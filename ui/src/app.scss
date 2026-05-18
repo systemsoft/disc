@@ -1,4 +1,4 @@
-// P1-25: design tokens are now CSS custom properties (see styles/tokens.css)
+// Design tokens are now CSS custom properties (see styles/tokens.css)
 // imported once here for global :root scope. Sass mixins live in
 // styles/_mixins.scss and must be `@use`d per file that needs them.
 @use "./styles/mixins" as *;

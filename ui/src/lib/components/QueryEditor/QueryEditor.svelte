@@ -165,103 +165,6 @@
   }
 </script>
 
-<div class="query-editor-container">
-  {#if multiTab}
-    <div class="tabs-bar">
-      {#each tabs as tab, index}
-        <button
-          class="tab"
-          class:active={activeTab === index}
-          on:click={() => switchTab(index)}
-        >
-          {tab.name}
-          {#if tabs.length > 1}
-            <span class="close-tab" on:click|stopPropagation={() => closeTab(index)}>×</span>
-          {/if}
-        </button>
-      {/each}
-      <button class="add-tab" on:click={addTab} aria-label="New tab">+</button>
-    </div>
-  {/if}
-
-  <div class="editor-wrapper">
-    <div class="query-editor" bind:this={editorContainer}></div>
-
-    <div class="editor-toolbar">
-      <button
-        class="execute-btn"
-        on:click={handleExecute}
-        disabled={loading || !value.trim()}
-        aria-label="Execute query"
-      >
-        {#if loading}
-          <span class="spinner">⟳</span>
-          Executing...
-        {:else}
-          <span class="play-icon">▶</span>
-          Execute
-        {/if}
-      </button>
-
-      {#if onFormat}
-        <button
-          class="format-btn"
-          on:click={handleFormat}
-          aria-label="Format query"
-        >
-          <span class="format-icon">⊞</span>
-          Format
-        </button>
-      {/if}
-
-      <div class="toolbar-info">
-        {#if executionTime !== null}
-          <span class="execution-time">
-            Executed in {executionTime}ms
-          </span>
-        {/if}
-
-        <span class="shortcut-hint">
-          {#if navigator.platform.includes('Mac')}Cmd{:else}Ctrl{/if}+Enter to run
-        </span>
-      </div>
-    </div>
-
-    {#if error}
-      <div class="error-message">
-        <span class="error-icon">⚠</span>
-        {error}
-      </div>
-    {/if}
-  </div>
-
-  {#if showHistory && history.length > 0}
-    <div class="history-panel">
-      <h3 class="history-title">Query History</h3>
-      <div class="history-list">
-        {#each history as item}
-          <button
-            class="history-item"
-            class:success={item.success}
-            class:failed={!item.success}
-            on:click={() => loadFromHistory(item)}
-          >
-            <span class="history-status">
-              {item.success ? '✓' : '×'}
-            </span>
-            <div class="history-content">
-              <div class="history-query">{item.query}</div>
-              <div class="history-time">
-                {new Date(item.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/if}
-</div>
-
 <style lang="scss">
   @use "../../../styles/mixins" as *;
   @import '../../styles/component-base.scss';
@@ -556,3 +459,100 @@
     to { transform: rotate(360deg); }
   }
 </style>
+
+<div class="query-editor-container">
+  {#if multiTab}
+    <div class="tabs-bar">
+      {#each tabs as tab, index}
+        <button
+          class="tab"
+          class:active={activeTab === index}
+          on:click={() => switchTab(index)}
+        >
+          {tab.name}
+          {#if tabs.length > 1}
+            <span class="close-tab" on:click|stopPropagation={() => closeTab(index)}>×</span>
+          {/if}
+        </button>
+      {/each}
+      <button class="add-tab" on:click={addTab} aria-label="New tab">+</button>
+    </div>
+  {/if}
+
+  <div class="editor-wrapper">
+    <div class="query-editor" bind:this={editorContainer}></div>
+
+    <div class="editor-toolbar">
+      <button
+        class="execute-btn"
+        on:click={handleExecute}
+        disabled={loading || !value.trim()}
+        aria-label="Execute query"
+      >
+        {#if loading}
+          <span class="spinner">⟳</span>
+          Executing...
+        {:else}
+          <span class="play-icon">▶</span>
+          Execute
+        {/if}
+      </button>
+
+      {#if onFormat}
+        <button
+          class="format-btn"
+          on:click={handleFormat}
+          aria-label="Format query"
+        >
+          <span class="format-icon">⊞</span>
+          Format
+        </button>
+      {/if}
+
+      <div class="toolbar-info">
+        {#if executionTime !== null}
+          <span class="execution-time">
+            Executed in {executionTime}ms
+          </span>
+        {/if}
+
+        <span class="shortcut-hint">
+          {#if navigator.platform.includes('Mac')}Cmd{:else}Ctrl{/if}+Enter to run
+        </span>
+      </div>
+    </div>
+
+    {#if error}
+      <div class="error-message">
+        <span class="error-icon">⚠</span>
+        {error}
+      </div>
+    {/if}
+  </div>
+
+  {#if showHistory && history.length > 0}
+    <div class="history-panel">
+      <h3 class="history-title">Query History</h3>
+      <div class="history-list">
+        {#each history as item}
+          <button
+            class="history-item"
+            class:success={item.success}
+            class:failed={!item.success}
+            on:click={() => loadFromHistory(item)}
+          >
+            <span class="history-status">
+              {item.success ? '✓' : '×'}
+            </span>
+            <div class="history-content">
+              <div class="history-query">{item.query}</div>
+              <div class="history-time">
+                {new Date(item.timestamp).toLocaleTimeString()}
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+</div>

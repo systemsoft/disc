@@ -4,7 +4,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
-  
+
   interface Column {
     key: string;
     label: string;
@@ -12,7 +12,7 @@
     type?: 'text' | 'number' | 'date' | 'boolean';
     render?: (value: any, row: any) => string;
   }
-  
+
   export let data: any[] = [];
   export let columns: Column[] = [];
   export let selectable = false;
@@ -27,9 +27,9 @@
   export let onSelect: ((selected: any[]) => void) | undefined = undefined;
   export let onEdit: ((edit: {row: any, field: string, value: any}) => void) | undefined = undefined;
   export let onExport: ((data: any[]) => void) | undefined = undefined;
-  
+
   const dispatch = createEventDispatcher();
-  
+
   let searchQuery = '';
   let sortColumn: string | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
@@ -38,42 +38,42 @@
   let editingCell: {row: number, col: string} | null = null;
   let editValue = '';
   let hoveredRow: number | null = null;
-  
+
   $: filteredData = filterData(data, searchQuery);
   $: sortedData = sortData(filteredData, sortColumn, sortDirection);
-  $: paginatedData = paginated 
-    ? sortedData.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-    : sortedData;
+  $: paginatedData = paginated ?
+    sortedData.slice(currentPage * pageSize, (currentPage + 1) * pageSize) :
+    sortedData;
   $: totalPages = Math.ceil(sortedData.length / pageSize);
-  
+
   function filterData(data: any[], query: string) {
     if (!query) return data;
-    
+
     const lowerQuery = query.toLowerCase();
-    return data.filter(row => 
-      Object.values(row).some(val => 
+    return data.filter(row =>
+      Object.values(row).some(val =>
         String(val).toLowerCase().includes(lowerQuery)
       )
     );
   }
-  
+
   function sortData(data: any[], column: string | null, direction: 'asc' | 'desc') {
     if (!column) return data;
-    
+
     return [...data].sort((a, b) => {
       const aVal = a[column];
       const bVal = b[column];
-      
+
       if (aVal === bVal) return 0;
-      
+
       const comparison = aVal < bVal ? -1 : 1;
       return direction === 'asc' ? comparison : -comparison;
     });
   }
-  
+
   function handleSort(column: Column) {
     if (!column.sortable) return;
-    
+
     if (sortColumn === column.key) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
@@ -81,7 +81,7 @@
       sortDirection = 'asc';
     }
   }
-  
+
   function toggleRowSelection(row: any) {
     if (selectedRows.has(row)) {
       selectedRows.delete(row);
@@ -89,38 +89,38 @@
       selectedRows.add(row);
     }
     selectedRows = selectedRows;
-    
+
     if (onSelect) {
       onSelect(Array.from(selectedRows));
     }
     dispatch('select', Array.from(selectedRows));
   }
-  
+
   function toggleSelectAll() {
     if (selectedRows.size === paginatedData.length) {
       selectedRows.clear();
     } else {
       selectedRows = new Set(paginatedData);
     }
-    
+
     if (onSelect) {
       onSelect(Array.from(selectedRows));
     }
     dispatch('select', Array.from(selectedRows));
   }
-  
+
   function startEdit(rowIndex: number, column: string, value: any) {
     if (!editable) return;
-    
+
     editingCell = { row: rowIndex, col: column };
     editValue = String(value);
   }
-  
+
   function saveEdit() {
     if (!editingCell) return;
-    
+
     const row = paginatedData[editingCell.row];
-    
+
     if (onEdit) {
       onEdit({
         row,
@@ -128,21 +128,21 @@
         value: editValue
       });
     }
-    
+
     dispatch('edit', {
       row,
       field: editingCell.col,
       value: editValue
     });
-    
+
     editingCell = null;
   }
-  
+
   function cancelEdit() {
     editingCell = null;
     editValue = '';
   }
-  
+
   function handleKeydown(event: KeyboardEvent) {
     if (editingCell) {
       if (event.key === 'Enter') {
@@ -152,26 +152,26 @@
       }
     }
   }
-  
+
   function handleExport() {
     if (onExport) {
       onExport(sortedData);
     }
     dispatch('export', sortedData);
   }
-  
+
   function nextPage() {
     if (currentPage < totalPages - 1) {
       currentPage++;
     }
   }
-  
+
   function prevPage() {
     if (currentPage > 0) {
       currentPage--;
     }
   }
-  
+
   function getCellValue(row: any, column: Column) {
     if (column.render) {
       return column.render(row[column.key], row);
@@ -179,6 +179,264 @@
     return row[column.key];
   }
 </script>
+
+<style lang="scss">
+  @use "../../../styles/mixins" as *;
+  @import '../../styles/component-base.scss';
+
+  .data-grid-container {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--grid-unit) * 2);
+    height: 100%;
+  }
+
+  .grid-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: calc(var(--grid-unit) * 2);
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+
+      .search-input {
+        width: 100%;
+        padding: var(--grid-unit) calc(var(--grid-unit) * 5) var(--grid-unit) calc(var(--grid-unit) * 2);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text);
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+
+        &:focus {
+          border-color: var(--color-primary);
+          @include glow(var(--color-primary-rgb), 0.3);
+        }
+      }
+
+      .search-icon {
+        position: absolute;
+        right: calc(var(--grid-unit) * 2);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--color-primary);
+      }
+    }
+
+    .export-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+      background: rgb(var(--color-info-rgb) / 0.1);
+      border: 1px solid rgb(var(--color-info-rgb) / 0.3);
+      border-radius: var(--border-radius);
+      color: var(--color-info);
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+
+      &:hover {
+        background: rgb(var(--color-info-rgb) / 0.2);
+        @include glow(var(--color-info-rgb), 0.3);
+      }
+    }
+  }
+
+  .grid-wrapper {
+    flex: 1;
+    overflow: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+  }
+
+  .data-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+
+    thead {
+      position: sticky;
+      top: 0;
+      background: var(--color-surface);
+      z-index: 10;
+
+      th {
+        padding: calc(var(--grid-unit) * 2);
+        text-align: left;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-text-dim);
+        border-bottom: 2px solid var(--color-border);
+        user-select: none;
+
+        &.sortable {
+          cursor: pointer;
+          transition: all var(--transition-fast);
+
+          &:hover {
+            background: rgb(var(--color-primary-rgb) / 0.05);
+            color: var(--color-text);
+          }
+        }
+
+        &.sorted {
+          color: var(--color-primary);
+          background: rgb(var(--color-primary-rgb) / 0.05);
+        }
+
+        .header-content {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--grid-unit);
+
+          .sort-icon {
+            font-size: 0.75rem;
+            opacity: 0.5;
+            transition: opacity var(--transition-fast);
+          }
+        }
+
+        &.sorted .sort-icon {
+          opacity: 1;
+          color: var(--color-primary);
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        border-bottom: 1px solid rgb(var(--color-border-rgb) / 0.5);
+        transition: background var(--transition-fast);
+
+        &.hover {
+          background: rgb(var(--color-primary-rgb) / 0.05);
+        }
+
+        &.selected {
+          background: rgb(var(--color-primary-rgb) / 0.1);
+        }
+
+        td {
+          padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+          color: var(--color-text);
+          position: relative;
+
+          &.editing {
+            padding: 0;
+          }
+        }
+      }
+    }
+
+    .checkbox-column {
+      width: 40px;
+      text-align: center;
+
+      input[type="checkbox"] {
+        cursor: pointer;
+      }
+    }
+  }
+
+  .edit-input {
+    width: 100%;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+    background: var(--color-background);
+    border: 2px solid var(--color-primary);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: inherit;
+
+    &:focus {
+      outline: none;
+      @include glow(var(--color-primary-rgb), 0.5);
+    }
+  }
+
+  .loading-state,
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--grid-unit) * 2);
+    padding: calc(var(--grid-unit) * 8);
+    color: var(--color-text-dim);
+    font-family: var(--font-mono);
+
+    .spinner,
+    .empty-icon {
+      font-size: 3rem;
+      color: var(--color-primary);
+      opacity: 0.5;
+    }
+
+    .spinner {
+      animation: pulse 2s ease-in-out infinite;
+    }
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--grid-unit) * 2);
+    padding: calc(var(--grid-unit) * 2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+
+    .pagination-btn {
+      padding: var(--grid-unit);
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-primary);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+
+      &:hover:not(:disabled) {
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.3);
+      }
+
+      &:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+    }
+
+    .page-info {
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      color: var(--color-text-dim);
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+</style>
 
 <div class="data-grid-container">
   {#if searchable || exportable}
@@ -194,7 +452,7 @@
           <span class="search-icon">⊙</span>
         </div>
       {/if}
-      
+
       {#if exportable}
         <button class="export-btn" on:click={handleExport} aria-label="Export">
           <span class="export-icon">⬇</span>
@@ -203,7 +461,7 @@
       {/if}
     </div>
   {/if}
-  
+
   <div class="grid-wrapper">
     {#if loading}
       <div class="loading-state">
@@ -293,7 +551,7 @@
       </table>
     {/if}
   </div>
-  
+
   {#if paginated && totalPages > 1}
     <div class="pagination">
       <button
@@ -304,11 +562,11 @@
       >
         ◀
       </button>
-      
+
       <span class="page-info">
         Page {currentPage + 1} of {totalPages}
       </span>
-      
+
       <button
         class="pagination-btn"
         on:click={nextPage}
@@ -320,261 +578,3 @@
     </div>
   {/if}
 </div>
-
-<style lang="scss">
-  @use "../../../styles/mixins" as *;
-  @import '../../styles/component-base.scss';
-  
-  .data-grid-container {
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--grid-unit) * 2);
-    height: 100%;
-  }
-  
-  .grid-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: calc(var(--grid-unit) * 2);
-    
-    .search-box {
-      position: relative;
-      flex: 1;
-      max-width: 400px;
-      
-      .search-input {
-        width: 100%;
-        padding: var(--grid-unit) calc(var(--grid-unit) * 5) var(--grid-unit) calc(var(--grid-unit) * 2);
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--border-radius);
-        color: var(--color-text);
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
-        
-        &:focus {
-          border-color: var(--color-primary);
-          @include glow(var(--color-primary-rgb), 0.3);
-        }
-      }
-      
-      .search-icon {
-        position: absolute;
-        right: calc(var(--grid-unit) * 2);
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--color-primary);
-      }
-    }
-    
-    .export-btn {
-      display: flex;
-      align-items: center;
-      gap: var(--grid-unit);
-      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
-      background: rgb(var(--color-info-rgb) / 0.1);
-      border: 1px solid rgb(var(--color-info-rgb) / 0.3);
-      border-radius: var(--border-radius);
-      color: var(--color-info);
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      cursor: pointer;
-      transition: all var(--transition-fast);
-      
-      &:hover {
-        background: rgb(var(--color-info-rgb) / 0.2);
-        @include glow(var(--color-info-rgb), 0.3);
-      }
-    }
-  }
-  
-  .grid-wrapper {
-    flex: 1;
-    overflow: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-  }
-  
-  .data-grid {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    
-    thead {
-      position: sticky;
-      top: 0;
-      background: var(--color-surface);
-      z-index: 10;
-      
-      th {
-        padding: calc(var(--grid-unit) * 2);
-        text-align: left;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--color-text-dim);
-        border-bottom: 2px solid var(--color-border);
-        user-select: none;
-        
-        &.sortable {
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          
-          &:hover {
-            background: rgb(var(--color-primary-rgb) / 0.05);
-            color: var(--color-text);
-          }
-        }
-        
-        &.sorted {
-          color: var(--color-primary);
-          background: rgb(var(--color-primary-rgb) / 0.05);
-        }
-        
-        .header-content {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--grid-unit);
-          
-          .sort-icon {
-            font-size: 0.75rem;
-            opacity: 0.5;
-            transition: opacity var(--transition-fast);
-          }
-        }
-        
-        &.sorted .sort-icon {
-          opacity: 1;
-          color: var(--color-primary);
-        }
-      }
-    }
-    
-    tbody {
-      tr {
-        border-bottom: 1px solid rgb(var(--color-border-rgb) / 0.5);
-        transition: background var(--transition-fast);
-        
-        &.hover {
-          background: rgb(var(--color-primary-rgb) / 0.05);
-        }
-        
-        &.selected {
-          background: rgb(var(--color-primary-rgb) / 0.1);
-        }
-        
-        td {
-          padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
-          color: var(--color-text);
-          position: relative;
-          
-          &.editing {
-            padding: 0;
-          }
-        }
-      }
-    }
-    
-    .checkbox-column {
-      width: 40px;
-      text-align: center;
-      
-      input[type="checkbox"] {
-        cursor: pointer;
-      }
-    }
-  }
-  
-  .edit-input {
-    width: 100%;
-    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
-    background: var(--color-background);
-    border: 2px solid var(--color-primary);
-    color: var(--color-text);
-    font-family: inherit;
-    font-size: inherit;
-    
-    &:focus {
-      outline: none;
-      @include glow(var(--color-primary-rgb), 0.5);
-    }
-  }
-  
-  .loading-state,
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: calc(var(--grid-unit) * 2);
-    padding: calc(var(--grid-unit) * 8);
-    color: var(--color-text-dim);
-    font-family: var(--font-mono);
-    
-    .spinner,
-    .empty-icon {
-      font-size: 3rem;
-      color: var(--color-primary);
-      opacity: 0.5;
-    }
-    
-    .spinner {
-      animation: pulse 2s ease-in-out infinite;
-    }
-  }
-  
-  .pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: calc(var(--grid-unit) * 2);
-    padding: calc(var(--grid-unit) * 2);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    
-    .pagination-btn {
-      padding: var(--grid-unit);
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: transparent;
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
-      color: var(--color-primary);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-      
-      &:hover:not(:disabled) {
-        background: rgb(var(--color-primary-rgb) / 0.1);
-        border-color: var(--color-primary);
-        @include glow(var(--color-primary-rgb), 0.3);
-      }
-      
-      &:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-      }
-    }
-    
-    .page-info {
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      color: var(--color-text-dim);
-    }
-  }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
-  }
-</style>

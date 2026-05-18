@@ -1,8 +1,15 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
+/*** IMPORT ------------------------------------------- ***/
+
 import { expect, test } from "@playwright/test";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { clearItems, insertItem, itemCount, runQuery } from "./helpers";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 test.describe("Data viewer — read", () => {
   test.beforeEach(async () => {
@@ -12,10 +19,9 @@ test.describe("Data viewer — read", () => {
     await insertItem("Recognizer", 3);
   });
 
-  // Each test starts with a hard reload via about:blank → target URL so
-  // tests don't inherit filter/sort state from a previous test (Vite HMR
-  // preserves Svelte component instances across same-URL navigations,
-  // which would otherwise carry stale filter values into the next test).
+  /*** Each test starts with a hard reload via about:blank → target URL so tests don’t inherit
+       filter/sort state from a previous test (Vite HMR preserves Svelte component instances across
+       same-URL navigations, which would otherwise carry stale filter values into the next test). ***/
   async function gotoData(page: import("@playwright/test").Page) {
     await page.goto("about:blank");
     await page.goto("/ui/data");
@@ -23,12 +29,10 @@ test.describe("Data viewer — read", () => {
 
   test("renders type list and rows for default::Item", async ({ page }) => {
     await gotoData(page);
+    /*** Type list shows the seeded type. ***/
+    await expect(page.getByRole("button", { name: "default::Item" })).toBeVisible();
 
-    // Type list shows the seeded type.
-    await expect(page.getByRole("button", { name: "default::Item" }))
-      .toBeVisible();
-
-    // Three rows appear in the table.
+    /*** Three rows appear in the table. ***/
     const rows = page.locator("tbody tr");
     await expect(rows).toHaveCount(3);
     await expect(page.getByRole("cell", { name: "Light cycle" })).toBeVisible();
@@ -38,14 +42,10 @@ test.describe("Data viewer — read", () => {
   test("sorts by clicking a property column header", async ({ page }) => {
     await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
-
-    // Click the count column header → asc → first row should be count=1.
+    /*** Click the count column header → asc → first row should be count=1. ***/
     await page.getByRole("columnheader", { name: /^count/ }).click();
-    await expect(page.locator("tbody tr").first()).toContainText(
-      "Disc identity disc"
-    );
-
-    // Click again → desc → first row should be count=3.
+    await expect(page.locator("tbody tr").first()).toContainText("Disc identity disc");
+    /*** Click again → desc → first row should be count=3. ***/
     await page.getByRole("columnheader", { name: /^count/ }).click();
     await expect(page.locator("tbody tr").first()).toContainText("Recognizer");
   });
@@ -55,12 +55,9 @@ test.describe("Data viewer — read", () => {
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow
-      .locator("input[placeholder=\"contains…\"]")
-      .first();
+    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
-
     await expect(page.locator("tbody tr")).toHaveCount(1);
     await expect(page.getByRole("cell", { name: "Light cycle" })).toBeVisible();
   });
@@ -69,24 +66,19 @@ test.describe("Data viewer — read", () => {
     await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
-    // The count column has placeholder ">=10, <5, 10..20".
-    const countFilter = page
-      .locator("tr.filter-row input[placeholder*=\"..\"]")
-      .first();
-
+    /*** The count column has placeholder ">=10, <5, 10..20". ***/
+    const countFilter = page.locator("tr.filter-row input[placeholder*=\"..\"]").first();
     await countFilter.fill(">=2");
     await countFilter.press("Enter");
-    // Light cycle (2) and Recognizer (3) match — Disc identity disc (1) does not.
+    /*** Light cycle (2) and Recognizer (3) match — Disc identity disc (1) does not. ***/
     await expect(page.locator("tbody tr")).toHaveCount(2);
-
     await countFilter.fill("2..3");
     await countFilter.press("Enter");
     await expect(page.locator("tbody tr")).toHaveCount(2);
-
     await countFilter.fill(">10");
     await countFilter.press("Enter");
     await expect(page.locator("tbody tr")).toHaveCount(1);
-    // The lone row in this scenario is the empty-state placeholder.
+    /*** The lone row in this scenario is the empty-state placeholder. ***/
     await expect(page.getByText("No rows match")).toBeVisible();
   });
 
@@ -94,37 +86,31 @@ test.describe("Data viewer — read", () => {
     await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
-    // The createdAt column has placeholder ">=2026-01-01" — date input
-    // sits between count and name in column order (id, count, createdAt,
-    // name) so it's the second .. placeholder input.
-    const dtFilter = page
-      .locator("tr.filter-row input[placeholder*=\">=2026\"]")
-      .first();
-    // Today's seed rows are timestamped "now"; a bare YYYY-MM-DD for
-    // today should match all 3, NOT zero (which is what `.col = <datetime>'today'`
-    // would have given since exact equality requires full timestamp).
+    /*** The createdAt column has placeholder ">=2026-01-01" — date input sits between count and
+         name in column order (id, count, createdAt, name) so it’s the second ..
+         placeholder input. ***/
+    const dtFilter = page.locator("tr.filter-row input[placeholder*=\">=2026\"]").first();
+    /*** Today’s seed rows are timestamped "now"; a bare YYYY-MM-DD for today should match all 3,
+         NOT zero (which is what `.col = <datetime>"today"` would have given since exact equality
+         requires full timestamp). ***/
     const today = new Date().toISOString().slice(0, 10);
     await dtFilter.fill(today);
     await dtFilter.press("Enter");
-
     await expect(page.locator("tbody tr")).toHaveCount(3);
   });
 
   test("Clear button resets filters and reloads", async ({ page }) => {
     await gotoData(page);
-    // Sanity: beforeEach inserted 3 rows, the page should show all of them
-    // before we touch the filter. If a prior test leaked filter state across
-    // the page navigation this catches it cleanly with a 3 vs N message.
+    /*** Sanity: beforeEach inserted 3 rows, the page should show all of them before we touch the
+         filter. If a prior test leaked filter state across the page navigation this catches it
+         cleanly with a 3 vs N message. ***/
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow
-      .locator("input[placeholder=\"contains…\"]")
-      .first();
+    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
     await expect(page.locator("tbody tr")).toHaveCount(1);
-
     await page.getByRole("button", { name: "Clear" }).click();
     await expect(page.locator("tbody tr")).toHaveCount(3);
   });
@@ -137,14 +123,12 @@ test.describe("Data viewer — CRUD", () => {
 
   test("inserts a new row through the New form", async ({ page }) => {
     await page.goto("/ui/data");
-    await expect(page.locator("tbody tr")).toHaveCount(1); // empty-row placeholder
-
+    await expect(page.locator("tbody tr")).toHaveCount(1); /*** empty-row placeholder ***/
     await page.getByRole("button", { name: "+ New" }).click();
     await page.getByLabel(/^name/).fill("Tron");
     await page.getByLabel(/^count/).fill("7");
     await page.getByRole("button", { name: "Save" }).click();
-
-    // After insert the form closes and the row appears.
+    /*** After insert the form closes and the row appears. ***/
     await expect(page.getByRole("cell", { name: "Tron" })).toBeVisible();
     expect(await itemCount()).toBe(1);
   });
@@ -152,20 +136,16 @@ test.describe("Data viewer — CRUD", () => {
   test("edits an existing row", async ({ page }) => {
     await insertItem("Sark", 4);
     await page.goto("/ui/data");
-
     await page.getByRole("button", { name: "Edit" }).click();
 
-    // Editable columns in order: count, createdAt, name (id is read-only).
-    // Target the name input (index 2) explicitly — `first()` would hit count.
+    /*** Editable columns in order: count, createdAt, name (id is read-only). Target the name input
+         (index 2) explicitly — `first()` would hit count. ***/
     const editingInputs = page.locator("tr.editing input[type=\"text\"]");
     await editingInputs.nth(2).fill("Sark v2");
     await page.getByRole("button", { name: "Save" }).click();
-
     await expect(page.getByRole("cell", { name: "Sark v2" })).toBeVisible();
 
-    const rows = await runQuery(
-      "select default::Item { name } filter .name = 'Sark v2';"
-    );
+    const rows = await runQuery(`select default::Item { name } filter .name = "Sark v2";`);
     expect(Array.isArray(rows.data) ? rows.data.length : 0).toBe(1);
   });
 
@@ -176,7 +156,7 @@ test.describe("Data viewer — CRUD", () => {
     page.once("dialog", dialog => dialog.accept());
     await page.getByRole("button", { name: "Delete" }).click();
 
-    // Row gone from UI and DB.
+    /*** Row gone from UI and DB. ***/
     await expect(page.getByRole("cell", { name: "CLU" })).toHaveCount(0);
     expect(await itemCount()).toBe(0);
   });

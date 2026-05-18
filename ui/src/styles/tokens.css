@@ -4,7 +4,7 @@
  * Source of truth for the TRON-inspired visual system. Imported once
  * in app.scss so :root applies globally; SCSS partials reference
  * `var(--name)` directly and no longer rely on Vite's `additionalData`
- * to inject Sass variables into every <style> block (P1-25).
+ * to inject Sass variables into every <style> block.
  *
  * Each color is defined twice:
  *   --color-X        : the canonical hex form (use for `color`, `background`, etc.)

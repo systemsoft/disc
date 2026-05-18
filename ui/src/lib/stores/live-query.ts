@@ -15,9 +15,10 @@
  * Usage:
  *
  *   const { store, refetch, close } = liveQuery({
- *     edgeql: 'select User { name }',
- *     tables: ['users'],
+ *     edgeql: "select User { name }",
+ *     tables: ["users"],
  *   });
+ *
  *   $: ({ data, status, error } = $store);
  *
  *   onDestroy(close);   // tear down the EventSource
@@ -31,34 +32,32 @@
  *   - "error"       last fetch failed
  */
 
+/*** IMPORT ------------------------------------------- ***/
+
 import { writable, type Readable } from "svelte/store";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { discAPI } from "../api/client";
 
+/*** EXPORT ------------------------------------------- ***/
+
 export type LiveQueryStatus =
+  | "error"
   | "idle"
   | "loading"
   | "ready"
-  | "refetching"
-  | "error";
-
-export interface LiveQueryState<T = unknown> {
-  data: T | null;
-  status: LiveQueryStatus;
-  error: string | null;
-  /** Wall-clock timestamp (ms) of the last successful refresh. */
-  lastUpdatedAt: number | null;
-  /**
-   * Most recent invalidate-event tables. Useful for UI affordances
-   * like "5 changes in `users`, refetching…".
-   */
-  lastInvalidatedTables: string[];
-}
+  | "refetching";
 
 export interface LiveQueryOptions {
+  /**
+   * Override the API base URL (mainly for tests). Defaults to the
+   * `discAPI`-resolved one.
+   */
+  baseUrl?: string;
   /** EdgeQL query string. */
   edgeql: string;
-  /** Variables for the EdgeQL query, if any. */
-  variables?: Record<string, unknown>;
+
   /**
    * The set of PG table names this query depends on. Subscribers to
    * `/admin/data-watch` filter incoming invalidation events by this
@@ -66,17 +65,27 @@ export interface LiveQueryOptions {
    * refetches tight.
    */
   tables: string[];
+  /** Variables for the EdgeQL query, if any. */
+  variables?: Record<string, unknown>;
+}
+
+export interface LiveQueryState<T = unknown> {
+  data: T | null;
+  error: string | null;
   /**
-   * Override the API base URL (mainly for tests). Defaults to the
-   * `discAPI`-resolved one.
+   * Most recent invalidate-event tables. Useful for UI affordances
+   * like "5 changes in `users`, refetching…".
    */
-  baseUrl?: string;
+  lastInvalidatedTables: string[];
+  /** Wall-clock timestamp (ms) of the last successful refresh. */
+  lastUpdatedAt: number | null;
+  status: LiveQueryStatus;
 }
 
 export interface LiveQueryHandle<T = unknown> {
-  store: Readable<LiveQueryState<T>>;
-  refetch: () => Promise<void>;
   close: () => void;
+  refetch: () => Promise<void>;
+  store: Readable<LiveQueryState<T>>;
 }
 
 /**
@@ -84,92 +93,56 @@ export interface LiveQueryHandle<T = unknown> {
  * `close()` when the component unmounts (an unclosed handle leaks an
  * EventSource and a poll subscription).
  */
-export function liveQuery<T = unknown>(
-  options: LiveQueryOptions
-): LiveQueryHandle<T> {
+export function liveQuery<T = unknown>(options: LiveQueryOptions): LiveQueryHandle<T> {
   const initial: LiveQueryState<T> = {
     data: null,
-    status: "idle",
     error: null,
+    lastInvalidatedTables: [],
     lastUpdatedAt: null,
-    lastInvalidatedTables: []
+    status: "idle"
   };
-  const store = writable<LiveQueryState<T>>(initial);
 
-  let eventSource: EventSource | null = null;
+  const store = writable<LiveQueryState<T>>(initial);
   let closed = false;
-  // Track the in-flight fetch so we can ignore stale refetches if a
-  // newer one fires in the middle of an old one's response.
+  let eventSource: EventSource | null = null;
+  /*** Track the in-flight fetch so we can ignore stale refetches if a newer one fires in the
+       middle of an old one’s response. ***/
   let inFlightToken = 0;
 
-  async function runFetch(reason: "initial" | "refetch") {
-    const token = ++inFlightToken;
-    store.update(s => ({
-      ...s,
-      status: reason === "initial" ? "loading" : "refetching",
-      error: null
-    }));
-    try {
-      const result = await discAPI.executeQuery(
-        options.edgeql,
-        options.variables
-      );
-      if (closed || token !== inFlightToken) {
-        return;
-      }
-      if (result.error) {
-        store.update(s => ({
-          ...s,
-          status: "error",
-          error: result.error ?? "Query failed"
-        }));
-        return;
-      }
-      store.update(s => ({
-        ...s,
-        data: (result.data as unknown as T) ?? null,
-        status: "ready",
-        error: null,
-        lastUpdatedAt: Date.now()
-      }));
-    } catch (err) {
-      if (closed || token !== inFlightToken) {
-        return;
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      store.update(s => ({ ...s, status: "error", error: message }));
-    }
-  }
-
   function openEventSource() {
-    if (closed) {
+    if (closed)
       return;
-    }
+
     const params = new URLSearchParams({
       tables: options.tables.join(",")
     });
+
     const url = `${options.baseUrl ?? ""}/admin/data-watch?${params}`;
+
     eventSource = new EventSource(url);
+
     eventSource.addEventListener("ready", () => {
-      // No-op — initial fetch is kicked off below.
+      /*** No-op — initial fetch is kicked off below. ***/
     });
+
     eventSource.addEventListener("invalidate", event => {
       try {
-        const payload = JSON.parse(
-          (event as MessageEvent).data
-        ) as { tables?: string[]; };
+        const payload = JSON.parse((event as MessageEvent).data) as { tables?: string[]; };
+
         store.update(s => ({
           ...s,
           lastInvalidatedTables: payload.tables ?? []
         }));
       } catch {
-        // payload not JSON — fall through to refetch anyway
+        /*** payload not JSON — fall through to refetch anyway ***/
       }
+
       void runFetch("refetch");
     });
+
     eventSource.addEventListener("error", () => {
-      // EventSource auto-reconnects on transient errors. Surface a
-      // soft signal but don't tear down — wait for `close()`.
+      /*** EventSource auto-reconnects on transient errors. Surface a soft signal but don’t tear
+           down — wait for `close()`. ***/
       store.update(s => ({
         ...s,
         error: s.error ?? "Live connection lost; reconnecting…"
@@ -177,22 +150,64 @@ export function liveQuery<T = unknown>(
     });
   }
 
-  // Kick off in parallel: initial fetch + subscribe.
+  async function runFetch(reason: "initial" | "refetch") {
+    const token = ++inFlightToken;
+
+    store.update(s => ({
+      ...s,
+      status: reason === "initial" ? "loading" : "refetching",
+      error: null
+    }));
+
+    try {
+      const result = await discAPI.executeQuery(options.edgeql, options.variables);
+
+      if (closed || token !== inFlightToken)
+        return;
+
+      if (result.error) {
+        store.update(s => ({
+          ...s,
+          status: "error",
+          error: result.error ?? "Query failed"
+        }));
+
+        return;
+      }
+
+      store.update(s => ({
+        ...s,
+        data: (result.data as unknown as T) ?? null,
+        error: null,
+        lastUpdatedAt: Date.now(),
+        status: "ready"
+      }));
+    } catch (err) {
+      if (closed || token !== inFlightToken)
+        return;
+
+      const message = err instanceof Error ? err.message : String(err);
+      store.update(s => ({ ...s, error: message, status: "error" }));
+    }
+  }
+
+  /*** Kick off in parallel: initial fetch + subscribe. ***/
   void runFetch("initial");
   openEventSource();
 
   return {
-    store,
-    refetch: () => runFetch("refetch"),
     close: () => {
-      if (closed) {
+      if (closed)
         return;
-      }
+
       closed = true;
+
       if (eventSource) {
         eventSource.close();
         eventSource = null;
       }
-    }
+    },
+    refetch: () => runFetch("refetch"),
+    store
   };
 }

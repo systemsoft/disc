@@ -1,23 +1,24 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
-import { sveltekit } from "@sveltejs/kit/vite";
+/*** IMPORT ------------------------------------------- ***/
+
 import { defineConfig } from "vite";
+import { sveltekit } from "@sveltejs/kit/vite";
+
+/*** EXPORT ------------------------------------------- ***/
 
 export default defineConfig({
-  // P1-25: design tokens moved to ui/src/styles/tokens.css and imported
-  // once in app.scss; per-file SCSS partials read CSS custom properties
-  // directly. The previous `additionalData` injection of variables.scss
-  // is no longer needed.
+  /*** Design tokens are in ui/src/styles/tokens.css and imported once in app.scss; per-file SCSS
+       partials read CSS custom properties directly. ***/
   plugins: [sveltekit()],
   server: {
     port: 5173,
     proxy: {
-      // Proxy API requests to Disc server during development.
-      // Strip the `/api` prefix — the server exposes bare routes
-      // (`/schema`, `/query`, `/health`, ...). The `/api` namespace
-      // exists only on the browser side to avoid colliding with
-      // SvelteKit page routes like `/schema` and `/query`.
+      /*** Proxy API requests to Disc server during development. Strip the `/api` prefix — the
+           server exposes bare routes (`/schema`, `/query`, `/health`, ...). The `/api` namespace
+           exists only on the browser side to avoid colliding with SvelteKit page routes like
+           `/schema` and `/query`. ***/
       "/api": {
         changeOrigin: true,
         rewrite: path => path.replace(/^\/api/, ""),

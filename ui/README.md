@@ -1,10 +1,10 @@
 # Disc Admin UI
 
-A TRON-inspired admin interface for Disc Database, built with SvelteKit and TypeScript.
+A TRON-inspired admin interface for Disc Database, built with SvelteKit and TypeScript.
 
 ## Features
 
-- 🎨 **TRON-inspired Design** - Dark theme with luminous accents and grid-based layouts
+- 🎨 **TRON-inspired Design** - Dark theme with luminous accents and grid-based layouts
 - 📊 **Schema Browser** - Visual representation of database schema
 - 📝 **Query Editor** - EdgeQL query editor with syntax highlighting
 - 📋 **Data Viewer** - Browse and edit database objects
@@ -13,7 +13,7 @@ A TRON-inspired admin interface for Disc Database, built with SvelteKit and Type
 
 ## Architecture
 
-The UI is built as a static SvelteKit application that gets bundled with the Disc server. When `disc serve` runs, it serves the UI at the `/ui` route.
+The UI is built as a static SvelteKit application that gets bundled with the Disc server. When `disc serve` runs, it serves the UI at the `/ui` route.
 
 ```
 ui/
@@ -52,7 +52,7 @@ bun run preview
 
 ## Integration with Disc Server
 
-The UI is served by the Disc server when running `disc serve`. The built UI files are served from the `/ui` route.
+The UI is served by the Disc server when running `disc serve`. The built UI files are served from the `/ui` route.
 
 ### CLI Commands
 
@@ -104,8 +104,8 @@ All components follow the TRON aesthetic with:
 bun run build
 ```
 
-The built files will be in the `build/` directory, ready to be served by the Disc server.
+The built files will be in the `build/` directory, ready to be served by the Disc server.
 
 ## License
 
-Part of the Disc Database project.
+Part of the Disc Database project.

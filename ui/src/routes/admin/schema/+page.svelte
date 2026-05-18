@@ -163,180 +163,6 @@
   onDestroy(disconnect);
 </script>
 
-<div class="schema-diff">
-  <header class="page-header">
-    <div>
-      <h1>Live Schema Diff</h1>
-      <p class="subtitle">
-        Watching <code>dbschema/default.disc</code> for changes.
-      </p>
-    </div>
-    <div class="status">
-      <span class="status-dot" data-status={connectionStatus}></span>
-      <span class="status-label">{connectionStatus}</span>
-      <span class="last-update">{formatTime(lastUpdate)}</span>
-    </div>
-  </header>
-
-  {#if connectionError}
-    <div class="banner error">
-      <span class="banner-icon">⚠</span>
-      <span>{connectionError}</span>
-    </div>
-  {/if}
-
-  {#if hasParseErrors > 0 && diff}
-    <div class="banner warning">
-      <span class="banner-icon">⚠</span>
-      <div>
-        <strong>Schema file has {hasParseErrors} parse error{hasParseErrors === 1 ? '' : 's'}:</strong>
-        <ul>
-          {#each diff.errors as err}
-            <li>
-              <span class="error-source">[{err.source}]</span>
-              {err.message}
-              {#if err.line}<span class="error-loc"> (line {err.line})</span>{/if}
-            </li>
-          {/each}
-        </ul>
-      </div>
-    </div>
-  {/if}
-
-  {#if diff && !diff.changed && hasParseErrors === 0}
-    <div class="banner clean">
-      <span class="banner-icon">✓</span>
-      <span>Schema is in sync.</span>
-    </div>
-  {/if}
-
-  {#if diff && diff.changed}
-    <section class="apply-strip">
-      <div class="counts">
-        <span class="count count-added">+{diff.added.length}</span>
-        <span class="count count-modified">~{diff.modified.length}</span>
-        <span class="count count-removed">−{diff.removed.length}</span>
-        <span class="count-label">{totalChanges(diff)} pending change{totalChanges(diff) === 1 ? '' : 's'}</span>
-      </div>
-      <div class="apply-controls">
-        <label class="force-toggle">
-          <input type="checkbox" bind:checked={forceApply} />
-          <span>Force (allow unsafe / ambiguous)</span>
-        </label>
-        <button class="apply-button" on:click={applyMigration} disabled={applying}>
-          {applying ? 'Applying…' : forceApply ? 'Force Apply' : 'Apply Migration'}
-        </button>
-      </div>
-    </section>
-
-    {#if applyResult}
-      <div class="banner clean"><span class="banner-icon">✓</span><span>{applyResult}</span></div>
-    {/if}
-    {#if applyError}
-      <div class="banner error"><span class="banner-icon">⚠</span><span>{applyError}</span></div>
-    {/if}
-
-    <div class="diff-grid">
-      {#each diff.added as t}
-        <article class="diff-card added">
-          <header><span class="badge">+ added</span><h3>{t.name}</h3></header>
-          <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code>{#if t.abstract} · <code>abstract</code>{/if}</div>
-            {#each t.properties as p}
-              <div class="member">
-                <span class="member-key">{p.required ? 'required ' : ''}{p.name}</span>
-                <span class="member-type">{p.type}</span>
-              </div>
-            {/each}
-            {#each t.links as l}
-              <div class="member link">
-                <span class="member-key">link {l.required ? 'required ' : ''}{l.multi ? 'multi ' : ''}{l.name}</span>
-                <span class="member-type">→ {l.target}</span>
-              </div>
-            {/each}
-          </div>
-        </article>
-      {/each}
-
-      {#each diff.removed as t}
-        <article class="diff-card removed">
-          <header><span class="badge">− removed</span><h3>{t.name}</h3></header>
-          <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code></div>
-            {#each t.properties as p}
-              <div class="member">
-                <span class="member-key">{p.required ? 'required ' : ''}{p.name}</span>
-                <span class="member-type">{p.type}</span>
-              </div>
-            {/each}
-          </div>
-        </article>
-      {/each}
-
-      {#each diff.modified as t}
-        <article class="diff-card modified">
-          <header><span class="badge">~ modified</span><h3>{t.name}</h3></header>
-          <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code></div>
-            {#if t.addedProperties.length > 0}
-              <div class="group">
-                <div class="group-label group-added">added properties</div>
-                {#each t.addedProperties as p}
-                  <div class="member added"><span class="member-key">+ {p.required ? 'required ' : ''}{p.name}</span><span class="member-type">{p.type}</span></div>
-                {/each}
-              </div>
-            {/if}
-            {#if t.removedProperties.length > 0}
-              <div class="group">
-                <div class="group-label group-removed">removed properties</div>
-                {#each t.removedProperties as p}
-                  <div class="member removed"><span class="member-key">− {p.name}</span><span class="member-type">{p.type}</span></div>
-                {/each}
-              </div>
-            {/if}
-            {#if t.changedProperties.length > 0}
-              <div class="group">
-                <div class="group-label group-modified">changed properties</div>
-                {#each t.changedProperties as c}
-                  <div class="member changed">
-                    <span class="member-key">~ {c.name}</span>
-                    <span class="member-change">
-                      <span class="before">{c.before.required ? 'required ' : ''}{c.before.type}</span>
-                      <span class="arrow">→</span>
-                      <span class="after">{c.after.required ? 'required ' : ''}{c.after.type}</span>
-                    </span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-            {#if t.addedLinks.length + t.removedLinks.length + t.changedLinks.length > 0}
-              <div class="group">
-                <div class="group-label">links</div>
-                {#each t.addedLinks as l}
-                  <div class="member added"><span class="member-key">+ link {l.required ? 'required ' : ''}{l.multi ? 'multi ' : ''}{l.name}</span><span class="member-type">→ {l.target}</span></div>
-                {/each}
-                {#each t.removedLinks as l}
-                  <div class="member removed"><span class="member-key">− link {l.name}</span><span class="member-type">→ {l.target}</span></div>
-                {/each}
-                {#each t.changedLinks as c}
-                  <div class="member changed">
-                    <span class="member-key">~ link {c.name}</span>
-                    <span class="member-change">
-                      <span class="before">{c.before.required ? 'required ' : ''}{c.before.multi ? 'multi ' : ''}→ {c.before.target}</span>
-                      <span class="arrow">→</span>
-                      <span class="after">{c.after.required ? 'required ' : ''}{c.after.multi ? 'multi ' : ''}→ {c.after.target}</span>
-                    </span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </article>
-      {/each}
-    </div>
-  {/if}
-</div>
-
 <style lang="scss">
   @use "../../../styles/mixins" as *;
 
@@ -618,3 +444,177 @@
     50% { opacity: 0.5; }
   }
 </style>
+
+<div class="schema-diff">
+  <header class="page-header">
+    <div>
+      <h1>Live Schema Diff</h1>
+      <p class="subtitle">
+        Watching <code>dbschema/default.disc</code> for changes.
+      </p>
+    </div>
+    <div class="status">
+      <span class="status-dot" data-status={connectionStatus}></span>
+      <span class="status-label">{connectionStatus}</span>
+      <span class="last-update">{formatTime(lastUpdate)}</span>
+    </div>
+  </header>
+
+  {#if connectionError}
+    <div class="banner error">
+      <span class="banner-icon">⚠</span>
+      <span>{connectionError}</span>
+    </div>
+  {/if}
+
+  {#if hasParseErrors > 0 && diff}
+    <div class="banner warning">
+      <span class="banner-icon">⚠</span>
+      <div>
+        <strong>Schema file has {hasParseErrors} parse error{hasParseErrors === 1 ? '' : 's'}:</strong>
+        <ul>
+          {#each diff.errors as err}
+            <li>
+              <span class="error-source">[{err.source}]</span>
+              {err.message}
+              {#if err.line}<span class="error-loc"> (line {err.line})</span>{/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
+    </div>
+  {/if}
+
+  {#if diff && !diff.changed && hasParseErrors === 0}
+    <div class="banner clean">
+      <span class="banner-icon">✓</span>
+      <span>Schema is in sync.</span>
+    </div>
+  {/if}
+
+  {#if diff && diff.changed}
+    <section class="apply-strip">
+      <div class="counts">
+        <span class="count count-added">+{diff.added.length}</span>
+        <span class="count count-modified">~{diff.modified.length}</span>
+        <span class="count count-removed">−{diff.removed.length}</span>
+        <span class="count-label">{totalChanges(diff)} pending change{totalChanges(diff) === 1 ? '' : 's'}</span>
+      </div>
+      <div class="apply-controls">
+        <label class="force-toggle">
+          <input type="checkbox" bind:checked={forceApply} />
+          <span>Force (allow unsafe / ambiguous)</span>
+        </label>
+        <button class="apply-button" on:click={applyMigration} disabled={applying}>
+          {applying ? 'Applying…' : forceApply ? 'Force Apply' : 'Apply Migration'}
+        </button>
+      </div>
+    </section>
+
+    {#if applyResult}
+      <div class="banner clean"><span class="banner-icon">✓</span><span>{applyResult}</span></div>
+    {/if}
+    {#if applyError}
+      <div class="banner error"><span class="banner-icon">⚠</span><span>{applyError}</span></div>
+    {/if}
+
+    <div class="diff-grid">
+      {#each diff.added as t}
+        <article class="diff-card added">
+          <header><span class="badge">+ added</span><h3>{t.name}</h3></header>
+          <div class="card-body">
+            <div class="meta">module: <code>{t.module}</code>{#if t.abstract} · <code>abstract</code>{/if}</div>
+            {#each t.properties as p}
+              <div class="member">
+                <span class="member-key">{p.required ? 'required ' : ''}{p.name}</span>
+                <span class="member-type">{p.type}</span>
+              </div>
+            {/each}
+            {#each t.links as l}
+              <div class="member link">
+                <span class="member-key">link {l.required ? 'required ' : ''}{l.multi ? 'multi ' : ''}{l.name}</span>
+                <span class="member-type">→ {l.target}</span>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {/each}
+
+      {#each diff.removed as t}
+        <article class="diff-card removed">
+          <header><span class="badge">− removed</span><h3>{t.name}</h3></header>
+          <div class="card-body">
+            <div class="meta">module: <code>{t.module}</code></div>
+            {#each t.properties as p}
+              <div class="member">
+                <span class="member-key">{p.required ? 'required ' : ''}{p.name}</span>
+                <span class="member-type">{p.type}</span>
+              </div>
+            {/each}
+          </div>
+        </article>
+      {/each}
+
+      {#each diff.modified as t}
+        <article class="diff-card modified">
+          <header><span class="badge">~ modified</span><h3>{t.name}</h3></header>
+          <div class="card-body">
+            <div class="meta">module: <code>{t.module}</code></div>
+            {#if t.addedProperties.length > 0}
+              <div class="group">
+                <div class="group-label group-added">added properties</div>
+                {#each t.addedProperties as p}
+                  <div class="member added"><span class="member-key">+ {p.required ? 'required ' : ''}{p.name}</span><span class="member-type">{p.type}</span></div>
+                {/each}
+              </div>
+            {/if}
+            {#if t.removedProperties.length > 0}
+              <div class="group">
+                <div class="group-label group-removed">removed properties</div>
+                {#each t.removedProperties as p}
+                  <div class="member removed"><span class="member-key">− {p.name}</span><span class="member-type">{p.type}</span></div>
+                {/each}
+              </div>
+            {/if}
+            {#if t.changedProperties.length > 0}
+              <div class="group">
+                <div class="group-label group-modified">changed properties</div>
+                {#each t.changedProperties as c}
+                  <div class="member changed">
+                    <span class="member-key">~ {c.name}</span>
+                    <span class="member-change">
+                      <span class="before">{c.before.required ? 'required ' : ''}{c.before.type}</span>
+                      <span class="arrow">→</span>
+                      <span class="after">{c.after.required ? 'required ' : ''}{c.after.type}</span>
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if t.addedLinks.length + t.removedLinks.length + t.changedLinks.length > 0}
+              <div class="group">
+                <div class="group-label">links</div>
+                {#each t.addedLinks as l}
+                  <div class="member added"><span class="member-key">+ link {l.required ? 'required ' : ''}{l.multi ? 'multi ' : ''}{l.name}</span><span class="member-type">→ {l.target}</span></div>
+                {/each}
+                {#each t.removedLinks as l}
+                  <div class="member removed"><span class="member-key">− link {l.name}</span><span class="member-type">→ {l.target}</span></div>
+                {/each}
+                {#each t.changedLinks as c}
+                  <div class="member changed">
+                    <span class="member-key">~ link {c.name}</span>
+                    <span class="member-change">
+                      <span class="before">{c.before.required ? 'required ' : ''}{c.before.multi ? 'multi ' : ''}→ {c.before.target}</span>
+                      <span class="arrow">→</span>
+                      <span class="after">{c.after.required ? 'required ' : ''}{c.after.multi ? 'multi ' : ''}→ {c.after.target}</span>
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </article>
+      {/each}
+    </div>
+  {/if}
+</div>

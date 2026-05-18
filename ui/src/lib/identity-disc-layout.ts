@@ -16,6 +16,15 @@
  * counts and renders SVG accordingly.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
+/** Right semicircle arc (in degrees, clockwise-from-up) for outgoing links. */
+const OUTGOING_ARC: [number, number] = [30, 150];
+/** Left semicircle arc for incoming references. */
+const INCOMING_ARC: [number, number] = [210, 330];
+
+/*** EXPORT ------------------------------------------- ***/
+
 export interface Point {
   x: number;
   y: number;
@@ -28,43 +37,41 @@ export interface OrbitalPoint extends Point {
 
 export interface DiscLayout {
   center: Point;
-  outgoing: OrbitalPoint[];
   incoming: OrbitalPoint[];
+  outgoing: OrbitalPoint[];
 }
 
 export interface LayoutOptions {
   cx: number;
   cy: number;
-  radius: number;
-  outgoingCount: number;
   incomingCount: number;
+  outgoingCount: number;
+  radius: number;
 }
 
-/** Right semicircle arc (in degrees, clockwise-from-up) for outgoing links. */
-const OUTGOING_ARC: [number, number] = [30, 150];
-/** Left semicircle arc for incoming references. */
-const INCOMING_ARC: [number, number] = [210, 330];
+export function layoutDisc(opts: LayoutOptions): DiscLayout {
+  const { cx, cy, radius, outgoingCount, incomingCount } = opts;
 
-function spread(count: number, [start, end]: [number, number]): number[] {
-  if (count <= 0) {
-    return [];
-  }
-  if (count === 1) {
-    return [(start + end) / 2];
-  }
-  const step = (end - start) / (count - 1);
-  return Array.from({ length: count }, (_, i) => start + i * step);
+  if (radius < 0)
+    throw new Error("radius must be non-negative");
+
+  if (outgoingCount < 0 || incomingCount < 0)
+    throw new Error("counts must be non-negative");
+
+  return {
+    center: { x: cx, y: cy },
+    incoming: spread(incomingCount, INCOMING_ARC).map(a => pointAt(cx, cy, radius, a)),
+    outgoing: spread(outgoingCount, OUTGOING_ARC).map(a => pointAt(cx, cy, radius, a))
+  };
 }
 
-function pointAt(
-  cx: number,
-  cy: number,
-  radius: number,
-  angleDeg: number
-): OrbitalPoint {
-  // SVG coordinates: y grows downward. Convert "clockwise from up" to
-  // standard math by rotating -90° so 0° lands at the top.
+/*** HELPER ------------------------------------------- ***/
+
+function pointAt(cx: number, cy: number, radius: number, angleDeg: number): OrbitalPoint {
+  /*** SVG coordinates: y grows downward. Convert "clockwise from up" to standard math by rotating
+       -90° so 0° lands at the top. ***/
   const rad = (angleDeg - 90) * Math.PI / 180;
+
   return {
     angle: angleDeg,
     x: cx + radius * Math.cos(rad),
@@ -72,17 +79,14 @@ function pointAt(
   };
 }
 
-export function layoutDisc(opts: LayoutOptions): DiscLayout {
-  const { cx, cy, radius, outgoingCount, incomingCount } = opts;
-  if (radius < 0) {
-    throw new Error("radius must be non-negative");
-  }
-  if (outgoingCount < 0 || incomingCount < 0) {
-    throw new Error("counts must be non-negative");
-  }
-  return {
-    center: { x: cx, y: cy },
-    outgoing: spread(outgoingCount, OUTGOING_ARC).map(a => pointAt(cx, cy, radius, a)),
-    incoming: spread(incomingCount, INCOMING_ARC).map(a => pointAt(cx, cy, radius, a))
-  };
+function spread(count: number, [start, end]: [number, number]): number[] {
+  if (count <= 0)
+    return [];
+
+  if (count === 1)
+    return [(start + end) / 2];
+
+  const step = (end - start) / (count - 1);
+
+  return Array.from({ length: count }, (_, i) => start + i * step);
 }

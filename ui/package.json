@@ -32,10 +32,10 @@
     "dev": "vite dev",
     "preview": "vite preview",
     "test": "vitest --config vite.config.test.ts --run --passWithNoTests",
-    "test:watch": "vitest --config vite.config.test.ts",
     "test:coverage": "vitest --config vite.config.test.ts --run --coverage --passWithNoTests",
+    "test:e2e": "playwright test",
     "test:ui": "vitest --config vite.config.test.ts --ui",
-    "test:e2e": "playwright test"
+    "test:watch": "vitest --config vite.config.test.ts"
   },
   "type": "module",
   "version": "0.1.0"

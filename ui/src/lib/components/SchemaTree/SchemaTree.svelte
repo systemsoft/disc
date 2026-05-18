@@ -68,94 +68,10 @@
   }
 </script>
 
-{#if searchable}
-  <div class="search-container">
-    <input
-      type="text"
-      class="search-input"
-      placeholder="Search types..."
-      bind:value={searchQuery}
-    />
-    <span class="search-icon">⊙</span>
-  </div>
-{/if}
-
-<div class="schema-tree">
-  {#each schema.modules || [] as module}
-    <div class="module-node">
-      <div class="module-header">
-        <span class="module-icon">◈</span>
-        <span class="module-name">{module.name}</span>
-      </div>
-
-      <div class="types-container">
-        {#each filterTypes(module.types || [], searchQuery) as type}
-          <div class="type-node" class:expanded={expandedTypes.has(type.name)}>
-            <button
-              class="type-header"
-              class:selected={selectedType === type.name}
-              on:click={() => toggleType(type.name)}
-            >
-              <span class="expand-icon">
-                {expandedTypes.has(type.name) ? '▼' : '▶'}
-              </span>
-              <span class="type-icon">▦</span>
-              <span class="type-name">{type.name}</span>
-            </button>
-
-            {#if expandedTypes.has(type.name)}
-              <div class="type-details" transition:slide={{ duration: 200 }}>
-                {#if type.properties?.length > 0}
-                  <div class="properties-section">
-                    <div class="section-label">Properties</div>
-                    {#each type.properties as property}
-                      <div class="property-item">
-                        <span class="property-icon">{getPropertyIcon(property)}</span>
-                        <span class="property-name">{property.name}</span>
-                        <span class="property-type">{property.type}</span>
-                        {#if property.required}
-                          <span class="property-badge required">required</span>
-                        {/if}
-                        {#if property.constraint}
-                          <span class="property-badge constraint">{property.constraint}</span>
-                        {/if}
-                        {#if property.default}
-                          <span class="property-default" title={property.default}>⚡</span>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-
-                {#if type.links?.length > 0}
-                  <div class="links-section">
-                    <div class="section-label">Links</div>
-                    {#each type.links as link}
-                      <div class="link-item">
-                        <span class="link-icon">{getLinkIcon(link)}</span>
-                        <span class="link-name">{link.name}</span>
-                        <span class="link-arrow">→</span>
-                        <span class="link-target">{link.target}</span>
-                        <span class="link-cardinality">[{link.cardinality}]</span>
-                        {#if link.required}
-                          <span class="link-badge required">required</span>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    </div>
-  {/each}
-</div>
 
 <style lang="scss">
   @use "../../../styles/mixins" as *;
-  @import '../../styles/component-base.scss';
+  @import "../../styles/component-base.scss";
 
   .search-container {
     margin-bottom: calc(var(--grid-unit) * 2);
@@ -367,3 +283,88 @@
     }
   }
 </style>
+
+{#if searchable}
+  <div class="search-container">
+    <input
+      class="search-input"
+      placeholder="Search types…"
+      type="text"
+      bind:value={searchQuery}
+    />
+    <span class="search-icon">⊙</span>
+  </div>
+{/if}
+
+<div class="schema-tree">
+  {#each schema.modules || [] as module}
+    <div class="module-node">
+      <div class="module-header">
+        <span class="module-icon">◈</span>
+        <span class="module-name">{module.name}</span>
+      </div>
+
+      <div class="types-container">
+        {#each filterTypes(module.types || [], searchQuery) as type}
+          <div class="type-node" class:expanded={expandedTypes.has(type.name)}>
+            <button
+              class="type-header"
+              class:selected={selectedType === type.name}
+              on:click={() => toggleType(type.name)}
+            >
+              <span class="expand-icon">
+                {expandedTypes.has(type.name) ? "▼" : "▶"}
+              </span>
+              <span class="type-icon">▦</span>
+              <span class="type-name">{type.name}</span>
+            </button>
+
+            {#if expandedTypes.has(type.name)}
+              <div class="type-details" transition:slide={{ duration: 200 }}>
+                {#if type.properties?.length > 0}
+                  <div class="properties-section">
+                    <div class="section-label">Properties</div>
+                    {#each type.properties as property}
+                      <div class="property-item">
+                        <span class="property-icon">{getPropertyIcon(property)}</span>
+                        <span class="property-name">{property.name}</span>
+                        <span class="property-type">{property.type}</span>
+                        {#if property.required}
+                          <span class="property-badge required">required</span>
+                        {/if}
+                        {#if property.constraint}
+                          <span class="property-badge constraint">{property.constraint}</span>
+                        {/if}
+                        {#if property.default}
+                          <span class="property-default" title={property.default}>⚡</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if type.links?.length > 0}
+                  <div class="links-section">
+                    <div class="section-label">Links</div>
+                    {#each type.links as link}
+                      <div class="link-item">
+                        <span class="link-icon">{getLinkIcon(link)}</span>
+                        <span class="link-name">{link.name}</span>
+                        <span class="link-arrow">→</span>
+                        <span class="link-target">{link.target}</span>
+                        <span class="link-cardinality">[{link.cardinality}]</span>
+                        {#if link.required}
+                          <span class="link-badge required">required</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/each}
+</div>
