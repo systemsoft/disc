@@ -427,22 +427,64 @@ export class PostgresInstance {
   private async isRunning(): Promise<boolean> {
     const pidFile = join(this.dataDir, "postmaster.pid");
 
+    let pidContent: string;
     try {
-      const pidContent = await Deno.readTextFile(pidFile);
-      const pid = parseInt(pidContent.split("\n")[0]);
-
-      // Check if process is actually running
-      try {
-        Deno.kill(pid, 0); // Signal 0 just checks if process exists
-        this.pid = pid;
-        return true;
-      } catch {
-        // Process doesn't exist, clean up stale PID file
-        await Deno.remove(pidFile).catch(() => {});
-        return false;
-      }
+      pidContent = await Deno.readTextFile(pidFile);
     } catch {
       // PID file doesn't exist
+      return false;
+    }
+
+    const pid = parseInt(pidContent.split("\n")[0]);
+
+    try {
+      Deno.kill(pid, 0); // Signal 0 just checks if process exists
+    } catch {
+      // Process doesn't exist, clean up stale PID file
+      await Deno.remove(pidFile).catch(() => {});
+      return false;
+    }
+
+    this.pid = pid;
+
+    // P*-**: The process is alive, but verify the Unix socket file is still
+    // on disk. External cleanup (tmp janitors, manual `rm`, OS-level socket
+    // dir wipes) can remove the socket entry while postgres keeps the fd
+    // open in memory — clients then get "Could not open socket" forever.
+    // Detect this orphan state, terminate the dead-socket process so the
+    // pidfile can be reclaimed, and report not-running so callers (start,
+    // status, monitor) take the restart path.
+    try {
+      await Deno.lstat(this.getSocketPath());
+      return true;
+    } catch {
+      logger.warn(
+        `PostgreSQL process ${pid} is alive but its Unix socket ${this.getSocketPath()} is missing from disk; terminating the orphan so the instance can be restarted`
+      );
+      try {
+        Deno.kill(pid, "SIGTERM");
+      } catch {
+        // Already exited between the kill(0) check and now — fall through.
+      }
+      // Wait up to 5s for the process to exit before escalating to SIGKILL.
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        try {
+          Deno.kill(pid, 0);
+          await new Promise(r => setTimeout(r, 100));
+        } catch {
+          break;
+        }
+      }
+      try {
+        Deno.kill(pid, 0);
+        // Still alive — escalate.
+        Deno.kill(pid, "SIGKILL");
+      } catch {
+        // Dead — proceed to cleanup.
+      }
+      await Deno.remove(pidFile).catch(() => {});
+      this.pid = undefined;
       return false;
     }
   }

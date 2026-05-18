@@ -346,3 +346,95 @@ Deno.test("isPgRunning - returns false when no postmaster.pid", async () => {
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+/**
+ * Build a synthetic postmaster.pid in `dataDir` pointing at `pid`, with the
+ * port + socket dir fields populated so isPgRunning's socket check can run.
+ * Uses Deno.pid (the test runner) as a known-alive PID by default.
+ */
+async function writePostmasterPid(
+  dataDir: string,
+  options: { pid?: number; port?: number; socketDir: string; }
+): Promise<void> {
+  const pid = options.pid ?? Deno.pid;
+  const port = options.port ?? 5432;
+  // PG 16 postmaster.pid layout: PID, data dir, start epoch, port, socket dir,
+  // listen address, shmem, status. Disc only reads lines 1, 4, 5.
+  const contents = [
+    String(pid),
+    dataDir,
+    "1700000000",
+    String(port),
+    options.socketDir,
+    "",
+    "",
+    "ready"
+  ]
+    .join("\n") + "\n";
+  await Deno.writeTextFile(join(dataDir, "postmaster.pid"), contents);
+}
+
+Deno.test(
+  "isPgRunning - returns false when process is alive but socket file is missing",
+  async () => {
+    const dir = await makeTempDir();
+    const socketDir = join(dir, "socket");
+    await Deno.mkdir(socketDir);
+    try {
+      await writePostmasterPid(dir, { socketDir });
+
+      const ctx: ProjectContext = {
+        dataDir: dir,
+        instanceName: "test-instance",
+        managed: true,
+        projectName: "test-project",
+        projectRoot: dir,
+        serverHost: "localhost",
+        serverPort: 5656,
+        socketDir
+      };
+
+      const running = await isPgRunning(ctx);
+      assertEquals(running, false);
+
+      // pid file must NOT be removed here — the live process still owns it,
+      // and only the instance-level recovery path may kill the orphan.
+      const pidStat = await Deno.stat(join(dir, "postmaster.pid"));
+      assertEquals(pidStat.isFile, true);
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  }
+);
+
+Deno.test(
+  "isPgRunning - returns true when process is alive and socket file exists",
+  async () => {
+    const dir = await makeTempDir();
+    const socketDir = join(dir, "socket");
+    await Deno.mkdir(socketDir);
+    try {
+      await writePostmasterPid(dir, { socketDir });
+      // Create a placeholder file at the socket path so lstat succeeds. We
+      // don't need a real Unix socket — isPgRunning only checks for entry
+      // existence.
+      await Deno.writeTextFile(join(socketDir, ".s.PGSQL.5432"), "");
+
+      const ctx: ProjectContext = {
+        dataDir: dir,
+        instanceName: "test-instance",
+        managed: true,
+        projectName: "test-project",
+        projectRoot: dir,
+        serverHost: "localhost",
+        serverPort: 5656,
+        socketDir
+      };
+
+      const running = await isPgRunning(ctx);
+      assertEquals(running, true);
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  }
+);

@@ -493,13 +493,19 @@ export function resolveDsn(ctx: ProjectContext): string {
 }
 
 /**
- * Check whether the managed PostgreSQL process is currently running.
+ * Check whether the managed PostgreSQL instance is currently usable.
  *
- * Reads `postmaster.pid` from the data directory, extracts the PID on the
- * first line, and sends signal 0 to verify the process is alive.
+ * "Usable" means: postmaster.pid exists, the process it points to is alive,
+ * AND the Unix-domain socket file is still on disk. The socket check matters
+ * because external cleanup (tmp janitors, manual `rm`, container restarts
+ * that wipe the socket dir) can remove the socket entry while postgres keeps
+ * its in-memory fd open — clients then fail with "Could not open socket" and
+ * the only fix is to restart postgres so it rebinds the socket. Reporting
+ * such an orphan as "not running" lets callers take the restart path.
  *
  * Stale PID files (process no longer alive) are removed automatically.
- * Returns false when the PID file is absent or the process is not running.
+ * Returns false when the PID file is absent, the process is not running, or
+ * the Unix socket file is missing from disk.
  */
 export async function isPgRunning(ctx: ProjectContext): Promise<boolean> {
   const pidFile = join(ctx.dataDir, "postmaster.pid");
@@ -512,8 +518,8 @@ export async function isPgRunning(ctx: ProjectContext): Promise<boolean> {
     return false;
   }
 
-  const firstLine = contents.split("\n")[0].trim();
-  const pid = parseInt(firstLine, 10);
+  const lines = contents.split("\n");
+  const pid = parseInt(lines[0]?.trim() ?? "", 10);
 
   if (isNaN(pid) || pid <= 0) {
     return false;
@@ -525,7 +531,6 @@ export async function isPgRunning(ctx: ProjectContext): Promise<boolean> {
     // On some platforms kill(pid, 0) is the idiom; Deno.kill accepts signal
     // names. We use SIGCONT because Deno does not expose signal 0. A running
     // process will not be affected by SIGCONT when already running.
-    return true;
   } catch {
     // Process does not exist — remove stale PID file
     try {
@@ -533,6 +538,26 @@ export async function isPgRunning(ctx: ProjectContext): Promise<boolean> {
     } catch {
       // Best-effort cleanup; ignore removal errors
     }
+    return false;
+  }
+
+  // Postmaster.pid layout (PG 16): line 4 is the port PG advertises, line 5
+  // is the socket directory. Fall back to ctx.socketDir and 5432 (the default
+  // disc managed instances use; see `instance.ts:buildPostgresArgs`) when the
+  // pid file shape is unexpected.
+  const pidPort = parseInt(lines[3]?.trim() ?? "", 10);
+  const port = Number.isFinite(pidPort) && pidPort > 0 ? pidPort : 5432;
+  const socketDir = lines[4]?.trim() || ctx.socketDir;
+  const socketPath = join(socketDir, `.s.PGSQL.${port}`);
+
+  try {
+    await Deno.lstat(socketPath);
+    return true;
+  } catch {
+    // Process is alive but the socket file is gone — orphan state. Do NOT
+    // remove the pid file here: the orphan process still holds it, and only
+    // the instance-level start path (which knows how to kill the orphan) can
+    // safely reclaim it.
     return false;
   }
 }
