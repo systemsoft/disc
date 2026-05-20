@@ -49,17 +49,37 @@ export interface LinkDescription {
   secret: boolean;
 }
 
+export interface IndexDescription {
+  /** Optional named index — e.g., `index name_idx on (.name)`. */
+  name?: string;
+  /**
+   * Columns covered by the index. A single-column index has one entry
+   * (e.g., `[".email"]`); a composite index has one entry per column
+   * (e.g., `[".created", ".environment", ".merchant"]`). Non-tuple
+   * expressions (function calls, etc.) appear as a single entry.
+   */
+  columns: string[];
+}
+
 export interface TypeDescription {
   name: string;
   module: string;
+  /**
+   * "object" types are queryable as collections; "enum" and "scalar"
+   * types appear in the schema but have no rows. Consumers like the
+   * data viewer use this to skip non-object entries (which lack `id`
+   * and would fail any `select X { id }` shape).
+   */
+  kind: "object" | "scalar" | "enum";
   abstract: boolean;
   parentTypes: string[];
   properties: PropertyDescription[];
   links: LinkDescription[];
   accessPolicies: string[];
-  indexes: string[];
+  indexes: IndexDescription[];
   annotations: Record<string, string>;
   secret: boolean;
+  enumValues?: string[];
 }
 
 export interface FunctionDescription {
@@ -115,7 +135,16 @@ export function describeSchema(schema: Schema): SchemaDescription {
   const modulesSet = new Set<string>();
   const types: TypeDescription[] = [];
 
+  // SchemaManager registers non-default-module enums under both the bare
+  // and module-qualified keys (so `<LogLevel>` resolves cross-module), so
+  // iterating `values()` would emit the same TypeDef twice. Dedupe by
+  // object identity to keep each type in the output exactly once.
+  const seen = new Set<TypeDef>();
   for (const typeDef of schema.types.values()) {
+    if (seen.has(typeDef)) {
+      continue;
+    }
+    seen.add(typeDef);
     const desc = buildTypeDescription(typeDef);
     types.push(desc);
     modulesSet.add(desc.module);
@@ -155,7 +184,10 @@ function isSecretAnnotation(
 }
 
 function buildTypeDescription(typeDef: TypeDef): TypeDescription {
-  const module = extractModule(typeDef.name);
+  // SchemaManager stores `typeDef.name` as the bare identifier (e.g. "Payment")
+  // and carries the module on `typeDef.module`. Fall back to extracting from
+  // the name only for legacy TypeDefs that pre-date the module field.
+  const module = typeDef.module ?? extractModule(typeDef.name);
 
   const properties: PropertyDescription[] = [];
   for (const prop of typeDef.properties.values()) {
@@ -176,20 +208,20 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     }
   }
 
-  const indexes: string[] = [];
+  const indexes: IndexDescription[] = [];
   if (typeDef.indexes) {
     for (const idx of typeDef.indexes) {
-      // Format as `name: expression` when named, else just the
-      // expression — matches the convention SDL uses textually.
-      indexes.push(
-        idx.name ? `${idx.name}: ${idx.expression}` : idx.expression
-      );
+      indexes.push({
+        ...(idx.name ? { name: idx.name } : {}),
+        columns: parseIndexColumns(idx.expression)
+      });
     }
   }
 
   return {
     name: typeDef.name,
     module,
+    kind: typeDef.kind,
     abstract: typeDef.abstract ?? false,
     parentTypes: typeDef.parentTypes ?? [],
     properties,
@@ -197,7 +229,8 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     accessPolicies,
     indexes,
     annotations: typeDef.annotations ?? {},
-    secret: isSecretAnnotation(typeDef.annotations)
+    secret: isSecretAnnotation(typeDef.annotations),
+    ...(typeDef.enumValues ? { enumValues: typeDef.enumValues } : {})
   };
 }
 
@@ -249,6 +282,43 @@ function buildFunctionDescription(funcDef: FunctionDef): FunctionDescription {
     params,
     returnType: funcDef.returnType
   };
+}
+
+/**
+ * Split an index expression into its column list. A composite index's
+ * `stringifyExpression` output is `"(.a, .b, .c)"` — strip the outer
+ * parens and split on top-level commas so the UI can render each column
+ * as a discrete item. Non-tuple expressions pass through as a single entry.
+ */
+function parseIndexColumns(expression: string): string[] {
+  const trimmed = expression.trim();
+  if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+    const inner = trimmed.slice(1, -1);
+    const parts = splitTopLevelCommas(inner);
+    if (parts.length > 1) {
+      return parts.map(p => p.trim());
+    }
+  }
+  return [trimmed];
+}
+
+function splitTopLevelCommas(s: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "(" || c === "[" || c === "{") {
+      depth++;
+    } else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+    } else if (c === "," && depth === 0) {
+      parts.push(s.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(s.slice(start));
+  return parts;
 }
 
 /**

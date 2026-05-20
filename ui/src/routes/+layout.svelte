@@ -1,208 +1,218 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
-  import '../app.scss';
-  import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  
-  let currentPath = '';
-  
-  $: currentPath = $page.url.pathname;
-  
+  /*** IMPORT ------------------------------------------- ***/
+
+  import { onMount, onDestroy } from "svelte";
+
+  /*** UTILITY ------------------------------------------ ***/
+
+  import "../app.scss";
+
+  import { discAPI } from "$lib/api/client";
+  import favicon from "$lib/assets/disc.svg";
+  import { page } from "$app/stores";
+
+  type ConnectionStatus = "connecting" | "offline" | "online";
+
   const navItems = [
-    { path: '/ui', label: 'Dashboard', icon: '⊞' },
-    { path: '/ui/schema', label: 'Schema', icon: '◈' },
-    { path: '/ui/admin/schema', label: 'Diff', icon: '⇄' },
-    { path: '/ui/data', label: 'Data', icon: '▦' },
-    { path: '/ui/query', label: 'Query', icon: '⟩' },
-    { path: '/ui/query-builder', label: 'Builder', icon: '◇' },
-    { path: '/ui/disc', label: 'Disc', icon: '◉' },
-    { path: '/ui/repl', label: 'REPL', icon: '›_' },
-    { path: '/ui/migrations', label: 'Migrations', icon: '⟲' },
-    { path: '/ui/config', label: 'Config', icon: '⚙' },
+    { path: "/ui/schema", label: "Schema" },
+    { path: "/ui/admin/schema", label: "Diff" },
+    { path: "/ui/data", label: "Data" },
+    { path: "/ui/query", label: "Query" },
+    { path: "/ui/query-builder", label: "Builder" },
+    { path: "/ui/disc", label: "Disc" },
+    { path: "/ui/repl", label: "REPL" },
+    { path: "/ui/migrations", label: "Migrations" },
+    { path: "/ui/config", label: "Config" }
   ];
-  
-  let connectionStatus = 'connecting';
-  
-  onMount(() => {
-    // Simulate connection check
-    setTimeout(() => {
-      connectionStatus = 'connected';
-    }, 1000);
+
+  let connectionStatus: ConnectionStatus = "connecting";
+  let currentPath = "";
+  let pollHandle: ReturnType<typeof setInterval> | null = null;
+
+  /*** RUNTIME ------------------------------------------ ***/
+
+  $: currentPath = $page.url.pathname;
+
+  onDestroy(() => {
+    if (pollHandle !== null)
+      clearInterval(pollHandle);
   });
+
+  onMount(() => {
+    checkHealth();
+    pollHandle = setInterval(checkHealth, 10_000);
+  });
+
+  /*** HELPER ------------------------------------------- ***/
+
+  async function checkHealth() {
+    const health = await discAPI.getHealth();
+
+    connectionStatus = health && (health.status === "ok" || health.status === "healthy") ?
+      "online" :
+      "offline";
+  }
 </script>
 
-<div class="app-layout">
-  <header class="app-header">
-    <div class="logo">
-      <span class="logo-icon">◉</span>
-      <span class="logo-text">DISC</span>
-    </div>
-    
-    <nav class="main-nav">
-      {#each navItems as item}
-        <a 
-          href={item.path} 
-          class="nav-item"
-          class:active={currentPath === item.path}
-        >
-          <span class="nav-icon">{item.icon}</span>
-          <span class="nav-label">{item.label}</span>
-        </a>
-      {/each}
-    </nav>
-    
-    <div class="connection-status" class:connected={connectionStatus === 'connected'}>
-      <span class="status-dot"></span>
-      <span class="status-text">{connectionStatus}</span>
-    </div>
-  </header>
-  
-  <main class="app-main">
-    <slot />
-  </main>
-</div>
-
 <style lang="scss">
+  @use "@inc/uchu/scss" as *;
   @use "../styles/mixins" as *;
+
   .app-layout {
+    width: 100vw; height: 100vh;
+
+    color: $uchu-yin-9;
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    width: 100vw;
     overflow: hidden;
   }
-  
+
   .app-header {
-    display: flex;
     align-items: center;
+    border-bottom: 1px solid $uchu-gray-1;
+    display: flex;
     gap: calc(var(--grid-unit) * 4);
     padding: calc(var(--grid-unit) * 2);
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
     position: relative;
-    
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, 
-        transparent,
-        var(--color-primary) 20%,
-        var(--color-primary) 80%,
-        transparent
-      );
-      opacity: 0.5;
-    }
   }
-  
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: var(--grid-unit);
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    font-weight: 900;
-    letter-spacing: 0.1em;
-    
-    .logo-icon {
-      color: var(--color-primary);
-      font-size: 2rem;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    
-    .logo-text {
-      @include neon-text(var(--color-primary-rgb));
-    }
-  }
-  
+
   .main-nav {
     display: flex;
     gap: var(--grid-unit);
     flex: 1;
-    
+
     .nav-item {
-      display: flex;
       align-items: center;
-      gap: var(--grid-unit);
-      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
-      color: var(--color-text-dim);
+      display: flex;
       font-family: var(--font-mono);
       font-size: 0.875rem;
+      gap: var(--grid-unit);
+      letter-spacing: 0.05rem;
+      padding-bottom: var(--grid-unit);
+      padding-right: calc(var(--grid-unit) * 2);
+      padding-top: var(--grid-unit);
+      position: relative;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border: 1px solid transparent;
-      border-radius: var(--border-radius);
       transition: all var(--transition-fast);
-      
-      .nav-icon {
-        font-size: 1.25rem;
+
+      &:not(:first-of-type) {
+        padding-left: calc(var(--grid-unit) * 2);
       }
-      
-      &:hover {
-        color: var(--color-primary);
-        background: rgb(var(--color-primary-rgb) / 0.1);
-        border-color: rgb(var(--color-primary-rgb) / 0.3);
+
+      &:not(:last-of-type) {
+        &::after {
+          top: var(--grid-unit); right: calc(var(--grid-unit) * -1);
+
+          color: $uchu-yin-3;
+          content: "/";
+          font-weight: normal;
+          opacity: 0.2;
+          position: absolute;
+          width: var(--grid-unit);
+        }
       }
-      
+
+      &:not(.active) {
+        color: $uchu-yin-3;
+      }
+
       &.active {
-        color: var(--color-primary);
-        background: rgb(var(--color-primary-rgb) / 0.15);
-        border-color: var(--color-primary);
-        @include glow(var(--color-primary-rgb), 0.3);
+        color: inherit;
+        font-weight: 700;
       }
     }
   }
-  
+
   .connection-status {
-    display: flex;
     align-items: center;
-    gap: var(--grid-unit);
-    padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+    display: flex;
     font-family: var(--font-mono);
     font-size: 0.75rem;
+    font-weight: 700;
+    gap: var(--grid-unit);
+    letter-spacing: 0.1rem;
+    padding: calc(var(--grid-unit) / 4) calc(var(--grid-unit) * 2);
+    pointer-events: none;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-dim);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--color-warning);
-      animation: pulse 2s ease-in-out infinite;
+    user-select: none;
+
+    &:not(.online):not(.offline) {
+      background-color: $uchu-orange-4;
+      color: $uchu-yin-8;
     }
-    
-    &.connected {
-      color: var(--color-success);
-      border-color: rgb(var(--color-success-rgb) / 0.3);
-      
-      .status-dot {
-        background: var(--color-success);
-      }
+
+    &.offline {
+      background-color: $uchu-red-4;
+      color: $uchu-yin-8;
+    }
+
+    &.online {
+      background-color: $uchu-green-4;
+      color: $uchu-yin-8;
     }
   }
-  
+
+  .logo {
+    align-items: center;
+    color: inherit;
+    display: flex;
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 900;
+    gap: var(--grid-unit);
+    letter-spacing: 0.1rem;
+
+    svg {
+      height: 2rem;
+    }
+  }
+
   .app-main {
     flex: 1;
-    overflow-y: auto;
     overflow-x: hidden;
-    padding: calc(var(--grid-unit) * 3);
+    overflow-y: auto;
+    padding: calc(var(--grid-unit) * 2);
     position: relative;
   }
-  
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
 </style>
+
+<svelte:head>
+  <title>Disc Viewer</title>
+	<link rel="icon" href={favicon}/>
+</svelte:head>
+
+<div class="app-layout">
+  <header class="app-header">
+    <div class="undershirt">
+      <nav class="main-nav">
+        {#each navItems as item}
+          <a
+            class="nav-item"
+            class:active={currentPath === item.path}
+            href={item.path}>
+            <span class="nav-label">{item.label}</span>
+          </a>
+        {/each}
+      </nav>
+
+      <div
+        class="connection-status"
+        class:online={connectionStatus === "online"}
+        class:offline={connectionStatus === "offline"}>
+        <span class="status-text">{connectionStatus}</span>
+      </div>
+
+      <a class="logo" href="/">
+        <svg viewBox="0 0 620 200" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+          <path d="M475 55l0 -30l120 0l0 30l-120 0Zm0 90l-30 0l0 -90l30 0l0 90Zm0 0l120 0l0 30l-120 0l0 -30Zm-90 0l0 30l-120 0l0 -30l120 0Zm0 0l0 -30l-120 0l0 -60l30 0l0 30l120 0l0 60l-30 0Zm-90 -90l0 -30l120 0l0 30l-120 0Zm-150 90l0 30l-120 0l0 -150l120 0l0 30l-90 0l0 90l90 0Zm0 -90l30 0l0 90l-30 0l0 -90Zm60 120l0 -150l30 0l0 150l-30 0Z"/>
+        </svg>
+      </a>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="undershirt">
+      <slot/>
+    </div>
+  </main>
+</div>

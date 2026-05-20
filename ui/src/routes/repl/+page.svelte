@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { discAPI } from '$lib/api/client';
@@ -109,48 +106,6 @@
   }
 </script>
 
-<div class="repl">
-  <header>
-    <h1>Interactive REPL</h1>
-    <button class="button" on:click={clearHistory} disabled={history.length === 0}>
-      Clear
-    </button>
-  </header>
-
-  <div class="repl-container">
-    <div class="repl-history" bind:this={scrollEl}>
-      {#each history as item}
-        <div class="history-item">
-          <div class="command">disc&gt; {item.command}</div>
-          {#if item.error}
-            <div class="error">! {item.error}</div>
-          {:else}
-            <pre class="result">{item.result}</pre>
-          {/if}
-          <div class="duration">{item.durationMs}ms</div>
-        </div>
-      {/each}
-      {#if history.length === 0}
-        <div class="empty">No history. Enter an EdgeQL statement below.</div>
-      {/if}
-    </div>
-
-    <div class="repl-input">
-      <span class="prompt">disc&gt;</span>
-      <input
-        bind:value={command}
-        on:keydown={handleKeyDown}
-        placeholder="select User {'{ name, email }'};"
-        class="command-input"
-        disabled={executing}
-      />
-      {#if executing}
-        <span class="spinner">...</span>
-      {/if}
-    </div>
-  </div>
-</div>
-
 <style lang="scss">
   .repl {
     max-width: 1400px;
@@ -248,3 +203,45 @@
     }
   }
 </style>
+
+<div class="repl">
+  <header>
+    <h1>Interactive REPL</h1>
+    <button class="button" on:click={clearHistory} disabled={history.length === 0}>
+      Clear
+    </button>
+  </header>
+
+  <div class="repl-container">
+    <div class="repl-history" bind:this={scrollEl}>
+      {#each history as item}
+        <div class="history-item">
+          <div class="command">disc&gt; {item.command}</div>
+          {#if item.error}
+            <div class="error">! {item.error}</div>
+          {:else}
+            <pre class="result">{item.result}</pre>
+          {/if}
+          <div class="duration">{item.durationMs}ms</div>
+        </div>
+      {/each}
+      {#if history.length === 0}
+        <div class="empty">No history. Enter an EdgeQL statement below.</div>
+      {/if}
+    </div>
+
+    <div class="repl-input">
+      <span class="prompt">disc&gt;</span>
+      <input
+        bind:value={command}
+        on:keydown={handleKeyDown}
+        placeholder="select User {'{ name, email }'};"
+        class="command-input"
+        disabled={executing}
+      />
+      {#if executing}
+        <span class="spinner">...</span>
+      {/if}
+    </div>
+  </div>
+</div>

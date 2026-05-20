@@ -8,7 +8,7 @@
 import { SyntaxError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
 import { EdgeQLLexer } from "./lexer.ts";
-import { Token, TokenType } from "./tokens.ts";
+import { KEYWORDS, RESERVED_KEYWORDS, Token, TokenType } from "./tokens.ts";
 
 export class EdgeQLParser {
   private tokens: Token[];
@@ -28,6 +28,20 @@ export class EdgeQLParser {
     }
 
     return query;
+  }
+
+  /**
+   * Parse a bare expression (no surrounding SELECT/INSERT/etc). Used by the
+   * compiler to re-parse computed-property expressions captured at schema
+   * load time — those live on `PropertyDef.computedExpr` as the EdgeQL
+   * source of the right-hand side of `name := expr`.
+   */
+  parseExpressionOnly(): AST.Expression {
+    const expr = this.parseExpression();
+    if (!this.isAtEnd()) {
+      this.consume(TokenType.SEMICOLON, "Expected ';' or end of input");
+    }
+    return expr;
   }
 
   /**
@@ -730,7 +744,7 @@ export class EdgeQLParser {
 
     // Check if it's a computed property (name := expr)
     const checkpoint = this.current;
-    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+    if (this.checkIdentLike()) {
       const ident = this.parseIdentifier();
 
       if (this.match(TokenType.ASSIGN)) {
@@ -1557,8 +1571,8 @@ export class EdgeQLParser {
       return AST.createIdentifier(value);
     }
 
-    // Type name or identifier
-    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+    // Type name or identifier (also accepts soft keywords like `type`)
+    if (this.checkIdentLike()) {
       const parts: string[] = [];
 
       parts.push(this.parseIdentifier().name);
@@ -1834,6 +1848,22 @@ export class EdgeQLParser {
     return { kind: "Subquery", query };
   }
 
+  /**
+   * True when the current token can stand in for an identifier — IDENT,
+   * BACKTICK_IDENT, or a soft keyword (in KEYWORDS but not RESERVED_KEYWORDS).
+   * Soft keywords like `type`, `schema`, `module` keep structural meaning in
+   * SDL/DDL contexts but should still parse as field names in shapes like
+   * `select X { type }`.
+   */
+  private checkIdentLike(): boolean {
+    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+      return true;
+    }
+    const tok = this.peek();
+    const lower = tok.value?.toLowerCase();
+    return !!lower && KEYWORDS.has(lower) && !RESERVED_KEYWORDS.has(lower);
+  }
+
   private parseIdentifier(): AST.Identifier {
     if (this.check(TokenType.IDENT)) {
       const name = this.advance().value;
@@ -1843,6 +1873,12 @@ export class EdgeQLParser {
     if (this.check(TokenType.BACKTICK_IDENT)) {
       const name = this.advance().value;
       return AST.createIdentifier(name, true);
+    }
+
+    // Accept soft keywords (e.g. `type`) so they can appear as field names.
+    if (this.checkIdentLike()) {
+      const name = this.advance().value;
+      return AST.createIdentifier(name, false);
     }
 
     throw this.error(`Expected identifier, got ${this.peek().value}`);

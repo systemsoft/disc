@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { discAPI } from '$lib/api/client';
@@ -25,6 +22,7 @@
     queries: 0
   };
 
+  let databaseName = '';
   let recentQueries: string[] = [];
   let isLoading = true;
   let errorMessage = '';
@@ -57,113 +55,56 @@
         connections: serverStats?.connections?.active ?? 0,
         queries: serverStats?.queries?.total ?? 0
       };
+
+      databaseName = serverStats?.database ?? '';
     } catch (error) {
-      errorMessage =
-        error instanceof Error ? error.message : 'Failed to load dashboard';
+      errorMessage = error instanceof Error ? error.message : 'Failed to load dashboard';
     } finally {
       isLoading = false;
     }
   });
 </script>
 
-<div class="dashboard">
-  <h1>Database Overview</h1>
-
-  {#if errorMessage}
-    <div class="error-banner" role="alert">
-      <span class="error-icon">⚠</span>
-      <span>Could not load stats: {errorMessage}</span>
-    </div>
-  {/if}
-
-  <div class="stats-grid" class:is-loading={isLoading}>
-    <div class="stat-card">
-      <div class="stat-value">{isLoading ? '—' : stats.types}</div>
-      <div class="stat-label">Schema Types</div>
-      <div class="stat-icon">◈</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-value">{isLoading ? '—' : stats.migrations}</div>
-      <div class="stat-label">Migrations Applied</div>
-      <div class="stat-icon">▦</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-value">{isLoading ? '—' : stats.connections}</div>
-      <div class="stat-label">Active Connections</div>
-      <div class="stat-icon">⟗</div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-value">{isLoading ? '—' : stats.queries.toLocaleString()}</div>
-      <div class="stat-label">Queries (lifetime)</div>
-      <div class="stat-icon">⟩</div>
-    </div>
-  </div>
-
-  <div class="content-grid">
-    <section class="recent-queries">
-      <h2>Recent Queries</h2>
-      <div class="query-list">
-        {#each recentQueries as query}
-          <div class="query-item">
-            <code>{query}</code>
-          </div>
-        {/each}
-        {#if recentQueries.length === 0}
-          <div class="empty-state">No recent queries</div>
-        {/if}
-      </div>
-    </section>
-
-    <section class="quick-actions">
-      <h2>Quick Actions</h2>
-      <div class="action-grid">
-        <a href="/ui/schema" class="action-card">
-          <span class="action-icon">◈</span>
-          <span class="action-label">Browse Schema</span>
-        </a>
-        <a href="/ui/query" class="action-card">
-          <span class="action-icon">⟩</span>
-          <span class="action-label">New Query</span>
-        </a>
-        <a href="/ui/data" class="action-card">
-          <span class="action-icon">▦</span>
-          <span class="action-label">View Data</span>
-        </a>
-        <a href="/ui/migrations" class="action-card">
-          <span class="action-icon">⟲</span>
-          <span class="action-label">Migrations</span>
-        </a>
-      </div>
-    </section>
-  </div>
-</div>
-
 <style lang="scss">
+  @use "@inc/uchu/scss" as *;
   @use "../styles/mixins" as *;
+
   .dashboard {
-    max-width: 1400px;
-    margin: 0 auto;
+    /* margin: 0 auto; */
+    /* max-width: 1400px; */
   }
 
   h1 {
-    margin-bottom: calc(var(--grid-unit) * 4);
+    border-bottom: 1px solid $uchu-gray-1;
+    /* margin-bottom: calc(var(--grid-unit) * 2); */
+    line-height: 1;
+    padding-bottom: calc(var(--grid-unit) * 2);
+
+    .database-name {
+      color: $uchu-yin-3;
+      font-family: var(--font-mono);
+      font-weight: 400;
+      margin-left: var(--grid-unit);
+
+      &::before {
+        content: "·";
+        margin-right: var(--grid-unit);
+      }
+    }
   }
 
   .error-banner {
-    display: flex;
     align-items: center;
-    gap: var(--grid-unit);
-    padding: calc(var(--grid-unit) * 2);
-    margin-bottom: calc(var(--grid-unit) * 3);
-    background: var(--color-surface);
-    border: 1px solid var(--color-error, #ff4444);
-    border-radius: var(--border-radius);
+    /* background: var(--color-surface); */
+    /* border: 1px solid var(--color-error, #ff4444); */
+    /* border-radius: var(--border-radius); */
+    /* color: var(--color-error, #ff4444); */
+    display: flex;
     font-family: var(--font-mono);
     font-size: 0.875rem;
-    color: var(--color-error, #ff4444);
+    gap: var(--grid-unit);
+    margin-bottom: calc(var(--grid-unit) * 3);
+    padding: calc(var(--grid-unit) * 2);
 
     .error-icon {
       font-size: 1.25rem;
@@ -171,9 +112,10 @@
   }
 
   .stats-grid {
+    border-bottom: 1px solid $uchu-gray-1;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: calc(var(--grid-unit) * 3);
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     margin-bottom: calc(var(--grid-unit) * 6);
 
     &.is-loading .stat-value {
@@ -182,50 +124,51 @@
   }
 
   .stat-card {
-    position: relative;
-    padding: calc(var(--grid-unit) * 3);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
+    /* background: var(--color-surface); */
+    /* border: 1px solid var(--color-border); */
+    /* border-radius: var(--border-radius); */
+    line-height: 1;
     overflow: hidden;
+    padding: calc(var(--grid-unit) * 3) calc(var(--grid-unit) * 2);
+    position: relative;
     transition: all var(--transition-fast);
 
     &:hover {
-      border-color: var(--color-primary);
-      @include glow(var(--color-primary-rgb), 0.2);
+      /* @include glow(var(--color-primary-rgb), 0.2); */
+      /* border-color: var(--color-primary); */
     }
 
     .stat-value {
+      /* @include neon-text(var(--color-primary-rgb)); */
+      /* color: var(--color-primary); */
       font-family: var(--font-display);
-      font-size: 2.5rem;
-      font-weight: 700;
-      color: var(--color-primary);
-      @include neon-text(var(--color-primary-rgb));
+      font-size: 2rem;
+      font-weight: 500;
     }
 
     .stat-label {
+      /* color: var(--color-text-dim); */
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      color: var(--color-text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.05rem;
       margin-top: var(--grid-unit);
+      text-transform: uppercase;
     }
 
     .stat-icon {
-      position: absolute;
-      top: calc(var(--grid-unit) * 2);
-      right: calc(var(--grid-unit) * 2);
+      top: calc(var(--grid-unit) * 2); right: calc(var(--grid-unit) * 2);
+
+      /* color: var(--color-primary); */
       font-size: 3rem;
-      color: var(--color-primary);
       opacity: 0.2;
+      position: absolute;
     }
   }
 
   .content-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: calc(var(--grid-unit) * 3);
+    grid-template-columns: 1fr 1fr;
   }
 
   section {
@@ -237,18 +180,18 @@
 
   .recent-queries {
     .query-list {
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
+      /* background: var(--color-surface); */
+      /* border: 1px solid var(--color-border); */
+      /* border-radius: var(--border-radius); */
       padding: calc(var(--grid-unit) * 2);
     }
 
     .query-item {
-      padding: calc(var(--grid-unit) * 1.5);
-      background: var(--color-background);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
+      /* background: var(--color-background); */
+      /* border: 1px solid var(--color-border); */
+      /* border-radius: var(--border-radius); */
       margin-bottom: var(--grid-unit);
+      padding: calc(var(--grid-unit) * 1.5);
       transition: all var(--transition-fast);
 
       &:last-child {
@@ -256,47 +199,47 @@
       }
 
       &:hover {
-        border-color: var(--color-primary);
-        background: var(--color-surface-hover);
+        /* background: var(--color-surface-hover); */
+        /* border-color: var(--color-primary); */
       }
 
       code {
-        color: var(--color-info);
+        /* color: var(--color-info); */
         font-size: 0.875rem;
       }
     }
 
     .empty-state {
+      /* color: var(--color-text-dim); */
+      font-family: var(--font-mono);
       padding: calc(var(--grid-unit) * 4);
       text-align: center;
-      color: var(--color-text-dim);
-      font-family: var(--font-mono);
     }
   }
 
   .quick-actions {
     .action-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
       gap: calc(var(--grid-unit) * 2);
+      grid-template-columns: 1fr 1fr;
     }
 
     .action-card {
+      align-items: center;
+      /* background: var(--color-surface); */
+      /* border: 1px solid var(--color-border); */
+      /* border-radius: var(--border-radius); */
       display: flex;
       flex-direction: column;
-      align-items: center;
       justify-content: center;
       padding: calc(var(--grid-unit) * 3);
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
-      transition: all var(--transition-fast);
       text-decoration: none;
+      transition: all var(--transition-fast);
 
       &:hover {
-        border-color: var(--color-primary);
-        background: var(--color-surface-hover);
-        @include glow(var(--color-primary-rgb), 0.3);
+        /* @include glow(var(--color-primary-rgb), 0.3); */
+        /* background: var(--color-surface-hover); */
+        /* border-color: var(--color-primary); */
 
         .action-icon {
           transform: scale(1.1);
@@ -304,18 +247,18 @@
       }
 
       .action-icon {
+        /* color: var(--color-primary); */
         font-size: 2.5rem;
-        color: var(--color-primary);
         margin-bottom: var(--grid-unit);
         transition: transform var(--transition-fast);
       }
 
       .action-label {
+        /* color: var(--color-text); */
         font-family: var(--font-mono);
         font-size: 0.875rem;
-        color: var(--color-text);
+        letter-spacing: 0.05rem;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
       }
     }
   }
@@ -326,3 +269,89 @@
     }
   }
 </style>
+
+<div class="dashboard">
+  <h1>
+    Database Overview
+    {#if databaseName}
+      <span class="database-name">{databaseName}</span>
+    {/if}
+  </h1>
+
+  {#if errorMessage}
+    <div class="error-banner" role="alert">
+      <span class="error-icon">⚠</span>
+      <span>Could not load stats: {errorMessage}</span>
+    </div>
+  {/if}
+
+  <div class="stats-grid" class:is-loading={isLoading}>
+    <div class="stat-card">
+      <div class="stat-value">{isLoading ? "—" : stats.types}</div>
+      <div class="stat-label">Schema Types</div>
+      <div class="stat-icon">◈</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-value">{isLoading ? "—" : stats.migrations}</div>
+      <div class="stat-label">Migrations Applied</div>
+      <div class="stat-icon">▦</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-value">{isLoading ? "—" : stats.connections}</div>
+      <div class="stat-label">Active Connections</div>
+      <div class="stat-icon">⟗</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-value">{isLoading ? "—" : stats.queries.toLocaleString()}</div>
+      <div class="stat-label">Queries (lifetime)</div>
+      <div class="stat-icon">⟩</div>
+    </div>
+  </div>
+
+  <div class="content-grid">
+    <section class="quick-actions">
+      <h2>Quick Actions</h2>
+
+      <div class="action-grid">
+        <a href="/ui/schema" class="action-card">
+          <span class="action-icon">◈</span>
+          <span class="action-label">Browse Schema</span>
+        </a>
+
+        <a href="/ui/query" class="action-card">
+          <span class="action-icon">⟩</span>
+          <span class="action-label">New Query</span>
+        </a>
+
+        <a href="/ui/data" class="action-card">
+          <span class="action-icon">▦</span>
+          <span class="action-label">View Data</span>
+        </a>
+
+        <a href="/ui/migrations" class="action-card">
+          <span class="action-icon">⟲</span>
+          <span class="action-label">Migrations</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="recent-queries">
+      <h2>Recent Queries</h2>
+
+      <div class="query-list">
+        {#each recentQueries as query}
+          <div class="query-item">
+            <code>{query}</code>
+          </div>
+        {/each}
+
+        {#if recentQueries.length === 0}
+          <div class="empty-state">No recent queries</div>
+        {/if}
+      </div>
+    </section>
+  </div>
+</div>

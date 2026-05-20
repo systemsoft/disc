@@ -339,6 +339,83 @@ Deno.test("SchemaManager - modulesToSchema - implicit id property added", () => 
 });
 
 // ---------------------------------------------------------------------------
+// 6a. modulesToSchema -- computed property captures the EdgeQL expression
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - computed property stores serialized expression", () => {
+  // Regression: a computed property like `expires := .created + ...` has
+  // no physical column. The compiler must be able to re-parse the right-
+  // hand side at query time, which requires PropertyDef.computedExpr to
+  // carry the EdgeQL source. Without this, `select X { expires }` emits
+  // a column reference to a non-existent column.
+  const manager = new SchemaManager({});
+  const sdl = `
+    type Token {
+      required created: datetime;
+      expires := .created + <duration>'7 days';
+    }
+  `;
+
+  const parseResult = manager.parseSDL(sdl);
+  assertEquals(parseResult.ok, true);
+  if (!parseResult.ok) {
+    return;
+  }
+
+  const schema = manager.modulesToSchema(parseResult.value);
+  const tokenType = schema.types.get("Token");
+  assert(tokenType !== undefined, "Expected a 'Token' TypeDef");
+
+  const expiresProp = tokenType.properties.get("expires");
+  assert(expiresProp !== undefined, "Expected an 'expires' property");
+  assertEquals(expiresProp.computed, true);
+  assert(
+    expiresProp.computedExpr && expiresProp.computedExpr.includes(".created"),
+    `Expected computedExpr to reference '.created', got: ${expiresProp.computedExpr}`
+  );
+  assert(
+    expiresProp.computedExpr!.includes("<duration>"),
+    `Expected computedExpr to preserve the duration cast, got: ${expiresProp.computedExpr}`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 6a-2. modulesToSchema -- computed backlink with type intersection
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - computed backlink with [is X] round-trips", () => {
+  // Regression: `.<options[is PaymentRequirements]` is a backlink with a
+  // type intersection. A naive `.`-join in the expression printer produces
+  // `.<options.[is X]`, which the EdgeQL parser rejects with
+  // "Expected identifier, got [". The printer must attach `[is X]` to its
+  // preceding step without a separator.
+  const manager = new SchemaManager({});
+  const sdl = `
+    type PaymentOption {
+      requirements := .<options[is PaymentRequirements];
+    }
+    type PaymentRequirements {
+      required options: PaymentOption;
+    }
+  `;
+  const parseResult = manager.parseSDL(sdl);
+  assertEquals(parseResult.ok, true);
+  if (!parseResult.ok) {
+    return;
+  }
+  const schema = manager.modulesToSchema(parseResult.value);
+  const option = schema.types.get("PaymentOption");
+  assert(option !== undefined, "Expected 'PaymentOption' TypeDef");
+  const reqs = option.properties.get("requirements") ?? option.links.get("requirements");
+  assert(reqs !== undefined, "Expected 'requirements' on PaymentOption");
+  assertEquals(reqs.computed, true);
+  // The serialized form must be re-parseable EdgeQL — exact form:
+  // `.<options[is PaymentRequirements]`.
+  assertEquals(
+    (reqs as { computedExpr?: string; }).computedExpr,
+    ".<options[is PaymentRequirements]"
+  );
+});
+
+// ---------------------------------------------------------------------------
 // 6b. modulesToSchema -- camelCase property name → snake_case columnName
 // ---------------------------------------------------------------------------
 Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_case columnName", () => {

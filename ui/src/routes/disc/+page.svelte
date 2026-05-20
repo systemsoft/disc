@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
@@ -255,110 +252,6 @@
   })();
 </script>
 
-<div class="identity-disc">
-  <header class="page-header">
-    <h1>Identity Disc</h1>
-    <p class="subtitle">A row's outgoing links + incoming references, rendered as a circle. Click any orbital to recenter.</p>
-  </header>
-
-  {#if loadingSchema}
-    <p class="loading">Loading schema…</p>
-  {:else}
-    <div class="picker-bar">
-      <label>Type
-        <select bind:value={selectedType}>
-          {#each types as t}
-            <option value={t.name}>{t.name}</option>
-          {/each}
-        </select>
-      </label>
-      <label>Object
-        <select bind:value={selectedObjectId} disabled={objectList.length === 0}>
-          <option value="">— pick a row —</option>
-          {#each objectList as obj}
-            <option value={obj.id}>{obj.label}</option>
-          {/each}
-        </select>
-      </label>
-      <button class="button primary" on:click={selectObject} disabled={!selectedObjectId}>Show disc</button>
-      {#if breadcrumb.length > 0}
-        <button class="button small" on:click={navigateBack}>← Back ({breadcrumb.length})</button>
-      {/if}
-    </div>
-
-    {#if breadcrumb.length > 0}
-      <div class="breadcrumb">
-        {#each breadcrumb as crumb, i}
-          <span class="crumb">{crumb.type}: {crumb.label}</span>{#if i < breadcrumb.length - 1}<span class="crumb-sep"> → </span>{/if}
-        {/each}
-      </div>
-    {/if}
-
-    {#if loadError}
-      <div class="run-error"><strong>Error:</strong> {loadError}</div>
-    {/if}
-
-    <div class="canvas-wrap">
-      {#if !discData && !loadingDisc}
-        <p class="empty">Pick a row above to render its disc.</p>
-      {:else if loadingDisc}
-        <p class="loading">Loading disc…</p>
-      {:else if discData}
-        <svg viewBox="0 0 {SVG_SIZE} {SVG_SIZE}" class="disc-svg" role="img" aria-label="Identity disc visualization">
-          <!-- TRON-aesthetic concentric rings -->
-          <circle cx={CENTER} cy={CENTER} r={RADIUS} class="ring-outer" />
-          <circle cx={CENTER} cy={CENTER} r={RADIUS * 0.66} class="ring-mid" />
-
-          <!-- Edges: line from center to each orbital -->
-          {#each positionedClusters as { cluster, pt }}
-            <line
-              x1={CENTER}
-              y1={CENTER}
-              x2={pt.x}
-              y2={pt.y}
-              class="edge"
-              class:edge-outgoing={cluster.direction === 'outgoing'}
-              class:edge-incoming={cluster.direction === 'incoming'}
-            />
-            <text
-              x={(CENTER + pt.x) / 2}
-              y={(CENTER + pt.y) / 2 - 6}
-              class="edge-label"
-              text-anchor="middle"
-            >{cluster.edgeLabel}</text>
-          {/each}
-
-          <!-- Orbital nodes -->
-          {#each positionedClusters as { cluster, pt }}
-            <g class="orbital" on:click={() => navigateTo(cluster.targetType, cluster.primaryId)} on:keydown={(e) => e.key === 'Enter' && navigateTo(cluster.targetType, cluster.primaryId)} role="button" tabindex="0">
-              <circle cx={pt.x} cy={pt.y} r="28" class="orbital-bg" class:orbital-incoming={cluster.direction === 'incoming'} />
-              <text x={pt.x} y={pt.y - 2} class="orbital-type" text-anchor="middle">{cluster.targetType}</text>
-              <text x={pt.x} y={pt.y + 12} class="orbital-label" text-anchor="middle">{cluster.primaryLabel}</text>
-              {#if cluster.totalCount > 1}
-                <g>
-                  <circle cx={pt.x + 22} cy={pt.y - 22} r="10" class="badge-bg" />
-                  <text x={pt.x + 22} y={pt.y - 18} class="badge-text" text-anchor="middle">+{cluster.totalCount - 1}</text>
-                </g>
-              {/if}
-            </g>
-          {/each}
-
-          <!-- Center node (rendered last so it sits on top) -->
-          <g class="center-node">
-            <circle cx={CENTER} cy={CENTER} r="46" class="center-bg" />
-            <text x={CENTER} y={CENTER - 6} class="center-type" text-anchor="middle">{discData.type}</text>
-            <text x={CENTER} y={CENTER + 14} class="center-label" text-anchor="middle">{discData.label}</text>
-          </g>
-        </svg>
-
-        {#if discData.clusters.length === 0}
-          <p class="empty">No outgoing links or incoming references.</p>
-        {/if}
-      {/if}
-    </div>
-  {/if}
-</div>
-
 <style lang="scss">
   @use "../../styles/mixins" as *;
 
@@ -526,3 +419,107 @@
     text-align: center;
   }
 </style>
+
+<div class="identity-disc">
+  <header class="page-header">
+    <h1>Identity Disc</h1>
+    <p class="subtitle">A row's outgoing links + incoming references, rendered as a circle. Click any orbital to recenter.</p>
+  </header>
+
+  {#if loadingSchema}
+    <p class="loading">Loading schema…</p>
+  {:else}
+    <div class="picker-bar">
+      <label>Type
+        <select bind:value={selectedType}>
+          {#each types as t}
+            <option value={t.name}>{t.name}</option>
+          {/each}
+        </select>
+      </label>
+      <label>Object
+        <select bind:value={selectedObjectId} disabled={objectList.length === 0}>
+          <option value="">— pick a row —</option>
+          {#each objectList as obj}
+            <option value={obj.id}>{obj.label}</option>
+          {/each}
+        </select>
+      </label>
+      <button class="button primary" on:click={selectObject} disabled={!selectedObjectId}>Show disc</button>
+      {#if breadcrumb.length > 0}
+        <button class="button small" on:click={navigateBack}>← Back ({breadcrumb.length})</button>
+      {/if}
+    </div>
+
+    {#if breadcrumb.length > 0}
+      <div class="breadcrumb">
+        {#each breadcrumb as crumb, i}
+          <span class="crumb">{crumb.type}: {crumb.label}</span>{#if i < breadcrumb.length - 1}<span class="crumb-sep"> → </span>{/if}
+        {/each}
+      </div>
+    {/if}
+
+    {#if loadError}
+      <div class="run-error"><strong>Error:</strong> {loadError}</div>
+    {/if}
+
+    <div class="canvas-wrap">
+      {#if !discData && !loadingDisc}
+        <p class="empty">Pick a row above to render its disc.</p>
+      {:else if loadingDisc}
+        <p class="loading">Loading disc…</p>
+      {:else if discData}
+        <svg viewBox="0 0 {SVG_SIZE} {SVG_SIZE}" class="disc-svg" role="img" aria-label="Identity disc visualization">
+          <!-- TRON-aesthetic concentric rings -->
+          <circle cx={CENTER} cy={CENTER} r={RADIUS} class="ring-outer" />
+          <circle cx={CENTER} cy={CENTER} r={RADIUS * 0.66} class="ring-mid" />
+
+          <!-- Edges: line from center to each orbital -->
+          {#each positionedClusters as { cluster, pt }}
+            <line
+              x1={CENTER}
+              y1={CENTER}
+              x2={pt.x}
+              y2={pt.y}
+              class="edge"
+              class:edge-outgoing={cluster.direction === 'outgoing'}
+              class:edge-incoming={cluster.direction === 'incoming'}
+            />
+            <text
+              x={(CENTER + pt.x) / 2}
+              y={(CENTER + pt.y) / 2 - 6}
+              class="edge-label"
+              text-anchor="middle"
+            >{cluster.edgeLabel}</text>
+          {/each}
+
+          <!-- Orbital nodes -->
+          {#each positionedClusters as { cluster, pt }}
+            <g class="orbital" on:click={() => navigateTo(cluster.targetType, cluster.primaryId)} on:keydown={(e) => e.key === 'Enter' && navigateTo(cluster.targetType, cluster.primaryId)} role="button" tabindex="0">
+              <circle cx={pt.x} cy={pt.y} r="28" class="orbital-bg" class:orbital-incoming={cluster.direction === 'incoming'} />
+              <text x={pt.x} y={pt.y - 2} class="orbital-type" text-anchor="middle">{cluster.targetType}</text>
+              <text x={pt.x} y={pt.y + 12} class="orbital-label" text-anchor="middle">{cluster.primaryLabel}</text>
+              {#if cluster.totalCount > 1}
+                <g>
+                  <circle cx={pt.x + 22} cy={pt.y - 22} r="10" class="badge-bg" />
+                  <text x={pt.x + 22} y={pt.y - 18} class="badge-text" text-anchor="middle">+{cluster.totalCount - 1}</text>
+                </g>
+              {/if}
+            </g>
+          {/each}
+
+          <!-- Center node (rendered last so it sits on top) -->
+          <g class="center-node">
+            <circle cx={CENTER} cy={CENTER} r="46" class="center-bg" />
+            <text x={CENTER} y={CENTER - 6} class="center-type" text-anchor="middle">{discData.type}</text>
+            <text x={CENTER} y={CENTER + 14} class="center-label" text-anchor="middle">{discData.label}</text>
+          </g>
+        </svg>
+
+        {#if discData.clusters.length === 0}
+          <p class="empty">No outgoing links or incoming references.</p>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+</div>

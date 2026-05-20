@@ -266,6 +266,134 @@ Deno.test("EdgeQL to SQL - SELECT with computed field", () => {
   assertStringIncludes(normalized, "FROM users AS");
 });
 
+Deno.test("EdgeQL to SQL - backlink through junction-table multi-link", async () => {
+  // Regression: when the forward link is `multi options -> PaymentOption`,
+  // schema-manager resolves it to a junction-table multi (no FK column on
+  // either side). The compiler must JOIN through the junction rather than
+  // looking for a column that doesn't exist.
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+  const manager = new SchemaManager({});
+  const parseResult = manager.parseSDL(`
+    type PaymentOption {
+      required name: str;
+      requirements := .<options[is PaymentRequirements];
+    }
+    type PaymentRequirements {
+      required name: str;
+      multi options -> PaymentOption;
+    }
+  `);
+  if (!parseResult.ok) {
+    throw new Error(`SDL parse failed: ${parseResult.error.message}`);
+  }
+  const schema = manager.modulesToSchema(parseResult.value);
+
+  const parser = new EdgeQLParser("SELECT PaymentOption { id, requirements }");
+  const ast = parser.parse();
+  const compiler = new EdgeQLCompiler(schema);
+  const compileResult = compiler.compile(ast);
+  if (!compileResult.ok) {
+    throw new Error(`Compile failed: ${compileResult.error.message}`);
+  }
+  const sql = new SQLCodeGenerator().generate(compileResult.value);
+  const normalized = normalizeSQL(sql);
+
+  // Junction-table form should JOIN the junction, not look for a column.
+  assertStringIncludes(normalized, "'requirements'");
+  assertStringIncludes(normalized, `FROM "payment_requirements"`);
+  assertStringIncludes(normalized, "JOIN");
+  assertStringIncludes(normalized, "payment_requirements_options");
+  assertStringIncludes(normalized, "source_id");
+  assertStringIncludes(normalized, "target_id");
+});
+
+Deno.test("EdgeQL to SQL - SELECT with computed backlink + type intersection", async () => {
+  // Regression: a computed property like
+  // `requirements := .<options[is PaymentRequirements]` previously threw
+  // "Complex path expressions not yet implemented" because the path
+  // compiler didn't recognize `[backlink, type_intersection]` 2-step
+  // paths. It now lowers to a correlated subquery materializing matches
+  // as a JSONB array of `{ id }` objects.
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+  const manager = new SchemaManager({});
+  const parseResult = manager.parseSDL(`
+    type PaymentOption {
+      required name: str;
+      requirements := .<options[is PaymentRequirements];
+    }
+    type PaymentRequirements {
+      required name: str;
+      required options: PaymentOption;
+    }
+  `);
+  if (!parseResult.ok) {
+    throw new Error(`SDL parse failed: ${parseResult.error.message}`);
+  }
+  const schema = manager.modulesToSchema(parseResult.value);
+
+  const parser = new EdgeQLParser("SELECT PaymentOption { id, requirements }");
+  const ast = parser.parse();
+  const compiler = new EdgeQLCompiler(schema);
+  const compileResult = compiler.compile(ast);
+  if (!compileResult.ok) {
+    throw new Error(`Compile failed: ${compileResult.error.message}`);
+  }
+  const sql = new SQLCodeGenerator().generate(compileResult.value);
+  const normalized = normalizeSQL(sql);
+
+  // Should emit a correlated subquery against the target table, filtered
+  // by the FK column that points back to the current type. Column name is
+  // `options` (not `options_id`) because the SDL uses colon-form which
+  // schema-manager reclassifies as a link with a bare column name; the
+  // arrow-form (`options -> PaymentOption`) would yield `options_id`.
+  assertStringIncludes(normalized, "'requirements'");
+  assertStringIncludes(normalized, `FROM "payment_requirements"`);
+  assertStringIncludes(normalized, `"payment_requirements"."options"`);
+  assertStringIncludes(normalized, "jsonb_agg");
+});
+
+Deno.test("EdgeQL to SQL - SELECT with SDL-declared computed property", async () => {
+  // Regression: a computed property declared in SDL like
+  // `expires := .created + ...` has no physical column. The compiler must
+  // inline the captured expression at shape resolution, NOT emit
+  // `<alias>.expires` (which would fail at runtime with "column does not
+  // exist"). Exercises the full SDL -> SchemaManager -> Compiler path.
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+  const manager = new SchemaManager({});
+  const parseResult = manager.parseSDL(`
+    type Token {
+      required created: datetime;
+      expires := .created + <duration>'7 days';
+    }
+  `);
+  if (!parseResult.ok) {
+    throw new Error(`SDL parse failed: ${parseResult.error.message}`);
+  }
+  const schema = manager.modulesToSchema(parseResult.value);
+
+  const parser = new EdgeQLParser("SELECT Token { id, created, expires }");
+  const ast = parser.parse();
+  const compiler = new EdgeQLCompiler(schema);
+  const compileResult = compiler.compile(ast);
+  if (!compileResult.ok) {
+    throw new Error(`Compile failed: ${compileResult.error.message}`);
+  }
+  const sql = new SQLCodeGenerator().generate(compileResult.value);
+  const normalized = normalizeSQL(sql);
+
+  // The `created` column reference is fine — it's a stored property.
+  assertStringIncludes(normalized, "created");
+  // The computed `expires` must NOT appear as a bare column ref. Instead,
+  // its expression (`.created + <duration>...`) is inlined under the
+  // 'expires' JSON key.
+  assertStringIncludes(normalized, "'expires'");
+  if (/[A-Za-z_]\.expires\b/.test(normalized)) {
+    throw new Error(
+      `Generated SQL references a non-existent 'expires' column: ${normalized}`
+    );
+  }
+});
+
 Deno.test("EdgeQL to SQL - SELECT with function call", () => {
   const edgeql = `SELECT count(User)`;
   const sql = compileToSQL(edgeql);

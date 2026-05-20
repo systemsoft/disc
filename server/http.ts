@@ -1190,9 +1190,18 @@ export class HttpServer {
     // Gather handler-level cache/metrics stats if available
     const handlerStats = this.protocolHandler.getStats?.();
 
+    // Resolve database name from the request (X-Database / ?database= / "disc").
+    // The UI surfaces this so users know which database the dashboard reflects.
+    const database = request ?
+      this.resolveDatabaseName(request, new URL(request.url)) :
+      "disc";
+    const databases = this.databaseRegistry?.listDatabases() ?? [database];
+
     const stats: Types.ServerStats & {
       subscriptions: typeof subscriptionStats;
     } = {
+      database,
+      databases,
       connections: this.connection_manager.get_stats(),
       queries: {
         total: this.stats.total_requests,

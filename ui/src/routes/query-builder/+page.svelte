@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { discAPI, type SchemaTypeDescription, type SchemaPropertyDescription, type SchemaLinkDescription } from '$lib/api/client';
@@ -215,188 +212,6 @@
   }
 </script>
 
-<div class="query-builder">
-  <header class="page-header">
-    <h1>Visual Query Builder</h1>
-    <p class="subtitle">Pick fields, add filters, learn EdgeQL by reading the synthesized query.</p>
-  </header>
-
-  {#if loadingSchema}
-    <p class="loading">Loading schema…</p>
-  {:else if types.length === 0}
-    <p class="empty">No types found in the current schema.</p>
-  {:else}
-    <div class="builder-grid">
-      <section class="card builder-form">
-        <div class="row">
-          <label>Root type
-            <select bind:value={selectedType}>
-              {#each types as t}
-                <option value={t.name}>{t.name}</option>
-              {/each}
-            </select>
-          </label>
-        </div>
-
-        <fieldset>
-          <legend>Fields</legend>
-          {#if properties.length === 0}
-            <p class="muted">This type has no scalar properties.</p>
-          {:else}
-            <div class="checks">
-              {#each properties as prop (prop.name)}
-                <label class="check">
-                  <input type="checkbox" bind:checked={pickedFields[prop.name]} />
-                  <span class="field-name">{prop.name}</span>
-                  <span class="field-type">{prop.type}</span>
-                </label>
-              {/each}
-            </div>
-          {/if}
-        </fieldset>
-
-        {#if links.length > 0}
-          <fieldset>
-            <legend>Links</legend>
-            {#each links as link (link.name)}
-              <div class="link-block">
-                <label class="check">
-                  <input
-                    type="checkbox"
-                    checked={pickedLinks[link.name]?.picked ?? false}
-                    on:change={() => toggleLink(link.name)}
-                  />
-                  <span class="field-name">{link.name}</span>
-                  <span class="field-type">{link.cardinality === 'multi' ? 'multi' : ''} {link.target}</span>
-                </label>
-                {#if pickedLinks[link.name]?.picked}
-                  <div class="link-fields">
-                    {#each (typeIndex[link.target]?.properties ?? []) as subProp (subProp.name)}
-                      <label class="check">
-                        <input
-                          type="checkbox"
-                          checked={pickedLinks[link.name]?.fields[subProp.name] ?? false}
-                          on:change={() => toggleLinkField(link.name, subProp.name)}
-                        />
-                        <span class="field-name">{subProp.name}</span>
-                        <span class="field-type">{subProp.type}</span>
-                      </label>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </fieldset>
-        {/if}
-
-        <fieldset>
-          <legend>Filters</legend>
-          {#each filterRows as row, idx}
-            <div class="filter-row">
-              <select
-                value={row.field}
-                on:change={(e) => handleFilterFieldChange(idx, e)}
-              >
-                {#each properties as prop}
-                  <option value={prop.name}>{prop.name}</option>
-                {/each}
-              </select>
-              <select bind:value={row.op}>
-                {#each FILTER_OPS as op}
-                  <option value={op}>{op}</option>
-                {/each}
-              </select>
-              <input type="text" placeholder="value" bind:value={row.value} />
-              <span class="cast-hint">&lt;{row.cast}&gt;</span>
-              <button type="button" class="button danger small" on:click={() => removeFilterRow(idx)}>×</button>
-            </div>
-          {/each}
-          <button type="button" class="button small" on:click={addFilterRow} disabled={properties.length === 0}>
-            + Add filter
-          </button>
-        </fieldset>
-
-        <fieldset class="row-fieldset">
-          <legend>Order / Limit / Offset</legend>
-          <div class="row">
-            <label>Order by
-              <select bind:value={orderField}>
-                <option value="">—</option>
-                {#each properties as prop}
-                  <option value={prop.name}>{prop.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>Direction
-              <select bind:value={orderDir} disabled={!orderField}>
-                <option value="asc">asc</option>
-                <option value="desc">desc</option>
-              </select>
-            </label>
-            <label>Limit
-              <input type="number" min="0" placeholder="—" bind:value={limit} />
-            </label>
-            <label>Offset
-              <input type="number" min="0" placeholder="—" bind:value={offset} />
-            </label>
-          </div>
-        </fieldset>
-      </section>
-
-      <section class="card edgeql-pane">
-        <div class="pane-header">
-          <h2>Synthesized EdgeQL</h2>
-          <div class="pane-actions">
-            <button class="button small" on:click={copyEdgeQL} disabled={!synthesized.query}>Copy</button>
-            <button class="button primary" on:click={runQuery} disabled={isRunning || !synthesized.query || !!synthError}>
-              {isRunning ? 'Running…' : 'Run'}
-            </button>
-          </div>
-        </div>
-        {#if synthError}
-          <pre class="synth-error">{synthError}</pre>
-        {:else}
-          <pre class="edgeql">{synthesized.query || '(pick at least a root type)'}</pre>
-          {#if Object.keys(synthesized.variables).length > 0}
-            <details class="variables">
-              <summary>Variables</summary>
-              <pre>{JSON.stringify(synthesized.variables, null, 2)}</pre>
-            </details>
-          {/if}
-        {/if}
-
-        {#if runError}
-          <div class="run-error">
-            <strong>Error:</strong> {runError}
-          </div>
-        {/if}
-
-        {#if queryResult}
-          <div class="result-pane">
-            <p class="muted">{queryResult.executionTime}ms</p>
-            {#if queryResult.kind === 'table'}
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>{#each queryResult.columns as col}<th>{col}</th>{/each}</tr>
-                  </thead>
-                  <tbody>
-                    {#each queryResult.rows as row}
-                      <tr>{#each row as cell}<td>{cell}</td>{/each}</tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {:else}
-              <pre class="json-result">{queryResult.text}</pre>
-            {/if}
-          </div>
-        {/if}
-      </section>
-    </div>
-  {/if}
-</div>
-
 <style lang="scss">
   @use "../../styles/mixins" as *;
 
@@ -609,3 +424,185 @@
     .builder-grid { grid-template-columns: 1fr; }
   }
 </style>
+
+<div class="query-builder">
+  <header class="page-header">
+    <h1>Visual Query Builder</h1>
+    <p class="subtitle">Pick fields, add filters, learn EdgeQL by reading the synthesized query.</p>
+  </header>
+
+  {#if loadingSchema}
+    <p class="loading">Loading schema…</p>
+  {:else if types.length === 0}
+    <p class="empty">No types found in the current schema.</p>
+  {:else}
+    <div class="builder-grid">
+      <section class="card builder-form">
+        <div class="row">
+          <label>Root type
+            <select bind:value={selectedType}>
+              {#each types as t}
+                <option value={t.name}>{t.name}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Fields</legend>
+          {#if properties.length === 0}
+            <p class="muted">This type has no scalar properties.</p>
+          {:else}
+            <div class="checks">
+              {#each properties as prop (prop.name)}
+                <label class="check">
+                  <input type="checkbox" bind:checked={pickedFields[prop.name]} />
+                  <span class="field-name">{prop.name}</span>
+                  <span class="field-type">{prop.type}</span>
+                </label>
+              {/each}
+            </div>
+          {/if}
+        </fieldset>
+
+        {#if links.length > 0}
+          <fieldset>
+            <legend>Links</legend>
+            {#each links as link (link.name)}
+              <div class="link-block">
+                <label class="check">
+                  <input
+                    type="checkbox"
+                    checked={pickedLinks[link.name]?.picked ?? false}
+                    on:change={() => toggleLink(link.name)}
+                  />
+                  <span class="field-name">{link.name}</span>
+                  <span class="field-type">{link.cardinality === 'multi' ? 'multi' : ''} {link.target}</span>
+                </label>
+                {#if pickedLinks[link.name]?.picked}
+                  <div class="link-fields">
+                    {#each (typeIndex[link.target]?.properties ?? []) as subProp (subProp.name)}
+                      <label class="check">
+                        <input
+                          type="checkbox"
+                          checked={pickedLinks[link.name]?.fields[subProp.name] ?? false}
+                          on:change={() => toggleLinkField(link.name, subProp.name)}
+                        />
+                        <span class="field-name">{subProp.name}</span>
+                        <span class="field-type">{subProp.type}</span>
+                      </label>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </fieldset>
+        {/if}
+
+        <fieldset>
+          <legend>Filters</legend>
+          {#each filterRows as row, idx}
+            <div class="filter-row">
+              <select
+                value={row.field}
+                on:change={(e) => handleFilterFieldChange(idx, e)}
+              >
+                {#each properties as prop}
+                  <option value={prop.name}>{prop.name}</option>
+                {/each}
+              </select>
+              <select bind:value={row.op}>
+                {#each FILTER_OPS as op}
+                  <option value={op}>{op}</option>
+                {/each}
+              </select>
+              <input type="text" placeholder="value" bind:value={row.value} />
+              <span class="cast-hint">&lt;{row.cast}&gt;</span>
+              <button type="button" class="button danger small" on:click={() => removeFilterRow(idx)}>×</button>
+            </div>
+          {/each}
+          <button type="button" class="button small" on:click={addFilterRow} disabled={properties.length === 0}>
+            + Add filter
+          </button>
+        </fieldset>
+
+        <fieldset class="row-fieldset">
+          <legend>Order / Limit / Offset</legend>
+          <div class="row">
+            <label>Order by
+              <select bind:value={orderField}>
+                <option value="">—</option>
+                {#each properties as prop}
+                  <option value={prop.name}>{prop.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>Direction
+              <select bind:value={orderDir} disabled={!orderField}>
+                <option value="asc">asc</option>
+                <option value="desc">desc</option>
+              </select>
+            </label>
+            <label>Limit
+              <input type="number" min="0" placeholder="—" bind:value={limit} />
+            </label>
+            <label>Offset
+              <input type="number" min="0" placeholder="—" bind:value={offset} />
+            </label>
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="card edgeql-pane">
+        <div class="pane-header">
+          <h2>Synthesized EdgeQL</h2>
+          <div class="pane-actions">
+            <button class="button small" on:click={copyEdgeQL} disabled={!synthesized.query}>Copy</button>
+            <button class="button primary" on:click={runQuery} disabled={isRunning || !synthesized.query || !!synthError}>
+              {isRunning ? 'Running…' : 'Run'}
+            </button>
+          </div>
+        </div>
+        {#if synthError}
+          <pre class="synth-error">{synthError}</pre>
+        {:else}
+          <pre class="edgeql">{synthesized.query || '(pick at least a root type)'}</pre>
+          {#if Object.keys(synthesized.variables).length > 0}
+            <details class="variables">
+              <summary>Variables</summary>
+              <pre>{JSON.stringify(synthesized.variables, null, 2)}</pre>
+            </details>
+          {/if}
+        {/if}
+
+        {#if runError}
+          <div class="run-error">
+            <strong>Error:</strong> {runError}
+          </div>
+        {/if}
+
+        {#if queryResult}
+          <div class="result-pane">
+            <p class="muted">{queryResult.executionTime}ms</p>
+            {#if queryResult.kind === 'table'}
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>{#each queryResult.columns as col}<th>{col}</th>{/each}</tr>
+                  </thead>
+                  <tbody>
+                    {#each queryResult.rows as row}
+                      <tr>{#each row as cell}<td>{cell}</td>{/each}</tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <pre class="json-result">{queryResult.text}</pre>
+            {/if}
+          </div>
+        {/if}
+      </section>
+    </div>
+  {/if}
+</div>

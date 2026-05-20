@@ -200,6 +200,63 @@ Deno.test("Integration - Schema Evolution Migration", () => {
   }
 });
 
+Deno.test("Integration - Cross-module inheritance via qualified name", async () => {
+  // Regression: a non-default-module type extending `default::BaseRecord`
+  // used to silently drop the inherited columns because the differ's
+  // `extending` lookup used `baseRef.name.parts.join("::")` verbatim
+  // (`default::BaseRecord`) against an `allTypes` map keyed by bare name.
+  const crossModuleSchema = `
+    module default {
+      abstract type BaseRecord {
+        required created -> datetime {
+          default := datetime_current();
+          readonly := true;
+        };
+        required updated -> datetime { default := datetime_current(); };
+      };
+    }
+
+    module payment {
+      type PaymentRecord extending default::BaseRecord {
+        required amount -> int64;
+      };
+    }
+  `;
+  const config = createIntegrationTestConfig();
+  const engine = new MigrationEngine(config);
+  const validator = new SchemaValidator();
+  const parser = new SDLParser(crossModuleSchema);
+  const sdlDocument = parser.parse();
+  // Arrow-form scalar declarations (`required created -> datetime`) parse as
+  // LinkDeclaration nodes; the differ only sees PropertyDeclarations, so the
+  // production code path runs `normalizeArrowsToProperties` first. Mirror
+  // that here so the test exercises realistic input.
+  const { normalizeArrowsToProperties } = await import("../schema/converter.ts");
+  const modules = normalizeArrowsToProperties(validator.convertToModules(sdlDocument));
+
+  const planResult = engine.planMigration(null, modules);
+  assertEquals(planResult.ok, true);
+  if (!planResult.ok)
+    return;
+
+  const operations = planResult.value.migrations[0].operations;
+  const paymentOp = operations.find(
+    (op: Types.MigrationOperation) =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "PaymentRecord"
+  ) as Types.CreateTypeOperation | undefined;
+
+  assertEquals(paymentOp !== undefined, true);
+  if (!paymentOp)
+    return;
+  const hasCreated = paymentOp.properties.some(p => p.name === "created");
+  const hasUpdated = paymentOp.properties.some(p => p.name === "updated");
+  const hasAmount = paymentOp.properties.some(p => p.name === "amount");
+  assertEquals(hasCreated, true, "PaymentRecord must inherit 'created' from default::BaseRecord");
+  assertEquals(hasUpdated, true, "PaymentRecord must inherit 'updated' from default::BaseRecord");
+  assertEquals(hasAmount, true);
+});
+
 Deno.test("Integration - Complex Schema with Inheritance", () => {
   const config = createIntegrationTestConfig();
   const engine = new MigrationEngine(config);

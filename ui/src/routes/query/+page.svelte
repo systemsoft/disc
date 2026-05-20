@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { discAPI } from '$lib/api/client';
@@ -107,121 +104,6 @@
     errorMessage = '';
   }
 </script>
-
-<div class="query-editor">
-  <div class="editor-toolbar">
-    <h1>Query Editor</h1>
-    <div class="toolbar-actions">
-      <button class="button" on:click={formatQuery}>
-        Format
-      </button>
-      <button class="button" on:click={saveQuery}>
-        Save
-      </button>
-      <button class="button primary" on:click={executeQuery} disabled={isExecuting}>
-        {isExecuting ? 'Executing...' : 'Execute'}
-      </button>
-    </div>
-  </div>
-
-  <div class="editor-container">
-    <div class="editor-sidebar">
-      <div class="sidebar-section">
-        <h3>Saved Queries</h3>
-        <div class="query-list">
-          {#each savedQueries as saved}
-            <button
-              class="query-item"
-              on:click={() => loadQuery(saved.query)}
-            >
-              {saved.name}
-            </button>
-          {/each}
-          {#if savedQueries.length === 0}
-            <div class="empty-text">No saved queries</div>
-          {/if}
-        </div>
-      </div>
-
-      <div class="sidebar-section">
-        <h3>History</h3>
-        <div class="query-list">
-          {#each queryHistory.slice(0, 5) as query}
-            <button
-              class="query-item history-item"
-              on:click={() => loadQuery(query)}
-            >
-              <code>{query.slice(0, 50)}...</code>
-            </button>
-          {/each}
-          {#if queryHistory.length === 0}
-            <div class="empty-text">No history</div>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <div class="editor-main">
-      <div class="code-editor">
-        <div class="line-numbers">
-          {#each queryText.split('\n') as _, i}
-            <span>{i + 1}</span>
-          {/each}
-        </div>
-        <textarea
-          bind:value={queryText}
-          placeholder="Enter your EdgeQL query..."
-          class="query-input"
-          spellcheck="false"
-        />
-      </div>
-
-      {#if errorMessage}
-        <div class="error-message">
-          <span class="error-icon">⚠</span>
-          {errorMessage}
-        </div>
-      {/if}
-
-      {#if queryResult}
-        <div class="query-results">
-          <div class="results-header">
-            <h3>Results</h3>
-            <span class="execution-time">
-              Executed in {queryResult.executionTime}ms
-            </span>
-            <button class="button" on:click={clearResults}>Clear</button>
-          </div>
-
-          {#if queryResult.kind === 'table'}
-            <div class="results-table">
-              <table>
-                <thead>
-                  <tr>
-                    {#each queryResult.columns as column}
-                      <th>{column}</th>
-                    {/each}
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each queryResult.rows as row}
-                    <tr>
-                      {#each row as cell}
-                        <td>{cell}</td>
-                      {/each}
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {:else}
-            <pre class="results-json">{queryResult.text}</pre>
-          {/if}
-        </div>
-      {/if}
-    </div>
-  </div>
-</div>
 
 <style lang="scss">
   .query-editor {
@@ -456,3 +338,118 @@
     }
   }
 </style>
+
+<div class="query-editor">
+  <div class="editor-toolbar">
+    <h1>Query Editor</h1>
+    <div class="toolbar-actions">
+      <button class="button" on:click={formatQuery}>
+        Format
+      </button>
+      <button class="button" on:click={saveQuery}>
+        Save
+      </button>
+      <button class="button primary" on:click={executeQuery} disabled={isExecuting}>
+        {isExecuting ? 'Executing...' : 'Execute'}
+      </button>
+    </div>
+  </div>
+
+  <div class="editor-container">
+    <div class="editor-sidebar">
+      <div class="sidebar-section">
+        <h3>Saved Queries</h3>
+        <div class="query-list">
+          {#each savedQueries as saved}
+            <button
+              class="query-item"
+              on:click={() => loadQuery(saved.query)}
+            >
+              {saved.name}
+            </button>
+          {/each}
+          {#if savedQueries.length === 0}
+            <div class="empty-text">No saved queries</div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>History</h3>
+        <div class="query-list">
+          {#each queryHistory.slice(0, 5) as query}
+            <button
+              class="query-item history-item"
+              on:click={() => loadQuery(query)}
+            >
+              <code>{query.slice(0, 50)}...</code>
+            </button>
+          {/each}
+          {#if queryHistory.length === 0}
+            <div class="empty-text">No history</div>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class="editor-main">
+      <div class="code-editor">
+        <div class="line-numbers">
+          {#each queryText.split('\n') as _, i}
+            <span>{i + 1}</span>
+          {/each}
+        </div>
+        <textarea
+          bind:value={queryText}
+          placeholder="Enter your EdgeQL query..."
+          class="query-input"
+          spellcheck="false"
+        />
+      </div>
+
+      {#if errorMessage}
+        <div class="error-message">
+          <span class="error-icon">⚠</span>
+          {errorMessage}
+        </div>
+      {/if}
+
+      {#if queryResult}
+        <div class="query-results">
+          <div class="results-header">
+            <h3>Results</h3>
+            <span class="execution-time">
+              Executed in {queryResult.executionTime}ms
+            </span>
+            <button class="button" on:click={clearResults}>Clear</button>
+          </div>
+
+          {#if queryResult.kind === 'table'}
+            <div class="results-table">
+              <table>
+                <thead>
+                  <tr>
+                    {#each queryResult.columns as column}
+                      <th>{column}</th>
+                    {/each}
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each queryResult.rows as row}
+                    <tr>
+                      {#each row as cell}
+                        <td>{cell}</td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <pre class="results-json">{queryResult.text}</pre>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
+</div>

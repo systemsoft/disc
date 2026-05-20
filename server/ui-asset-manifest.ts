@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 /**
  * UI asset manifest.
  *
@@ -10,35 +7,45 @@
  *
  *   bash ui/build.sh && deno task cli build
  *
- * The manifest is checked in so callers don't need to run the build to
+ * The manifest is checked in so callers don’t need to run the build to
  * use the asset handler in tests / development.
  */
+
+/*** EXPORT ------------------------------------------- ***/
 
 export const UI_ASSET_MANIFEST: readonly string[] = [
   "_app/env.js",
   "_app/immutable/assets/0.dsxhLmCD.css",
+  "_app/immutable/assets/10.7wpEyT6F.css",
+  "_app/immutable/assets/11.BE_hVje9.css",
   "_app/immutable/assets/2.BWRgaZw3.css",
-  "_app/immutable/assets/3.D6-E2Ut7.css",
-  "_app/immutable/assets/4.g_OvFdOn.css",
-  "_app/immutable/assets/5.eFErUQn-.css",
-  "_app/immutable/assets/6.7wpEyT6F.css",
-  "_app/immutable/assets/7.BE_hVje9.css",
-  "_app/immutable/chunks/-THCdB5N.js",
-  "_app/immutable/chunks/CB9bRvYd.js",
-  "_app/immutable/chunks/CWd9pCgo.js",
-  "_app/immutable/chunks/D0-y8WWq.js",
-  "_app/immutable/chunks/D6YF6ztN.js",
-  "_app/immutable/chunks/DSOgNidj.js",
-  "_app/immutable/entry/app.DJk0Elfn.js",
-  "_app/immutable/entry/start.DHNWWMbx.js",
-  "_app/immutable/nodes/0.PEu5SYxm.js",
-  "_app/immutable/nodes/1.B31DMEvM.js",
-  "_app/immutable/nodes/2.BWPHt7Lv.js",
-  "_app/immutable/nodes/3.Bc9OfQyG.js",
-  "_app/immutable/nodes/4.B3stqgPG.js",
-  "_app/immutable/nodes/5.DMvnYw8Y.js",
-  "_app/immutable/nodes/6.YXaEUa5h.js",
-  "_app/immutable/nodes/7.BkQQR3wo.js",
+  "_app/immutable/assets/3.CyZx97h2.css",
+  "_app/immutable/assets/4.3qzHnvf7.css",
+  "_app/immutable/assets/5.BT4GUY5x.css",
+  "_app/immutable/assets/6.CuSIIQKq.css",
+  "_app/immutable/assets/7.g_OvFdOn.css",
+  "_app/immutable/assets/8.eFErUQn-.css",
+  "_app/immutable/assets/9.CT8hIkKS.css",
+  "_app/immutable/chunks/CmA4cKJD.js",
+  "_app/immutable/chunks/CrJvGHKw.js",
+  "_app/immutable/chunks/Cyubia20.js",
+  "_app/immutable/chunks/CzOyYGJm.js",
+  "_app/immutable/chunks/DWU2MR38.js",
+  "_app/immutable/chunks/uVrAl215.js",
+  "_app/immutable/entry/app.DZaNhJEU.js",
+  "_app/immutable/entry/start.DSg7KXf8.js",
+  "_app/immutable/nodes/0.xY2U_qwZ.js",
+  "_app/immutable/nodes/1.CTzTdPUb.js",
+  "_app/immutable/nodes/10.BBQSbpFt.js",
+  "_app/immutable/nodes/11.Bj6WrUBW.js",
+  "_app/immutable/nodes/2.CjmuA3jk.js",
+  "_app/immutable/nodes/3.CeJEnYZS.js",
+  "_app/immutable/nodes/4.BJNWh7bo.js",
+  "_app/immutable/nodes/5.BRc0cJLL.js",
+  "_app/immutable/nodes/6.C0ZfEGYj.js",
+  "_app/immutable/nodes/7.D7yAfVs4.js",
+  "_app/immutable/nodes/8.CJ1rnVCA.js",
+  "_app/immutable/nodes/9.DKdcbCik.js",
   "_app/version.json",
   "index.html"
 ];

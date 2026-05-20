@@ -25,6 +25,21 @@ import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
 /**
+ * Extract the intersection type name from a backlink step's optional
+ * filter. The parser emits `[is X]` as a `TypeName` AST node here (see
+ * edgeql/parser.ts:1227). Other filter expressions are valid EdgeQL but
+ * map to a different code path, so this helper only matches `[is X]`.
+ */
+function backlinkIntersectionName(
+  filter: EdgeQLAST.Expression | undefined
+): string | null {
+  if (!filter || filter.kind !== "TypeName") {
+    return null;
+  }
+  return (filter as EdgeQLAST.TypeName).name.parts.join("::");
+}
+
+/**
  * Render a TypeName AST node back to its EdgeQL textual form, including
  * any generic subtypes — e.g. `array<str>`, `tuple<str, int64>`,
  * `array<array<int>>`. Used to build the lookup key for the PG type map.
@@ -1227,6 +1242,24 @@ export class EdgeQLCompiler {
     return out;
   }
 
+  /**
+   * Resolve a property reference inside a shape. Stored properties emit a
+   * column reference; computed properties re-parse their captured EdgeQL
+   * expression (`PropertyDef.computedExpr`) and compile that in place, so
+   * `select X { computedThing }` doesn't reference a non-existent column.
+   */
+  private compilePropertyReference(
+    property: Context.PropertyDef,
+    tableAlias: string
+  ): SQL.SQLExpression {
+    if (property.computed && property.computedExpr) {
+      const parser = new EdgeQLParser(property.computedExpr);
+      const expr = parser.parseExpressionOnly();
+      return this.compileExpression(expr);
+    }
+    return SQL.createColumnReference(property.columnName, tableAlias);
+  }
+
   private compileShapeElement(
     element: EdgeQLAST.ShapeElement,
     typeName: string,
@@ -1268,7 +1301,7 @@ export class EdgeQLCompiler {
         const propName = element.name.name;
         const property = Context.getProperty(this.ctx, typeName, propName);
         if (property) {
-          value = SQL.createColumnReference(property.columnName, tableAlias);
+          value = this.compilePropertyReference(property, tableAlias);
         } else {
           // Fall back to compiling the expression
           value = this.compileExpression(element.expr);
@@ -1281,7 +1314,7 @@ export class EdgeQLCompiler {
 
       const property = Context.getProperty(this.ctx, typeName, propName);
       if (property) {
-        value = SQL.createColumnReference(property.columnName, tableAlias);
+        value = this.compilePropertyReference(property, tableAlias);
       } else {
         const link = Context.getLink(this.ctx, typeName, propName);
         if (link) {
@@ -1478,8 +1511,11 @@ export class EdgeQLCompiler {
     shape: EdgeQLAST.Shape,
     parentAlias: string
   ): SQL.SQLExpression {
-    // Generate a subquery for the linked type with the given shape
-    const targetTypeDef = Context.getTypeDef(this.ctx, link.target);
+    // Generate a subquery for the linked type with the given shape.
+    // Use `resolveTypeName` (not `getTypeDef`) so a link target like
+    // "default::Merchant" still resolves when the type is stored under
+    // its bare "Merchant" key (see schema-manager.ts:737-740).
+    const targetTypeDef = Context.resolveTypeName(this.ctx, link.target);
     if (!targetTypeDef) {
       throw new CompilationError(
         `Target type '${link.target}' not found for link '${link.name}'`
@@ -2602,10 +2638,50 @@ export class EdgeQLCompiler {
       }
     }
 
+    // Reverse link with inline type intersection: `.<options[is X]` is
+    // parsed as a single backlink step whose `filter` carries the
+    // intersected TypeName (see edgeql/parser.ts:1220). Handle this here
+    // before falling through to multi-step branches.
+    if (path.steps.length === 1) {
+      const step = path.steps[0];
+      if (step.type === "backlink") {
+        const intersection = backlinkIntersectionName(step.filter);
+        if (intersection) {
+          const backlink = this.compileBacklinkWithIntersection(
+            step.name,
+            intersection
+          );
+          if (backlink) {
+            return backlink;
+          }
+        }
+        throw new CompilationError(
+          `Backlink '.<${step.name}' without a type intersection ` +
+            `(e.g. \`.<${step.name}[is SomeType]\`) is not yet supported`
+        );
+      }
+    }
+
     // Handle 2-step paths: check for enum literals before rejecting
     if (path.steps.length === 2) {
       const firstStep = path.steps[0];
       const secondStep = path.steps[1];
+
+      // `.<linkName[is Type]` can also be parsed as two separate steps in
+      // some grammar paths — keep this branch as a safety net.
+      if (
+        firstStep.type === "backlink" &&
+        secondStep.type === "type_intersection"
+      ) {
+        const backlink = this.compileBacklinkWithIntersection(
+          firstStep.name,
+          secondStep.name
+        );
+        if (backlink) {
+          return backlink;
+        }
+      }
+
       const enumDefPath = firstStep.type === "property" ?
         Context.resolveTypeName(this.ctx, firstStep.name) :
         undefined;
@@ -2820,6 +2896,91 @@ export class EdgeQLCompiler {
     targetField: string
   ): SQL.SQLExpression | null {
     return this.compileLinkChain([linkName, targetField]);
+  }
+
+  /**
+   * Lower a reverse link with type intersection — `.<linkName[is TargetType]`
+   * — into a correlated subquery. Materializes the matching rows as a JSON
+   * array of `{ id }` objects so the value slots cleanly into a JSONB shape.
+   *
+   * Resolves the link on `TargetType` (NOT the current scope's type) and
+   * uses its FK column to filter against the current scope's `id`. Supports
+   * single-FK backlinks today; junction-table multi backlinks throw a clear
+   * error rather than silently returning the wrong rows.
+   */
+  private compileBacklinkWithIntersection(
+    backlinkName: string,
+    intersectionType: string
+  ): SQL.SQLExpression | null {
+    let currentAlias: { alias: string; type: string; } | undefined;
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      currentAlias = ta;
+      break;
+    }
+    if (!currentAlias) {
+      return null;
+    }
+    const currentType = Context.resolveTypeName(this.ctx, currentAlias.type);
+    if (!currentType) {
+      return null;
+    }
+
+    const targetType = Context.resolveTypeName(this.ctx, intersectionType);
+    if (!targetType) {
+      throw new CompilationError(
+        `Backlink intersection target '${intersectionType}' not found in schema`
+      );
+    }
+
+    const link = targetType.links.get(backlinkName);
+    if (!link) {
+      throw new CompilationError(
+        `Type '${intersectionType}' has no link '${backlinkName}' — ` +
+          `'.<${backlinkName}[is ${intersectionType}]' requires the named ` +
+          `link to exist on the intersection target`
+      );
+    }
+
+    // The forward link on the target must point back at the current type.
+    // Resolving against the schema (not just a string compare) tolerates
+    // module-qualified vs bare target names.
+    const linkTargetType = Context.resolveTypeName(this.ctx, link.target);
+    if (linkTargetType && linkTargetType.name !== currentType.name) {
+      throw new CompilationError(
+        `Link '${intersectionType}.${backlinkName}' targets ` +
+          `'${linkTargetType.name}', not '${currentType.name}' — backlink ` +
+          `does not connect to the current type`
+      );
+    }
+
+    if (link.columnName && !link.junctionTable) {
+      // Single-FK backlink. Emit a correlated subquery materializing matches
+      // as JSON, defaulting to `[]` so a row with no requirements still
+      // produces a parseable JSON array instead of NULL.
+      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${targetType.tableName}"."id")), '[]'::jsonb) ` +
+        `FROM "${targetType.tableName}" ` +
+        `WHERE "${targetType.tableName}"."${link.columnName}" = "${currentAlias.alias}"."id")`;
+      return { kind: "RawSQLExpression", sql };
+    }
+
+    if (link.junctionTable) {
+      // Junction-table multi backlink. The target's forward link sits on
+      // the `source_id` side by default; the rows we want are reached by
+      // joining the junction table on its `target_id` matching the
+      // current scope's id, then projecting the source-side target rows.
+      const srcCol = link.junctionSourceColumn ?? "source_id";
+      const tgtCol = link.junctionTargetColumn ?? "target_id";
+      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${targetType.tableName}"."id")), '[]'::jsonb) ` +
+        `FROM "${targetType.tableName}" ` +
+        `JOIN "${link.junctionTable}" ON "${link.junctionTable}"."${srcCol}" = "${targetType.tableName}"."id" ` +
+        `WHERE "${link.junctionTable}"."${tgtCol}" = "${currentAlias.alias}"."id")`;
+      return { kind: "RawSQLExpression", sql };
+    }
+
+    throw new CompilationError(
+      `Backlink '${intersectionType}.${backlinkName}' has no resolvable ` +
+        `column (link is neither a single FK nor a junction-table multi)`
+    );
   }
 
   private compileLinkChain(

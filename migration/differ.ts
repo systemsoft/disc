@@ -500,6 +500,26 @@ export class SchemaDiffer {
     return this.computePropertiesWithInheritance(typeDef, allTypes);
   }
 
+  /**
+   * Look up a parent type referenced by `extending <name>` against the cache.
+   * Tries the literal name first, then strips a `default::` prefix so a
+   * cross-module reference like `extending default::BaseRecord` resolves
+   * against the bare-keyed entry that `extractTypes` writes for every type.
+   */
+  private resolveExtendsTarget(
+    name: string,
+    allTypes: Map<string, AST.TypeDeclaration>
+  ): AST.TypeDeclaration | undefined {
+    const direct = allTypes.get(name);
+    if (direct) {
+      return direct;
+    }
+    if (name.startsWith("default::")) {
+      return allTypes.get(name.slice("default::".length));
+    }
+    return undefined;
+  }
+
   private computePropertiesWithInheritance(
     typeDef: AST.TypeDeclaration,
     allTypes?: Map<string, AST.TypeDeclaration>
@@ -510,7 +530,7 @@ export class SchemaDiffer {
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
         const baseName = baseRef.name.parts.join("::");
-        const baseType = allTypes.get(baseName);
+        const baseType = this.resolveExtendsTarget(baseName, allTypes);
         if (baseType) {
           const inheritedProps = this.extractPropertiesWithInheritance(
             baseType,
@@ -559,7 +579,7 @@ export class SchemaDiffer {
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
         const baseName = baseRef.name.parts.join("::");
-        const baseType = allTypes.get(baseName);
+        const baseType = this.resolveExtendsTarget(baseName, allTypes);
         if (baseType) {
           const inheritedLinks = this.extractLinksWithInheritance(
             baseType,

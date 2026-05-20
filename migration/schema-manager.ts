@@ -50,6 +50,7 @@ import {
   normalizeArrowsToProperties,
   SDLConverter
 } from "../schema/converter.ts";
+import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
@@ -559,6 +560,14 @@ export class SchemaManager {
             propDecl.annotations
           );
 
+          // Stringify the computed expression so the compiler can re-parse
+          // and inline it at shape-element resolution. Without this, a
+          // computed property like `expires := .created + ...` would emit
+          // a column reference to a non-existent `expires` column.
+          const computedExpr = propDecl.computed ?
+            sdlExpressionToEdgeQL(propDecl.computed) :
+            undefined;
+
           properties.set(propName, {
             name: propName,
             type: sqlType,
@@ -569,6 +578,7 @@ export class SchemaManager {
             readonly: propDecl.readonly ?? false,
             hasDefault: propDecl.default !== undefined,
             computed: propDecl.computed !== undefined,
+            computedExpr,
             constraints,
             rewrites,
             annotations: propAnnotations
@@ -750,7 +760,14 @@ export class SchemaManager {
       }
 
       for (const parentName of typeDef.parentTypes) {
-        const parentDef = types.get(parentName);
+        // Look up by literal name first, then strip a `default::` prefix —
+        // types in the default module are stored under their bare key (see
+        // line 737-740), so `extending default::BaseRecord` from another
+        // module would otherwise silently fail to find its parent.
+        let parentDef = types.get(parentName);
+        if (!parentDef && parentName.startsWith("default::")) {
+          parentDef = types.get(parentName.slice("default::".length));
+        }
         if (!parentDef) {
           continue;
         }
@@ -786,21 +803,54 @@ export class SchemaManager {
     // (many-to-many via junction table).
     const resolvedJunctions = new Set<string>();
 
+    // Cross-module-aware lookup: SDL stores `linkDef.target` verbatim from
+    // the source text (often unqualified, e.g. `multi options -> PaymentOption`
+    // from inside `payment::`), but `types` is keyed by qualified name for
+    // non-default modules. Try the verbatim key, then a same-module qualified
+    // key (so `PaymentOption` resolves to `payment::PaymentOption` when the
+    // owner is in `payment::`), and finally strip a `default::` prefix.
+    const resolveLinkTarget = (
+      target: string,
+      ownerModule: string | undefined
+    ): TypeDef | undefined => {
+      const direct = types.get(target);
+      if (direct)
+        return direct;
+      if (!target.includes("::") && ownerModule && ownerModule !== "default") {
+        const qualified = types.get(`${ownerModule}::${target}`);
+        if (qualified)
+          return qualified;
+      }
+      if (target.startsWith("default::")) {
+        return types.get(target.slice("default::".length));
+      }
+      return undefined;
+    };
+
     for (const [typeName, typeDef] of types) {
       for (const [_linkName, linkDef] of typeDef.links) {
         if (!linkDef.multi) {
           continue;
         }
 
-        const targetTypeDef = types.get(linkDef.target);
+        const targetTypeDef = resolveLinkTarget(linkDef.target, typeDef.module);
         if (!targetTypeDef) {
           continue;
         }
 
-        // First try: single-link backlink on the target type
+        // First try: single-link backlink on the target type. Resolve each
+        // candidate's `target` (often unqualified in SDL) to its TypeDef and
+        // compare by reference — comparing the raw string against `typeName`
+        // breaks across modules (`PaymentOption` vs `payment::PaymentOption`).
         let foundBacklink = false;
         for (const [candidateName, candidateLink] of targetTypeDef.links) {
-          if (!candidateLink.multi && candidateLink.target === typeName) {
+          if (candidateLink.multi)
+            continue;
+          const candidateTarget = resolveLinkTarget(
+            candidateLink.target,
+            targetTypeDef.module
+          );
+          if (candidateTarget === typeDef) {
             linkDef.backlink = candidateName;
             foundBacklink = true;
             break;
@@ -827,7 +877,13 @@ export class SchemaManager {
           for (
             const [_candidateName, candidateLink] of targetTypeDef.links
           ) {
-            if (candidateLink.multi && candidateLink.target === typeName) {
+            if (!candidateLink.multi)
+              continue;
+            const candidateTarget = resolveLinkTarget(
+              candidateLink.target,
+              targetTypeDef.module
+            );
+            if (candidateTarget === typeDef) {
               // Use canonical ordering to avoid duplicate junction tables:
               // the junction table belongs to whichever type comes first
               // alphabetically

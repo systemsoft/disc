@@ -156,6 +156,13 @@ export interface PropertyDef {
   hasDefault?: boolean;
   /** Whether this property is a computed expression (not stored) */
   computed?: boolean;
+  /**
+   * For computed properties: the EdgeQL source of the right-hand side of
+   * `name := expr`. Schema-manager stringifies the SDL Expression here so
+   * the compiler can re-parse and inline it as a shape element's value
+   * rather than emitting a column reference to a non-existent column.
+   */
+  computedExpr?: string;
   /** Constraints applied to this property (e.g., exclusive, max_length) */
   constraints?: PropertyConstraint[];
   /** Rewrite rules for insert/update operations */
@@ -320,6 +327,20 @@ export function resolveTypeName(
     typeDef = ctx.schema.types.get(name.slice("default::".length));
     if (typeDef) {
       return typeDef;
+    }
+  }
+
+  // 5. Bare-name fallback across modules. `compileSelectQuery` strips the
+  // module from `typeDef.name` (it stores the bare identifier) and passes
+  // that to downstream shape compilation, so a query like
+  // `select api::ApiKey { id }` reaches `getProperty(ctx, "ApiKey", "id")`
+  // with no module context. Without this scan, the `id` lookup fails even
+  // though the type lives in the schema under its qualified key.
+  if (!name.includes("::")) {
+    for (const td of ctx.schema.types.values()) {
+      if (td.name === name) {
+        return td;
+      }
     }
   }
 

@@ -496,7 +496,7 @@ export class CLICommands {
       } else if (args.squash) {
         await this.handleSquash(manager, args);
       } else if (args.create) {
-        await this.createMigration(manager, load!.modules);
+        this.createMigration(manager, load!.modules);
       } else {
         await this.applyMigrations(
           manager,
@@ -788,6 +788,10 @@ export class CLICommands {
           await server.stop();
 
           if (instanceName) {
+            /*** ensurePgRunning constructed its own PostgresManager, so this CLI-scoped manager has
+                 no entry for the instance. Recover from disk before stopping — same pattern
+                 as `disc stop`. ***/
+            await this.postgresManager.discoverInstances();
             await this.postgresManager.stopInstance(instanceName);
             console.log("✅ PostgreSQL stopped");
           }

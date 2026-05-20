@@ -81,6 +81,16 @@ export interface SchemaFunctionDescription {
   returnType: string;
 }
 
+export interface SchemaIndexDescription {
+  /** Optional named index — e.g., `index name_idx on (.name)`. */
+  name?: string;
+  /**
+   * Columns covered by the index. Single-column indexes have one entry;
+   * composite indexes expose each column as a separate entry.
+   */
+  columns: string[];
+}
+
 export interface SchemaLinkDescription {
   annotations: Record<string, string>;
   cardinality: "single" | "multi";
@@ -108,7 +118,9 @@ export interface SchemaTypeDescription {
   abstract: boolean;
   accessPolicies: string[];
   annotations: Record<string, string>;
-  indexes: string[];
+  enumValues?: string[];
+  indexes: SchemaIndexDescription[];
+  kind: "object" | "scalar" | "enum";
   links: SchemaLinkDescription[];
   module: string;
   name: string;
@@ -133,6 +145,10 @@ export interface ServerHealth {
 }
 
 export interface ServerStats {
+  /** Database resolved for this request — the one the UI is viewing. */
+  database?: string;
+  /** All databases registered with the server. */
+  databases?: string[];
   connections: any;
   memoryUsage?: any;
   queries: {

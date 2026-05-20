@@ -54,9 +54,10 @@ const CONTENT_TYPES: Record<string, string> = {
  */
 export function getUiContentType(filename: string): string {
   const dot = filename.lastIndexOf(".");
-  if (dot === -1) {
+
+  if (dot === -1)
     return "application/octet-stream";
-  }
+
   const ext = filename.slice(dot + 1).toLowerCase();
   return CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
@@ -70,6 +71,7 @@ export function getUiContentType(filename: string): string {
 async function readUiAsset(relPath: string): Promise<Uint8Array | null> {
   // The build dir lives one directory above this file: server/ → ui/build.
   const url = new URL(`../ui/build/${relPath}`, import.meta.url);
+
   try {
     return await Deno.readFile(url);
   } catch {

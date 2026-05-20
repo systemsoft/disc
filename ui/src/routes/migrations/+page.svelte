@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { discAPI, type MigrationHistoryEntry } from '$lib/api/client';
@@ -36,59 +33,6 @@
     return `${(ms / 1000).toFixed(2)}s`;
   }
 </script>
-
-<div class="migrations">
-  <header class="page-header">
-    <h1>Migration History</h1>
-    <button class="button" on:click={reload} disabled={loading}>
-      {loading ? 'Loading…' : 'Refresh'}
-    </button>
-  </header>
-
-  {#if loadError}
-    <div class="error-banner">{loadError}</div>
-  {/if}
-
-  {#if !loading && migrations.length === 0 && !loadError}
-    <div class="empty">
-      <h3>No migrations applied yet</h3>
-      <p>
-        When the schema is applied (via <code>disc serve</code> auto-migrate
-        on a fresh database, or <code>disc migrate</code> manually) the
-        history will appear here.
-      </p>
-    </div>
-  {/if}
-
-  {#if migrations.length > 0}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Applied</th>
-            <th>Name</th>
-            <th>ID</th>
-            <th>Description</th>
-            <th>Duration</th>
-            <th>Schema Hash</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each migrations as m}
-            <tr>
-              <td>{formatDate(m.appliedAt)}</td>
-              <td>{m.name}</td>
-              <td><code>{m.id}</code></td>
-              <td>{m.description}</td>
-              <td>{formatDuration(m.durationMs)}</td>
-              <td><code>{m.schemaHash}</code></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  {/if}
-</div>
 
 <style lang="scss">
   .migrations {
@@ -175,3 +119,56 @@
     }
   }
 </style>
+
+<div class="migrations">
+  <header class="page-header">
+    <h1>Migration History</h1>
+    <button class="button" on:click={reload} disabled={loading}>
+      {loading ? 'Loading…' : 'Refresh'}
+    </button>
+  </header>
+
+  {#if loadError}
+    <div class="error-banner">{loadError}</div>
+  {/if}
+
+  {#if !loading && migrations.length === 0 && !loadError}
+    <div class="empty">
+      <h3>No migrations applied yet</h3>
+      <p>
+        When the schema is applied (via <code>disc serve</code> auto-migrate
+        on a fresh database, or <code>disc migrate</code> manually) the
+        history will appear here.
+      </p>
+    </div>
+  {/if}
+
+  {#if migrations.length > 0}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Applied</th>
+            <th>Name</th>
+            <th>ID</th>
+            <th>Description</th>
+            <th>Duration</th>
+            <th>Schema Hash</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each migrations as m}
+            <tr>
+              <td>{formatDate(m.appliedAt)}</td>
+              <td>{m.name}</td>
+              <td><code>{m.id}</code></td>
+              <td>{m.description}</td>
+              <td>{formatDuration(m.durationMs)}</td>
+              <td><code>{m.schemaHash}</code></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+</div>

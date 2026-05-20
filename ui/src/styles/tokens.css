@@ -13,6 +13,22 @@
  *                      get translucent variants without Sass.
  */
 
+@font-face {
+  font-display: swap;
+  font-family: TekturVariable;
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("/ui/type/tektur-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Tektur;
+  font-style: normal;
+  font-weight: 400;
+  src: url("/ui/type/tektur.woff2") format("woff2");
+}
+
 :root {
   /* TRON-inspired surfaces */
   --color-background: #0a0e1b;
@@ -59,9 +75,14 @@
   --glow-radius: 8px;
 
   /* Typography */
-  --font-mono: "Space Mono", "Courier New", monospace;
-  --font-display: "Orbitron", "Arial Black", sans-serif;
-  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Berkeley Mono", monospace;
+  --font-display: Tektur, "Orbitron", "Arial Black", sans-serif;
+  --font-base: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  @supports (font-variation-settings: normal) {
+    --font-base: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-display: TekturVariable, "Orbitron", "Arial Black", sans-serif;
+  }
 
   /* Z-index */
   --z-base: 0;
@@ -76,3 +97,14 @@
   --transition-base: 250ms ease-out;
   --transition-slow: 350ms ease-out;
 }
+
+:root {
+  font-family: var(--font-base);
+  font-feature-settings: "liga" 1, "calt" 1; /* fix for Chrome */
+}
+
+/*@supports (font-variation-settings: normal) {
+  :root {
+    font-family: InterVariable, sans-serif;
+  }
+}*/

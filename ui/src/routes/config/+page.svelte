@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount } from 'svelte';
   import { discAPI, type ConfigKeyDef } from '$lib/api/client';
@@ -44,77 +41,6 @@
 
   onMount(reload);
 </script>
-
-<div class="config">
-  <header class="page-header">
-    <div>
-      <h1>Configuration</h1>
-      <p class="subtitle">
-        CONFIGURE-able settings registry. Secret values are masked by default.
-      </p>
-    </div>
-    <button class="button" on:click={reload} disabled={loading}>
-      {loading ? 'Loading…' : 'Refresh'}
-    </button>
-  </header>
-
-  {#if loadError}
-    <div class="error-banner">{loadError}</div>
-  {/if}
-
-  {#if !loading && configKeys.length === 0 && !loadError}
-    <div class="empty">
-      <h3>No configuration keys</h3>
-      <p>The server returned an empty config registry.</p>
-    </div>
-  {/if}
-
-  {#if configKeys.length > 0}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Scope</th>
-            <th>Value</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each configKeys as k (k.name)}
-            <tr class:secret={k.secret}>
-              <td>
-                <code>{k.name}</code>
-                {#if k.secret}
-                  <span class="badge" title="Marked secret — value is masked">🔒 secret</span>
-                {/if}
-              </td>
-              <td><span class="type">{k.edgeqlType}</span></td>
-              <td>{k.defaultScope}</td>
-              <td class="value">
-                <span class="value-text" class:masked={k.secret && !revealed.has(k.name)}>
-                  {displayValue(k)}
-                </span>
-                {#if k.secret}
-                  <button
-                    class="reveal-btn"
-                    type="button"
-                    on:click={() => toggleReveal(k.name)}
-                    title={revealed.has(k.name) ? 'Hide value' : 'Reveal value'}
-                  >
-                    {revealed.has(k.name) ? 'hide' : 'reveal'}
-                  </button>
-                {/if}
-              </td>
-              <td class="description">{k.description ?? ''}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  {/if}
-</div>
 
 <style lang="scss">
   .config {
@@ -266,3 +192,74 @@
     }
   }
 </style>
+
+<div class="config">
+  <header class="page-header">
+    <div>
+      <h1>Configuration</h1>
+      <p class="subtitle">
+        CONFIGURE-able settings registry. Secret values are masked by default.
+      </p>
+    </div>
+    <button class="button" on:click={reload} disabled={loading}>
+      {loading ? 'Loading…' : 'Refresh'}
+    </button>
+  </header>
+
+  {#if loadError}
+    <div class="error-banner">{loadError}</div>
+  {/if}
+
+  {#if !loading && configKeys.length === 0 && !loadError}
+    <div class="empty">
+      <h3>No configuration keys</h3>
+      <p>The server returned an empty config registry.</p>
+    </div>
+  {/if}
+
+  {#if configKeys.length > 0}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Scope</th>
+            <th>Value</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each configKeys as k (k.name)}
+            <tr class:secret={k.secret}>
+              <td>
+                <code>{k.name}</code>
+                {#if k.secret}
+                  <span class="badge" title="Marked secret — value is masked">🔒 secret</span>
+                {/if}
+              </td>
+              <td><span class="type">{k.edgeqlType}</span></td>
+              <td>{k.defaultScope}</td>
+              <td class="value">
+                <span class="value-text" class:masked={k.secret && !revealed.has(k.name)}>
+                  {displayValue(k)}
+                </span>
+                {#if k.secret}
+                  <button
+                    class="reveal-btn"
+                    type="button"
+                    on:click={() => toggleReveal(k.name)}
+                    title={revealed.has(k.name) ? 'Hide value' : 'Reveal value'}
+                  >
+                    {revealed.has(k.name) ? 'hide' : 'reveal'}
+                  </button>
+                {/if}
+              </td>
+              <td class="description">{k.description ?? ''}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+</div>
