@@ -547,9 +547,9 @@ import type { EmbeddedPgEntry } from "./embedded-extractor.ts";
 
 /*** EXPORT ------------------------------------------- ***/
 
-export const EMBEDDED_PG_VERSION = ${JSON.stringify(options.pgVersion)};
+export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = ${body};
 
-export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = ${body};\n`;
+export const EMBEDDED_PG_VERSION = ${JSON.stringify(options.pgVersion)};\n`;
 }
 
 /**
