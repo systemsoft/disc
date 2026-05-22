@@ -1248,10 +1248,7 @@ export class EdgeQLCompiler {
    * expression (`PropertyDef.computedExpr`) and compile that in place, so
    * `select X { computedThing }` doesn't reference a non-existent column.
    */
-  private compilePropertyReference(
-    property: Context.PropertyDef,
-    tableAlias: string
-  ): SQL.SQLExpression {
+  private compilePropertyReference(property: Context.PropertyDef, tableAlias: string): SQL.SQLExpression {
     if (property.computed && property.computedExpr) {
       const parser = new EdgeQLParser(property.computedExpr);
       const expr = parser.parseExpressionOnly();
@@ -3723,6 +3720,12 @@ export class EdgeQLCompiler {
   private compileSetExpr(setExpr: EdgeQLAST.SetExpr): SQL.SQLExpression {
     // Compile set expression {val1, val2, ...} into a SQL tuple (val1, val2, ...)
     // This is used in expressions like FILTER .role IN {"admin", "moderator"}
+    // The empty set `{}` is the EdgeQL "no value" sentinel; in scalar/assignment
+    // context (e.g. `update T set { col := {} }`) it must become SQL NULL, not
+    // `()` — bare `()` is invalid Postgres syntax.
+    if (setExpr.elements.length === 0)
+      return { kind: "RawSQLExpression" as const, sql: "NULL" };
+
     const elements = setExpr.elements.map(elem => this.compileExpression(elem));
 
     // Build a raw SQL expression for the tuple representation

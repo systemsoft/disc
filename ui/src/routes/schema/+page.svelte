@@ -136,6 +136,10 @@
 
       h1 {
         font-size: 1.5rem;
+
+        span {
+          color: var(--uchu-yin-3);
+        }
       }
 
       .type-meta {
@@ -248,9 +252,8 @@
       background-color: oklch(var(--uchu-blue-1-raw) / 30%);
       color: var(--uchu-blue-9);
       font-family: var(--font-mono);
-      font-size: 0.875rem;
-      line-height: 1;
-      padding: calc(var(--grid-unit) * 0.5) var(--grid-unit);
+      font-size: 0.75rem;
+      padding: 2px 8px;
     }
 
     .index-expr,
@@ -379,7 +382,7 @@
       <h5 style="--ch: 13ch;">Object Detail</h5>
 
       <div class="type-header">
-        <h1>{selectedType.name}</h1>
+        <h1>{#if selectedType.module !== "default"}<span>{selectedType.module}::</span>{/if}{selectedType.name}</h1>
 
         <div class="type-meta">
           {#if selectedType.module}

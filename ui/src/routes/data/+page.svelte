@@ -169,7 +169,7 @@
     return ` order by .${sortBy.col} ${sortBy.dir}`;
   }
 
-  function buildSelect(type: SchemaTypeDescription): { query: string; cols: string[] } {
+  function buildSelect(type: SchemaTypeDescription): { cols: string[]; query: string; } {
     /*** Schema introspection includes `id` in properties[], so don’t prepend it again — duplicate
          fields make the compiler emit invalid SQL. ***/
     const propNames = type.properties.map((p) => p.name);
@@ -241,12 +241,12 @@
 
   function filterPlaceholder(type: string): string {
     switch (type) {
-      case "int16":
-      case "int32":
-      case "int64":
+      case "decimal":
       case "float32":
       case "float64":
-      case "decimal": {
+      case "int16":
+      case "int32":
+      case "int64": {
         return ">=10, <5, 10..20";
       }
 
@@ -259,7 +259,7 @@
       }
 
       case "uuid": {
-        return "full uuid";
+        return "UUID";
       }
 
       default: {
@@ -294,7 +294,7 @@
     }
   }
 
-  /** Resolve a link's `target` (e.g. "User" or "default::User") to a loaded type. */
+  /** Resolve a link’s `target` (e.g. "User" or "default::User") to a loaded type. */
   function findTargetType(target: string): SchemaTypeDescription | null {
     if (target.includes("::")) {
       const [mod, name] = target.split("::");
@@ -302,6 +302,21 @@
     }
 
     return types.find((t) => t.name === target) ?? null;
+  }
+
+  function getDataLink(value: any) {
+    if (Array.isArray(value) && value.some(v => v.id))
+      return value.find(v => v.id).id;
+    else
+      return "";
+  }
+
+  function isDataLink(value: any): boolean {
+    /*** A link will most likely have an ID ***/
+    if (Array.isArray(value) && value.some(v => v.id))
+      return true;
+
+    return false;
   }
 
   function formatCell(value: any): string {
@@ -403,7 +418,7 @@
         return `<datetime>"${v.replace(/'/g, "\\'")}"`;
       }
 
-      case 'uuid': {
+      case "uuid": {
         return `<uuid>"${v.replace(/'/g, "\\'")}"`;
       }
 
@@ -539,7 +554,7 @@
     if (!sortBy || sortBy.col !== col)
       return "";
 
-    return sortBy.dir === "asc" ? " ↑" : " ↓";
+    return sortBy.dir === "asc" ? "↑" : "↓";
   }
 
   function startEdit(row: any) {
@@ -551,7 +566,7 @@
 
     for (const p of writableProps(selectedType)) {
       const v = row[p.name];
-      editDraft[p.name] = v == null ? '' : String(v);
+      editDraft[p.name] = v == null ? "" : String(v);
     }
 
     editError = null;
@@ -778,37 +793,29 @@
     gap: calc(var(--grid-unit) * 2);
   }
 
-  .viewer-header {
+  .controls {
     align-items: center;
-    background-color: var(--uchu-gray-1);
     display: flex;
-    justify-content: space-between;
-    margin-bottom: calc(calc(var(--grid-unit) * 2) * -1);
-    padding: calc(var(--grid-unit) * 1) calc(var(--grid-unit) * 3);
-    position: relative;
-    top: calc(calc(var(--grid-unit) * 2) * -1);
-    /* width: 100%; */
+    gap: calc(var(--grid-unit) * 2);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
 
-    .controls {
-      align-items: center;
-      display: flex;
-      gap: calc(var(--grid-unit) * 2);
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
+    input[type="number"] {
+      border-color: var(--uchu-gray-2);
+      padding: calc(var(--grid-unit) / 2 - 2px) 5px;
+      width: 80px;
+    }
 
-      input[type="number"] {
-        margin-left: var(--grid-unit);
-        width: 80px;
-      }
+    button {
+      font-size: inherit;
+      text-transform: inherit;
     }
   }
 
   .error-banner {
     background-color: oklch(var(--uchu-red-1-raw) / 20%);
     color: var(--uchu-red-5);
-    /* background: rgb(var(--color-danger-rgb) / 0.1); */
-    /* border: 1px solid var(--color-danger); */
-    /* color: var(--color-danger); */
     font-family: var(--font-mono);
     font-size: 0.875rem;
     padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
@@ -826,21 +833,9 @@
     border-bottom: 1px solid var(--uchu-gray-1);
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
-    /* display: flex; */
-    /* flex-direction: column; */
     gap: calc(var(--grid-unit) * 0.5);
-    /* padding: calc(var(--grid-unit) * 2); */
-    /* width: 300px; */
-
-    h3 {
-      font-size: 0.875rem;
-      margin-bottom: var(--grid-unit);
-    }
+    overflow-y: auto;
+    padding-bottom: var(--grid-unit);
 
     .type-item {
       align-items: center;
@@ -909,11 +904,6 @@
       margin: 0;
     }
 
-
-    h3 {
-      font-size: 1rem;
-    }
-
     h4 {
       font-size: 0.875rem;
       margin-bottom: var(--grid-unit);
@@ -930,10 +920,13 @@
       display: flex;
       justify-content: space-between;
       line-height: 1;
-      margin-bottom: calc(var(--grid-unit) * 2.25);
 
       h1 {
         font-size: 1.5rem;
+
+        span {
+          color: var(--uchu-yin-3);
+        }
       }
 
       .type-meta {
@@ -973,16 +966,12 @@
   }
 
   .insert-form {
-    /* background: var(--color-background-dark); */
-    /* border: 1px solid var(--color-primary); */
-    /* border-radius: var(--border-radius); */
     display: flex;
     flex-direction: column;
     gap: var(--grid-unit);
     padding: calc(var(--grid-unit) * 2);
 
     label {
-      /* color: var(--color-text); */
       display: flex;
       flex-direction: column;
       font-family: var(--font-mono);
@@ -990,10 +979,6 @@
       gap: calc(var(--grid-unit) * 0.5);
 
       input {
-        /* background: var(--color-background); */
-        /* border: 1px solid var(--color-border); */
-        /* border-radius: var(--border-radius); */
-        /* color: var(--color-text); */
         font-family: var(--font-mono);
         font-size: 0.875rem;
         padding: var(--grid-unit);
@@ -1001,7 +986,6 @@
     }
 
     .type-tag {
-      /* color: var(--color-text-dim); */
       display: inline-block;
       font-size: 0.7rem;
       margin-left: var(--grid-unit);
@@ -1027,117 +1011,6 @@
     }
   }
 
-  .table-wrap {
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
-    overflow: auto;
-  }
-
-  table {
-    border-collapse: collapse;
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    width: 100%;
-
-    th, td {
-      /* border-bottom: 1px solid var(--color-border); */
-      padding: calc(var(--grid-unit) * 1.5);
-      text-align: left;
-      white-space: nowrap;
-    }
-
-    th {
-      /* background: var(--color-background-dark); */
-      /* color: var(--color-primary); */
-      position: sticky;
-      top: 0;
-      user-select: none;
-
-      &.sortable {
-        cursor: pointer;
-
-        &:hover {
-          background: var(--color-surface-hover);
-        }
-      }
-
-      &.active-sort {
-        color: var(--color-secondary);
-      }
-    }
-
-    .filter-row th {
-      /* background: var(--color-surface); */
-      padding: calc(var(--grid-unit) * 0.75);
-      top: calc(2rem + var(--grid-unit));
-
-      input,
-      select {
-        /* background: var(--color-background); */
-        /* border: 1px solid var(--color-border); */
-        /* border-radius: var(--border-radius); */
-        /* color: var(--color-text); */
-        font-family: var(--font-mono);
-        font-size: 0.75rem;
-        min-width: 100px;
-        padding: calc(var(--grid-unit) * 0.5);
-        width: 100%;
-
-        &::placeholder {
-          /* color: var(--color-text-dim); */
-          font-style: italic;
-        }
-
-        &:focus {
-          /* border-color: var(--color-primary); */
-          outline: none;
-        }
-      }
-    }
-
-    .empty-row {
-      padding: calc(var(--grid-unit) * 4);
-      text-align: center;
-      color: var(--color-text-dim);
-      font-style: italic;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:hover td {
-      /* background: var(--color-surface-hover); */
-    }
-
-    .editing td {
-      /* background: rgb(var(--color-primary-rgb) / 0.05); */
-    }
-
-    code {
-      /* color: var(--color-info); */
-      font-size: 0.75rem;
-    }
-
-    input[type="text"] {
-      /* background: var(--color-background); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
-      /* color: var(--color-text); */
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      min-width: 120px;
-      padding: calc(var(--grid-unit) * 0.5);
-      width: 100%;
-    }
-  }
-
-  .actions-col {
-    display: flex;
-    gap: calc(var(--grid-unit) * 0.5);
-    white-space: nowrap;
-  }
-
   :global(.button-small) {
     font-size: 0.75rem !important;
     padding: calc(var(--grid-unit) * 0.5) var(--grid-unit) !important;
@@ -1161,6 +1034,180 @@
     padding: calc(var(--grid-unit) * 4);
     text-align: center;
   }
+
+  .type-filters {
+    background-color: oklch(var(--uchu-gray-1-raw) / 30%);
+    border: 1px solid var(--uchu-gray-1);
+    display: grid;
+    gap: var(--grid-unit);
+    grid-template-columns: repeat(3, 1fr);
+    padding: calc(var(--grid-unit) * 2);
+
+    .type-filter {
+      display: flex;
+      flex-direction: row;
+
+      button {
+        background-color: oklch(var(--uchu-gray-2-raw) / 50%);
+        letter-spacing: normal;
+        margin-right: calc(var(--grid-unit) / 1.5);
+        padding: calc(var(--grid-unit) / 2 - 2px) calc(var(--grid-unit) * 3) calc(var(--grid-unit) / 2 - 2px) var(--grid-unit);
+        position: relative;
+
+        span {
+          position: absolute;
+          right: calc(var(--grid-unit) + 0.5px);
+        }
+      }
+
+      input {
+        border-color: var(--uchu-gray-2);
+        flex: 1;
+        padding: calc(var(--grid-unit) / 2 - 2px) var(--grid-unit);
+        width: 100%;
+
+        &::placeholder {
+          color: var(--uchu-yin-3);
+        }
+      }
+    }
+  }
+
+  .data-wrap {
+    display: grid;
+    gap: calc(var(--grid-unit) * 2);
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .data {
+    border: 1px solid;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    transition: box-shadow 0.2s;
+
+    &:not(:hover) {
+      .data-actions {
+        .button-danger {
+          background-color: var(--uchu-red-9);
+        }
+      }
+    }
+
+    &:hover {
+      .data-actions {
+        .button-danger {
+          background-color: var(--uchu-red-4);
+        }
+      }
+    }
+
+    &:not(.editing) {
+      border-color: var(--uchu-gray-1);
+
+      input {
+        border-bottom-color: transparent;
+      }
+    }
+
+    &.editing {
+      border-color: var(--uchu-yin-3);
+      box-shadow: 5px 5px var(--uchu-yin-3);
+
+      .error-banner {
+        border-bottom: 1px solid var(--uchu-gray-2);
+      }
+
+      input {
+        border-bottom-color: var(--uchu-gray-1);
+      }
+    }
+
+    .data-header {
+      background-color: oklch(var(--uchu-gray-1-raw) / 50%);
+      border-bottom: 1px solid var(--uchu-gray-1);
+      flex-direction: row;
+      font-weight: 500;
+      margin-bottom: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+    }
+
+    input {
+      border: none;
+      border-bottom: 1px solid;
+      padding: 0;
+      width: 100%;
+    }
+
+    .data-bit {
+      align-items: center;
+      display: flex;
+      flex-direction: row;
+      padding-left: calc(var(--grid-unit) * 2);
+      padding-right: calc(var(--grid-unit) * 2);
+
+      .null {
+        color: var(--uchu-gray-3);
+      }
+
+      .parameter {
+        font-family: var(--font-mono);
+        font-weight: 500;
+        margin-right: 0.5ch;
+        max-width: 18ch;
+        overflow: hidden;
+        position: relative;
+        text-overflow: ellipsis;
+        width: 100%;
+
+        &::after {
+          width: calc(100% - var(--ch)); height: 100%;
+          bottom: 0; right: 0;
+
+          color: var(--uchu-gray-1);
+          content: "....................";
+          position: absolute;
+        }
+      }
+    }
+
+    .data-actions {
+      align-items: center;
+      border-top: 1px solid var(--uchu-gray-1);
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      margin-top: var(--grid-unit);
+      padding: var(--grid-unit);
+
+      .button-secondary {
+        background-color: var(--uchu-orange-4);
+      }
+
+      .button-danger {
+        transition: background-color 0.2s;
+        color: var(--uchu-yang);
+      }
+
+      .links {
+        font-size: 0.75rem;
+      }
+
+      .link {
+        align-items: center;
+        background-color: oklch(var(--uchu-gray-2-raw) / 25%);
+        display: flex;
+        padding-right: var(--grid-unit);
+
+        span {
+          background-color: oklch(var(--uchu-gray-2-raw) / 50%);
+          color: var(--uchu-gray-9);
+          margin-right: calc(var(--grid-unit) / 1.5);
+          padding: calc(var(--grid-unit) / 4) var(--grid-unit);
+          text-transform: uppercase;
+        }
+      }
+    }
+  }
 </style>
 
 <svelte:head>
@@ -1168,49 +1215,6 @@
 </svelte:head>
 
 <div class="data-viewer">
-  <header class="viewer-header">
-    <!-- <h1>Data Viewer</h1> -->
-
-    <div class="controls">
-      <label>
-        Limit
-        <input type="number" min="1" max="500" bind:value={limit} on:change={loadRows}/>
-      </label>
-      <button class="button" on:click={loadRows} disabled={loading || !selectedType}>
-        {loading ? 'Loading...' : 'Refresh'}
-      </button>
-      <button
-        class="button"
-        on:click={startInsert}
-        disabled={!selectedType || inserting}
-      >
-        + New
-      </button>
-      <button
-        class="button button-secondary"
-        on:click={clearFilters}
-        disabled={!selectedType ||
-          (Object.values(filters).every((v) => !v) && !sortBy)}
-        title="Clear all column filters and sort"
-      >
-        Clear
-      </button>
-      <button
-        class="button"
-        class:button-live-on={liveOn}
-        on:click={toggleLive}
-        disabled={!selectedType}
-        title="When on, the table re-fetches automatically as the underlying rows change."
-      >
-        {liveOn ? '● Live' : '○ Live'}
-      </button>
-    </div>
-  </header>
-
-  {#if loadError}
-    <div class="error-banner">{loadError}</div>
-  {/if}
-
   <div class="viewer-body">
     <aside class="type-list">
       <h5 style="--ch: 12ch;">Object Types</h5>
@@ -1219,7 +1223,7 @@
         <button
           class="type-item"
           class:active={selectedType?.name === type.name}
-          on:click={() => selectType(type)}>
+          onclick={() => selectType(type)}>
           <!-- {type.module}:: -->
           {type.name}
         </button>
@@ -1231,13 +1235,57 @@
     </aside>
 
     <section class="rows-pane" class:live-pulse={livePulse}>
+      <h5 style="--ch: 13ch;">Data Controls</h5>
+
+      <div class="controls">
+        <label for="row limit">
+          Limit
+          <input
+            id="row limit"
+            max="500"
+            min="1"
+            onchange={loadRows}
+            type="number"
+            bind:value={limit}/>
+        </label>
+
+        <button
+          class="button"
+          class:button-live-on={liveOn}
+          disabled={!selectedType}
+          onclick={toggleLive}
+          title="When on, the table re-fetches automatically as the underlying rows change.">
+          {liveOn ? "● Live" : "○ Live"}
+        </button>
+
+        <button
+          class="button"
+          disabled={loading || !selectedType}
+          onclick={loadRows}>
+          {loading ? "Loading…" : "Refresh View"}
+        </button>
+
+        <button
+          class="button button-secondary"
+          disabled={!selectedType || (Object.values(filters).every((v) => !v) && !sortBy)}
+          onclick={clearFilters}
+          title="Clear all column filters and sort">
+          Clear Filters
+        </button>
+
+        <button
+          class="button"
+          disabled={!selectedType || inserting}
+          onclick={startInsert}>
+          + Add Object
+        </button>
+      </div>
+
       <h5 style="--ch: 13ch;">Object Detail</h5>
 
       {#if selectedType}
-        <!-- <h1>{selectedType.module}::{selectedType.name}</h1> -->
-
         <div class="type-header">
-          <h1>{selectedType.name}</h1>
+          <h1>{#if selectedType.module !== "default"}<span>{selectedType.module}::</span>{/if}{selectedType.name}</h1>
 
           <div class="type-meta">
             {#if selectedType.module}
@@ -1254,8 +1302,12 @@
           </div>
         </div>
 
+        {#if loadError}
+          <div class="error-banner">{loadError}</div>
+        {/if}
+
         {#if inserting}
-          <form class="insert-form" on:submit|preventDefault={submitInsert}>
+          <form class="insert-form" onsubmit={submitInsert}>
             <h4>New row</h4>
             {#each writableProps(selectedType) as prop}
               <label>
@@ -1273,10 +1325,10 @@
               <label class="link-row">
                 {linkDef.name}{linkDef.required ? " *" : ""}
                 <span class="type-tag">
-                  → {linkDef.target}{linkDef.cardinality === 'multi' ? '[]' : ''}
+                  → {linkDef.target}{linkDef.cardinality === "multi" ? "[]" : ""}
                 </span>
-                {#if (insertLinkMode[linkDef.name] ?? 'select') === 'select'}
-                  {#if linkDef.cardinality === 'multi'}
+                {#if (insertLinkMode[linkDef.name] ?? "select") === "select"}
+                  {#if linkDef.cardinality === "multi"}
                     <select multiple bind:value={insertLinkDraft[linkDef.name]}>
                       {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
                         <option value={opt.id}>{opt.label}</option>
@@ -1284,7 +1336,7 @@
                     </select>
                   {:else}
                     <select bind:value={insertLinkDraft[linkDef.name]}>
-                      <option value="">{linkDef.required ? 'Select…' : '(none)'}</option>
+                      <option value="">{linkDef.required ? "Select…" : "(none)"}</option>
                       {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
                         <option value={opt.id}>{opt.label}</option>
                       {/each}
@@ -1293,14 +1345,14 @@
                 {:else}
                   <input
                     bind:value={insertLinkDraft[linkDef.name]}
-                    placeholder={linkDef.cardinality === 'multi' ? 'UUIDs (comma-separated)' : 'UUID'}
+                    placeholder={linkDef.cardinality === "multi" ? "UUIDs (comma-separated)" : "UUID"}
                     type="text"/>
                 {/if}
                 <button
                   class="button button-small button-secondary link-mode-toggle"
-                  on:click={() => toggleLinkMode(linkDef)}
+                  onclick={() => toggleLinkMode(linkDef)}
                   type="button">
-                  {(insertLinkMode[linkDef.name] ?? 'select') === 'select' ? 'Enter ID' : 'Choose from list'}
+                  {(insertLinkMode[linkDef.name] ?? "select") === "select" ? "Enter UUID" : "Choose from list"}
                 </button>
               </label>
             {/each}
@@ -1311,132 +1363,169 @@
 
             <div class="form-actions">
               <button type="submit" class="button" disabled={insertSubmitting}>{insertSubmitting ? "Saving…" : "Save"}</button>
-              <button type="button" class="button button-secondary" on:click={cancelInsert}>Cancel</button>
+              <button type="button" class="button button-secondary" onclick={cancelInsert}>Cancel</button>
             </div>
           </form>
         {/if}
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                {#each columns as col}
-                  {@const propType =
-                    selectedType.properties.find((p) => p.name === col)}
-                  {@const isSortable = propType !== undefined}
-                  <th
-                    class:sortable={isSortable}
-                    class:active-sort={sortBy?.col === col}
-                    on:click={() => isSortable && toggleSort(col)}
-                    title={isSortable ? 'Click to sort' : ''}
-                  >
-                    {col}{sortIndicator(col)}
-                  </th>
-                {/each}
-                <th class="actions-col">Actions</th>
-              </tr>
-              <tr class="filter-row">
-                {#each columns as col}
-                  {@const prop =
-                    selectedType.properties.find((p) => p.name === col)}
-                  <th>
-                    {#if prop && prop.type === 'bool'}
-                      <select
-                        bind:value={filters[col]}
-                        on:change={loadRows}
-                      >
-                        <option value="">—</option>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    {:else if prop}
-                      <input
-                        type="text"
-                        placeholder={filterPlaceholder(prop.type)}
-                        title={filterTitle(prop.type)}
-                        bind:value={filters[col]}
-                        on:keydown={(e) => e.key === 'Enter' && loadRows()}
-                        on:blur={loadRows}
-                     />
-                    {/if}
-                  </th>
-                {/each}
-                <th class="actions-col"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {#if rows.length === 0 && !loading && !loadError}
-                <tr>
-                  <td colspan={columns.length + 1} class="empty-row">
-                    {Object.values(filters).some((v) => v)
-                      ? 'No rows match the current filters.'
-                      : 'No rows.'}
-                  </td>
-                </tr>
+        <aside class="type-filters">
+          {#each columns as col}
+            {@const prop = selectedType.properties.find((p) => p.name === col)}
+            {@const isSortable = prop !== undefined}
+            <div class="type-filter">
+              {#if isSortable}
+                <button
+                  class:sortable={isSortable}
+                  class:active-sort={sortBy?.col === col}
+                  disabled={!isSortable}
+                  onclick={() => isSortable && toggleSort(col)}
+                  title={isSortable ? "Click to sort" : ""}
+                  type="button">
+                  {col}<span>{sortIndicator(col)}</span>
+                </button>
               {/if}
-                {#each rows as row}
-                  {#if editingId === row.id}
-                    <tr class="editing">
-                      {#each columns as col}
-                        <td>
-                          {#if col === 'id'}
-                            <code>{row.id}</code>
-                          {:else if writableProps(selectedType).find((p) => p.name === col)}
-                            <input type="text" bind:value={editDraft[col]}/>
-                          {:else}
-                            {formatCell(row[col])}
-                          {/if}
-                        </td>
-                      {/each}
-                      <td class="actions-col">
-                        <button
-                          class="button button-small"
-                          on:click={submitEdit}
-                          disabled={editSubmitting}
-                        >
-                          {editSubmitting ? '…' : 'Save'}
-                        </button>
-                        <button
-                          class="button button-small button-secondary"
-                          on:click={cancelEdit}
-                        >
-                          Cancel
-                        </button>
-                      </td>
-                    </tr>
-                    {#if editError}
-                      <tr>
-                        <td colspan={columns.length + 1}>
-                          <div class="error-banner">{editError}</div>
-                        </td>
-                      </tr>
-                    {/if}
-                  {:else}
-                    <tr>
-                      {#each columns as col}
-                        <td>{formatCell(row[col])}</td>
-                      {/each}
-                      <td class="actions-col">
-                        <button
-                          class="button button-small"
-                          on:click={() => startEdit(row)}
-                          disabled={editingId !== null}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          class="button button-small button-danger"
-                          on:click={() => deleteRow(row)}
-                          disabled={editingId !== null}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
+
+              {#if prop && prop.type === "bool"}
+                <select
+                  bind:value={filters[col]}
+                  onchange={loadRows}>
+                  <option value="">—</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              {:else if prop}
+                <input
+                  name={`filter-${prop.name}`}
+                  onblur={loadRows}
+                  onkeydown={(e) => e.key === "Enter" && loadRows()}
+                  placeholder={filterPlaceholder(prop.type)}
+                  title={filterTitle(prop.type)}
+                  type="text"
+                  bind:value={filters[col]}/>
+              {/if}
+            </div>
+          {/each}
+        </aside>
+
+        <div class="data-wrap">
+          {#if rows.length === 0 && !loading && !loadError}
+            <div class="empty-row">{Object.values(filters).some((v) => v) ? "No matches." : "No data."}</div>
+          {/if}
+
+          {#each rows as row}
+            {#if editingId === row.id}
+              <div class="data editing">
+                {#if editError}
+                  <div class="error-banner">{editError}</div>
+                {/if}
+
+                {#each columns as col}
+                  {#if col === "id"}
+                    <header class="data-header">
+                      {formatCell(row[col])}
+                    </header>
+                  {:else if !isDataLink(row[col])}
+                    <div class="data-bit">
+                      <label class="parameter" for={`update-${col}`} style={`--ch: ${col.length}ch`}>{col}</label>
+
+                      {#if writableProps(selectedType).find((p) => p.name === col)}
+                        <input
+                          autocorrect="off"
+                          id={`update-${col}`}
+                          spellcheck="false"
+                          type="text"
+                          bind:value={editDraft[col]}/>
+                      {:else}
+                        {formatCell(row[col])}
+                      {/if}
+                    </div>
                   {/if}
-              {/each}
-            </tbody>
-          </table>
+                {/each}
+
+                <footer class="data-actions">
+                  <div class="links">
+                    {#each columns as col}
+                      {#if isDataLink(row[col])}
+                        <div class="link">
+                          <span>{col}</span>
+                          {getDataLink(row[col])}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+
+                  <div class="actions">
+                    <button
+                      class="button button-small"
+                      disabled={editSubmitting}
+                      onclick={submitEdit}>
+                      {editSubmitting ? "…" : "Save"}
+                    </button>
+
+                    <button
+                      class="button button-small button-secondary"
+                      onclick={cancelEdit}>
+                      Cancel
+                    </button>
+                  </div>
+                </footer>
+              </div>
+            {:else}
+              <div class="data">
+                {#each columns as col}
+                  {#if col === "id"}
+                    <header class="data-header">
+                      {formatCell(row[col])}
+                    </header>
+                  {:else if !isDataLink(row[col])}
+                    <div class="data-bit">
+                      <span class="parameter" style={`--ch: ${col.length}ch`}>{col}</span>
+
+                      {#if formatCell(row[col]).length}
+                        <input
+                          autocomplete="off"
+                          name={`${col}`}
+                          readonly
+                          type="text"
+                          value={formatCell(row[col])}/>
+                      {:else}
+                        <span class="null">null</span>
+                      {/if}
+                    </div>
+                  {/if}
+                {/each}
+
+                <footer class="data-actions">
+                  <div class="links">
+                    {#each columns as col}
+                      {#if isDataLink(row[col])}
+                        <div class="link">
+                          <span>{col}</span>
+                          {getDataLink(row[col])}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+
+                  <div class="actions">
+                    <button
+                      class="button button-small"
+                      disabled={editingId !== null}
+                      onclick={() => startEdit(row)}>
+                      Edit
+                    </button>
+
+                    <button
+                      class="button button-small button-danger"
+                      disabled={editingId !== null}
+                      onclick={() => deleteRow(row)}>
+                      Delete
+                    </button>
+                  </div>
+                </footer>
+              </div>
+            {/if}
+          {/each}
         </div>
       {:else}
         <div class="empty">Select a type to view its data.</div>

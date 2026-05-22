@@ -147,23 +147,23 @@ button,
     opacity: 0.5;
   }
 
-  &.primary {
-    /* background: var(--color-primary); */
-    /* color: var(--color-background); */
+  /* &.primary {
+    background: var(--color-primary);
+    color: var(--color-background);
 
     &:hover {
-      /* background: color-mix(in srgb, var(--color-primary) 90%, white); */
+      background: color-mix(in srgb, var(--color-primary) 90%, white);
     }
-  }
+  } */
 
-  &.danger {
+  /* &.danger {
     border-color: var(--color-danger);
     color: var(--color-danger);
 
     &:hover {
-      /* @include glow(var(--color-danger-rgb), 0.5); */
+      @include glow(var(--color-danger-rgb), 0.5);
     }
-  }
+  } */
 }
 
 input,

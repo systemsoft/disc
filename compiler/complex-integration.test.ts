@@ -112,11 +112,32 @@ Deno.test("Complex query integration - parse and compile update", () => {
   }
 });
 
+Deno.test("Complex query integration - update with empty set assigns NULL", () => {
+  // Regression: `set { col := {} }` (the EdgeQL "no value" sentinel for optional
+  // properties) previously compiled to `SET col = ()`, which Postgres rejects
+  // with `syntax error at or near ")"`. In scalar/assignment context, the
+  // empty set must serialize as NULL. Triggered from the data viewer's edit
+  // form when an optional field is left blank.
+  const schema = Context.createTestSchema();
+  const compiler = new ComplexQueryCompiler(schema);
+  const edgeql = `UPDATE User FILTER .email = "a@b.com" SET { name := {} }`;
+  const parser = new EdgeQLParser(edgeql);
+  const ast = parser.parse();
+  const compileResult = compiler.compile(ast);
+
+  assertEquals(compileResult.ok, true);
+
+  if (compileResult.ok) {
+    const sql = codegen.generate(compileResult.value);
+    assertEquals(sql.includes("= NULL"), true);
+    assertEquals(sql.includes("= ()"), false);
+  }
+});
+
 Deno.test("Complex query integration - parse and compile delete", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
-
-  const edgeql = `DELETE User FILTER .email = 'billie@example.com'`;
+  const edgeql = `DELETE User FILTER .email = "billie@example.com"`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -138,7 +159,6 @@ Deno.test("Complex query integration - parse and compile delete", () => {
 Deno.test("Complex query integration - parse and compile WITH block", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
-
   // WITH block: bind a subquery then SELECT from the main type
   const edgeql = `WITH active := (SELECT User FILTER .active = true) SELECT User { name, email }`;
   const parser = new EdgeQLParser(edgeql);
