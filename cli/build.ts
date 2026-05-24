@@ -976,7 +976,7 @@ async function listBuildArtifacts(buildDir: string): Promise<string[]> {
 
       if (entry.isDirectory)
         await walk(full);
-      else if (entry.isFile)
+      else if (entry.isFile && !entry.name.startsWith("."))
         out.push(relative(buildDir, full).split("\\").join("/"));
     }
   }

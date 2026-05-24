@@ -58,6 +58,13 @@ export interface CreateTypeOperation extends MigrationOperation {
 export interface DropTypeOperation extends MigrationOperation {
   kind: "DropType";
   typeName: string;
+  /**
+   * Names of multi-valued links the dropped type carried (own + inherited).
+   * Used by the DDL generator to drop the per-link junction tables that
+   * `DROP TABLE ... CASCADE` on the main table cannot reach — junctions
+   * are sibling tables, not FK-dependent rows.
+   */
+  multiLinks?: string[];
 }
 
 export interface AlterTypeOperation extends MigrationOperation {
@@ -563,11 +570,19 @@ export function createTypeOperation(
   };
 }
 
-export function dropTypeOperation(name: string): DropTypeOperation {
-  return {
+export function dropTypeOperation(
+  name: string,
+  options: { multiLinks?: string[]; } = {}
+): DropTypeOperation {
+  const op: DropTypeOperation = {
     kind: "DropType",
     typeName: name
   };
+
+  if (options.multiLinks && options.multiLinks.length > 0)
+    op.multiLinks = options.multiLinks;
+
+  return op;
 }
 
 export function addPropertyOperation(

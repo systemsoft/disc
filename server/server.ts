@@ -23,6 +23,7 @@ import { configureLogging } from "../lib/logger.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import { DatabaseRegistry } from "./database-registry.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { HttpServer } from "./http.ts";
@@ -382,41 +383,54 @@ export class DiscServer {
           () => this.extensionRegistry.getHealthStatus() :
           undefined,
         databaseRegistry: this.databaseRegistry,
-        // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
-        // schema source, HttpServer mounts `/admin/schema-watch` and
-        // `/admin/schema-apply`; otherwise both 404.
+        /*** Live-schema-diff. When the CLI passed a schema source, HttpServer mounts
+             `/admin/schema-watch` and `/admin/schema-apply`; otherwise both 404. ***/
         adminSchemaWatch: this.schemaWatchSource ?
           {
-            source: this.schemaWatchSource,
             appliedSdlProvider: () => this.appliedSdl ?? "",
             onApplied: newSdl => {
               this.appliedSdl = newSdl;
-            }
+              /*** Rebuild the protocol handler’s in-memory Schema so that `/schema`, `/data`, and
+                   every other read path picks up the new types without requiring a server restart.
+                   The SDL has already been validated and applied to PG by the schema-apply handler
+                   — we just need to refresh the cached view the handler hands out. ***/
+              const manager = new SchemaManager({});
+              const baselineResult = manager.loadBaseline(newSdl);
+
+              if (!baselineResult.ok)
+                return;
+
+              const schema = manager.getSchema();
+
+              if (schema)
+                this.updateSchema(schema);
+            },
+            source: this.schemaWatchSource
           } :
           undefined,
         dataWatchRegistry: this.dataWatchRegistry,
         schemaProvider: () => {
-          // Access the handler's current schema (may be updated at runtime)
+          /*** Access the handler’s current schema (may be updated at runtime) ***/
           const handler = this.protocolHandler as any;
           return handler.schema || { types: new Map(), functions: new Map() };
         },
         migrationsProvider: async () => {
-          // Build a transient MigrationTracker against the protocol
-          // handler's pool. Throws if no pool is available (e.g. dry-run).
+          /*** Build a transient MigrationTracker against the protocol handler’s pool. Throws if no
+               pool is available (e.g. dry-run). ***/
           const handler = this.protocolHandler as any;
           const pool = handler.pool;
-          if (!pool) {
+
+          if (!pool)
             throw new Error("No connection pool available");
-          }
-          const { MigrationTracker } = await import(
-            "../migration/tracker.ts"
-          );
+
+          const { MigrationTracker } = await import("../migration/tracker.ts");
           const tracker = new MigrationTracker(pool);
           await tracker.initialize();
           const result = await tracker.getMigrationHistory();
-          if (!result.ok) {
+
+          if (!result.ok)
             throw new Error(result.error.message);
-          }
+
           return result.value;
         }
       });

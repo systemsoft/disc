@@ -1429,11 +1429,18 @@ export class SchemaManager {
    */
   loadBaseline(sdlSource: string): Result<void, MigrationError> {
     const parseResult = this.parseSDL(sdlSource);
-    if (!parseResult.ok) {
+
+    if (!parseResult.ok)
       return Err(parseResult.error);
-    }
-    this.currentModules = parseResult.value;
-    this.currentSchema = this.modulesToSchema(parseResult.value);
+
+    /*** Match the normalization every other SDL-ingesting path applies (see applySchema,
+         planMigrationFromSDL, etc). Without this, the baseline keeps arrow-syntax fields as links
+         while applySchema normalizes them to properties — every existing field then diffs as a
+         DropLink, falsely tripping the unsafe-op gate. ***/
+    const normalized = normalizeArrowsToProperties(parseResult.value);
+    this.currentModules = normalized;
+    this.currentSchema = this.modulesToSchema(normalized);
+
     return Ok(undefined);
   }
 

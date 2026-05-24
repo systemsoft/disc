@@ -692,9 +692,20 @@ END $$;`,
 
   private generateDropType(operation: Types.DropTypeOperation): string[] {
     const tableName = typeNameToTableName(operation.typeName);
-    return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`
-    ];
+    const statements: string[] = [];
+
+    /*** Drop junction tables for multi-valued links first. The CASCADE on the main table drops
+         dependent FKs, but the junctions themselves are sibling tables — they’d survive an
+         unqualified CASCADE and collide on a subsequent re-create. ***/
+    if (operation.multiLinks) {
+      for (const linkName of operation.multiLinks) {
+        const junctionTableName = `${tableName}_${linkName}`;
+        statements.push(`DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`);
+      }
+    }
+
+    statements.push(`DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`);
+    return statements;
   }
 
   private generateAlterType(operation: Types.AlterTypeOperation): string[] {

@@ -67,28 +67,38 @@ export class SchemaDiffer {
 
   diff(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
-
-    // Convert schemas to maps for easier comparison
+    /*** Convert schemas to maps for easier comparison ***/
     const oldTypes = this.extractTypes(oldSchema);
     const newTypes = this.extractTypes(newSchema);
 
-    // Find types that were added
+    /*** Find types that were added ***/
     for (const [typeName, typeDef] of newTypes) {
       if (!oldTypes.has(typeName)) {
-        operations.push(this.createTypeOperation(typeDef));
+        /*** Pass `newTypes` so inherited properties/links from `extending` parents are folded into
+             the CREATE op. Without this, a new concrete type that extends an abstract type ships to
+             DDL missing every inherited column. ***/
+        operations.push(this.createTypeOperation(typeDef, newTypes));
       }
     }
 
-    // Find types that were removed
-    for (const [typeName] of oldTypes) {
+    /*** Find types that were removed ***/
+    for (const [typeName, oldTypeDef] of oldTypes) {
       if (!newTypes.has(typeName)) {
-        operations.push(Types.dropTypeOperation(typeName));
+        /*** Surface multi-link names (own + inherited) so the DDL generator can drop the per-link
+             junction tables. Without this, `DROP TABLE ... CASCADE` on the main type table leaves
+             orphan `<table>_<link>` junctions behind that then collide on a future re-create. ***/
+        const multiLinks = this.extractLinksWithInheritance(oldTypeDef, oldTypes)
+          .filter(l => l.multi)
+          .map(l => l.name);
+
+        operations.push(Types.dropTypeOperation(typeName, { multiLinks }));
       }
     }
 
-    // Find types that were modified
+    /*** Find types that were modified ***/
     for (const [typeName, newTypeDef] of newTypes) {
       const oldTypeDef = oldTypes.get(typeName);
+
       if (oldTypeDef) {
         const alterOps = this.diffType(
           oldTypeDef,
@@ -96,6 +106,7 @@ export class SchemaDiffer {
           oldTypes,
           newTypes
         );
+
         if (alterOps.length > 0) {
           operations.push({
             kind: "AlterType",

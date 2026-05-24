@@ -291,14 +291,21 @@ export class DiscShell {
       return;
     }
 
+    /*** Detailed variant joins pg_class via OID rather than casting the qualified name with
+         `::regclass`. The cast throws when a catalog row references a relation the current role
+         can’t see (or a partial drop left an inconsistent pg_tables/pg_class state); the join
+         degrades gracefully, returning NULL for size/description instead of failing the
+         whole listing. ***/
     const query = detailed ?
       `SELECT
-           tablename as name,
-           pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
-           obj_description((schemaname||'.'||tablename)::regclass) as description
-         FROM pg_tables
-         WHERE schemaname = 'public'
-         ORDER BY tablename` :
+           t.tablename as name,
+           pg_size_pretty(pg_total_relation_size(c.oid)) as size,
+           obj_description(c.oid) as description
+         FROM pg_tables t
+         LEFT JOIN pg_namespace n ON n.nspname = t.schemaname
+         LEFT JOIN pg_class c ON c.relname = t.tablename AND c.relnamespace = n.oid
+         WHERE t.schemaname = 'public'
+         ORDER BY t.tablename` :
       `SELECT tablename as name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`;
 
     try {
@@ -431,6 +438,11 @@ export class DiscShell {
       }
 
       case "\\dt": {
+        await this.listTables(false);
+        break;
+      }
+
+      case "\\dt+": {
         await this.listTables(true);
         break;
       }
@@ -484,7 +496,8 @@ export class DiscShell {
     console.log("  \\q          Quit shell");
     console.log("  \\d          List all schema types");
     console.log("  \\d <Type>   Describe one type in full detail");
-    console.log("  \\dt         List tables (detailed)");
+    console.log("  \\dt         List tables");
+    console.log("  \\dt+        List tables with size and description");
     console.log("  \\c <db>     Connect to database");
     console.log("  \\i <file>   Execute file");
     console.log("  \\timing     Toggle query timing");
@@ -535,6 +548,17 @@ export class DiscShell {
       } catch (error) {
         console.error(`[FAIL] Error: ${(error as Error).message}`);
         await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
+      }
+    }
+
+    /*** Without an explicit close, the open DB connection keeps Deno’s event loop alive after the
+         REPL exits — `\q` would print "Goodbye!" but the process would hang until the
+         user Ctrl-C’d. ***/
+    if (this.db) {
+      try {
+        await this.db.close();
+      } catch {
+        /*** best-effort — already exiting ***/
       }
     }
   }

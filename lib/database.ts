@@ -25,7 +25,7 @@ export interface DatabaseConfig {
   /**
    * `application_name` reported to PostgreSQL — visible in
    * `pg_stat_activity.application_name` and the server log line
-   * prefix. The CLI's pre-migrate preflight uses it to detect a
+   * prefix. The CLI’s pre-migrate preflight uses it to detect a
    * running Disc server attached to the same database
    * (gh/geldata#9034). Defaults are set at the call sites:
    * `disc-server` for the protocol pool, `disc-cli` for ad-hoc CLI
@@ -58,7 +58,7 @@ interface ParsedConnection {
  * Socket format: postgresql://user@/database?host=/path/to/socket
  *
  * The socket format has no hostname between @ and /, which makes it
- * invalid for JavaScript's URL parser. We detect and handle it manually.
+ * invalid for JavaScript’s URL parser. We detect and handle it manually.
  */
 export function parseConnectionString(dsn: string): ParsedConnection {
   // Detect Unix socket DSN: has ?host=/ and @/ (no hostname)
@@ -88,22 +88,22 @@ export function parseConnectionString(dsn: string): ParsedConnection {
     };
   }
 
-  // Standard TCP DSN — safe for URL parser
+  /*** Standard TCP DSN — safe for URL parser ***/
   const url = new URL(dsn);
-  // gh/geldata#2292: surface `?sslmode=...` so the client config can
-  // map it to `tls: { enabled, enforce }`. The Deno postgres driver
-  // already understands these modes when the DSN is passed verbatim,
-  // but we've already destructured into an object form by here, so
-  // we re-derive the TLS hint explicitly.
+  /*** gh/geldata#2292: surface `?sslmode=...` so the client config can map it to
+       `tls: { enabled, enforce }`. The Deno postgres driver already understands these modes when
+       the DSN is passed verbatim, but we’ve already destructured into an object form by here, so
+       we re-derive the TLS hint explicitly. ***/
   const rawSslmode = url.searchParams.get("sslmode");
   const sslmode = isValidSslmode(rawSslmode) ? rawSslmode : undefined;
+
   return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "postgres",
-    password: url.password || "",
     database: url.pathname.slice(1) || "postgres",
-    sslmode
+    hostname: url.hostname || "localhost",
+    password: url.password || "",
+    port: url.port ? parseInt(url.port) : 5432,
+    sslmode,
+    user: url.username || "postgres"
   };
 }
 
@@ -116,8 +116,8 @@ function isValidSslmode(
 
 /**
  * Map a libpq-style `sslmode` value to the `tls` option shape the
- * deno-postgres Client accepts. `prefer` is the driver's default when
- * unset, so callers don't need to construct an explicit object for
+ * deno-postgres Client accepts. `prefer` is the driver’s default when
+ * unset, so callers don’t need to construct an explicit object for
  * that mode — `undefined` here means "use the driver default".
  * (gh/geldata#2292)
  */
@@ -156,14 +156,15 @@ export class DatabaseConnection {
   }
 
   private getClientConfig() {
-    // gh/geldata#9034: thread `application_name` so a running server's
-    // connections are visible in `pg_stat_activity` and a CLI preflight
-    // can detect them.
+    /*** gh/geldata#9034: thread `application_name` so a running server’s connections are visible in
+         `pg_stat_activity` and a CLI preflight can detect them. ***/
     const applicationName = this.config.applicationName;
+
     if (this.config.connectionString) {
       const parsed = parseConnectionString(this.config.connectionString);
+
       if (parsed.host_type === "socket") {
-        // Socket connections never use TLS; the driver enforces this.
+        /*** Socket connections never use TLS; the driver enforces this. ***/
         return {
           hostname: parsed.hostname,
           user: parsed.user,
@@ -173,10 +174,10 @@ export class DatabaseConnection {
           applicationName
         };
       }
-      // gh/geldata#2292: forward TLS hints derived from `?sslmode=...`
-      // so TCP connections honor the operator's transport-security
-      // requirement instead of silently falling back to the driver
-      // default.
+
+      /*** gh/geldata#2292: forward TLS hints derived from `?sslmode=...` so TCP connections honor
+           the operator’s transport-security requirement instead of silently falling back to the
+           driver default. ***/
       const tls = sslmodeToTlsOptions(parsed.sslmode);
       return {
         hostname: parsed.hostname,
@@ -281,6 +282,7 @@ export class DatabaseConnection {
       await this.client.end();
       this.connected = false;
       logger.info("Database connection closed");
+      Deno.exit(1);
     }
   }
 
@@ -289,10 +291,10 @@ export class DatabaseConnection {
   }
 
   /**
-   * Create database if it doesn't exist
+   * Create database if it doesn’t exist
    */
   async createDatabaseIfNotExists(dbName: string): Promise<void> {
-    // Connect to postgres database to create new database
+    /*** Connect to postgres database to create new database ***/
     const adminClient = new Client({
       ...this.getClientConfig(),
       database: "postgres"
@@ -301,14 +303,11 @@ export class DatabaseConnection {
     try {
       await adminClient.connect();
 
-      // Check if database exists
-      const result = await adminClient.queryObject(
-        `SELECT 1 FROM pg_database WHERE datname = $1`,
-        [dbName]
-      );
+      /*** Check if database exists ***/
+      const result = await adminClient.queryObject(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
 
       if (result.rowCount === 0) {
-        // Create database
+        /*** Create database ***/
         await adminClient.queryArray(`CREATE DATABASE "${dbName}"`);
         logger.info(`Created database: ${dbName}`);
       } else {
@@ -324,11 +323,12 @@ export class DatabaseConnection {
    */
   async tableExists(tableName: string): Promise<boolean> {
     const result = await this.query(
-      `SELECT 1 FROM information_schema.tables 
-       WHERE table_schema = 'public' 
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = "public"
        AND table_name = $1`,
       [tableName]
     );
+
     return result.rowCount > 0;
   }
 
@@ -394,13 +394,15 @@ export function createDiscConnection(
  *   => "postgresql://user:pass@host:5432/other"
  */
 export function replaceDsnDatabase(dsn: string, dbName: string): string {
-  // Handle Unix socket DSNs that can't be parsed by new URL()
+  /*** Handle Unix socket DSNs that can’t be parsed by new URL() ***/
   if (/^postgresql(s)?:\/\/[^@]*@\//.test(dsn)) {
-    // Replace the database name between @/ and ? (or end of string)
+    /*** Replace the database name between @/ and ? (or end of string) ***/
     return dsn.replace(/(postgresql(s)?:\/\/[^@]*@\/)([^?]*)/, `$1${dbName}`);
   }
+
   const url = new URL(dsn);
   url.pathname = `/${dbName}`;
+
   return url.toString();
 }
 
@@ -408,12 +410,10 @@ export function replaceDsnDatabase(dsn: string, dbName: string): string {
  * Create a PostgreSQL database by connecting to the `postgres` maintenance DB.
  * Closes the admin connection when done.
  */
-export async function createDatabase(
-  mainDsn: string,
-  dbName: string
-): Promise<void> {
+export async function createDatabase(mainDsn: string, dbName: string): Promise<void> {
   const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
   const adminConn = new DatabaseConnection(adminDsn);
+
   try {
     await adminConn.connect();
     await adminConn.execute(`CREATE DATABASE "${dbName}"`);
