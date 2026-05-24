@@ -27,7 +27,7 @@ Deno.test("handleSchemaApply — refuses non-POST", async () => {
         method: "GET"
       }),
       url: new URL("http://localhost/admin/schema-apply"),
-      schemaFilePath: tmp,
+      source: { kind: "file", path: tmp },
       databaseUrl: "postgresql://localhost:5432/dummy"
     });
     assertEquals(res.status, 405);
@@ -42,7 +42,7 @@ Deno.test("handleSchemaApply — returns 404 when SDL file missing", async () =>
       method: "POST"
     }),
     url: new URL("http://localhost/admin/schema-apply"),
-    schemaFilePath: "/nonexistent/path/should/not/exist.disc",
+    source: { kind: "file", path: "/nonexistent/path/should/not/exist.disc" },
     databaseUrl: "postgresql://localhost:5432/dummy"
   });
   assertEquals(res.status, 404);
@@ -63,7 +63,7 @@ Deno.test(
           method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply"),
-        schemaFilePath: tmp,
+        source: { kind: "file", path: tmp },
         databaseUrl: "postgresql://localhost:5432/dummy"
       });
       assertEquals(res.status, 400);

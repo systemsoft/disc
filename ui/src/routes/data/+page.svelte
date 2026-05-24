@@ -1077,6 +1077,14 @@
     display: grid;
     gap: calc(var(--grid-unit) * 2);
     grid-template-columns: repeat(2, 1fr);
+
+    .empty-row {
+      color: var(--uchu-yin-3);
+      font-size: 0.875rem;
+      letter-spacing: 0.05rem;
+      text-transform: uppercase;
+      user-select: none;
+    }
   }
 
   .data {
@@ -1409,7 +1417,7 @@
 
         <div class="data-wrap">
           {#if rows.length === 0 && !loading && !loadError}
-            <div class="empty-row">{Object.values(filters).some((v) => v) ? "No matches." : "No data."}</div>
+            <div class="empty-row">{Object.values(filters).some((v) => v) ? "No matches" : "No data"}</div>
           {/if}
 
           {#each rows as row}

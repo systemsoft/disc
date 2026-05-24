@@ -24,9 +24,19 @@ const log = getLogger("admin/schema-watch");
 
 const DEFAULT_DEBOUNCE_MS = 250;
 
+/**
+ * What the watcher reads from disk. `file` is single-file mode (used
+ * when the CLI received `--schema <path>`); `dir` is multi-file mode
+ * (the default — concatenates every `*.disc` in the directory, sorted
+ * alphabetically, matching `loadProjectSchema`).
+ */
+export type SchemaWatchSource =
+  | { kind: "file"; path: string }
+  | { kind: "dir"; dir: string };
+
 export interface SchemaWatchOptions {
-  /** Path to the SDL file to watch (e.g. `./dbschema/default.disc`). */
-  schemaFilePath: string;
+  /** What to read + watch — a single file or a directory of `.disc` files. */
+  source: SchemaWatchSource;
   /**
    * Provider that returns the SDL the running server believes is
    * applied. In production this is the source the server booted from
@@ -68,17 +78,90 @@ export function formatSseEvent(frame: SseFrame): string {
 }
 
 interface WatchContext {
-  schemaFilePath: string;
+  source: SchemaWatchSource;
   appliedSdlProvider: () => string;
   debounceMs: number;
 }
 
-async function readOnDiskSdl(path: string): Promise<string | null> {
-  try {
-    return await Deno.readTextFile(path);
-  } catch {
-    return null;
+type ReadResult =
+  | { ok: true; sdl: string; files: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Read the SDL from disk per the source descriptor. In dir mode this
+ * discovers every `*.disc` file (sorted), reads them, and concatenates
+ * with `\n` — the same shape `loadProjectSchema` produces, so the diff
+ * sees the same text the server boots from. A single missing file
+ * (atomic rename mid-save) is tolerated via a one-shot retry; a
+ * directory that disappears entirely surfaces as an error frame.
+ */
+export async function readOnDiskSdl(source: SchemaWatchSource): Promise<ReadResult> {
+  if (source.kind === "file") {
+    try {
+      const sdl = await Deno.readTextFile(source.path);
+      return { ok: true, sdl, files: [source.path] };
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        return { ok: false, error: `Schema file not found: ${source.path}` };
+      }
+      return {
+        ok: false,
+        error: `Failed to read ${source.path}: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
   }
+
+  const files: string[] = [];
+  try {
+    for await (const entry of Deno.readDir(source.dir)) {
+      if (entry.isFile && entry.name.endsWith(".disc")) {
+        files.push(`${source.dir}/${entry.name}`);
+      }
+    }
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      return { ok: false, error: `Schema directory not found: ${source.dir}` };
+    }
+    return {
+      ok: false,
+      error: `Failed to list ${source.dir}: ${err instanceof Error ? err.message : String(err)}`
+    };
+  }
+
+  files.sort();
+  if (files.length === 0) {
+    return { ok: false, error: `No .disc files found in ${source.dir}` };
+  }
+
+  const parts: string[] = [];
+  for (const file of files) {
+    try {
+      parts.push(await Deno.readTextFile(file));
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        // Atomic-save race: editor wrote a temp file, renamed over the
+        // target, and our readDir snapshot still references the temp.
+        // Skip this iteration — the rename will fire a fresh watch event
+        // and we'll re-read on the next debounce tick.
+        continue;
+      }
+      return {
+        ok: false,
+        error: `Failed to read ${file}: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
+  }
+
+  return { ok: true, sdl: parts.join("\n"), files };
+}
+
+function watchDirFor(source: SchemaWatchSource): string {
+  if (source.kind === "dir") {
+    return source.dir;
+  }
+  return source.path.includes("/") ?
+    source.path.slice(0, source.path.lastIndexOf("/")) :
+    ".";
 }
 
 async function emitDiff(
@@ -87,17 +170,17 @@ async function emitDiff(
   encoder: TextEncoder,
   eventName: string
 ): Promise<SchemaDiffSummary | null> {
-  const onDiskSdl = await readOnDiskSdl(ctx.schemaFilePath);
-  if (onDiskSdl === null) {
+  const read = await readOnDiskSdl(ctx.source);
+  if (!read.ok) {
     controller.enqueue(encoder.encode(formatSseEvent({
       event: "error",
-      data: { message: `Schema file not found: ${ctx.schemaFilePath}` }
+      data: { message: read.error }
     })));
     return null;
   }
 
   const appliedSdl = ctx.appliedSdlProvider();
-  const diff = computeSchemaDiff(appliedSdl, onDiskSdl);
+  const diff = computeSchemaDiff(appliedSdl, read.sdl);
   controller.enqueue(encoder.encode(formatSseEvent({
     event: eventName,
     data: diff,
@@ -113,7 +196,7 @@ async function emitDiff(
  */
 export function handleSchemaWatch(options: SchemaWatchOptions): Response {
   const ctx: WatchContext = {
-    schemaFilePath: options.schemaFilePath,
+    source: options.source,
     appliedSdlProvider: options.appliedSdlProvider,
     debounceMs: options.debounceMs ?? DEFAULT_DEBOUNCE_MS
   };
@@ -142,13 +225,12 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
         return;
       }
 
-      // Watch the *directory* containing the SDL file. Watching the
+      // Watch the *directory* containing the SDL file(s). Watching a
       // file directly works on macOS but is unreliable on Linux when
       // editors save via rename — the watched inode disappears and no
-      // further events arrive.
-      const dir = ctx.schemaFilePath.includes("/") ?
-        ctx.schemaFilePath.slice(0, ctx.schemaFilePath.lastIndexOf("/")) :
-        ".";
+      // further events arrive. In dir mode this is the dir itself; in
+      // file mode it's the parent dir.
+      const dir = watchDirFor(ctx.source);
 
       try {
         watcher = Deno.watchFs([dir], { recursive: false });
@@ -187,8 +269,13 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
             if (abortController.signal.aborted) {
               break;
             }
-            // Filter for our SDL file and any peer .disc files in the dir.
-            const matchedPath = event.paths.find(p => p === ctx.schemaFilePath || p.endsWith(".disc"));
+            // Filter for `.disc` files. In file mode we also match the
+            // exact target path so an editor that writes a non-`.disc`
+            // tempfile-then-renames still triggers a delta.
+            const targetPath = ctx.source.kind === "file" ? ctx.source.path : null;
+            const matchedPath = event.paths.find(
+              p => p.endsWith(".disc") || (targetPath !== null && p === targetPath)
+            );
             if (!matchedPath) {
               continue;
             }

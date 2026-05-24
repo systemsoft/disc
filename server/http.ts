@@ -76,7 +76,7 @@ export interface HttpServerOptions {
    * Both routes are gated by the standard auth gate. Omitted → 404.
    */
   adminSchemaWatch?: {
-    schemaFilePath: string;
+    source: import("./admin/schema-watch.ts").SchemaWatchSource;
     appliedSdlProvider: () => string;
     onApplied?: (newSdl: string) => void;
   };
@@ -1635,7 +1635,7 @@ export class HttpServer {
         return this.create_error_response("Method Not Allowed", 405);
       }
       return handleSchemaWatch({
-        schemaFilePath: this.adminSchemaWatch.schemaFilePath,
+        source: this.adminSchemaWatch.source,
         appliedSdlProvider: this.adminSchemaWatch.appliedSdlProvider
       });
     }
@@ -1647,7 +1647,7 @@ export class HttpServer {
       return await handleSchemaApply({
         request,
         url,
-        schemaFilePath: this.adminSchemaWatch.schemaFilePath,
+        source: this.adminSchemaWatch.source,
         databaseUrl: this.config.databaseUrl,
         appliedSdl: this.adminSchemaWatch.appliedSdlProvider(),
         onApplied: this.adminSchemaWatch.onApplied

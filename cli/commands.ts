@@ -701,11 +701,17 @@ export class CLICommands {
       const schema = load?.schema;
 
       /*** Cache the (concatenated) SDL text so the live-schema-diff admin endpoint can compare it
-           to whatever’s on disk when an editor saves changes. (Bundle K — Disc #3a). Multi-file
-           watch is wired only when the project resolved to a single file; multi-file watch is a
-           follow-up since `setSchemaWatchSource` takes one path. ***/
-      const appliedSdl = load?.appliedSdl;
-      const watchSourcePath = load?.singleFile ?? null;
+           to whatever’s on disk when an editor saves changes. (Bundle K — Disc #3a). Both
+           single-file and multi-file modes wire the watch; the empty-project case wires the
+           default dir so the route emits a structured "directory not found" frame instead of
+           404'ing — friendlier than a "connection lost" toast in the admin UI. ***/
+      const appliedSdl = load?.appliedSdl ?? "";
+      const schemaDir = options.schemaDir ?? "./dbschema";
+
+      const watchSource: import("../server/admin/schema-watch.ts").SchemaWatchSource =
+        load?.singleFile ?
+          { kind: "file", path: load.singleFile } :
+          { dir: schemaDir, kind: "dir" };
 
       if (load) {
         const objectTypeCount = Array
@@ -749,20 +755,20 @@ export class CLICommands {
         createServerFromEnv(undefined, schema) :
         createServerFromEnv();
 
-      /*** Wire the live-schema-diff admin endpoints. Requires a single schema file path because the
-           watcher monitors one path and diffs the on-disk SDL against the cached text. Multi-file
-           schemas (the new default) skip this and the /admin/schema-* routes return
-           404. (Bundle K) ***/
-      if (watchSourcePath && appliedSdl !== undefined)
-        server.setSchemaWatchSource(watchSourcePath, appliedSdl);
+      /*** Wire the live-schema-diff admin endpoints. The watcher accepts either a single file (when
+           the operator passed `--schema <path>`) or a directory of `*.disc` files (the default —
+           concatenated alphabetically, same shape as `loadProjectSchema`). When the dir is missing
+           or empty the SSE stream emits a structured error frame the admin UI renders as
+           a banner. ***/
+      server.setSchemaWatchSource(watchSource, appliedSdl);
 
       /*** Apply layered config overrides. Precedence (lowest → highest):
            1. env-derived defaults (already in `server.get_config()`)
            2. disc.toml `[server]` keys (project-level defaults)
            3. CLI flags (per-invocation overrides)
 
-           Keep this order so per-invocation flags always win over file config, and file config
-           wins over env defaults. (gh/geldata#1325) ***/
+           Keep this order so per-invocation flags always win over file config, and file config wins
+           over env defaults. (gh/geldata#1325) ***/
       const config = server.get_config();
 
       if (ctx?.serverOverrides)

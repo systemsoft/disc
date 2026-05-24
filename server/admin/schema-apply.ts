@@ -28,13 +28,20 @@ import { ConnectionPool } from "../../lib/connection-pool.ts";
 import { getLogger } from "../../lib/logger.ts";
 import { SchemaManager } from "../../migration/schema-manager.ts";
 import { computeSchemaDiff } from "./schema-diff.ts";
+import { readOnDiskSdl, type SchemaWatchSource } from "./schema-watch.ts";
 
 const log = getLogger("admin/schema-apply");
 
 export interface SchemaApplyOptions {
   request: Request;
   url: URL;
-  schemaFilePath: string;
+  /**
+   * Where to read the on-disk SDL from. `file` mode reads one path;
+   * `dir` mode concatenates every `*.disc` in the directory (matching
+   * `loadProjectSchema`). Both produce the same diff input as
+   * `/admin/schema-watch`.
+   */
+  source: SchemaWatchSource;
   databaseUrl: string;
   /**
    * SDL the server believes is currently applied. When provided, the
@@ -67,27 +74,20 @@ function jsonResponse(status: number, body: unknown): Response {
 export async function handleSchemaApply(
   options: SchemaApplyOptions
 ): Promise<Response> {
-  const { request, url, schemaFilePath, databaseUrl, onApplied } = options;
+  const { request, url, source, databaseUrl, onApplied } = options;
 
   if (request.method !== "POST") {
     return jsonResponse(405, { error: "Method Not Allowed" });
   }
 
-  // Read on-disk SDL.
-  let onDiskSdl: string;
-  try {
-    onDiskSdl = await Deno.readTextFile(schemaFilePath);
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      return jsonResponse(404, {
-        error: `Schema file not found: ${schemaFilePath}`
-      });
-    }
-    log.error("schema-apply: failed to read schema file", {
-      error: err instanceof Error ? err.message : String(err)
-    });
-    return jsonResponse(500, { error: "Failed to read schema file" });
+  // Read on-disk SDL via the shared helper so file + dir modes produce
+  // the exact same concatenated text the watch endpoint diffs against.
+  const read = await readOnDiskSdl(source);
+  if (!read.ok) {
+    log.warn("schema-apply: failed to read source", { error: read.error });
+    return jsonResponse(404, { error: read.error });
   }
+  const onDiskSdl = read.sdl;
 
   // Parse-check the on-disk SDL up front so we can return a clean
   // structured error before opening a DB connection.

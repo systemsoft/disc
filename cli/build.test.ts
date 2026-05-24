@@ -16,7 +16,8 @@ import {
   generateUiManifest,
   platformPgStagingDir,
   refreshEmbeddedPgManifest,
-  refreshEmbeddedSdkManifest
+  refreshEmbeddedSdkManifest,
+  runUiBuild
 } from "./build.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -73,6 +74,41 @@ Deno.test("generateUiManifest - emits manifest from build dir contents", async (
     assertStringIncludes(generated, "index.html");
     assertStringIncludes(generated, "UI_ASSET_MANIFEST");
     assertStringIncludes(generated, "UI_ASSET_SET");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("runUiBuild - skips cleanly when ui/ directory is missing", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-ui-build-no-ui-" });
+
+  try {
+    const result = await runUiBuild(tmp);
+    assertEquals(result.ran, false);
+    assertStringIncludes(result.reason ?? "", "ui directory not found");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("runUiBuild - skips cleanly when bun is not on PATH", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-ui-build-no-bun-" });
+
+  try {
+    /*** Create a `ui/` dir so we get past the first guard, then nuke PATH so the bun lookup fails
+         deterministically — covers the "bun missing on a clean CI image" case without depending on
+         the host’s PATH content. ***/
+    await Deno.mkdir(join(tmp, "ui"));
+    const originalPath = Deno.env.get("PATH") ?? "";
+    Deno.env.set("PATH", "");
+
+    try {
+      const result = await runUiBuild(tmp);
+      assertEquals(result.ran, false);
+      assertStringIncludes(result.reason ?? "", "bun");
+    } finally {
+      Deno.env.set("PATH", originalPath);
+    }
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }

@@ -43,7 +43,7 @@ Deno.test("handleSchemaWatch — returns SSE response with correct headers", asy
     );
 
     const response = handleSchemaWatch({
-      schemaFilePath: tmp,
+      source: { kind: "file", path: tmp },
       appliedSdlProvider: () => "module default {};",
       // Test mode: skip the watch loop so the response closes
       // immediately after the snapshot event.
@@ -82,7 +82,7 @@ Deno.test(
       );
 
       const response = handleSchemaWatch({
-        schemaFilePath: tmp,
+        source: { kind: "file", path: tmp },
         appliedSdlProvider: () => "module default {};",
         runWatchLoop: false
       });
@@ -100,12 +100,83 @@ Deno.test(
   "handleSchemaWatch — emits an error event when the schema file is missing",
   async () => {
     const response = handleSchemaWatch({
-      schemaFilePath: "/nonexistent/path/should/not/exist.disc",
+      source: { kind: "file", path: "/nonexistent/path/should/not/exist.disc" },
       appliedSdlProvider: () => "module default {};",
       runWatchLoop: false
     });
 
     const body = await response.text();
     assertStringIncludes(body, "event: error\n");
+  }
+);
+
+Deno.test(
+  "handleSchemaWatch — dir mode concatenates *.disc files in sorted order",
+  async () => {
+    const dir = await Deno.makeTempDir();
+    try {
+      // Two files, intentionally written out of alphabetical order.
+      await Deno.writeTextFile(
+        `${dir}/02-post.disc`,
+        `module default {\n  type Post {\n    required title: str;\n  };\n};`
+      );
+      await Deno.writeTextFile(
+        `${dir}/01-user.disc`,
+        `module default {\n  type User {\n    required name: str;\n  };\n};`
+      );
+      // A non-.disc file that should be ignored.
+      await Deno.writeTextFile(`${dir}/README.md`, "ignore me");
+
+      const response = handleSchemaWatch({
+        source: { kind: "dir", dir },
+        appliedSdlProvider: () => "module default {};",
+        runWatchLoop: false
+      });
+
+      const body = await response.text();
+      assertStringIncludes(body, "event: snapshot\n");
+      // Both types should show up as additions.
+      assertStringIncludes(body, "\"User\"");
+      assertStringIncludes(body, "\"Post\"");
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  }
+);
+
+Deno.test(
+  "handleSchemaWatch — dir mode emits error frame when directory missing",
+  async () => {
+    const response = handleSchemaWatch({
+      source: { kind: "dir", dir: "/nonexistent/dbschema/should/not/exist" },
+      appliedSdlProvider: () => "module default {};",
+      runWatchLoop: false
+    });
+
+    const body = await response.text();
+    assertStringIncludes(body, "event: error\n");
+    assertStringIncludes(body, "Schema directory not found");
+  }
+);
+
+Deno.test(
+  "handleSchemaWatch — dir mode emits error frame when no .disc files present",
+  async () => {
+    const dir = await Deno.makeTempDir();
+    try {
+      await Deno.writeTextFile(`${dir}/README.md`, "no schema here");
+
+      const response = handleSchemaWatch({
+        source: { kind: "dir", dir },
+        appliedSdlProvider: () => "module default {};",
+        runWatchLoop: false
+      });
+
+      const body = await response.text();
+      assertStringIncludes(body, "event: error\n");
+      assertStringIncludes(body, "No .disc files");
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
   }
 );

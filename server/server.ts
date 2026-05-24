@@ -115,17 +115,17 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
   binaryTls?: { certFile: string; keyFile: string; };
 
   /**
-   * Path to the SDL schema file for the live-schema-diff admin endpoint
-   * (Bundle K — Disc-original feature #3a). When provided, the HTTP
-   * server mounts `/admin/schema-watch` (SSE diff stream) and
-   * `/admin/schema-apply` (gated migration apply). When omitted, both
-   * routes return 404.
+   * Source of the SDL schema for the live-schema-diff admin endpoint
+   * (Bundle K — Disc-original feature #3a). Single-file or directory
+   * of `*.disc` files. When provided, the HTTP server mounts
+   * `/admin/schema-watch` (SSE diff stream) and `/admin/schema-apply`
+   * (gated migration apply). When omitted, both routes return 404.
    */
-  schemaFilePath?: string;
+  schemaWatchSource?: import("./admin/schema-watch.ts").SchemaWatchSource;
 
   /**
    * SDL text the server believes is currently applied. Cached at boot
-   * by the CLI from `schemaFilePath`; re-read internally after each
+   * by the CLI from `schemaWatchSource`; re-read internally after each
    * successful schema apply via `/admin/schema-apply`. Diff-vs-on-disk
    * is computed against this string.
    */
@@ -159,10 +159,10 @@ export class DiscServer {
   private last_log_level?: "DEBUG" | "INFO" | "WARN" | "ERROR";
   private last_log_format?: "json" | "text";
   /**
-   * Path + cached SDL text for the live-schema-diff admin endpoint.
+   * Source + cached SDL text for the live-schema-diff admin endpoint.
    * Updated in-place after a successful `/admin/schema-apply`.
    */
-  private schemaFilePath?: string;
+  private schemaWatchSource?: import("./admin/schema-watch.ts").SchemaWatchSource;
   private appliedSdl?: string;
 
   constructor(config: DiscServerOptions = {}) {
@@ -208,7 +208,7 @@ export class DiscServer {
     this.postgresInstance = config.postgresInstance;
     this.binaryPassword = config.binaryPassword;
     this.binaryTls = config.binaryTls;
-    this.schemaFilePath = config.schemaFilePath;
+    this.schemaWatchSource = config.schemaWatchSource;
     this.appliedSdl = config.appliedSdl;
 
     // Initialize extension registry and register extensions from options
@@ -242,14 +242,17 @@ export class DiscServer {
   /**
    * Set or replace the live-schema-diff source (Bundle K — Disc #3a).
    * Called by the CLI between `createServerFromEnv()` and `start()`
-   * with the path to the project's `.disc` SDL file plus the SDL
-   * text the server is booting from. After start, the server
-   * exposes `/admin/schema-watch` (SSE diff stream) and
+   * with either a single `.disc` file path or a directory of them,
+   * plus the SDL text the server is booting from. After start, the
+   * server exposes `/admin/schema-watch` (SSE diff stream) and
    * `/admin/schema-apply` (gated apply). The cached SDL is updated
    * automatically on each successful apply.
    */
-  setSchemaWatchSource(schemaFilePath: string, appliedSdl: string): void {
-    this.schemaFilePath = schemaFilePath;
+  setSchemaWatchSource(
+    source: import("./admin/schema-watch.ts").SchemaWatchSource,
+    appliedSdl: string
+  ): void {
+    this.schemaWatchSource = source;
     this.appliedSdl = appliedSdl;
   }
 
@@ -380,11 +383,11 @@ export class DiscServer {
           undefined,
         databaseRegistry: this.databaseRegistry,
         // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
-        // schemaFilePath, HttpServer mounts `/admin/schema-watch` and
+        // schema source, HttpServer mounts `/admin/schema-watch` and
         // `/admin/schema-apply`; otherwise both 404.
-        adminSchemaWatch: this.schemaFilePath ?
+        adminSchemaWatch: this.schemaWatchSource ?
           {
-            schemaFilePath: this.schemaFilePath,
+            source: this.schemaWatchSource,
             appliedSdlProvider: () => this.appliedSdl ?? "",
             onApplied: newSdl => {
               this.appliedSdl = newSdl;

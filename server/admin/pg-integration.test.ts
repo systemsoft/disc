@@ -85,7 +85,7 @@ Deno.test({
           method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply"),
-        schemaFilePath: path,
+        source: { kind: "file", path },
         databaseUrl: dsn
       });
       assertEquals(res.status, 200);
@@ -121,7 +121,7 @@ Deno.test({
           method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply"),
-        schemaFilePath: path,
+        source: { kind: "file", path },
         databaseUrl: dsn
       });
       assertEquals(res.status, 200);
@@ -140,7 +140,7 @@ Deno.test({
           method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply"),
-        schemaFilePath: path,
+        source: { kind: "file", path },
         databaseUrl: dsn,
         appliedSdl: sdlWith
       });
@@ -157,7 +157,7 @@ Deno.test({
           method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply?force=true"),
-        schemaFilePath: path,
+        source: { kind: "file", path },
         databaseUrl: dsn,
         appliedSdl: sdlWith
       });

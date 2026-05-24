@@ -272,9 +272,28 @@ export class BuildCommand {
 
     const outputPath = this.resolveOutputPath(options.output, options.platform);
 
-    /*** Refresh the UI manifest before deno compile picks it up so the runtime handler always
-         matches the embedded build. Skip in --lite mode where the UI isn’t shipped. ***/
+    /*** Rebuild the UI bundle before refreshing the manifest so `ui/build/` and the embedded asset
+         list always reflect the current `ui/src/`. Skipping this is what lets a stale admin page
+         survive into a fresh binary. Cross-compile builds (--platform set) re-throw on failure so a
+         release tag never ships a stale or broken UI; host builds warn + continue with whatever’s
+         already in `ui/build/`. Skip entirely in --lite mode where the UI isn’t shipped. ***/
     if (!options.lite) {
+      try {
+        const uiBuild = await runUiBuild();
+
+        if (uiBuild.ran)
+          console.log("  Rebuilt UI bundle");
+        else
+          console.warn(`  Skipped UI rebuild: ${uiBuild.reason}`);
+      } catch (err) {
+        if (options.platform)
+          throw new Error(`UI build failed for ${options.platform}: ${(err as Error).message}`, { cause: err });
+
+        console.warn(`  UI rebuild failed: ${(err as Error).message}`);
+      }
+
+      /*** Refresh the manifest from whatever’s now in ui/build/ — either the fresh bundle we just
+           produced, or the pre-existing one if we skipped above. ***/
       try {
         const refreshed = await refreshUiManifest();
 
@@ -803,6 +822,89 @@ export async function refreshEmbeddedSdkManifest(rootDir: string = Deno.cwd()): 
     sdkSourceDir,
     wrote
   };
+}
+
+export interface UiBuildResult {
+  /** `true` when `bun run build` actually executed. */
+  ran: boolean;
+  /** Populated when `ran === false`; explains why we skipped. */
+  reason?: string;
+}
+
+/**
+ * Run the SvelteKit production build in `ui/` so `ui/build/` is fresh
+ * before `refreshUiManifest` + `deno compile --include ui/build` pick
+ * it up. Mirrors what `ui/build.sh` does, but inlined into `disc build`
+ * so a release artifact can never embed a stale UI bundle.
+ *
+ * Skips cleanly (returns `ran: false` with a reason) when:
+ *   - `ui/` doesn't exist (e.g. a fork that stripped the admin UI),
+ *   - `bun` isn't on PATH (CI image without bun — fall back to whatever
+ *     is already in `ui/build/`).
+ * Throws on actual build failure (non-zero exit from `bun install` or
+ * `bun run build`) so the caller can decide whether to fail loud (cross-
+ * compile / release) or warn + continue (host dev build).
+ */
+export async function runUiBuild(rootDir: string = Deno.cwd()): Promise<UiBuildResult> {
+  const uiDir = join(rootDir, "ui");
+
+  try {
+    const stat = await Deno.stat(uiDir);
+
+    if (!stat.isDirectory)
+      return { ran: false, reason: `ui directory not found at ${uiDir}` };
+  } catch {
+    return { ran: false, reason: `ui directory not found at ${uiDir}` };
+  }
+
+  /*** Check for bun before doing anything else. We rely on `bun --version` rather than parsing
+       $PATH ourselves so PATHEXT, hash tables, and shell-style lookup all match what `bun run`
+       would see at the real build step. ***/
+  try {
+    const probe = await new Deno.Command("bun", {
+      args: ["--version"],
+      stderr: "null",
+      stdout: "null"
+    }).output();
+
+    if (!probe.success)
+      return { ran: false, reason: "bun --version exited non-zero — falling back to existing ui/build/" };
+  } catch {
+    return { ran: false, reason: "bun not found on PATH — falling back to existing ui/build/" };
+  }
+
+  /*** Install deps when node_modules is missing. Mirrors `ui/build.sh`. ***/
+  const nodeModules = join(uiDir, "node_modules");
+
+  try {
+    await Deno.stat(nodeModules);
+  } catch {
+    console.log("  Installing ui/ dependencies (bun install)…");
+
+    const install = await new Deno.Command("bun", {
+      args: ["install"],
+      cwd: uiDir,
+      stderr: "inherit",
+      stdout: "inherit"
+    }).output();
+
+    if (!install.success)
+      throw new Error(`bun install exited ${install.code}`);
+  }
+
+  console.log("  Building UI (bun run build)…");
+
+  const build = await new Deno.Command("bun", {
+    args: ["run", "build"],
+    cwd: uiDir,
+    stderr: "inherit",
+    stdout: "inherit"
+  }).output();
+
+  if (!build.success)
+    throw new Error(`bun run build exited ${build.code}`);
+
+  return { ran: true };
 }
 
 /**

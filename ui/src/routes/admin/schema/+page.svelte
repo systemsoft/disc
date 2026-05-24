@@ -91,6 +91,9 @@
   let eventSource: EventSource | null = null;
   let forceApply = false;
   let lastUpdate: Date | null = null;
+  /*** Surfaces structured `error` frames from the SSE stream (e.g. "schema directory not found") so
+       they render as a banner instead of looking like a dropped connection. ***/
+  let serverNotice: string | null = null;
 
   /*** RUNTIME ------------------------------------------ ***/
 
@@ -146,6 +149,7 @@
         diff = JSON.parse((e as MessageEvent).data);
         lastUpdate = new Date();
         connectionStatus = "live";
+        serverNotice = null;
       } catch (err) {
         connectionError = err instanceof Error ? err.message : String(err);
       }
@@ -155,12 +159,30 @@
       try {
         diff = JSON.parse((e as MessageEvent).data);
         lastUpdate = new Date();
+        serverNotice = null;
       } catch (err) {
         connectionError = err instanceof Error ? err.message : String(err);
       }
     });
 
-    eventSource.addEventListener("error", () => {
+    /*** Named `error` frames are application-level (missing schema dir, unreadable file, etc.) —
+         the connection is fine, the server is just telling us it can’t compute a diff. Surface
+         them as a banner instead of "lost connection". ***/
+    eventSource.addEventListener("error", (e) => {
+      const me = e as MessageEvent;
+
+      if (me && typeof me.data === "string" && me.data.length > 0) {
+        try {
+          const payload = JSON.parse(me.data);
+          serverNotice = payload?.message ?? "Schema watcher reported an error";
+          connectionStatus = "live";
+
+          return;
+        } catch {
+          /*** fall through to connection-loss handling ***/
+        }
+      }
+
       connectionStatus = "disconnected";
       connectionError = "Lost connection to schema-watch stream";
     });
@@ -175,12 +197,12 @@
 
   function formatTime(d: Date | null) {
     if (!d)
-      return "—";
+      return null;
 
     return d.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
+      second: "2-digit"
     });
   }
 </script>
@@ -192,58 +214,66 @@
     display: flex;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 3);
-    /* margin: 0 auto; */
-    /* max-width: 1400px; */
   }
 
   .page-header {
-    align-items: flex-start;
+    align-items: center;
     display: flex;
     gap: calc(var(--grid-unit) * 4);
     justify-content: space-between;
 
     h1 {
-      margin: 0 0 calc(var(--grid-unit) * 0.5) 0;
+      line-height: 1;
     }
 
     .subtitle {
-      /* color: var(--color-text-dim); */
+      color: var(--uchu-yin-3);
       font-family: var(--font-mono);
       font-size: 0.875rem;
       margin: 0;
 
       code {
-        /* color: var(--color-info); */
+        color: var(--uchu-yin-7);
+        position: relative;
+
+        &::after {
+          width: calc(100% + var(--grid-unit)); height: 100%;
+          bottom: 0; left: calc(calc(var(--grid-unit)/2) * -1);
+
+          background-color: var(--uchu-yellow-1);
+          content: "";
+          position: absolute;
+          z-index: -1;
+        }
       }
     }
   }
 
   .status {
     align-items: center;
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
-    /* color: var(--color-text-dim); */
     display: flex;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     gap: var(--grid-unit);
     letter-spacing: 0.05rem;
-    padding: var(--grid-unit) calc(var(--grid-unit) * 1.5);
     text-transform: uppercase;
 
     .status-dot {
-      width: 8px; height: 8px;
+      width: var(--grid-unit); height: var(--grid-unit);
 
       animation: pulse 2s ease-in-out infinite;
-      background: var(--color-warning, #ffaa00);
       border-radius: 50%;
 
-      &[data-status="live"] {
-        background: var(--color-success, #00ff88);
+      &:not([data-status="disconnected"]):not([data-status="live"]) {
+        background-color: var(--uchu-orange-4);
       }
 
       &[data-status="disconnected"] {
-        background: var(--color-error, #ff4444);
+        background-color: var(--uchu-red-4);
+      }
+
+      &[data-status="live"] {
+        background-color: var(--uchu-green-4);
       }
     }
 
@@ -261,45 +291,34 @@
     gap: var(--grid-unit);
     padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
 
-    /* .banner-icon {
-      font-size: 1.25rem;
-    } */
+    &.clean {
+      background-color: oklch(var(--uchu-green-1-raw) / 20%);
+      border: 1px solid var(--uchu-green-1);
+      color: var(--uchu-green-5);
+    }
 
     &.error {
       background-color: oklch(var(--uchu-red-1-raw) / 20%);
+      border: 1px solid var(--uchu-red-1);
       color: var(--uchu-red-5);
     }
 
     &.warning {
       background-color: oklch(var(--uchu-orange-1-raw) / 20%);
+      border: 1px solid var(--uchu-orange-1);
       color: var(--uchu-orange-5);
 
       ul {
         margin: var(--grid-unit) 0 0 calc(var(--grid-unit) * 2);
       }
-
-      /* .error-loc {
-        color: var(--color-text-dim);
-      } */
-
-      /* .error-source {
-        color: var(--color-text-dim);
-      } */
-    }
-
-    &.clean {
-      background: rgb(0 255 136 / 0.05);
-      border-color: var(--color-success, #00ff88);
-      color: var(--color-success, #00ff88);
     }
   }
 
   .apply-strip {
     /* @include glow(var(--color-primary-rgb), 0.2); */
     align-items: center;
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-primary); */
-    /* border-radius: var(--border-radius); */
+    border: 1px solid var(--uchu-gray-1);
+    background-color: oklch(var(--uchu-gray-1-raw) / 30%);
     display: flex;
     gap: calc(var(--grid-unit) * 2);
     justify-content: space-between;
@@ -317,22 +336,22 @@
       font-weight: 700;
 
       &.count-added {
-        color: var(--color-success, #00ff88);
+        color: var(--uchu-green-4);
       }
 
       &.count-modified {
-        color: var(--color-warning, #ffaa00);
+        color: var(--uchu-orange-4);
       }
 
       &.count-removed {
-        color: var(--color-error, #ff4444);
+        color: var(--uchu-red-4);
       }
     }
 
     .count-label {
-      color: var(--color-text-dim);
+      color: var(--uchu-yin-3);
       font-size: 0.875rem;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.05rem;
       text-transform: uppercase;
     }
   }
@@ -345,7 +364,6 @@
 
   .force-toggle {
     align-items: center;
-    /* color: var(--color-text-dim); */
     cursor: pointer;
     display: flex;
     font-family: var(--font-mono);
@@ -353,29 +371,41 @@
     gap: var(--grid-unit);
     letter-spacing: 0.05em;
     text-transform: uppercase;
+
+    input[type="checkbox"] {
+      width: calc(var(--grid-unit) * 1.75); height: calc(var(--grid-unit) * 1.75);
+
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: calc(var(--grid-unit) * 2);
+      border-radius: 0;
+      padding: 0;
+
+      &:checked {
+        background-image: url("data:image/svg+xml,<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M17.2835 7.51131L11.0738 17.4468L6.68933 13.0623L7.74999 12.0016L10.8012 15.0528L16.0115 6.71631L17.2835 7.51131Z\"/></svg>");
+      }
+    }
   }
 
   .apply-button {
-    /* background: rgb(var(--color-primary-rgb) / 0.15); */
-    /* border: 1px solid var(--color-primary); */
-    /* border-radius: var(--border-radius); */
-    /* color: var(--color-primary); */
     cursor: pointer;
     font-family: var(--font-mono);
     font-size: 0.875rem;
     letter-spacing: 0.1rem;
-    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 3);
     text-transform: uppercase;
-    transition: all var(--transition-fast);
 
-    &:hover:not(:disabled) {
-      /* @include glow(var(--color-primary-rgb), 0.4); */
-      /* background: rgb(var(--color-primary-rgb) / 0.3); */
-    }
+    /* &:hover:not(:disabled) {
+      @include glow(var(--color-primary-rgb), 0.4);
+    } */
 
     &:disabled {
       cursor: not-allowed;
       opacity: 0.5;
+    }
+
+    &.force {
+      background-color: var(--uchu-red-4);
+      color: var(--uchu-yang);
     }
   }
 
@@ -386,129 +416,198 @@
   }
 
   .diff-card {
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
+    border: 1px solid;
+    border-color: var(--uchu-gray-1);
     display: flex;
     flex-direction: column;
     overflow: hidden;
 
     header {
       align-items: center;
-      border-bottom: 1px solid var(--color-border);
+      background-color: oklch(var(--uchu-gray-1-raw) / 50%);
+      border-bottom: 1px solid var(--uchu-gray-1);
       display: flex;
+      flex-direction: row-reverse;
       gap: var(--grid-unit);
-      padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+      justify-content: space-between;
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
 
       h3 {
         font-family: var(--font-mono);
-        font-size: 1rem;
+        font-size: 0.875rem;
+        letter-spacing: normal;
         margin: 0;
+
+        span {
+          color: var(--uchu-yin-3);
+        }
       }
     }
 
     .badge {
-      /* border-radius: 4px; */
       font-family: var(--font-mono);
       font-size: 0.625rem;
-      letter-spacing: 0.1em;
-      padding: 0.2em 0.5em;
+      letter-spacing: 0.05rem;
+      padding: calc(var(--grid-unit) / 4) var(--grid-unit);
       text-transform: uppercase;
     }
 
     &.added {
-      border-color: var(--color-success, #00ff88);
-
       .badge {
-        background: rgb(0 255 136 / 0.2);
-        /* color: var(--color-success, #00ff88); */
-      }
-
-      h3 {
-        /* color: var(--color-success, #00ff88); */
+        background-color: oklch(var(--uchu-green-2-raw) / 50%);
+        color: var(--uchu-green-9);
       }
     }
 
     &.removed {
-      border-color: var(--color-error, #ff4444);
-
       .badge {
-        /* background: rgb(255 68 68 / 0.2); */
-        color: var(--color-error, #ff4444);
-      }
-
-      h3 {
-        /* color: var(--color-error, #ff4444); */
+        background-color: oklch(var(--uchu-red-2-raw) / 50%);
+        color: var(--uchu-red-9);
       }
     }
 
     &.modified {
-      border-color: var(--color-warning, #ffaa00);
-      .badge { background: rgb(255 170 0 / 0.2); color: var(--color-warning, #ffaa00); }
-      h3 { color: var(--color-warning, #ffaa00); }
+      .badge {
+        background-color: oklch(var(--uchu-orange-2-raw) / 50%);
+        color: var(--uchu-orange-9);
+      }
     }
 
     .card-body {
-      padding: calc(var(--grid-unit) * 2);
       display: flex;
       flex-direction: column;
-      gap: var(--grid-unit);
+      padding: calc(var(--grid-unit) * 2);
     }
-    .meta {
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      color: var(--color-text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      code { color: var(--color-info); text-transform: none; }
-    }
+
     .member {
       display: flex;
-      justify-content: space-between;
-      gap: var(--grid-unit);
       font-family: var(--font-mono);
       font-size: 0.8125rem;
-      padding: calc(var(--grid-unit) * 0.5) 0;
+      justify-content: space-between;
+      white-space: nowrap;
 
-      .member-key { color: var(--color-text); }
-      .member-type { color: var(--color-info); }
-      &.added { .member-key { color: var(--color-success, #00ff88); } }
-      &.removed { .member-key { color: var(--color-error, #ff4444); } }
-      &.changed { flex-direction: column; gap: calc(var(--grid-unit) * 0.5); }
-      &.changed .member-key { color: var(--color-warning, #ffaa00); }
+      &:not(.added):not(.changed):not(.removed) {
+        .member-key {
+          color: var(--uchu-yin-3);
+        }
+      }
+
+      .member-key {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+      }
+
+      .member-type {
+        color: var(--uchu-blue-3);
+        flex: 1;
+        margin-left: var(--grid-unit);
+        white-space: nowrap;
+        width: 100%;
+      }
+
+      &.added {
+        .member-key {
+          color: var(--uchu-green-5);
+        }
+      }
+
+      &.changed {
+        flex-direction: column;
+
+        .member-key {
+          color: var(--uchu-orange-5);
+        }
+      }
+
+      &.removed {
+        .member-key {
+          color: var(--uchu-red-5);
+        }
+      }
+
+      .multi,
+      .required {
+        margin-right: 1ch;
+        text-transform: uppercase;
+      }
+
+      .multi {
+        color: var(--uchu-yellow-6);
+      }
+
+      .required {
+        color: var(--uchu-red-5);
+      }
+
       .member-change {
+        align-items: center;
         display: flex;
         gap: var(--grid-unit);
-        align-items: center;
-        font-size: 0.75rem;
-        .before { color: var(--color-error, #ff4444); }
-        .after { color: var(--color-success, #00ff88); }
-        .arrow { color: var(--color-text-dim); }
+        margin-left: 2ch;
+
+        .after {
+          color: var(--uchu-green-5);
+        }
+
+        .arrow {
+          color: var(--uchu-yin-3);
+        }
+
+        .before {
+          color: var(--uchu-red-5);
+        }
       }
     }
-    .group {
-      border-top: 1px solid var(--color-border);
-      padding-top: var(--grid-unit);
-      margin-top: var(--grid-unit);
-    }
+
     .group-label {
-      font-family: var(--font-mono);
-      font-size: 0.625rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--color-text-dim);
+      font-family: var(--font-display);
+      font-size: 0.575rem;
+      letter-spacing: 0.1rem;
+      line-height: 1;
       margin-bottom: var(--grid-unit);
-      &.group-added { color: var(--color-success, #00ff88); }
-      &.group-removed { color: var(--color-error, #ff4444); }
-      &.group-modified { color: var(--color-warning, #ffaa00); }
+      position: relative;
+      text-transform: uppercase;
+      user-select: none;
+
+      &::after {
+        width: calc(100% - (var(--ch) + 2.5ch)); height: 1px;
+        bottom: 1.5px; right: 0;
+
+        background-color: var(--uchu-gray-1);
+        content: "";
+        position: absolute;
+        z-index: -1;
+      }
+
+      &.group-added {
+        color: var(--uchu-green-4);
+      }
+
+      &.group-modified {
+        color: var(--uchu-orange-4);
+      }
+
+      &.group-removed {
+        color: var(--uchu-red-4);
+      }
     }
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%, 100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.5;
+    }
   }
 </style>
+
+<svelte:head>
+  <title>Disc Viewer &bull; Diff</title>
+</svelte:head>
 
 <div class="schema-diff">
   <header class="page-header">
@@ -520,14 +619,22 @@
     <div class="status">
       <span class="status-dot" data-status={connectionStatus}></span>
       <span class="status-label">{connectionStatus}</span>
-      <span class="last-update">{formatTime(lastUpdate)}</span>
+      {#if formatTime(lastUpdate)}
+        <span class="last-update">{formatTime(lastUpdate)}</span>
+      {/if}
     </div>
   </header>
 
   {#if connectionError}
     <div class="banner error">
-      <!-- <span class="banner-icon">⚠</span> -->
       <span>{connectionError}</span>
+    </div>
+  {/if}
+
+  {#if serverNotice}
+    <div class="banner warning">
+      <span class="banner-icon">⚠</span>
+      <span>{serverNotice}</span>
     </div>
   {/if}
 
@@ -569,12 +676,16 @@
 
       <div class="apply-controls">
         <label class="force-toggle">
-          <input type="checkbox" bind:checked={forceApply} />
+          <input bind:checked={forceApply} type="checkbox"/>
           <span>Force (allow unsafe / ambiguous)</span>
         </label>
 
-        <button class="apply-button" on:click={applyMigration} disabled={applying}>
-          {applying ? "Applying…" : forceApply ? "Force Apply" : "Apply Migration"}
+        <button
+          class="apply-button"
+          class:force={forceApply}
+          disabled={applying}
+          onclick={applyMigration}>
+          {applying ? "Applying…" : forceApply ? "Force Migration" : "Apply Migration"}
         </button>
       </div>
     </section>
@@ -598,22 +709,22 @@
         <article class="diff-card added">
           <header>
             <span class="badge">+ added</span>
-            <h3>{t.name}</h3>
+            <h3><span>{t.module}::</span>{t.name}</h3>
           </header>
 
           <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code>{#if t.abstract} · <code>abstract</code>{/if}</div>
+            <!-- <div class="meta">module: <code>{t.module}</code>{#if t.abstract} · <code>abstract</code>{/if}</div> -->
 
             {#each t.properties as p}
               <div class="member">
-                <span class="member-key">{p.required ? "required " : ""}{p.name}</span>
+                <span class="member-key">{#if p.required}<span class="required">required</span>{/if}{p.name}</span>
                 <span class="member-type">{p.type}</span>
               </div>
             {/each}
 
             {#each t.links as l}
               <div class="member link">
-                <span class="member-key">link {l.required ? "required " : ""}{l.multi ? "multi " : ""}{l.name}</span>
+                <span class="member-key">link {#if l.required}<span class="required">required</span>{/if}{#if l.multi}<span class="multi">multi</span>{/if}{l.name}</span>
                 <span class="member-type">→ {l.target}</span>
               </div>
             {/each}
@@ -625,15 +736,13 @@
         <article class="diff-card removed">
           <header>
             <span class="badge">− removed</span>
-            <h3>{t.name}</h3>
+            <h3><span>{t.module}::</span>{t.name}</h3>
           </header>
 
           <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code></div>
-
             {#each t.properties as p}
               <div class="member">
-                <span class="member-key">{p.required ? "required " : ""}{p.name}</span>
+                <span class="member-key">{#if p.required}<span class="required">required</span>{/if}{p.name}</span>
                 <span class="member-type">{p.type}</span>
               </div>
             {/each}
@@ -645,19 +754,17 @@
         <article class="diff-card modified">
           <header>
             <span class="badge">~ modified</span>
-            <h3>{t.name}</h3>
+            <h3><span>{t.module}::</span>{t.name}</h3>
           </header>
 
           <div class="card-body">
-            <div class="meta">module: <code>{t.module}</code></div>
-
             {#if t.addedProperties.length > 0}
               <div class="group">
-                <div class="group-label group-added">added properties</div>
+                <div class="group-label group-added" style="--ch: 5ch;">added</div>
 
                 {#each t.addedProperties as p}
                   <div class="member added">
-                    <span class="member-key">+ {p.required ? "required " : ""}{p.name}</span>
+                    <span class="member-key">+ {#if p.required}<span class="required">required</span>{/if}{p.name}</span>
                     <span class="member-type">{p.type}</span>
                   </div>
                 {/each}
@@ -666,7 +773,7 @@
 
             {#if t.removedProperties.length > 0}
               <div class="group">
-                <div class="group-label group-removed">removed properties</div>
+                <div class="group-label group-removed" style="--ch: 7ch;">removed</div>
 
                 {#each t.removedProperties as p}
                   <div class="member removed">
@@ -679,16 +786,16 @@
 
             {#if t.changedProperties.length > 0}
               <div class="group">
-                <div class="group-label group-modified">changed properties</div>
+                <div class="group-label group-modified" style="--ch: 7ch;">changed</div>
 
                 {#each t.changedProperties as c}
                   <div class="member changed">
                     <span class="member-key">~ {c.name}</span>
 
                     <span class="member-change">
-                      <span class="before">{c.before.required ? "required " : ""}{c.before.type}</span>
+                      <span class="before">{#if c.before.required}<span class="required">required</span>{/if}{c.before.type}</span>
                       <span class="arrow">→</span>
-                      <span class="after">{c.after.required ? "required " : ""}{c.after.type}</span>
+                      <span class="after">{#if c.after.required}<span class="required">required</span>{/if}{c.after.type}</span>
                     </span>
                   </div>
                 {/each}
@@ -697,11 +804,11 @@
 
             {#if t.addedLinks.length + t.removedLinks.length + t.changedLinks.length > 0}
               <div class="group">
-                <div class="group-label">links</div>
+                <div class="group-label" style="--ch: 5ch;">links</div>
 
                 {#each t.addedLinks as l}
                   <div class="member added">
-                    <span class="member-key">+ link {l.required ? "required " : ""}{l.multi ? "multi " : ""}{l.name}</span>
+                    <span class="member-key">+ link {#if l.required}<span class="required">required</span>{/if}{#if l.multi}<span class="multi">multi</span>{/if}{l.name}</span>
                     <span class="member-type">→ {l.target}</span>
                   </div>
                 {/each}
@@ -718,9 +825,9 @@
                     <span class="member-key">~ link {c.name}</span>
 
                     <span class="member-change">
-                      <span class="before">{c.before.required ? "required " : ""}{c.before.multi ? "multi " : ""}→ {c.before.target}</span>
+                      <span class="before">{#if c.before.required}<span class="required">required</span>{/if}{#if c.before.multi}<span class="multi">multi</span>{/if} {c.before.target}</span>
                       <span class="arrow">→</span>
-                      <span class="after">{c.after.required ? "required " : ""}{c.after.multi ? "multi " : ""}→ {c.after.target}</span>
+                      <span class="after">{#if c.after.required}<span class="required">required</span>{/if}{#if c.after.multi}<span class="multi">multi</span>{/if} {c.after.target}</span>
                     </span>
                   </div>
                 {/each}
