@@ -87,7 +87,8 @@ export class SchemaDiffer {
         /*** Surface multi-link names (own + inherited) so the DDL generator can drop the per-link
              junction tables. Without this, `DROP TABLE ... CASCADE` on the main type table leaves
              orphan `<table>_<link>` junctions behind that then collide on a future re-create. ***/
-        const multiLinks = this.extractLinksWithInheritance(oldTypeDef, oldTypes)
+        const multiLinks = this
+          .extractLinksWithInheritance(oldTypeDef, oldTypes)
           .filter(l => l.multi)
           .map(l => l.name);
 

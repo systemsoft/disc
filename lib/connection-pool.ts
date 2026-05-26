@@ -101,7 +101,7 @@ export class ConnectionPool {
       return;
     }
 
-    logger.info(
+    logger.debug(
       `Initializing connection pool with min=${this.config.minConnections}, max=${this.config.maxConnections}`
     );
 
@@ -127,7 +127,7 @@ export class ConnectionPool {
       );
     }
 
-    logger.info(
+    logger.debug(
       `Connection pool initialized with ${this.connections.size} connections`
     );
   }
@@ -207,7 +207,7 @@ export class ConnectionPool {
     const pooled = this.connectionToPooled.get(connection);
 
     if (!pooled) {
-      logger.warn("Attempted to release unknown connection");
+      logger.debug("Attempted to release unknown connection");
       return;
     }
 
@@ -307,7 +307,7 @@ export class ConnectionPool {
   }
 
   async close(): Promise<void> {
-    logger.info("Closing connection pool");
+    logger.debug("Closing connection pool");
 
     this.closed = true;
 
@@ -344,7 +344,7 @@ export class ConnectionPool {
     this.idleConnections = [];
     this.activeCount = 0;
 
-    logger.info("Connection pool closed");
+    logger.debug("Connection pool closed");
   }
 
   async cleanupIdleConnections(): Promise<void> {
@@ -374,7 +374,7 @@ export class ConnectionPool {
     }
 
     if (toDestroy.length > 0) {
-      logger.info(`Cleaned up ${toDestroy.length} idle connections`);
+      logger.debug(`Cleaned up ${toDestroy.length} idle connections`);
     }
   }
 
@@ -429,27 +429,17 @@ export class ConnectionPool {
         this.stats.totalCreated++;
         this.updateStats();
 
-        logger.info(
-          `Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`
-        );
+        logger.debug(`Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`);
         return pooled;
       } catch (error) {
         this.stats.totalErrors++;
-        const delay = Math.min(
-          baseDelay * Math.pow(2, attempt - 1),
-          maxDelay
-        );
-        logger.warn(
-          `Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`
-        );
+        const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+        logger.debug(`Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`);
 
-        if (attempt < maxRetries) {
+        if (attempt < maxRetries)
           await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          throw new Error(
-            `Failed to create connection after ${maxRetries} attempts: ${error}`
-          );
-        }
+        else
+          throw new Error(`Failed to create connection after ${maxRetries} attempts: ${error}`);
       }
     }
 
@@ -460,7 +450,7 @@ export class ConnectionPool {
     try {
       await pooled.connection.close();
     } catch (error) {
-      logger.error(`Error closing connection ${pooled.id}: ${error}`);
+      logger.debug(`Error closing connection ${pooled.id}: ${error}`);
     }
 
     this.connections.delete(pooled.id);
@@ -468,9 +458,7 @@ export class ConnectionPool {
     this.stats.totalDestroyed++;
     this.updateStats();
 
-    logger.info(
-      `Destroyed connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`
-    );
+    logger.debug(`Destroyed connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`);
   }
 
   private async validateConnection(
@@ -480,7 +468,7 @@ export class ConnectionPool {
       const result = await connection.query("SELECT 1");
       return result.rowCount === 1;
     } catch (error) {
-      logger.warn(`Connection validation failed: ${error}`);
+      logger.debug(`Connection validation failed: ${error}`);
       return false;
     }
   }
@@ -523,7 +511,7 @@ export class ConnectionPool {
       const heldMs = pooled.acquiredAt ?
         Date.now() - pooled.acquiredAt.getTime() :
         timeout;
-      logger.warn(
+      logger.debug(
         `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
           pooled.acquireStackTrace || "unavailable"
         }`

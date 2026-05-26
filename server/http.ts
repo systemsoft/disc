@@ -167,28 +167,28 @@ export class HttpServer {
   }
 
   async start(): Promise<void> {
-    log.info("Starting Disc HTTP server", {
+    log.debug("Starting Disc HTTP server", {
       host: this.config.host,
       port: this.config.port
     });
 
-    const handler = (
-      request: Request,
-      info: Deno.ServeHandlerInfo
-    ): Response | Promise<Response> => {
+    const handler = (request: Request, info: Deno.ServeHandlerInfo): Response | Promise<Response> => {
       return this.handleRequest(request, info);
     };
+
     this.request_handler = handler;
 
     if (this.config.tls) {
       const cert = await Deno.readTextFile(this.config.tls.certFile);
       const key = await Deno.readTextFile(this.config.tls.keyFile);
+
       this.server = Deno.serve({
         hostname: this.config.host,
         port: this.config.port,
         cert,
         key
       }, handler);
+
       this.refreshTlsCertExpiry(cert);
 
       // Start file-watch-driven TLS hot-reload when opted in.
@@ -206,6 +206,9 @@ export class HttpServer {
     } else {
       this.server = Deno.serve({
         hostname: this.config.host,
+        onListen() {
+          /*** We already expose the path/port, we don’t need it again ***/
+        },
         port: this.config.port
       }, handler);
     }
@@ -235,9 +238,11 @@ export class HttpServer {
     this.start_cleanup_intervals();
 
     const protocol = this.config.tls ? "https" : "http";
+
     log.info("Disc server is running", {
       url: `${protocol}://${this.config.host}:${this.config.port}`
     });
+
     log.info("Server configuration", {
       cors: this.config.enableCors,
       websockets: this.config.enableWebsockets
@@ -277,6 +282,8 @@ export class HttpServer {
     }
 
     if (this.server) {
+      // deno-lint-ignore no-console
+      console.log("");
       log.info("Stopping Disc server");
       await this.server.shutdown();
       log.info("Server stopped");

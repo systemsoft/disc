@@ -95,7 +95,8 @@ export class PostgresBinaryDownloader {
     // Check if already downloaded
     try {
       await Deno.stat(binPath);
-      logger.info(`PostgreSQL ${version} already downloaded`);
+      logger.debug(`PostgreSQL ${version} already downloaded`);
+
       return versionDir;
     } catch {
       // Not downloaded yet, proceed

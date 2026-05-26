@@ -115,10 +115,10 @@ export async function handleSchemaApply(
     // unsafe-op gate compares against the running schema rather than
     // starting from `null` (which would treat every drop as a new
     // type-create — silently bypassing the gate). The CLI's `migrate`
-    // path doesn't need this because it discovers state through the
-    // MigrationTracker; we'd have to load the previous SDL from
-    // history to do the same and that's substantially more work for
-    // the same outcome.
+    // path primes its own baseline from `disc_migrations.schema_modules`
+    // inside `SchemaManager.initialize()`; the admin path can't rely on
+    // that because the just-modified SDL hasn't been written into the
+    // tracker yet — so we pass it explicitly here.
     if (options.appliedSdl !== undefined && options.appliedSdl.length > 0) {
       const baselineResult = manager.loadBaseline(options.appliedSdl);
       if (!baselineResult.ok) {

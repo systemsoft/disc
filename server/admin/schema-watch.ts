@@ -31,8 +31,8 @@ const DEFAULT_DEBOUNCE_MS = 250;
  * alphabetically, matching `loadProjectSchema`).
  */
 export type SchemaWatchSource =
-  | { kind: "file"; path: string }
-  | { kind: "dir"; dir: string };
+  | { kind: "file"; path: string; }
+  | { kind: "dir"; dir: string; };
 
 export interface SchemaWatchOptions {
   /** What to read + watch — a single file or a directory of `.disc` files. */
@@ -84,8 +84,8 @@ interface WatchContext {
 }
 
 type ReadResult =
-  | { ok: true; sdl: string; files: string[] }
-  | { ok: false; error: string };
+  | { ok: true; sdl: string; files: string[]; }
+  | { ok: false; error: string; };
 
 /**
  * Read the SDL from disk per the source descriptor. In dir mode this

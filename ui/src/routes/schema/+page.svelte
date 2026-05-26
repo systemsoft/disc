@@ -345,7 +345,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Schema</title>
+  <title>Disc Viewer &bull; Schema Viewer</title>
 </svelte:head>
 
 <div class="schema-browser">

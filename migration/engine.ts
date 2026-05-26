@@ -24,6 +24,20 @@ export class MigrationEngine {
   private db?: DatabaseConnection;
   private pool?: ConnectionPool;
   private tracker?: MigrationTracker;
+  /**
+   * Cached post-state modules from the latest applied migration. Populated
+   * during `initialize()` from `disc_migrations.schema_modules`. SchemaManager
+   * reads this via `getLatestAppliedModules()` to prime `currentModules` so
+   * a fresh CLI `disc migrate` diffs against the actual applied schema
+   * rather than null.
+   */
+  private latestAppliedModules: Module[] | null = null;
+  /**
+   * Cached schema_hash from the latest applied migration. Used as the
+   * fallback "is this a no-op?" check when `latestAppliedModules` is null
+   * (migrations recorded before the schema_modules column existed).
+   */
+  private latestAppliedSchemaHash: string | null = null;
 
   constructor(private config: Types.MigrationConfig) {
     if (config.connectionPool) {
@@ -64,6 +78,82 @@ export class MigrationEngine {
           this.appliedMigrations.add(id);
         }
       }
+
+      // Load the post-state schema of the latest applied migration so
+      // SchemaManager can prime its `currentModules` baseline. Without
+      // this, a fresh `disc migrate` against a previously-migrated DB
+      // diffs against null and emits "create everything" ops that
+      // collide with existing types/tables.
+      const modules = await this.tracker.getLatestSchemaModules();
+      if (modules.ok && modules.value !== null) {
+        this.latestAppliedModules = modules.value;
+      }
+
+      // Also cache the latest schema_hash as a fallback baseline
+      // detector for rows that pre-date the schema_modules column.
+      const hash = await this.tracker.getLatestSchemaHash();
+      if (hash.ok && hash.value !== null) {
+        this.latestAppliedSchemaHash = hash.value;
+      }
+    }
+  }
+
+  /**
+   * Return the post-state schema modules of the latest applied migration
+   * (null when no migrations are recorded or the latest row pre-dates the
+   * schema_modules column). SchemaManager calls this in `initialize()` to
+   * prime its `currentModules` baseline.
+   */
+  getLatestAppliedModules(): Module[] | null {
+    return this.latestAppliedModules;
+  }
+
+  /**
+   * Return the schema_hash of the latest applied migration, or null if no
+   * migrations have been recorded. Used as the fallback "is this a no-op?"
+   * detector when `getLatestAppliedModules()` returns null.
+   */
+  getLatestAppliedSchemaHash(): string | null {
+    return this.latestAppliedSchemaHash;
+  }
+
+  /**
+   * Compute the stable hash of the given schema in the same format used
+   * for `disc_migrations.schema_hash`. Exposed so SchemaManager can detect
+   * the no-op case when only `latestAppliedSchemaHash` is available
+   * (legacy rows without stored schema_modules): if the on-disk schema
+   * hashes to the stored value, the new migrate is a no-op.
+   */
+  hashSchemaForBaseline(schema: Module[]): string {
+    return this.hashSchema(schema);
+  }
+
+  /**
+   * Number of migrations recorded in `disc_migrations`. Used by
+   * SchemaManager to distinguish "fresh DB" from "DB has migrations but
+   * we couldn't recover the baseline".
+   */
+  appliedMigrationCount(): number {
+    return this.appliedMigrations.size;
+  }
+
+  /**
+   * Backfill the post-state modules onto the latest applied migration
+   * row. Called by SchemaManager when the schema-hash fallback detects
+   * a no-op against a legacy row — persisting the modules means future
+   * runs prime currentModules directly and skip the fallback.
+   */
+  async backfillLatestAppliedModules(modules: Module[]): Promise<void> {
+    if (!this.tracker) {
+      return;
+    }
+    const result = await this.tracker.backfillLatestSchemaModules(modules);
+    if (result.ok) {
+      this.latestAppliedModules = modules;
+    } else {
+      logger.warn("failed to backfill schema_modules on latest row", {
+        error: result.error.message
+      });
     }
   }
 
@@ -157,7 +247,7 @@ export class MigrationEngine {
    */
   async executeMigration(
     plan: Types.MigrationPlan,
-    options?: { skipHistory?: boolean; }
+    options?: { skipHistory?: boolean; postStateModules?: Module[]; }
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const planStartTime = Date.now();
     const results: Types.MigrationResult[] = [];
@@ -228,8 +318,15 @@ export class MigrationEngine {
         if (this.tracker && !options?.skipHistory) {
           await this.tracker.recordMigration(
             migration,
-            results[results.length - 1]
+            results[results.length - 1],
+            options?.postStateModules ?? null
           );
+          // Refresh the cached baseline so subsequent plan/apply calls
+          // on this engine instance see the just-applied state.
+          if (options?.postStateModules) {
+            this.latestAppliedModules = options.postStateModules;
+          }
+          this.latestAppliedSchemaHash = migration.schemaHash;
         }
 
         this.emit({
@@ -318,7 +415,8 @@ export class MigrationEngine {
    * Execute migration with automatic rollback on error
    */
   async executeMigrationWithRollback(
-    plan: Types.MigrationPlan
+    plan: Types.MigrationPlan,
+    options?: { postStateModules?: Module[]; }
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const planStartTime = Date.now();
     const results: Types.MigrationResult[] = [];
@@ -394,8 +492,13 @@ export class MigrationEngine {
         if (this.tracker) {
           await this.tracker.recordMigration(
             migration,
-            results[results.length - 1]
+            results[results.length - 1],
+            options?.postStateModules ?? null
           );
+          if (options?.postStateModules) {
+            this.latestAppliedModules = options.postStateModules;
+          }
+          this.latestAppliedSchemaHash = migration.schemaHash;
         }
 
         this.emit({
@@ -1254,7 +1357,7 @@ export class MigrationEngine {
           await conn.execute(stmt);
         }
         for (const stmt of executableStatements) {
-          logger.info(`Executing: ${stmt.substring(0, 100)}…`);
+          logger.debug(`Executing: ${stmt.split("\n")[0].substring(0, 100)}…`);
           await conn.execute(stmt);
         }
       });
@@ -1276,7 +1379,7 @@ export class MigrationEngine {
         await this.db!.execute(stmt);
       }
       for (const statement of executableStatements) {
-        logger.info(`Executing: ${statement.substring(0, 100)}…`);
+        logger.debug(`Executing: ${statement.split("\n")[0].substring(0, 100)}…`);
         await this.db!.execute(statement);
       }
     });

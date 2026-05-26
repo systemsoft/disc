@@ -68,6 +68,25 @@ async function dropTableIfExists(dsn: string, name: string): Promise<void> {
   }
 }
 
+/**
+ * Reset the migration tracker so SchemaManager.initialize() can't pull
+ * a baseline left behind by a prior test in the same run. Required since
+ * baseline reconstruction landed — without this, the second test in the
+ * file inherits the first test's schema as its applied baseline and the
+ * fresh-create step trips the unsafe-op gate.
+ */
+async function clearMigrationHistory(dsn: string): Promise<void> {
+  const client = new Client(parseDsn(dsn));
+  await client.connect();
+  try {
+    await client.queryArray(`TRUNCATE TABLE disc_migrations`);
+  } catch {
+    // Table may not exist yet on a brand-new test DB; safe to ignore.
+  } finally {
+    await client.end();
+  }
+}
+
 Deno.test({
   name: "Bundle K — apply happy path: new type via /admin/schema-apply creates the PG table",
   ignore: !RUN_PG,
@@ -77,6 +96,7 @@ Deno.test({
     const dsn = await getTestDsn();
     // Make sure we're starting clean.
     await dropTableIfExists(dsn, TABLE_NAME);
+    await clearMigrationHistory(dsn);
 
     const sdl = `module default {\n  type ${TYPE_NAME} {\n    required name: str;\n  };\n};`;
     await withTempSdl(sdl, async path => {
@@ -112,6 +132,7 @@ Deno.test({
     const dropTypeName = `BkDrop${Date.now() % 100000}`;
     const dropTableName = `bk_drop${Date.now() % 100000}`;
     await dropTableIfExists(dsn, dropTableName);
+    await clearMigrationHistory(dsn);
 
     // Step 1: create the type via apply.
     const sdlWith = `module default {\n  type ${dropTypeName} {\n    required name: str;\n  };\n};`;

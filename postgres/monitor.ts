@@ -46,13 +46,13 @@ export class PostgresMonitor {
 
   async start(): Promise<void> {
     if (this.isMonitoring) {
-      logger.info("Monitor already running");
+      logger.debug("Monitor already running");
       return;
     }
 
     this.isMonitoring = true;
     this.isFirstCheck = true;
-    logger.info("Starting PostgreSQL health monitor");
+    logger.debug("Starting PostgreSQL health monitor");
 
     // Startup grace period — let PG finish initializing before first check
     await new Promise(resolve => setTimeout(resolve, this.startupGraceMs));
@@ -70,11 +70,10 @@ export class PostgresMonitor {
   }
 
   stop(): void {
-    if (!this.isMonitoring) {
+    if (!this.isMonitoring)
       return;
-    }
 
-    logger.info("Stopping PostgreSQL health monitor");
+    logger.debug("Stopping PostgreSQL health monitor");
     this.isMonitoring = false;
 
     if (this.monitorHandle) {
@@ -94,9 +93,8 @@ export class PostgresMonitor {
         lastCheck: new Date()
       };
 
-      if (this.autoRestart) {
+      if (this.autoRestart)
         await this.handleUnhealthy();
-      }
 
       return this.lastHealthStatus;
     }
@@ -112,8 +110,10 @@ export class PostgresMonitor {
           lastCheck: new Date(),
           latencyMs: Date.now() - startTime
         };
+
         this.restartAttempts = 0;
         this.isFirstCheck = false;
+
         return this.lastHealthStatus;
       }
 
@@ -140,34 +140,34 @@ export class PostgresMonitor {
           lastCheck: new Date(),
           latencyMs
         };
+
         this.restartAttempts = 0;
         this.isFirstCheck = false;
+
         return this.lastHealthStatus;
       }
 
       // pg_isready returned non-zero: not accepting connections
       const stderr = new TextDecoder().decode(output.stderr).trim();
-      throw new Error(
-        `pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`
-      );
+      throw new Error(`pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`);
     } catch (error) {
       // On the first check, don't count toward restart attempts —
       // PG may still be finishing startup even after pg_ctl -w returns.
       if (this.isFirstCheck) {
-        logger.info(
-          `First health check failed (startup grace): ${error}`
-        );
+        logger.debug(`First health check failed (startup grace): ${error}`);
         this.isFirstCheck = false;
+
         this.lastHealthStatus = {
           connections: 0,
           healthy: false,
           lastCheck: new Date(),
           latencyMs: Date.now() - startTime
         };
+
         return this.lastHealthStatus;
       }
 
-      logger.error(`Health check failed: ${error}`);
+      logger.debug(`Health check failed: ${error}`);
 
       this.lastHealthStatus = {
         connections: 0,
@@ -176,9 +176,8 @@ export class PostgresMonitor {
         latencyMs: Date.now() - startTime
       };
 
-      if (this.autoRestart) {
+      if (this.autoRestart)
         await this.handleUnhealthy();
-      }
 
       return this.lastHealthStatus;
     }
@@ -186,26 +185,23 @@ export class PostgresMonitor {
 
   private async handleUnhealthy(): Promise<void> {
     if (this.restartAttempts >= this.maxRestartAttempts) {
-      logger.error(
-        `PostgreSQL failed after ${this.maxRestartAttempts} restart attempts. Manual intervention required.`
-      );
+      logger.debug(`PostgreSQL failed after ${this.maxRestartAttempts} restart attempts. Manual intervention required.`);
       this.stop();
+
       return;
     }
 
     this.restartAttempts++;
-    logger.info(
-      `Attempting to restart PostgreSQL (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`
-    );
+    logger.debug(`Attempting to restart PostgreSQL (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`);
 
     // Wait before restarting
     await new Promise(resolve => setTimeout(resolve, this.restartDelayMs));
 
     try {
       await this.instance.restart();
-      logger.info("PostgreSQL restarted successfully");
+      logger.debug("PostgreSQL restarted successfully");
     } catch (error) {
-      logger.error(`Failed to restart PostgreSQL: ${error}`);
+      logger.debug(`Failed to restart PostgreSQL: ${error}`);
     }
   }
 
@@ -215,14 +211,14 @@ export class PostgresMonitor {
 
   async getMetrics(): Promise<Record<string, unknown>> {
     const status = await this.instance.status();
-    if (!status.running) {
+
+    if (!status.running)
       return { error: "Instance not running" };
-    }
 
     const pgBinDir = this.instance.getPgBinDir();
-    if (!pgBinDir) {
+
+    if (!pgBinDir)
       return { error: "PostgreSQL binaries not available" };
-    }
 
     const psql = join(pgBinDir, "psql");
     const socketDir = this.instance.getSocketDir();
@@ -250,6 +246,7 @@ export class PostgresMonitor {
       });
 
       const output = await cmd.output();
+
       if (!output.success) {
         const stderr = new TextDecoder().decode(output.stderr).trim();
         throw new Error(`psql query failed: ${stderr}`);
@@ -279,9 +276,9 @@ export class PostgresMonitor {
 
   async performMaintenance(): Promise<void> {
     const pgBinDir = this.instance.getPgBinDir();
-    if (!pgBinDir) {
+
+    if (!pgBinDir)
       throw new Error("PostgreSQL binaries not available for maintenance");
-    }
 
     const psql = join(pgBinDir, "psql");
     const socketDir = this.instance.getSocketDir();
@@ -292,30 +289,28 @@ export class PostgresMonitor {
       ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] :
       ["-h", "localhost", "-p", String(port), "-U", "disc"];
 
-    logger.info("Running PostgreSQL maintenance tasks…");
+    logger.debug("Running PostgreSQL maintenance tasks…");
 
     try {
       // ANALYZE
-      const analyzeCmd = new Deno.Command(psql, {
-        args: [...connArgs, "-c", "ANALYZE"]
-      });
+      const analyzeCmd = new Deno.Command(psql, { args: [...connArgs, "-c", "ANALYZE"] });
       const analyzeOutput = await analyzeCmd.output();
+
       if (!analyzeOutput.success) {
         const stderr = new TextDecoder().decode(analyzeOutput.stderr).trim();
         throw new Error(`ANALYZE failed: ${stderr}`);
       }
 
       // VACUUM
-      const vacuumCmd = new Deno.Command(psql, {
-        args: [...connArgs, "-c", "VACUUM"]
-      });
+      const vacuumCmd = new Deno.Command(psql, { args: [...connArgs, "-c", "VACUUM"] });
       const vacuumOutput = await vacuumCmd.output();
+
       if (!vacuumOutput.success) {
         const stderr = new TextDecoder().decode(vacuumOutput.stderr).trim();
         throw new Error(`VACUUM failed: ${stderr}`);
       }
 
-      logger.info("Maintenance tasks completed");
+      logger.debug("Maintenance tasks completed");
     } catch (error) {
       throw new Error(`Maintenance failed: ${error}`);
     }

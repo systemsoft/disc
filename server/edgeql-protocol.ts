@@ -600,7 +600,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext
   ): Promise<{ data: any; warnings?: string[]; }> {
-    log.info("Executing SQL", {
+    log.debug("Executing SQL", {
       sessionId: context.session.sessionId,
       sql
     });
@@ -687,7 +687,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     context: Types.QueryContext
   ): Promise<void> {
-    log.info("Executing SET GLOBAL", {
+    log.debug("Executing SET GLOBAL", {
       sessionId: context.session.sessionId,
       sql
     });

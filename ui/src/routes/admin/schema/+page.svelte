@@ -369,7 +369,8 @@
     font-family: var(--font-mono);
     font-size: 0.75rem;
     gap: var(--grid-unit);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.05rem;
+    line-height: 1;
     text-transform: uppercase;
 
     input[type="checkbox"] {
@@ -606,7 +607,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Diff</title>
+  <title>Disc Viewer &bull; Diff Viewer</title>
 </svelte:head>
 
 <div class="schema-diff">

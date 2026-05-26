@@ -1,71 +1,62 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { discAPI } from '$lib/api/client';
+  /*** IMPORT ------------------------------------------- ***/
 
-  // P1-23: query editor wired to real /query endpoint. Result rendering
-  // adapts to whatever EdgeQL returns: an array of rows is rendered as a
-  // table (columns derived from the first row's keys); anything else falls
-  // back to a JSON pretty-print so scalar/single-object results are still
-  // readable.
-  interface TableResult {
-    columns: string[];
-    kind: 'table';
-    rows: any[][];
-  }
+  import { onMount } from "svelte";
+
+  /*** UTILITY ------------------------------------------ ***/
+
+  import { discAPI } from "$lib/api/client";
+
   interface JsonResult {
-    kind: 'json';
+    kind: "json";
     text: string;
   }
+
+  interface TableResult {
+    columns: string[];
+    kind: "table";
+    rows: any[][];
+  }
+
   type DisplayResult = (TableResult | JsonResult) & { executionTime: number };
 
-  let queryText = 'select User { name, email };';
-  let queryResult: DisplayResult | null = null;
+  let errorMessage = "";
   let isExecuting = false;
-  let errorMessage = '';
-  let savedQueries: Array<{name: string, query: string}> = [];
   let queryHistory: string[] = [];
+  let queryResult: DisplayResult | null = null;
+  let queryText = "select User { email, name };";
+  let savedQueries: Array<{name: string, query: string}> = [];
+
+  /*** RUNTIME ------------------------------------------ ***/
 
   onMount(() => {
-    const saved = localStorage.getItem('discSavedQueries');
-    if (saved) {
-      savedQueries = JSON.parse(saved);
-    }
+    const saved = localStorage.getItem("discSavedQueries");
 
-    const history = localStorage.getItem('discQueryHistory');
-    if (history) {
+    if (saved)
+      savedQueries = JSON.parse(saved);
+
+    const history = localStorage.getItem("discQueryHistory");
+
+    if (history)
       queryHistory = JSON.parse(history);
-    }
   });
 
-  function shapeResult(data: any, executionTime: number): DisplayResult {
-    if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
-      const columns = Array.from(
-        data.reduce((set: Set<string>, row: any) => {
-          for (const k of Object.keys(row)) set.add(k);
-          return set;
-        }, new Set<string>())
-      );
-      const rows = data.map((row: any) =>
-        columns.map((c) => {
-          const v = row[c];
-          if (v === null || v === undefined) return '';
-          if (typeof v === 'object') return JSON.stringify(v);
-          return v;
-        })
-      );
-      return { kind: 'table', columns, rows, executionTime };
-    }
-    return { kind: 'json', text: JSON.stringify(data, null, 2), executionTime };
+  /*** HELPER ------------------------------------------- ***/
+
+  function clearResults() {
+    queryResult = null;
+    errorMessage = "";
   }
 
   async function executeQuery() {
-    if (!queryText.trim()) return;
+    if (!queryText.trim())
+      return;
 
     isExecuting = true;
-    errorMessage = '';
+    errorMessage = "";
 
     queryHistory = [queryText, ...queryHistory.filter(q => q !== queryText)].slice(0, 20);
-    localStorage.setItem('discQueryHistory', JSON.stringify(queryHistory));
+    localStorage.setItem("discQueryHistory", JSON.stringify(queryHistory));
 
     const result = await discAPI.executeQuery(queryText);
     isExecuting = false;
@@ -73,35 +64,59 @@
     if (result.error) {
       errorMessage = result.error;
       queryResult = null;
+
       return;
     }
+
     queryResult = shapeResult(result.data, Math.round(result.durationMs));
   }
 
-  function saveQuery() {
-    const name = prompt('Enter a name for this query:');
-    if (name) {
-      savedQueries = [...savedQueries, { name, query: queryText }];
-      localStorage.setItem('discSavedQueries', JSON.stringify(savedQueries));
-    }
+  function formatQuery() {
+    // Simple formatting - in production would use proper parser
+    queryText = queryText
+      .replace(/\s+/g, " ")
+      .replace(/\{/g, " {\n  ")
+      .replace(/\}/g, "\n}")
+      .replace(/,/g, ",\n  ");
   }
 
   function loadQuery(query: string) {
     queryText = query;
   }
 
-  function formatQuery() {
-    // Simple formatting - in production would use proper parser
-    queryText = queryText
-      .replace(/\s+/g, ' ')
-      .replace(/\{/g, ' {\n  ')
-      .replace(/\}/g, '\n}')
-      .replace(/,/g, ',\n  ');
+  function saveQuery() {
+    const name = prompt("Enter a name for this query:");
+
+    if (name) {
+      savedQueries = [...savedQueries, { name, query: queryText }];
+      localStorage.setItem("discSavedQueries", JSON.stringify(savedQueries));
+    }
   }
 
-  function clearResults() {
-    queryResult = null;
-    errorMessage = '';
+  function shapeResult(data: any, executionTime: number): DisplayResult {
+    if (Array.isArray(data) && data.length > 0 && typeof data[0] === "object" && data[0] !== null) {
+      const columns = Array.from(
+        data.reduce((set: Set<string>, row: any) => {
+          for (const k of Object.keys(row)) {
+            set.add(k);
+          }
+
+          return set;
+        },
+        new Set<string>()
+      ));
+
+      const rows = data.map((row: any) =>
+        columns.map((c) => {
+          const v = row[c];
+          if (v === null || v === undefined) return "";
+          if (typeof v === "object") return JSON.stringify(v);
+          return v;
+        })
+      );
+      return { kind: "table", columns, rows, executionTime };
+    }
+    return { kind: "json", text: JSON.stringify(data, null, 2), executionTime };
   }
 </script>
 
@@ -110,14 +125,14 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - 120px);
-    max-width: 1400px;
     margin: 0 auto;
+    max-width: 1400px;
   }
 
   .editor-toolbar {
+    align-items: center;
     display: flex;
     justify-content: space-between;
-    align-items: center;
     margin-bottom: calc(var(--grid-unit) * 3);
 
     h1 {
@@ -138,15 +153,15 @@
   }
 
   .editor-sidebar {
-    width: 250px;
     display: flex;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 3);
+    width: 250px;
 
     .sidebar-section {
-      background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
+      /* background: var(--color-surface); */
+      /* border: 1px solid var(--color-border); */
+      /* border-radius: var(--border-radius); */
       padding: calc(var(--grid-unit) * 2);
 
       h3 {
@@ -162,83 +177,84 @@
     }
 
     .query-item {
-      padding: var(--grid-unit);
-      background: var(--color-background);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius);
-      color: var(--color-text);
+      /* background: var(--color-background); */
+      /* border: 1px solid var(--color-border); */
+      /* border-radius: var(--border-radius); */
+      /* color: var(--color-text); */
+      cursor: pointer;
       font-family: var(--font-mono);
       font-size: 0.75rem;
+      padding: var(--grid-unit);
       text-align: left;
-      cursor: pointer;
       transition: all var(--transition-fast);
 
       &:hover {
-        border-color: var(--color-primary);
-        background: var(--color-surface-hover);
+        /* border-color: var(--color-primary); */
+        /* background: var(--color-surface-hover); */
       }
 
       &.history-item {
         code {
-          color: var(--color-info);
+          /* color: var(--color-info); */
           font-size: 0.7rem;
         }
       }
     }
 
     .empty-text {
+      /* color: var(--color-text-dim); */
+      font-size: 0.75rem;
       padding: calc(var(--grid-unit) * 2);
       text-align: center;
-      color: var(--color-text-dim);
-      font-size: 0.75rem;
     }
   }
 
   .editor-main {
-    flex: 1;
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 3);
     overflow-y: auto;
   }
 
   .code-editor {
+    /* background: var(--color-surface); */
+    /* border: 1px solid var(--color-border); */
+    /* border-radius: var(--border-radius); */
     display: flex;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    overflow: hidden;
     min-height: 300px;
+    overflow: hidden;
     position: relative;
 
     .line-numbers {
-      padding: calc(var(--grid-unit) * 2);
-      background: var(--color-background-dark);
-      border-right: 1px solid var(--color-border);
+      /* background: var(--color-background-dark); */
+      /* border-right: 1px solid var(--color-border); */
       display: flex;
       flex-direction: column;
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      color: var(--color-text-dim);
-      line-height: 1.5em;
+      line-height: 1.5rem;
+      padding: calc(var(--grid-unit) * 2);
       user-select: none;
+      /* color: var(--color-text-dim); */
+
 
       span {
-        text-align: right;
-        padding-right: var(--grid-unit);
         min-width: 30px;
+        padding-right: var(--grid-unit);
+        text-align: right;
       }
     }
 
     .query-input {
+      /* background: transparent; */
+      /* border: none; */
+      /* color: var(--color-info); */
       flex: 1;
-      padding: calc(var(--grid-unit) * 2);
-      background: transparent;
-      border: none;
-      color: var(--color-info);
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      line-height: 1.5em;
+      line-height: 1.5rem;
+      padding: calc(var(--grid-unit) * 2);
       resize: none;
 
       &:focus {
@@ -252,16 +268,16 @@
   }
 
   .error-message {
-    display: flex;
     align-items: center;
-    gap: var(--grid-unit);
-    padding: calc(var(--grid-unit) * 2);
-    background: rgb(var(--color-danger-rgb) / 0.1);
-    border: 1px solid var(--color-danger);
-    border-radius: var(--border-radius);
     color: var(--color-danger);
+    display: flex;
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    gap: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 2);
+    /* background: rgb(var(--color-danger-rgb) / 0.1); */
+    /* border: 1px solid var(--color-danger); */
+    /* border-radius: var(--border-radius); */
 
     .error-icon {
       font-size: 1.25rem;
@@ -269,17 +285,17 @@
   }
 
   .query-results {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
+    /* background: var(--color-surface); */
+    /* border: 1px solid var(--color-border); */
+    /* border-radius: var(--border-radius); */
     overflow: hidden;
 
     .results-header {
-      display: flex;
       align-items: center;
+      /* border-bottom: 1px solid var(--color-border); */
+      display: flex;
       gap: calc(var(--grid-unit) * 2);
       padding: calc(var(--grid-unit) * 2);
-      border-bottom: 1px solid var(--color-border);
 
       h3 {
         font-size: 1rem;
@@ -287,17 +303,17 @@
       }
 
       .execution-time {
+        color: var(--color-success);
         font-family: var(--font-mono);
         font-size: 0.75rem;
-        color: var(--color-success);
       }
     }
 
     .results-json {
-      margin: 0;
-      padding: calc(var(--grid-unit) * 2);
-      background: var(--color-background-dark);
-      color: var(--color-info);
+      margin: 0; padding: calc(var(--grid-unit) * 2);
+
+      /* background: var(--color-background-dark); */
+      /* color: var(--color-info); */
       font-family: var(--font-mono);
       font-size: 0.875rem;
       max-height: 400px;
@@ -308,23 +324,23 @@
       overflow-x: auto;
 
       table {
-        width: 100%;
         border-collapse: collapse;
         font-family: var(--font-mono);
         font-size: 0.875rem;
+        width: 100%;
 
         th, td {
+          /* border-bottom: 1px solid var(--color-border); */
           padding: calc(var(--grid-unit) * 1.5);
           text-align: left;
-          border-bottom: 1px solid var(--color-border);
         }
 
         th {
-          background: var(--color-background-dark);
-          color: var(--color-primary);
+          /* background: var(--color-background-dark); */
+          /* color: var(--color-primary); */
           font-weight: 500;
+          letter-spacing: 0.05rem;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
         }
 
         tr:hover td {
@@ -339,35 +355,25 @@
   }
 </style>
 
-<div class="query-editor">
-  <div class="editor-toolbar">
-    <h1>Query Editor</h1>
-    <div class="toolbar-actions">
-      <button class="button" on:click={formatQuery}>
-        Format
-      </button>
-      <button class="button" on:click={saveQuery}>
-        Save
-      </button>
-      <button class="button primary" on:click={executeQuery} disabled={isExecuting}>
-        {isExecuting ? 'Executing...' : 'Execute'}
-      </button>
-    </div>
-  </div>
+<svelte:head>
+  <title>Disc Viewer &bull; Query Editor</title>
+</svelte:head>
 
+<div class="query-editor">
   <div class="editor-container">
     <div class="editor-sidebar">
       <div class="sidebar-section">
         <h3>Saved Queries</h3>
+
         <div class="query-list">
           {#each savedQueries as saved}
             <button
               class="query-item"
-              on:click={() => loadQuery(saved.query)}
-            >
+              onclick={() => loadQuery(saved.query)}>
               {saved.name}
             </button>
           {/each}
+
           {#if savedQueries.length === 0}
             <div class="empty-text">No saved queries</div>
           {/if}
@@ -376,15 +382,16 @@
 
       <div class="sidebar-section">
         <h3>History</h3>
+
         <div class="query-list">
           {#each queryHistory.slice(0, 5) as query}
             <button
               class="query-item history-item"
-              on:click={() => loadQuery(query)}
-            >
-              <code>{query.slice(0, 50)}...</code>
+              onclick={() => loadQuery(query)}>
+              <code>{query.slice(0, 50)}&hellip;</code>
             </button>
           {/each}
+
           {#if queryHistory.length === 0}
             <div class="empty-text">No history</div>
           {/if}
@@ -393,18 +400,26 @@
     </div>
 
     <div class="editor-main">
+      <div class="toolbar-actions">
+        <button class="button" onclick={formatQuery}>Format</button>
+        <button class="button" onclick={saveQuery}>Save</button>
+        <button class="button primary" onclick={executeQuery} disabled={isExecuting}>
+          {isExecuting ? "Executing..." : "Execute"}
+        </button>
+      </div>
+
       <div class="code-editor">
         <div class="line-numbers">
-          {#each queryText.split('\n') as _, i}
+          {#each queryText.split("\n") as _, i}
             <span>{i + 1}</span>
           {/each}
         </div>
+
         <textarea
-          bind:value={queryText}
-          placeholder="Enter your EdgeQL query..."
           class="query-input"
+          placeholder="Enter your EdgeQL query…"
           spellcheck="false"
-        />
+          bind:value={queryText}/>
       </div>
 
       {#if errorMessage}
@@ -421,10 +436,10 @@
             <span class="execution-time">
               Executed in {queryResult.executionTime}ms
             </span>
-            <button class="button" on:click={clearResults}>Clear</button>
+            <button class="button" onclick={clearResults}>Clear</button>
           </div>
 
-          {#if queryResult.kind === 'table'}
+          {#if queryResult.kind === "table"}
             <div class="results-table">
               <table>
                 <thead>

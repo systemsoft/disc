@@ -621,3 +621,66 @@ module default {
     assertStringIncludes((error as Error).message.toLowerCase(), "expected");
   }
 });
+
+/**
+ * Regression: a fresh `disc migrate` against a DB that already has the
+ * full schema applied (typical when `disc serve` auto-migrated on first
+ * run) used to diff against null and emit "create everything" ops that
+ * collided with existing types/tables — failing on the first CREATE TYPE
+ * with "type already exists". With baseline reconstruction via
+ * `disc_migrations.schema_modules`, a second apply of the same schema
+ * is now a no-op.
+ */
+Deno.test({
+  name: "Integration - second apply of same schema is a no-op (baseline reconstruction)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const { ConnectionPool } = await import("../lib/connection-pool.ts");
+    const { SchemaManager } = await import("./schema-manager.ts");
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+
+    const schema = `
+module default {
+  type Account {
+    required name: str;
+    required email: str {
+      constraint exclusive;
+    };
+  };
+}
+`;
+
+    // First apply — like `disc serve` auto-migrate on a fresh DB.
+    const pool1 = new ConnectionPool({ connectionString: dsn });
+    await pool1.initialize();
+    const mgr1 = new SchemaManager({ pool: pool1, dryRun: false });
+    await mgr1.initialize();
+    const first = await mgr1.applySchema(schema);
+    assertEquals(first.ok, true, first.ok ? "" : first.error.message);
+    if (first.ok) {
+      assertEquals(first.value.length, 1);
+    }
+    await mgr1.close();
+    await pool1.close();
+
+    // Second apply — like `disc migrate` from a fresh process. Without
+    // baseline reconstruction this used to fail with "type already exists";
+    // now it should be a no-op (zero results returned).
+    const pool2 = new ConnectionPool({ connectionString: dsn });
+    await pool2.initialize();
+    const mgr2 = new SchemaManager({ pool: pool2, dryRun: false });
+    await mgr2.initialize();
+    const second = await mgr2.applySchema(schema);
+    assertEquals(second.ok, true, second.ok ? "" : second.error.message);
+    if (second.ok) {
+      assertEquals(
+        second.value.length,
+        0,
+        "Expected zero migrations on a second apply of unchanged schema"
+      );
+    }
+    await mgr2.close();
+    await pool2.close();
+  }
+});

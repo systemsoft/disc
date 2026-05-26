@@ -10,6 +10,7 @@ import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { logger } from "../postgres/logger.ts";
+import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 export class MigrationTracker {
@@ -35,7 +36,7 @@ export class MigrationTracker {
     try {
       // Initialize connection pool
       await this.pool.initialize();
-      logger.info("Initialized migration tracker connection pool");
+      logger.debug("Initialized migration tracker connection pool");
 
       // Create migrations tracking table
       await this.pool.execute(`
@@ -79,6 +80,23 @@ export class MigrationTracker {
             WHERE table_name = 'disc_migrations' AND column_name = 'applied_order'
           ) THEN
             ALTER TABLE disc_migrations ADD COLUMN applied_order INTEGER NOT NULL DEFAULT 0;
+          END IF;
+        END $$;
+      `);
+
+      // Add schema_modules column for baseline reconstruction. Without it,
+      // a fresh `disc migrate` against a previously-migrated DB diffs
+      // against null and emits "create everything" ops that collide with
+      // existing types/tables. Existing rows are left NULL; the engine
+      // falls back to schema_hash comparison when the column is missing.
+      await this.pool.execute(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'disc_migrations' AND column_name = 'schema_modules'
+          ) THEN
+            ALTER TABLE disc_migrations ADD COLUMN schema_modules JSONB;
           END IF;
         END $$;
       `);
@@ -127,7 +145,8 @@ export class MigrationTracker {
    */
   async recordMigration(
     migration: Types.Migration,
-    result: Types.MigrationResult
+    result: Types.MigrationResult,
+    postStateModules?: Module[] | null
   ): Promise<Result<void, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -145,10 +164,11 @@ export class MigrationTracker {
         INSERT INTO disc_migrations (
           id, name, description, schema_hash, applied_at,
           duration_ms, rollback_sql, checksum, created_at, data_migration,
-          applied_order
+          applied_order, schema_modules
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          (SELECT COALESCE(MAX(applied_order), 0) + 1 FROM disc_migrations)
+          (SELECT COALESCE(MAX(applied_order), 0) + 1 FROM disc_migrations),
+          $11
         )
       `,
         [
@@ -161,7 +181,8 @@ export class MigrationTracker {
           result.rollbackSql || [],
           this.calculateMigrationChecksum(migration),
           migration.createdAt,
-          !!migration.dataMigrationFile
+          !!migration.dataMigrationFile,
+          postStateModules ? JSON.stringify(postStateModules) : null
         ]
       );
 
@@ -170,6 +191,125 @@ export class MigrationTracker {
       return Err(
         new MigrationError(
           `Failed to record migration: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
+   * Load the latest applied migration's stored schema modules. Returns
+   * Ok(null) when there are no applied migrations or the column was left
+   * NULL (pre-baseline-reconstruction rows). Callers use this to prime
+   * SchemaManager.currentModules so diffs run against the actual applied
+   * schema instead of treating null as "create everything from scratch".
+   */
+  async getLatestSchemaModules(): Promise<
+    Result<Module[] | null, MigrationError>
+  > {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      const result = await this.pool.query(`
+        SELECT schema_modules
+        FROM disc_migrations
+        ORDER BY applied_order DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return Ok(null);
+      }
+
+      const raw = (result.rows[0] as { schema_modules: unknown; }).schema_modules;
+      if (raw === null || raw === undefined) {
+        return Ok(null);
+      }
+
+      const modules = typeof raw === "string" ?
+        JSON.parse(raw) as Module[] :
+        raw as Module[];
+      return Ok(modules);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get latest schema modules: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
+   * Backfill `schema_modules` on the latest applied migration row.
+   * Called when the schema-hash fallback detects a no-op against a
+   * legacy row that lacks schema_modules — persisting the modules now
+   * means subsequent `disc migrate` runs prime currentModules directly
+   * from the row and skip the fallback entirely.
+   */
+  async backfillLatestSchemaModules(
+    modules: Module[]
+  ): Promise<Result<void, MigrationError>> {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      await this.pool.execute(
+        `
+        UPDATE disc_migrations
+        SET schema_modules = $1::jsonb
+        WHERE id = (
+          SELECT id FROM disc_migrations
+          ORDER BY applied_order DESC
+          LIMIT 1
+        )
+          AND schema_modules IS NULL
+        `,
+        [JSON.stringify(modules)]
+      );
+
+      return Ok(void 0);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to backfill schema modules: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
+   * Load the latest applied migration's schema_hash. Returns Ok(null)
+   * when no migrations have been applied. Used as the fallback baseline
+   * detector when schema_modules is NULL (pre-baseline-reconstruction
+   * rows): a fresh apply that produces the same hash is a no-op.
+   */
+  async getLatestSchemaHash(): Promise<
+    Result<string | null, MigrationError>
+  > {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      const result = await this.pool.query(`
+        SELECT schema_hash
+        FROM disc_migrations
+        ORDER BY applied_order DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return Ok(null);
+      }
+
+      const hash = (result.rows[0] as { schema_hash: string | null; }).schema_hash;
+      return Ok(hash ?? null);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get latest schema hash: ${error instanceof Error ? error.message : String(error)}`
         )
       );
     }

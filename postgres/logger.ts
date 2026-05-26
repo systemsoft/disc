@@ -17,7 +17,7 @@ export enum LogLevel {
 export class PostgresLogger {
   private inner;
 
-  constructor(_prefix = "[postgres]", _level = LogLevel.INFO) {
+  constructor(_prefix = "[postgres]", _level = LogLevel.DEBUG) {
     this.inner = getLogger("postgres");
   }
 

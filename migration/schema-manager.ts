@@ -949,6 +949,31 @@ export class SchemaManager {
       );
     }
 
+    // Hash-fallback baseline check (see applyModules for details).
+    if (
+      this.currentModules === null &&
+      this.engine.appliedMigrationCount() > 0
+    ) {
+      const latestHash = this.engine.getLatestAppliedSchemaHash();
+      const newHash = this.engine.hashSchemaForBaseline(newModules);
+      if (latestHash !== null && latestHash === newHash) {
+        this.currentModules = newModules;
+        this.currentSchema = this.modulesToSchema(newModules);
+        this.onSchemaChange?.(this.currentSchema);
+        return Ok([]);
+      }
+      if (latestHash !== null && latestHash !== newHash) {
+        return Err(
+          new MigrationError(
+            "Schema changes detected but the applied baseline can't be reconstructed: " +
+              "the latest disc_migrations row was recorded before schema snapshots were stored. " +
+              "Re-apply the existing schema once to record a baseline, then re-run `disc migrate`. " +
+              "If the database is empty / stale, delete the disc_migrations table and retry."
+          )
+        );
+      }
+    }
+
     // Plan migration: diff currentModules vs newModules
     const planResult = this.engine.planMigration(
       this.currentModules,
@@ -958,6 +983,16 @@ export class SchemaManager {
       return planResult;
     }
     const plan = planResult.value;
+
+    // Early-return for no-op plans (no operations to apply). See
+    // applyModules() for the same guard — keeps disc_migrations clean
+    // when a fresh process re-applies an unchanged schema.
+    if (plan.operationsCount === 0) {
+      this.currentModules = newModules;
+      this.currentSchema = this.modulesToSchema(newModules);
+      this.onSchemaChange?.(this.currentSchema);
+      return Ok([]);
+    }
 
     // gh/geldata#1838 + gh/geldata#1840: refuse data-destroying *and*
     // ambiguous ops by default. Callers pass `{ allowUnsafe: true }` to
@@ -1005,7 +1040,8 @@ export class SchemaManager {
     // the `db push` path — DDL still applies, but the engine doesn't
     // record the migration in `disc_migrations`.
     const execResult = await this.engine.executeMigration(plan, {
-      skipHistory: options?.skipHistory
+      skipHistory: options?.skipHistory,
+      postStateModules: newModules
     });
     if (!execResult.ok) {
       return execResult;
@@ -1077,6 +1113,44 @@ export class SchemaManager {
     // FK constraints to scalar "tables".
     const newModules = normalizeArrowsToProperties(rawModules);
 
+    // Hash-fallback baseline check: when `currentModules` couldn't be
+    // primed (latest applied migration row pre-dates the schema_modules
+    // column) but the engine has applied migrations recorded, comparing
+    // the new schema's hash against the latest applied schema_hash lets
+    // us detect the no-op case without a baseline. Without this, we'd
+    // diff against null and emit "create everything" ops that collide
+    // with existing types/tables.
+    if (
+      this.currentModules === null &&
+      this.engine.appliedMigrationCount() > 0
+    ) {
+      const latestHash = this.engine.getLatestAppliedSchemaHash();
+      const newHash = this.engine.hashSchemaForBaseline(newModules);
+      if (latestHash !== null && latestHash === newHash) {
+        // No-op: schema unchanged since last migrate. Adopt newModules
+        // as the baseline so subsequent calls on this instance don't
+        // re-trigger the fallback, and backfill the row in disc_migrations
+        // so future runs prime directly from schema_modules.
+        this.currentModules = newModules;
+        this.currentSchema = this.modulesToSchema(newModules);
+        this.onSchemaChange?.(this.currentSchema);
+        if (!this.dryRun) {
+          await this.engine.backfillLatestAppliedModules(newModules);
+        }
+        return Ok([]);
+      }
+      if (latestHash !== null && latestHash !== newHash) {
+        return Err(
+          new MigrationError(
+            "Schema changes detected but the applied baseline can't be reconstructed: " +
+              "the latest disc_migrations row was recorded before schema snapshots were stored. " +
+              "Re-apply the existing schema once to record a baseline, then re-run `disc migrate`. " +
+              "If the database is empty / stale, delete the disc_migrations table and retry."
+          )
+        );
+      }
+    }
+
     const planResult = this.engine.planMigration(
       this.currentModules,
       newModules
@@ -1085,6 +1159,18 @@ export class SchemaManager {
       return planResult;
     }
     const plan = planResult.value;
+
+    // Early-return for no-op plans: the differ found zero changes
+    // between the current baseline and the new schema. Without this,
+    // executeMigration would still record an empty row in disc_migrations
+    // (no DDL runs, but the bookkeeping insert fires), bloating history
+    // with synthetic "nothing changed" entries on every re-apply.
+    if (plan.operationsCount === 0) {
+      this.currentModules = newModules;
+      this.currentSchema = this.modulesToSchema(newModules);
+      this.onSchemaChange?.(this.currentSchema);
+      return Ok([]);
+    }
 
     if (!options?.allowUnsafe && !this.dryRun) {
       const flagged = this.engine.classifyUnsafeOperations(plan);
@@ -1121,7 +1207,8 @@ export class SchemaManager {
     }
 
     const execResult = await this.engine.executeMigration(plan, {
-      skipHistory: options?.skipHistory
+      skipHistory: options?.skipHistory,
+      postStateModules: newModules
     });
     if (!execResult.ok) {
       return execResult;
@@ -1461,6 +1548,12 @@ export class SchemaManager {
   /**
    * Initialize the SchemaManager. If a ConnectionPool was provided, creates
    * and initializes a MigrationEngine backed by that pool.
+   *
+   * After engine initialization, primes `currentModules` from the latest
+   * applied migration's stored schema_modules (when available). Without
+   * this, a fresh `disc migrate` against a previously-migrated DB would
+   * diff against null and emit "create everything" ops that collide with
+   * existing types/tables.
    */
   async initialize(): Promise<void> {
     const config: Types.MigrationConfig = {
@@ -1479,6 +1572,17 @@ export class SchemaManager {
 
     if (this.pool) {
       await this.engine.initialize();
+
+      // Prime the baseline from the latest applied migration's stored
+      // schema modules. Rows from before this column existed will return
+      // null — for those we fall back to schema_hash comparison inside
+      // applyModules/applySchema (no-op when hashes match, error
+      // otherwise).
+      const baseline = this.engine.getLatestAppliedModules();
+      if (baseline !== null) {
+        this.currentModules = normalizeArrowsToProperties(baseline);
+        this.currentSchema = this.modulesToSchema(this.currentModules);
+      }
     }
   }
 

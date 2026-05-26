@@ -201,9 +201,8 @@ export class DatabaseConnection {
   }
 
   async connect(): Promise<void> {
-    if (this.connected) {
+    if (this.connected)
       return;
-    }
 
     const maxRetries = this.config.maxRetries || 3;
     const retryDelay = this.config.retryDelay || 1000;
@@ -212,27 +211,22 @@ export class DatabaseConnection {
       try {
         await this.client.connect();
         this.connected = true;
-        logger.info(`Connected to PostgreSQL database`);
+        logger.debug(`Connected to PostgreSQL database`);
         return;
       } catch (error) {
-        logger.warn(
-          `Connection attempt ${attempt}/${maxRetries} failed: ${error}`
-        );
-        if (attempt < maxRetries) {
+        logger.debug(`Connection attempt ${attempt}/${maxRetries} failed: ${error}`);
+
+        if (attempt < maxRetries)
           await new Promise(resolve => setTimeout(resolve, retryDelay));
-        } else {
-          throw new Error(
-            `Failed to connect to database after ${maxRetries} attempts: ${error}`
-          );
-        }
+        else
+          throw new Error(`Failed to connect to database after ${maxRetries} attempts: ${error}`);
       }
     }
   }
 
   async query(sql: string, params?: any[]): Promise<QueryResult> {
-    if (!this.connected) {
+    if (!this.connected)
       await this.connect();
-    }
 
     try {
       const result = await this.client.queryObject(sql, params);
@@ -241,7 +235,7 @@ export class DatabaseConnection {
         rowCount: result.rowCount || 0
       };
     } catch (error) {
-      logger.error(`Query failed: ${error}`);
+      logger.debug(`Query failed: ${error}`);
       throw error;
     }
   }
@@ -254,22 +248,21 @@ export class DatabaseConnection {
     try {
       await this.client.queryArray(sql, params);
     } catch (error) {
-      logger.error(`Execute failed: ${error}`);
+      logger.debug(`Execute failed: ${error}`);
       throw error;
     }
   }
 
-  async transaction<T>(
-    fn: (conn: DatabaseConnection) => Promise<T>
-  ): Promise<T> {
-    if (!this.connected) {
+  async transaction<T>(fn: (conn: DatabaseConnection) => Promise<T>): Promise<T> {
+    if (!this.connected)
       await this.connect();
-    }
 
     await this.execute("BEGIN");
+
     try {
       const result = await fn(this);
       await this.execute("COMMIT");
+
       return result;
     } catch (error) {
       await this.execute("ROLLBACK");
@@ -281,8 +274,7 @@ export class DatabaseConnection {
     if (this.connected) {
       await this.client.end();
       this.connected = false;
-      logger.info("Database connection closed");
-      Deno.exit(1);
+      logger.debug("Database connection closed");
     }
   }
 
@@ -309,9 +301,9 @@ export class DatabaseConnection {
       if (result.rowCount === 0) {
         /*** Create database ***/
         await adminClient.queryArray(`CREATE DATABASE "${dbName}"`);
-        logger.info(`Created database: ${dbName}`);
+        logger.debug(`Created database: ${dbName}`);
       } else {
-        logger.info(`Database already exists: ${dbName}`);
+        logger.debug(`Database already exists: ${dbName}`);
       }
     } finally {
       await adminClient.end();
@@ -337,9 +329,8 @@ export class DatabaseConnection {
    */
   async executeMany(statements: string[]): Promise<void> {
     for (const statement of statements) {
-      if (statement.trim()) {
+      if (statement.trim())
         await this.execute(statement);
-      }
     }
   }
 }
@@ -365,10 +356,7 @@ export function createConnectionFromEnv(): DatabaseConnection {
 /**
  * Create a connection to a Disc-managed PostgreSQL instance
  */
-export function createDiscConnection(
-  instanceName: string,
-  socketDir?: string
-): DatabaseConnection {
+export function createDiscConnection(instanceName: string, socketDir?: string): DatabaseConnection {
   if (socketDir) {
     // Unix socket connection
     return new DatabaseConnection({
@@ -417,7 +405,7 @@ export async function createDatabase(mainDsn: string, dbName: string): Promise<v
   try {
     await adminConn.connect();
     await adminConn.execute(`CREATE DATABASE "${dbName}"`);
-    logger.info(`Created database: ${dbName}`);
+    logger.debug(`Created database: ${dbName}`);
   } finally {
     await adminConn.close();
   }
@@ -427,16 +415,14 @@ export async function createDatabase(mainDsn: string, dbName: string): Promise<v
  * Drop a PostgreSQL database by connecting to the `postgres` maintenance DB.
  * Closes the admin connection when done.
  */
-export async function dropDatabase(
-  mainDsn: string,
-  dbName: string
-): Promise<void> {
+export async function dropDatabase(mainDsn: string, dbName: string): Promise<void> {
   const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
   const adminConn = new DatabaseConnection(adminDsn);
+
   try {
     await adminConn.connect();
     await adminConn.execute(`DROP DATABASE "${dbName}"`);
-    logger.info(`Dropped database: ${dbName}`);
+    logger.debug(`Dropped database: ${dbName}`);
   } finally {
     await adminConn.close();
   }

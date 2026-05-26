@@ -865,7 +865,8 @@ export async function runUiBuild(rootDir: string = Deno.cwd()): Promise<UiBuildR
       args: ["--version"],
       stderr: "null",
       stdout: "null"
-    }).output();
+    })
+      .output();
 
     if (!probe.success)
       return { ran: false, reason: "bun --version exited non-zero — falling back to existing ui/build/" };
@@ -886,7 +887,8 @@ export async function runUiBuild(rootDir: string = Deno.cwd()): Promise<UiBuildR
       cwd: uiDir,
       stderr: "inherit",
       stdout: "inherit"
-    }).output();
+    })
+      .output();
 
     if (!install.success)
       throw new Error(`bun install exited ${install.code}`);
@@ -899,7 +901,8 @@ export async function runUiBuild(rootDir: string = Deno.cwd()): Promise<UiBuildR
     cwd: uiDir,
     stderr: "inherit",
     stdout: "inherit"
-  }).output();
+  })
+    .output();
 
   if (!build.success)
     throw new Error(`bun run build exited ${build.code}`);

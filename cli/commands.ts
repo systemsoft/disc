@@ -19,6 +19,7 @@ import { dbCommand } from "./db.ts";
 import { deployCommand, DeployOptions } from "./deploy.ts";
 import { ensurePgRunning } from "../postgres/ensure-running.ts";
 import { extractEmbeddedSdk } from "../codegen/sdk-extractor.ts";
+import { getLogger } from "../lib/logger.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
 import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
@@ -120,7 +121,7 @@ export class CLICommands {
   }
 
   async codegen(args: CLIArgs): Promise<void> {
-    console.log("🚀 Generating TypeScript types…");
+    getLogger("cli").info("Generating TypeScript types…");
 
     const outputDir = args.output || "./dbschema/disc-client";
     const schemaDir = args["schema-dir"] || "./dbschema";
@@ -132,7 +133,7 @@ export class CLICommands {
 
       if (schemaFile) {
         /*** Single-file mode (explicit --schema flag) ***/
-        console.log(`📋 Schema: ${schemaFile}`);
+        getLogger("cli").info(`Schema: ${schemaFile}`);
 
         try {
           await Deno.stat(schemaFile);
@@ -154,10 +155,10 @@ export class CLICommands {
 
         schema = loaded;
         const typeNames = Array.from(schema.types.keys()).join(", ");
-        console.log(`📖 Loaded types: ${typeNames}`);
+        getLogger("cli").info(`Loaded types: ${typeNames}`);
       } else {
         /*** Multi-file mode: discover schema files from directory ***/
-        console.log(`📋 Schema dir: ${schemaDir}`);
+        getLogger("cli").info(`Schema dir: ${schemaDir}`);
         const files = await Codegen.discoverSchemaFiles(schemaDir);
 
         if (files.length === 0) {
@@ -167,15 +168,15 @@ export class CLICommands {
           );
         }
 
-        console.log(`📖 Discovered ${files.length} schema file${files.length === 1 ? "" : "s"}: ${files.map(f => f.split("/").pop()).join(", ")}`);
+        getLogger("cli").info(`Discovered ${files.length} schema file${files.length === 1 ? "" : "s"}: ${files.map(f => f.split("/").pop()).join(", ")}`);
         schema = await Codegen.loadMultiFileSchema(files);
 
         const typeNames = Array.from(schema.types.keys()).join(", ");
-        console.log(`📖 Loaded types: ${typeNames}`);
+        getLogger("cli").info(`Loaded types: ${typeNames}`);
       }
 
-      console.log(`📋 Output: ${outputDir}`);
-      console.log(`📋 Target: ${target}`);
+      getLogger("cli").info(`Output: ${outputDir}`);
+      getLogger("cli").info(`Target: ${target}`);
 
       /*** Generate TypeScript code ***/
       const config: Partial<Codegen.CodegenConfig> = {
@@ -189,12 +190,12 @@ export class CLICommands {
         formatOutput: args["no-format"] !== true
       };
 
-      console.log(`⚙️  Generating code…`);
+      getLogger("cli").info(`Generating code…`);
       const result = Codegen.generateTypeScript(schema, config);
 
       if (result.errors.length > 0) {
-        console.error(`❌ Generation failed with errors:`);
-        result.errors.forEach(error => console.error(`   ${error}`));
+        getLogger("cli").error(`Generation failed with errors:`);
+        result.errors.forEach(error => getLogger("cli").error(`  ${error}`));
         return;
       }
 
@@ -206,31 +207,29 @@ export class CLICommands {
       const sdkResult = await extractEmbeddedSdk(sdkTargetDir, VERSION);
 
       if (!sdkResult.alreadyExtracted && sdkResult.extracted > 0)
-        console.log(`📦 Extracting SDK to ${sdkTargetDir}/ (${sdkResult.extracted} files)`);
+        getLogger("cli").info(`Extracting SDK to ${sdkTargetDir}/ (${sdkResult.extracted} files)`);
 
       /*** Write files to disk ***/
-      console.log(`💾 Writing ${result.files.length} files…`);
+      getLogger("cli").info(`Writing ${result.files.length} file${result.files.length === 1 ? "" : "s"}…`);
       await Codegen.writeGeneratedFiles(result, ".");
 
       /*** Show summary ***/
-      console.log(`\n📊 Generation Summary:`);
-      console.log(`   Files generated: ${result.files.length}`);
-      console.log(`   Types generated: ${Array.from(schema.types.keys()).length}`);
-      console.log(`   Warnings: ${result.warnings.length}`);
-      console.log(`   Errors: ${result.errors.length}`);
+      getLogger("cli").info(`Generation Summary:`);
+      getLogger("cli").info(`  Files generated: ${result.files.length}`);
+      getLogger("cli").info(`  Types generated: ${Array.from(schema.types.keys()).length}`);
+      getLogger("cli").info(`  Warnings: ${result.warnings.length}`);
+      getLogger("cli").info(`  Errors: ${result.errors.length}`);
 
-      if (result.warnings.length > 0) {
-        console.log(`\n⚠️  Warnings:`);
-        result.warnings.forEach(warning => console.log(`   ${warning}`));
-      }
+      if (result.warnings.length > 0)
+        result.warnings.forEach(warning => getLogger("cli").warn(`${warning}`));
 
-      console.log(`\n✅ TypeScript generation complete!`);
-      console.log(`💡 Usage example:`);
-      console.log(`   import { DiscClient } from "${outputDir}/index.ts";`);
-      console.log(`   const client = new DiscClient({ host: "localhost", port: 5656 });`);
-      console.log(`   const users = await client.user.select();`);
+      getLogger("cli").info(`TypeScript generation complete!`);
+      getLogger("cli").info(`  Usage example:`);
+      getLogger("cli").info(`  import { DiscClient } from "${outputDir}/index.ts";`);
+      getLogger("cli").info(`  const client = new DiscClient({ host: "localhost", port: 5656 });`);
+      getLogger("cli").info(`  const users = await client.user.select();`);
     } catch (error) {
-      console.error(`❌ Failed to generate types: ${(error as Error).message}`);
+      getLogger("cli").error(`Failed to generate types: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -645,7 +644,7 @@ export class CLICommands {
    * Start the Disc server
    */
   async serve(options: ServeOptions): Promise<void> {
-    console.log("🚀 Starting Disc Database Server…");
+    getLogger("cli").debug("Starting Disc Database Server…");
 
     try {
       const ctx = resolveProjectContext();
@@ -653,20 +652,20 @@ export class CLICommands {
       /*** Start PostgreSQL if managed. `disc serve` is a long-running process, so the health
            monitor is wanted here (restart PG on crash). ***/
       if (ctx?.managed) {
-        console.log(`📦 Starting PostgreSQL for project: ${ctx.projectName}`);
+        getLogger("cli").debug(`Starting PostgreSQL for project: ${ctx.projectName}`);
         const { dsn, wasStarted } = await ensurePgRunning(ctx, { withMonitor: true });
         Deno.env.set("DATABASE_URL", dsn);
 
-        console.log(
+        getLogger("cli").debug(
           wasStarted ?
-            "✅ PostgreSQL started" :
-            "✅ PostgreSQL already running"
+            "PostgreSQL started" :
+            "PostgreSQL already running"
         );
 
-        console.log(`📡 Connection: ${dsn}`);
+        getLogger("cli").debug(`Connection: ${dsn}`);
       } else if (ctx?.backendDsn) {
         Deno.env.set("DATABASE_URL", ctx.backendDsn);
-        console.log(`📡 External database: ${ctx.backendDsn}`);
+        getLogger("cli").debug(`External database: ${ctx.backendDsn}`);
       }
 
       const instanceName = ctx?.instanceName;
@@ -708,10 +707,9 @@ export class CLICommands {
       const appliedSdl = load?.appliedSdl ?? "";
       const schemaDir = options.schemaDir ?? "./dbschema";
 
-      const watchSource: import("../server/admin/schema-watch.ts").SchemaWatchSource =
-        load?.singleFile ?
-          { kind: "file", path: load.singleFile } :
-          { dir: schemaDir, kind: "dir" };
+      const watchSource: import("../server/admin/schema-watch.ts").SchemaWatchSource = load?.singleFile ?
+        { kind: "file", path: load.singleFile } :
+        { dir: schemaDir, kind: "dir" };
 
       if (load) {
         const objectTypeCount = Array
@@ -720,11 +718,12 @@ export class CLICommands {
           .length;
 
         if (load.sources.length > 1) {
-          console.log(
-            `  Loaded schema with ${objectTypeCount} object types from ${load.sources.length} files (${load.sources.map(f => f.split("/").pop()).join(", ")})`
+          getLogger("cli").info(
+            `Loaded schema with ${objectTypeCount} object types from ${load.sources.length} ` +
+              `files (${load.sources.map(f => f.split("/").pop()).join(", ")})`
           );
         } else {
-          console.log(`  Loaded schema with ${objectTypeCount} object types from ${load.sources[0]}`);
+          getLogger("cli").info(`Loaded schema with ${objectTypeCount} object types from ${load.sources[0]}`);
         }
 
         /*** Auto-migrate on dev (managed PG only). External DSN is treated as user-managed;
@@ -734,21 +733,21 @@ export class CLICommands {
         if (ctx?.managed)
           await this.autoMigrateOnServe(load.modules);
         else
-          console.log(`  💡 External DSN — run ’disc migrate’ to apply schema changes.`);
+          getLogger("cli").debug(`External DSN — run "disc migrate" to apply schema changes.`);
       } else {
-        console.log("  ⚠️  No schema files found in ./dbschema (looked for *.disc).");
-        console.log("     Falling back to in-memory test schema. Queries against");
-        console.log("     User/Post/Status will fail because no tables exist in");
-        console.log(`     PostgreSQL. Run ’disc init’ or create a schema file and`);
-        console.log(`     ’disc migrate’ before issuing queries.`);
+        getLogger("cli").warn("No schema files found in ./dbschema (looked for *.disc).");
+        getLogger("cli").warn("  Falling back to in-memory test schema. Queries against");
+        getLogger("cli").warn("  User/Post/Status will fail because no tables exist in");
+        getLogger("cli").warn(`  PostgreSQL. Run "disc init" or create a schema file and`);
+        getLogger("cli").warn(`  "disc migrate" before issuing queries.`);
       }
 
       /*** Log auth status ***/
       if (options.jwtSecret || Deno.env.get("DISC_JWT_SECRET"))
-        console.log("🔐 Authentication enabled");
+        getLogger("cli").info("Authentication enabled");
 
       if (options.enableAccessPolicies || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES"))
-        console.log("🛡️ Access policies enabled");
+        getLogger("cli").info("Access policies enabled");
 
       /*** Create server from environment variables, passing schema if available ***/
       const server = schema ?
@@ -790,7 +789,7 @@ export class CLICommands {
 
       for (const signal of signals) {
         Deno.addSignalListener(signal, async () => {
-          console.log(`\n📡 Received ${signal}, shutting down gracefully…`);
+          getLogger("cli").debug(`Received ${signal}, shutting down gracefully…`);
           await server.stop();
 
           if (instanceName) {
@@ -799,7 +798,7 @@ export class CLICommands {
                  as `disc stop`. ***/
             await this.postgresManager.discoverInstances();
             await this.postgresManager.stopInstance(instanceName);
-            console.log("✅ PostgreSQL stopped");
+            getLogger("cli").debug("PostgreSQL stopped");
           }
 
           Deno.exit(0);
@@ -809,7 +808,8 @@ export class CLICommands {
       /*** Start the server ***/
       await server.start();
     } catch (error) {
-      console.error(`❌ Failed to start server: ${(error as Error).message}`);
+      getLogger("cli").error(`Failed to start server.`);
+      getLogger("cli").info(`Try "disc start" and try again.`);
       throw error;
     }
   }
@@ -834,50 +834,51 @@ export class CLICommands {
     const foreground = args.foreground === true;
     const useMonitor = foreground && !args["no-monitor"];
 
-    console.log(`🚀 Starting PostgreSQL for project: ${projectName}`);
+    getLogger("cli").debug(`Starting PostgreSQL for project: ${projectName}`);
 
     try {
       if (ctx?.managed) {
-        const { instance, dsn, wasStarted } = await ensurePgRunning(ctx, {
-          withMonitor: useMonitor
-        });
+        const { instance, dsn, wasStarted } = await ensurePgRunning(ctx, { withMonitor: useMonitor });
         const status = await instance.status();
-        console.log(
+
+        getLogger("cli").debug(
           wasStarted ?
-            "✅ PostgreSQL started successfully" :
-            "✅ PostgreSQL already running"
+            "PostgreSQL started successfully" :
+            "PostgreSQL already running"
         );
-        console.log(`📊 Status:`);
-        console.log(`   PID: ${status.pid || "N/A"}`);
-        console.log(`   Port: ${status.port || "Unix socket"}`);
-        console.log(`   Data: ${status.dataDir}`);
-        console.log(`   DSN: ${dsn}`);
+
+        getLogger("cli").debug(`Status:`);
+        getLogger("cli").debug(`  PID: ${status.pid || "N/A"}`);
+        getLogger("cli").debug(`  Port: ${status.port || "Unix socket"}`);
+        getLogger("cli").debug(`  Data: ${status.dataDir}`);
+        getLogger("cli").debug(`  DSN: ${dsn}`);
       } else {
         /*** Fallback to old behavior for non-context projects ***/
         let instance = this.postgresManager.getInstance(projectName);
 
         if (!instance) {
-          console.log("📋 Creating new PostgreSQL instance…");
+          getLogger("cli").debug("Creating new PostgreSQL instance…");
           instance = await this.postgresManager.createInstance(projectName, { port: args.port || 0 });
         }
 
         await this.postgresManager.startInstance(projectName, useMonitor);
         const status = await instance.status();
-        console.log("✅ PostgreSQL started successfully");
-        console.log(`📊 Status:`);
-        console.log(`   PID: ${status.pid || "N/A"}`);
-        console.log(`   Port: ${status.port || "Unix socket"}`);
-        console.log(`   Data: ${status.dataDir}`);
-        console.log(`   DSN: ${instance.dsn()}`);
+        getLogger("cli").debug("PostgreSQL started successfully");
+        getLogger("cli").debug(`Status:`);
+        getLogger("cli").debug(`  PID: ${status.pid || "N/A"}`);
+        getLogger("cli").debug(`  Port: ${status.port || "Unix socket"}`);
+        getLogger("cli").debug(`  Data: ${status.dataDir}`);
+        getLogger("cli").debug(`  DSN: ${instance.dsn()}`);
       }
 
       if (foreground) {
-        console.log(
-          `\n📡 Running in foreground (--foreground). Press Ctrl-C to stop the health monitor; PostgreSQL itself will keep running until \`disc stop\`.`
+        getLogger("cli").debug(
+          `Running in foreground (--foreground). Press Ctrl-C to stop the health monitor; ` +
+            `PostgreSQL itself will keep running until "disc stop".`
         );
       }
     } catch (error) {
-      console.error(`❌ Failed to start PostgreSQL: ${(error as Error).message}`);
+      getLogger("cli").error(`Failed to start PostgreSQL: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -993,46 +994,46 @@ export class CLICommands {
     quiet = false
   ): Promise<void> {
     if (!quiet && dryRun)
-      console.log("Applying migrations…");
+      getLogger("cli").info("Applying migrations…");
 
     if (!quiet && sources.length > 1)
-      console.log(`📖 Loaded ${sources.length} schema files: ${sources.map(f => f.split("/").pop()).join(", ")}`);
+      getLogger("cli").info(`Loaded ${sources.length} schema files: ${sources.map(f => f.split("/").pop()).join(", ")}`);
 
     if (dryRun) {
       /*** Dry-run: plan and show DDL without executing ***/
       const planResult = manager.planModules(modules);
 
       if (!planResult.ok) {
-        console.error(`Migration planning failed: ${planResult.error.message}`);
+        getLogger("cli").error(`Migration planning failed: ${planResult.error.message}`);
         return;
       }
 
       const plan = planResult.value;
 
       if (plan.operationsCount === 0) {
-        console.log("No migrations to apply - schema is up to date");
+        getLogger("cli").info("No migrations to apply - schema is up to date");
         return;
       }
 
-      console.log(`DRY RUN - ${plan.migrations.length} migration${plan.migrations.length === 1 ? "" : "s"} planned:`);
+      getLogger("cli").info(`DRY RUN - ${plan.migrations.length} migration${plan.migrations.length === 1 ? "" : "s"} planned:`);
 
       plan.migrations.forEach((migration, i) => {
-        console.log(`  ${i + 1}. ${migration.name}`);
-        console.log(`     ${migration.description}`);
+        getLogger("cli").info(`  ${i + 1}. ${migration.name}`);
+        getLogger("cli").info(`    ${migration.description}`);
       });
 
       const ddlResult = manager.generateDDL(plan);
 
       if (ddlResult.ok) {
-        console.log("\nDDL that would be executed:");
+        getLogger("cli").info("DDL that would be executed:");
 
         ddlResult.value.forEach((stmt, i) => {
           if (stmt.trim() && !stmt.startsWith("--"))
-            console.log(`   ${i + 1}. ${stmt}`);
+            getLogger("cli").info(`  ${i + 1}. ${stmt}`);
         });
       }
 
-      console.log("\nNo changes applied (dry-run mode)");
+      getLogger("cli").info("No changes applied (dry-run mode)");
     } else {
       /*** Pre-flight: detect a running Disc server attached to the same database (gh/geldata#9034).
            Migration applies via the CLI’s direct PG connection and a running server’s in-memory
@@ -1044,9 +1045,9 @@ export class CLICommands {
         const detected = await manager.detectRunningServers();
 
         if (detected.ok && detected.value.length > 0 && !quiet) {
-          console.warn(`\n⚠ Detected ${detected.value.length} active Disc server connection${detected.value.length === 1 ? "" : "s"} on this database.`);
-          console.warn("  Migrate will succeed, but the server’s in-memory schema cache will be stale until reload.");
-          console.warn("  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.\n");
+          getLogger("cli").warn(`Detected ${detected.value.length} active Disc server connection${detected.value.length === 1 ? "" : "s"} on this database.`);
+          getLogger("cli").warn("  Migrate will succeed, but the server’s in-memory schema cache will be stale until reload.");
+          getLogger("cli").warn("  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.");
         }
       } catch {
         // Best-effort preflight: a probe failure is not a migration
@@ -1064,14 +1065,14 @@ export class CLICommands {
       const applyResult = await manager.applyModules(modules, { allowUnsafe });
 
       if (!applyResult.ok) {
-        console.error(`Migration execution failed: ${applyResult.error.message}`);
+        getLogger("cli").error(`Migration execution failed: ${applyResult.error.message}`);
         return;
       }
 
       const results = applyResult.value;
 
       if (results.length === 0 && !quiet) {
-        console.log("No migrations to apply - schema is up to date");
+        getLogger("cli").info("No migrations to apply - schema is up to date");
         return;
       }
     }
@@ -1107,25 +1108,25 @@ export class CLICommands {
       const status = await manager.getMigrationStatus();
 
       if (status.ok && status.value.applied > 0) {
-        console.log(`  💡 Existing migrations detected — run ’disc migrate’ to apply schema changes.`);
+        getLogger("cli").info(`Existing migrations detected — run "disc migrate" to apply schema changes.`);
         return;
       }
 
       const result = await manager.applyModules(modules);
 
       if (!result.ok) {
-        console.log(`  ⚠️  Auto-migrate failed: ${result.error.message}. Run ’disc migrate’ manually.`);
+        getLogger("cli").warn(`Auto-migrate failed: ${result.error.message}. Run "disc migrate" manually.`);
         return;
       }
 
       const applied = result.value.length;
 
       if (applied === 0)
-        console.log("  ✅ Schema up to date");
+        getLogger("cli").info("Schema up to date");
       else
-        console.log(`  ✅ Auto-applied ${applied} migration${applied === 1 ? "" : "s"}`);
+        getLogger("cli").info(`Auto-applied ${applied} migration${applied === 1 ? "" : "s"}`);
     } catch (error) {
-      console.log(`  ⚠️  Auto-migrate error: ${(error as Error).message}. Run ’disc migrate’ manually.`);
+      getLogger("cli").warn(`Auto-migrate error: ${(error as Error).message}. Run "disc migrate" manually.`);
     } finally {
       if (manager)
         await manager.close();
@@ -1135,40 +1136,40 @@ export class CLICommands {
   }
 
   private createMigration(manager: SchemaManager, modules: Module[]): void {
-    console.log("Creating new migration…");
+    getLogger("cli").debug("Creating new migration…");
     const planResult = manager.planModules(modules);
 
     if (!planResult.ok) {
-      console.error(`Migration planning failed: ${planResult.error.message}`);
+      getLogger("cli").error(`Migration planning failed: ${planResult.error.message}`);
       return;
     }
 
     const plan = planResult.value;
 
     if (plan.operationsCount === 0) {
-      console.log("No changes detected - schema is up to date");
+      getLogger("cli").debug("No changes detected - schema is up to date");
       return;
     }
 
-    console.log(`Migration Plan:`);
-    console.log(`   Operations: ${plan.operationsCount}`);
-    console.log(`   Estimated Duration: ${plan.estimatedDuration || 0}ms\n`);
+    getLogger("cli").info(`Migration Plan:`);
+    getLogger("cli").info(`  Operations: ${plan.operationsCount}`);
+    getLogger("cli").info(`  Estimated Duration: ${plan.estimatedDuration || 0}ms\n`);
 
     plan.migrations.forEach((migration, i) => {
-      console.log(`${i + 1}. ${migration.name} (${migration.id})`);
-      console.log(`   ${migration.description}`);
-      console.log(`   Operations: ${migration.operations.length}\n`);
+      getLogger("cli").info(`${i + 1}. ${migration.name} (${migration.id})`);
+      getLogger("cli").info(`  ${migration.description}`);
+      getLogger("cli").info(`  Operations: ${migration.operations.length}\n`);
     });
 
     /*** Generate DDL for preview ***/
     const ddlResult = manager.generateDDL(plan);
 
     if (ddlResult.ok) {
-      console.log("Generated DDL:");
+      getLogger("cli").info("Generated DDL:");
 
       ddlResult.value.forEach((stmt, i) => {
         if (stmt.trim() && !stmt.startsWith("--"))
-          console.log(`   ${i + 1}. ${stmt}`);
+          getLogger("cli").info(`  ${i + 1}. ${stmt}`);
       });
     }
 
@@ -1176,10 +1177,10 @@ export class CLICommands {
     const validationResult = manager.validateMigration(plan);
 
     if (!validationResult.ok)
-      console.log(`Validation warning: ${validationResult.error.message}`);
+      getLogger("cli").warn(`Validation warning: ${validationResult.error.message}`);
 
-    console.log("\nMigration created successfully");
-    console.log(`Run ’disc migrate’ to apply the migration`);
+    getLogger("cli").info("Migration created successfully");
+    getLogger("cli").info(`Run "disc migrate" to apply the migration`);
   }
 
   /**
@@ -1192,9 +1193,9 @@ export class CLICommands {
 
   private async handleRollback(manager: SchemaManager, args: CLIArgs): Promise<void> {
     if (!args.force) {
-      console.error("Error: Rollback is a destructive operation that may cause data loss.");
-      console.error("       Rolling back DROP TABLE cannot restore lost data.");
-      console.error("       Use --force to confirm you understand the risks.");
+      getLogger("cli").error("Error: Rollback is a destructive operation that may cause data loss.");
+      getLogger("cli").error("       Rolling back DROP TABLE cannot restore lost data.");
+      getLogger("cli").error("       Use --force to confirm you understand the risks.");
 
       return;
     }

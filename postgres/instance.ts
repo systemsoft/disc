@@ -58,7 +58,7 @@ export class PostgresInstance {
   }
 
   async init(): Promise<void> {
-    logger.info(`Initializing PostgreSQL instance: ${this.instanceName}`);
+    logger.debug(`Initializing PostgreSQL instance: ${this.instanceName}`);
 
     // When pgBinDir was provided via options, skip the download entirely.
     // Otherwise, download/verify the PostgreSQL binary as usual.
@@ -66,7 +66,7 @@ export class PostgresInstance {
       const pgDir = await this.downloader.ensurePostgres(this.postgresVersion);
       this.pgBinDir = join(pgDir, "bin");
     } else {
-      logger.info(`Using pre-existing PostgreSQL binaries at ${this.pgBinDir}`);
+      logger.debug(`Using pre-existing PostgreSQL binaries at ${this.pgBinDir}`);
     }
 
     // P2-02: if any of these paths already exists but is a regular
@@ -101,7 +101,7 @@ export class PostgresInstance {
     const pgVersionFile = join(this.dataDir, "PG_VERSION");
     try {
       await Deno.stat(pgVersionFile);
-      logger.info("Data directory already initialized");
+      logger.debug("Data directory already initialized");
       return;
     } catch {
       // Not initialized, proceed with initdb
@@ -120,7 +120,7 @@ export class PostgresInstance {
     const configPath = join(this.dataDir, "postgresql.conf");
     await Deno.writeTextFile(configPath, configContent);
 
-    logger.info(`PostgreSQL instance initialized at ${this.dataDir}`);
+    logger.debug(`PostgreSQL instance initialized at ${this.dataDir}`);
   }
 
   private async runInitDb(): Promise<void> {
@@ -151,7 +151,7 @@ export class PostgresInstance {
 
   async start(): Promise<void> {
     if (await this.isRunning()) {
-      logger.info("PostgreSQL instance is already running");
+      logger.debug("PostgreSQL instance is already running");
       return;
     }
 
@@ -166,7 +166,7 @@ export class PostgresInstance {
     // and has to `rm ~/.disc/instances/<name>/socket/.s.PGSQL.5432*` manually.
     await this.cleanupStaleSocket();
 
-    logger.info(`Starting PostgreSQL instance: ${this.instanceName}`);
+    logger.debug(`Starting PostgreSQL instance: ${this.instanceName}`);
 
     const pgCtlPath = join(this.pgBinDir!, "pg_ctl");
     const logsDir = join(this.dataDir, "..", "logs");
@@ -204,7 +204,7 @@ export class PostgresInstance {
     this.pid = parseInt(pidContent.split("\n")[0]);
     this.startedAt = new Date();
 
-    logger.info(`PostgreSQL started with PID ${this.pid}`);
+    logger.debug(`PostgreSQL started with PID ${this.pid}`);
 
     // Ensure the project database exists (initdb only creates the "disc" default db)
     await this.ensureDatabase();
@@ -232,20 +232,20 @@ export class PostgresInstance {
           [this.instanceName]
         );
         if (exists.rowCount && exists.rowCount > 0) {
-          logger.info(`Database "${this.instanceName}" already exists`);
+          logger.debug(`Database "${this.instanceName}" already exists`);
           return;
         }
         // Identifier is the instance name; assertSafeIdentifier is enforced
         // upstream (cli/init.ts validates the project name).
         await admin.queryArray(`CREATE DATABASE "${this.instanceName}"`);
-        logger.info(`Created database "${this.instanceName}"`);
+        logger.debug(`Created database "${this.instanceName}"`);
         return;
       } catch (err) {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
         // "already exists" race when concurrent starts collide.
         if (/already exists/i.test(msg)) {
-          logger.info(`Database "${this.instanceName}" already exists`);
+          logger.debug(`Database "${this.instanceName}" already exists`);
           return;
         }
         const transient = /starting up|not yet accepting|could not connect|ECONNREFUSED/i
@@ -254,9 +254,7 @@ export class PostgresInstance {
           break;
         }
         const delayMs = 150 * (attempt + 1);
-        logger.info(
-          `ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`
-        );
+        logger.debug(`ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`);
         await new Promise(r => setTimeout(r, delayMs));
       } finally {
         try {
@@ -296,11 +294,11 @@ export class PostgresInstance {
 
   async stop(): Promise<void> {
     if (!await this.isRunning()) {
-      logger.info("PostgreSQL instance is not running");
+      logger.debug("PostgreSQL instance is not running");
       return;
     }
 
-    logger.info(`Stopping PostgreSQL instance: ${this.instanceName}`);
+    logger.debug(`Stopping PostgreSQL instance: ${this.instanceName}`);
 
     const pgCtlPath = join(this.pgBinDir!, "pg_ctl");
 
@@ -331,7 +329,7 @@ export class PostgresInstance {
 
     this.pid = undefined;
     this.startedAt = undefined;
-    logger.info("PostgreSQL stopped");
+    logger.debug("PostgreSQL stopped");
   }
 
   private async forceStop(): Promise<void> {
@@ -367,7 +365,7 @@ export class PostgresInstance {
   }
 
   async restart(): Promise<void> {
-    logger.info(`Restarting PostgreSQL instance: ${this.instanceName}`);
+    logger.debug(`Restarting PostgreSQL instance: ${this.instanceName}`);
     await this.stop();
     await this.start();
   }

@@ -557,8 +557,10 @@ export class DiscShell {
     if (this.db) {
       try {
         await this.db.close();
+        Deno.exit(1);
       } catch {
         /*** best-effort — already exiting ***/
+        Deno.exit(1);
       }
     }
   }

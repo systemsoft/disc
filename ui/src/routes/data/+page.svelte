@@ -965,6 +965,12 @@
     /* color: var(--color-bg, #000); */
   }
 
+  .insert-wrap {
+    display: grid;
+    gap: calc(var(--grid-unit) * 2);
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .insert-form {
     display: flex;
     flex-direction: column;
@@ -1080,9 +1086,10 @@
 
     .empty-row {
       color: var(--uchu-yin-3);
+      font-family: var(--font-display);
       font-size: 0.875rem;
-      letter-spacing: 0.05rem;
-      text-transform: uppercase;
+      letter-spacing: 0.1rem;
+      text-transform: lowercase;
       user-select: none;
     }
   }
@@ -1125,7 +1132,8 @@
         border-bottom: 1px solid var(--uchu-gray-2);
       }
 
-      input {
+      input,
+      select {
         border-bottom-color: var(--uchu-gray-1);
       }
     }
@@ -1139,14 +1147,36 @@
       padding: var(--grid-unit) calc(var(--grid-unit) * 2);
     }
 
+    input,
+    select {
+      padding: 0;
+      width: 100%;
+
+      + button {
+        margin-left: var(--grid-unit);
+        white-space: nowrap;
+      }
+    }
+
     input {
       border: none;
       border-bottom: 1px solid;
-      padding: 0;
-      width: 100%;
     }
 
-    .data-bit {
+    select {
+      border: 1px solid var(--uchu-gray-1);
+      border-radius: 0;
+    }
+
+    .data-links {
+      border-top: 1px solid var(--uchu-gray-1);
+      margin-top: calc(var(--grid-unit) * 2);
+      padding-bottom: calc(var(--grid-unit) * 1.25);
+      padding-top: calc(var(--grid-unit) * 2);
+    }
+
+    .data-bit,
+    .data-link {
       align-items: center;
       display: flex;
       flex-direction: row;
@@ -1174,6 +1204,15 @@
           color: var(--uchu-gray-1);
           content: "....................";
           position: absolute;
+        }
+
+        &.required {
+          &::before {
+            bottom: 0; right: 0;
+
+            content: "*";
+            position: absolute;
+          }
         }
       }
     }
@@ -1219,7 +1258,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Data</title>
+  <title>Disc Viewer &bull; Data Explorer</title>
 </svelte:head>
 
 <div class="data-viewer">
@@ -1232,7 +1271,6 @@
           class="type-item"
           class:active={selectedType?.name === type.name}
           onclick={() => selectType(type)}>
-          <!-- {type.module}:: -->
           {type.name}
         </button>
       {/each}
@@ -1315,65 +1353,105 @@
         {/if}
 
         {#if inserting}
-          <form class="insert-form" onsubmit={submitInsert}>
-            <h4>New row</h4>
-            {#each writableProps(selectedType) as prop}
-              <label>
-                {prop.name}{prop.required ? " *" : ""}
-                <span class="type-tag">{prop.type}</span>
-                <input
-                  bind:value={insertDraft[prop.name]}
-                  placeholder={prop.hasDefault ? "(default)" : ""}
-                  required={prop.required && !prop.hasDefault}
-                  type="text"/>
-              </label>
-            {/each}
+          <div class="insert-wrap">
+            <form class="data editing" onsubmit={submitInsert}>
+              {#if insertError}
+                <div class="error-banner">{insertError}</div>
+              {/if}
 
-            {#each selectedType.links as linkDef (linkDef.name)}
-              <label class="link-row">
-                {linkDef.name}{linkDef.required ? " *" : ""}
-                <span class="type-tag">
-                  → {linkDef.target}{linkDef.cardinality === "multi" ? "[]" : ""}
-                </span>
-                {#if (insertLinkMode[linkDef.name] ?? "select") === "select"}
-                  {#if linkDef.cardinality === "multi"}
-                    <select multiple bind:value={insertLinkDraft[linkDef.name]}>
-                      {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
-                        <option value={opt.id}>{opt.label}</option>
-                      {/each}
-                    </select>
-                  {:else}
-                    <select bind:value={insertLinkDraft[linkDef.name]}>
-                      <option value="">{linkDef.required ? "Select…" : "(none)"}</option>
-                      {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
-                        <option value={opt.id}>{opt.label}</option>
-                      {/each}
-                    </select>
-                  {/if}
-                {:else}
+              <header class="data-header">New {selectedType.name}</header>
+
+              {#each writableProps(selectedType) as prop}
+                <div class="data-bit">
+                  <label
+                    class="parameter"
+                    class:required={prop.required}
+                    for={`insert-${prop.name}`}
+                    style={`--ch: ${prop.name.length}ch`}>{prop.name}</label>
+
                   <input
-                    bind:value={insertLinkDraft[linkDef.name]}
-                    placeholder={linkDef.cardinality === "multi" ? "UUIDs (comma-separated)" : "UUID"}
-                    type="text"/>
-                {/if}
-                <button
-                  class="button button-small button-secondary link-mode-toggle"
-                  onclick={() => toggleLinkMode(linkDef)}
-                  type="button">
-                  {(insertLinkMode[linkDef.name] ?? "select") === "select" ? "Enter UUID" : "Choose from list"}
-                </button>
-              </label>
-            {/each}
+                    autocorrect="off"
+                    id={`insert-${prop.name}`}
+                    placeholder={prop.hasDefault ? "(default)" : ""}
+                    required={prop.required && !prop.hasDefault}
+                    spellcheck="false"
+                    type="text"
+                    bind:value={insertDraft[prop.name]}/>
+                </div>
+              {/each}
 
-            {#if insertError}
-              <div class="error-banner">{insertError}</div>
-            {/if}
+              {#if selectedType.links.length}
+                <div class="data-links">
+                  {#each selectedType.links as linkDef (linkDef.name)}
+                    <div class="data-link">
+                      <label
+                        class="parameter"
+                        class:required={linkDef.required}
+                        for={`insert-${linkDef.name}`}
+                        style={`--ch: ${linkDef.name.length}ch`}>{linkDef.name}</label>
 
-            <div class="form-actions">
-              <button type="submit" class="button" disabled={insertSubmitting}>{insertSubmitting ? "Saving…" : "Save"}</button>
-              <button type="button" class="button button-secondary" onclick={cancelInsert}>Cancel</button>
-            </div>
-          </form>
+                      <!--/
+                      {linkDef.name}{linkDef.required ? " *" : ""}
+                      <span class="type-tag">→ {linkDef.target}{linkDef.cardinality === "multi" ? "[]" : ""}</span>
+                      /-->
+
+                      {#if (insertLinkMode[linkDef.name] ?? "select") === "select"}
+                        {#if linkDef.cardinality === "multi"}
+                          <select id={`insert-${linkDef.name}`} multiple bind:value={insertLinkDraft[linkDef.name]}>
+                            {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
+                              <option value={opt.id}>{opt.label}</option>
+                            {/each}
+                          </select>
+                        {:else}
+                          <select id={`insert-${linkDef.name}`} bind:value={insertLinkDraft[linkDef.name]}>
+                            <option value="">{linkDef.required ? "Select…" : "(none)"}</option>
+                            {#each (linkOptions[linkDef.target] ?? []) as opt (opt.id)}
+                              <option value={opt.id}>{opt.label}</option>
+                            {/each}
+                          </select>
+                        {/if}
+                      {:else}
+                        <input
+                          autocorrect="off"
+                          id={`insert-${linkDef.name}`}
+                          placeholder={linkDef.cardinality === "multi" ? "UUIDs (comma-separated)" : "UUID"}
+                          spellcheck="false"
+                          type="text"
+                          bind:value={insertLinkDraft[linkDef.name]}/>
+                      {/if}
+
+                      <button
+                        class="button button-small button-secondary link-mode-toggle"
+                        onclick={() => toggleLinkMode(linkDef)}
+                        type="button">
+                        {(insertLinkMode[linkDef.name] ?? "select") === "select" ? "Enter UUID" : "Choose from list"}
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              <footer class="data-actions">
+                <div></div>
+
+                <div class="actions">
+                  <button
+                    class="button"
+                    disabled={insertSubmitting}
+                    type="submit">
+                    {insertSubmitting ? "Saving…" : "Save"}
+                  </button>
+
+                  <button
+                    class="button button-secondary"
+                    onclick={cancelInsert}
+                    type="button">
+                    Cancel
+                  </button>
+                </div>
+              </footer>
+            </form>
+          </div>
         {/if}
 
         <aside class="type-filters">

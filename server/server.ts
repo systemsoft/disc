@@ -258,43 +258,46 @@ export class DiscServer {
   }
 
   async start(): Promise<void> {
-    logger.info("Starting Disc Database Server");
-    logger.info(`Configuration:
-  Host: ${this.config.host}
-  Port: ${this.config.port}
-  Database: ${this.config.databaseUrl}
-  Max Connections: ${this.config.maxConnections}
-  CORS: ${this.config.enableCors}
-  WebSockets: ${this.config.enableWebsockets}
-  Request Timeout: ${this.config.requestTimeout}ms
-  Bundled PostgreSQL: ${this.postgresInstance ? "yes" : "no"}`);
+    logger.debug("Starting Disc Database Server");
+
+    const configuration = [
+      "Configuration",
+      `Host: ${this.config.host}`,
+      `Port: ${this.config.port}`,
+      `Database: ${this.config.databaseUrl}`,
+      `Max Connections: ${this.config.maxConnections}`,
+      `CORS: ${this.config.enableCors}`,
+      `WebSockets: ${this.config.enableWebsockets}`,
+      `Request Timeout: ${this.config.requestTimeout}ms`,
+      `Bundled PostgreSQL: ${this.postgresInstance ? "yes" : "no"}`
+    ];
+
+    logger.debug(configuration.join(" :: "));
 
     try {
       // Initialize protocol handler (creates and warms up the connection pool)
       if (this.protocolHandler.initialize) {
         await this.protocolHandler.initialize();
-        logger.info("Protocol handler initialized (connection pool ready)");
+        logger.debug("Protocol handler initialized (connection pool ready)");
       }
 
       // Bootstrap live data-subscription infrastructure (Bundle L).
       // The pool is owned by the protocol handler; we reuse it so we
       // don't open yet another connection. Failures here are
       // non-fatal — the live-watch endpoint just stays unavailable.
-      if (this.config.enableDataWatch !== false) {
+      if (this.config.enableDataWatch !== false)
         await this.initializeDataWatch();
-      }
 
       // Initialize database registry for multi-database support
       if (this.config.enableMultiDatabase) {
         this.databaseRegistry = new DatabaseRegistry();
         await this.databaseRegistry.initialize(this.config.databaseUrl);
-        logger.info("DatabaseRegistry initialized for multi-database support");
+        logger.debug("DatabaseRegistry initialized for multi-database support");
       }
 
       // Initialize auth if jwtSecret is set and enableAuth is not explicitly false
-      if (this.config.jwtSecret && this.config.enableAuth !== false) {
+      if (this.config.jwtSecret && this.config.enableAuth !== false)
         await this.initializeAuth();
-      }
 
       // Initialize extensions
       if (this.extensionRegistry.size > 0) {
@@ -305,30 +308,31 @@ export class DiscServer {
             { types: new Map(), functions: new Map() },
           config: this.config
         });
+
         await this.extensionRegistry.initializeAll(extCtx);
 
         // Merge extension functions and types into the protocol handler schema
         const extFunctions = this.extensionRegistry.getAllFunctions();
         const extTypes = this.extensionRegistry.getAllTypes();
-        if (
-          (extFunctions.length > 0 || extTypes.length > 0) &&
-          this.protocolHandler.updateSchema
-        ) {
+
+        if ((extFunctions.length > 0 || extTypes.length > 0) && this.protocolHandler.updateSchema) {
           const handlerSchema: {
             types: Map<string, any>;
             functions: Map<string, any>;
           } = (this.protocolHandler as any).schema ||
             { types: new Map(), functions: new Map() };
+
           const merged = mergeSchemaAdditions(
             handlerSchema,
             extFunctions,
             extTypes
           );
+
           this.protocolHandler.updateSchema(merged);
-          logger.info(
-            `Merged ${extFunctions.length} extension function${extFunctions.length === 1 ? "" : "s"} and ${extTypes.length} extension type${
-              extTypes.length === 1 ? "" : "s"
-            } into schema`
+
+          logger.debug(
+            `Merged ${extFunctions.length} extension function${extFunctions.length === 1 ? "" : "s"} and ${extTypes.length} extension ` +
+              `type${extTypes.length === 1 ? "" : "s"} into schema`
           );
         }
       }
@@ -366,9 +370,7 @@ export class DiscServer {
           executor
         });
         this.binaryServer.start();
-        logger.info(
-          `Binary protocol server listening on port ${this.binaryServer.port}`
-        );
+        logger.info(`Binary protocol server listening on port ${this.binaryServer.port}`);
       }
 
       // Initialize HTTP server
@@ -439,6 +441,7 @@ export class DiscServer {
       this.signal_handler = () => {
         this.stop();
       };
+
       Deno.addSignalListener("SIGINT", this.signal_handler);
       Deno.addSignalListener("SIGTERM", this.signal_handler);
 
@@ -450,19 +453,14 @@ export class DiscServer {
           // runs as its own task; errors are caught + logged inside.
           // (gh/geldata#4278)
           void this.reloadConfig().catch(err => {
-            logger.error(
-              `SIGHUP config reload failed: ${err instanceof Error ? err.message : String(err)}`
-            );
+            logger.debug(`SIGHUP config reload failed: ${err instanceof Error ? err.message : String(err)}`);
           });
         };
+
         Deno.addSignalListener("SIGHUP", this.sighup_handler);
-        logger.info(
-          "SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart"
-        );
+        logger.debug("SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart");
       } else {
-        logger.info(
-          "SIGHUP config reload is not available on Windows; restart required for config changes"
-        );
+        logger.debug("SIGHUP config reload is not available on Windows; restart required for config changes");
       }
 
       // Capture the logging config that was active when the server
@@ -474,19 +472,20 @@ export class DiscServer {
       // Start the server (blocks until server.finished)
       await this.httpServer.start();
     } catch (error) {
-      logger.error(`Failed to start server: ${error}`);
+      logger.debug(`Failed to start server.`);
+      logger.info(`Try "disc start" and try again.`);
       throw error;
     }
   }
 
   async stop(): Promise<void> {
     // Make stop() idempotent -- safe to call multiple times
-    if (this.stopping) {
+    if (this.stopping)
       return;
-    }
+
     this.stopping = true;
 
-    logger.info("Stopping Disc Database Server");
+    logger.debug("Stopping Disc Database Server");
 
     // Remove signal handlers
     if (this.signal_handler) {
@@ -511,15 +510,13 @@ export class DiscServer {
     // Stop binary protocol server
     if (this.binaryServer) {
       await this.binaryServer.stop();
-      logger.info("Binary protocol server stopped");
+      logger.debug("Binary protocol server stopped");
     }
 
     if (this.httpServer) {
       // Drain in-flight requests before shutting down
       const drainTimeout = this.config.shutdownDrainTimeout ?? 30000;
-      logger.info(
-        `Draining in-flight requests (timeout: ${drainTimeout}ms)`
-      );
+      logger.debug(`Draining in-flight requests (timeout: ${drainTimeout}ms)`);
       await this.httpServer.drain(drainTimeout);
 
       await this.httpServer.stop();
@@ -529,38 +526,38 @@ export class DiscServer {
     if (this.dataWatchRegistry) {
       this.dataWatchRegistry.stop();
       this.dataWatchRegistry = undefined;
-      logger.info("Data-watch registry stopped");
+      logger.debug("Data-watch registry stopped");
     }
 
     // Shut down extensions
     if (this.extensionRegistry.size > 0) {
       await this.extensionRegistry.shutdownAll();
-      logger.info("Extensions shut down");
+      logger.debug("Extensions shut down");
     }
 
     // Close database registry pools
     if (this.databaseRegistry) {
       await this.databaseRegistry.close();
-      logger.info("DatabaseRegistry closed (all pools drained)");
+      logger.debug("DatabaseRegistry closed (all pools drained)");
     }
 
     // Close database connections in protocol handler (drain pool)
     if (this.protocolHandler.close) {
       await this.protocolHandler.close();
-      logger.info("Protocol handler closed (connection pool drained)");
+      logger.debug("Protocol handler closed (connection pool drained)");
     }
 
     // Close auth database connection
     if (this.auth_db) {
       await this.auth_db.close();
-      logger.info("Auth database connection closed");
+      logger.debug("Auth database connection closed");
     }
 
-    logger.info("Server stopped successfully");
+    logger.debug("Server stopped successfully");
   }
 
   /**
-   * Bootstrap the live data-subscription infrastructure (Bundle L).
+   * Bootstrap the live data-subscription infrastructure.
    *
    * Steps:
    *   1. Pull the connection pool from the protocol handler.
@@ -577,9 +574,7 @@ export class DiscServer {
       pool?: import("../lib/connection-pool.ts").ConnectionPool;
     };
     if (!handler.pool) {
-      logger.info(
-        "data-watch: skipped — protocol handler has no connection pool"
-      );
+      logger.debug("data-watch: skipped — protocol handler has no connection pool");
       return;
     }
     try {
@@ -592,23 +587,18 @@ export class DiscServer {
       const result = await bootstrapDataWatch({ pool: handler.pool });
       this.dataWatchRegistry = new DataWatchRegistry({ pool: handler.pool });
       await this.dataWatchRegistry.start();
-      logger.info(
-        `data-watch: ready (${result.wiredTables.length} table${result.wiredTables.length === 1 ? "" : "s"} wired)`
-      );
+      logger.debug(`data-watch: ready (${result.wiredTables.length} table${result.wiredTables.length === 1 ? "" : "s"} wired)`);
     } catch (err) {
       this.dataWatchRegistry = undefined;
-      logger.warn(
-        `data-watch: bootstrap failed; live data subscriptions disabled — ${err instanceof Error ? err.message : String(err)}`
-      );
+      logger.debug(`data-watch: bootstrap failed; live data subscriptions disabled — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   private async initializeAuth(): Promise<void> {
-    if (!this.config.jwtSecret) {
+    if (!this.config.jwtSecret)
       return;
-    }
 
-    logger.info("Initializing authentication system");
+    logger.debug("Initializing authentication system");
 
     // Create a dedicated database connection for auth
     this.auth_db = new DatabaseConnection(this.config.databaseUrl);
@@ -643,7 +633,7 @@ export class DiscServer {
       trustProxy: this.config.trustProxy
     });
 
-    logger.info("Authentication system initialized");
+    logger.debug("Authentication system initialized");
   }
 
   /**
@@ -667,7 +657,7 @@ export class DiscServer {
    * ignored — restart required.
    */
   async reloadConfig(): Promise<void> {
-    logger.info("SIGHUP received: reloading config from environment");
+    logger.debug("SIGHUP received: reloading config from environment");
 
     const next = buildEnvOptions(
       this.postgresInstance,
@@ -684,9 +674,7 @@ export class DiscServer {
       oldVal: unknown,
       newVal: unknown
     ): void => {
-      logger.info(
-        `config reload: ${field}: ${String(oldVal)} -> ${String(newVal)}`
-      );
+      logger.debug(`config reload: ${field}: ${String(oldVal)} -> ${String(newVal)}`);
       applied++;
     };
     const noteIgnored = (
@@ -694,9 +682,7 @@ export class DiscServer {
       oldVal: unknown,
       newVal: unknown
     ): void => {
-      logger.warn(
-        `config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`
-      );
+      logger.warn(`config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`);
       ignored++;
     };
 
@@ -754,73 +740,61 @@ export class DiscServer {
 
     // Logging — reconfigure the global logger if either knob changed.
     const nextLogging = readLoggingEnv();
-    if (
-      nextLogging.level !== this.last_log_level ||
-      nextLogging.format !== this.last_log_format
-    ) {
+
+    if (nextLogging.level !== this.last_log_level || nextLogging.format !== this.last_log_format) {
       noteApplied(
         "logLevel/format",
         `${this.last_log_level}/${this.last_log_format}`,
         `${nextLogging.level}/${nextLogging.format}`
       );
+
       configureLogging({
         format: nextLogging.format,
         level: nextLogging.level
       });
+
       this.last_log_level = nextLogging.level;
       this.last_log_format = nextLogging.format;
     }
 
     // ── Unsafe-to-reload fields ─────────────────────────────────────
-    if (next.host !== undefined && next.host !== cur.host) {
+    if (next.host !== undefined && next.host !== cur.host)
       noteIgnored("host", cur.host, next.host);
-    }
-    if (next.port !== undefined && next.port !== cur.port) {
+
+    if (next.port !== undefined && next.port !== cur.port)
       noteIgnored("port", cur.port, next.port);
-    }
-    if (
-      next.databaseUrl !== undefined && next.databaseUrl !== cur.databaseUrl
-    ) {
+
+    if (next.databaseUrl !== undefined && next.databaseUrl !== cur.databaseUrl)
       noteIgnored("databaseUrl", "(redacted)", "(redacted)");
-    }
-    if (next.jwtSecret !== undefined && next.jwtSecret !== cur.jwtSecret) {
+
+    if (next.jwtSecret !== undefined && next.jwtSecret !== cur.jwtSecret)
       noteIgnored("jwtSecret", "(redacted)", "(redacted)");
-    }
-    if (next.enableAuth !== undefined && next.enableAuth !== cur.enableAuth) {
+
+    if (next.enableAuth !== undefined && next.enableAuth !== cur.enableAuth)
       noteIgnored("enableAuth", cur.enableAuth, next.enableAuth);
-    }
-    if (
-      next.enableAccessPolicies !== undefined &&
-      next.enableAccessPolicies !== cur.enableAccessPolicies
-    ) {
+
+    if (next.enableAccessPolicies !== undefined && next.enableAccessPolicies !== cur.enableAccessPolicies) {
       noteIgnored(
         "enableAccessPolicies",
         cur.enableAccessPolicies,
         next.enableAccessPolicies
       );
     }
-    if (
-      next.enableWebsockets !== undefined &&
-      next.enableWebsockets !== cur.enableWebsockets
-    ) {
+
+    if (next.enableWebsockets !== undefined && next.enableWebsockets !== cur.enableWebsockets) {
       noteIgnored(
         "enableWebsockets",
         cur.enableWebsockets,
         next.enableWebsockets
       );
     }
-    if (
-      next.enableMetrics !== undefined &&
-      next.enableMetrics !== cur.enableMetrics
-    ) {
+
+    if (next.enableMetrics !== undefined && next.enableMetrics !== cur.enableMetrics)
       noteIgnored("enableMetrics", cur.enableMetrics, next.enableMetrics);
-    }
-    if (
-      next.maxConnections !== undefined &&
-      next.maxConnections !== cur.maxConnections
-    ) {
+
+    if (next.maxConnections !== undefined && next.maxConnections !== cur.maxConnections)
       noteIgnored("maxConnections", cur.maxConnections, next.maxConnections);
-    }
+
     // cacheMaxSize: the LRU caches live on the protocol handler and were
     // sized at construction time. Resizing in place would require pruning
     // entries to fit a smaller cap and re-keying the eviction list — not
@@ -839,19 +813,13 @@ export class DiscServer {
     if (cur.tls && this.httpServer) {
       try {
         await this.httpServer.reloadTls();
-        logger.info(
-          "config reload: TLS listener reloaded from on-disk cert/key"
-        );
+        logger.debug("config reload: TLS listener reloaded from on-disk cert/key");
       } catch (err) {
-        logger.error(
-          `config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`
-        );
+        logger.debug(`config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    logger.info(
-      `SIGHUP reload complete: ${applied} applied, ${ignored} ignored (unsafe)`
-    );
+    logger.debug(`SIGHUP reload complete: ${applied} applied, ${ignored} ignored (unsafe)`);
   }
 
   get_config(): Types.ServerConfig {
@@ -1156,7 +1124,7 @@ function readLoggingEnv(): {
     | "INFO"
     | "WARN"
     | "ERROR";
-  const format = (Deno.env.get("DISC_LOG_FORMAT") || "json") as "json" | "text";
+  const format = (Deno.env.get("DISC_LOG_FORMAT") || "text") as "json" | "text";
   return { format, level };
 }
 
