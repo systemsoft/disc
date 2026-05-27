@@ -604,7 +604,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       sessionId: context.session.sessionId,
       sql
     });
-    log.info("Query variables", {
+
+    log.debug("Query variables", {
       sessionId: context.session.sessionId,
       variables: JSON.stringify(variables)
     });

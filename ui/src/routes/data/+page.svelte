@@ -319,6 +319,18 @@
     return false;
   }
 
+  function isPropReadOnly(prop: string): boolean {
+    if (!selectedType)
+      return false;
+
+    const property = selectedType.properties.filter((p) => p.name === prop)[0];
+
+    if (property && property.readonly)
+      return true;
+
+    return false;
+  }
+
   function formatCell(value: any): string {
     if (value === null || value === undefined)
       return "";
@@ -1161,6 +1173,10 @@
     input {
       border: none;
       border-bottom: 1px solid;
+
+      &[readonly] {
+        cursor: default;
+      }
     }
 
     select {
@@ -1518,6 +1534,7 @@
                         <input
                           autocorrect="off"
                           id={`update-${col}`}
+                          readonly={isPropReadOnly(col)}
                           spellcheck="false"
                           type="text"
                           bind:value={editDraft[col]}/>

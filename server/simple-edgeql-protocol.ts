@@ -447,10 +447,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     const registry = this.options.databaseRegistry;
     if (registry && context.session.database) {
       const entry = registry.getDatabase(context.session.database);
-      if (entry) {
+
+      if (entry)
         return entry.pool;
-      }
     }
+
     return this.pool;
   }
 
@@ -459,16 +460,16 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext
   ): Promise<{ data: any; warnings?: string[]; }> {
-    log.info("Executing SQL", { sql });
-    log.info("Query variables", { variables: JSON.stringify(variables) });
-    log.info("Query session", { sessionId: context.session.sessionId });
+    log.debug("Executing SQL", { sql });
+    log.debug("Query variables", { variables: JSON.stringify(variables) });
+    log.debug("Query session", { sessionId: context.session.sessionId });
 
     if (this.options.dryRun) {
       return {
         data: {
+          dryRun: true,
           sql,
-          variables,
-          dryRun: true
+          variables
         },
         warnings: ["Query executed in dry-run mode"]
       };
@@ -481,11 +482,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (pool) {
       try {
         // Execute the SQL using the pool
-        const result = await pool.query(
-          sql,
-          this.prepareParameters(variables)
-        );
-
+        const result = await pool.query(sql, this.prepareParameters(variables));
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
 
@@ -510,12 +507,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         const dbError = error instanceof Error ?
           error :
           new Error(String(error));
+
         log.error("Database execution error", { error: dbError.message });
-        throw new DatabaseExecutionError(
-          `Database query failed: ${dbError.message}`,
-          sql,
-          dbError
-        );
+        throw new DatabaseExecutionError(`Database query failed: ${dbError.message}`, sql, dbError);
       }
     }
 
