@@ -19,6 +19,12 @@
 /*** EXPORT ------------------------------------------- ***/
 
 export interface ConfigKeyDef {
+  /**
+   * Live PostgreSQL value for this key. `null` when the key is secret
+   * (masked server-side), when the server has no pool, or when PostgreSQL
+   * exposes no setting under `pgName`.
+   */
+  currentValue?: string | null;
   defaultScope: "database" | "instance" | "session" | "system";
   defaultValue?: boolean | number | string;
   description?: string;
@@ -31,6 +37,14 @@ export interface ConfigKeyDef {
 
 export interface ConfigResponse {
   keys: ConfigKeyDef[];
+}
+
+/** Outcome of a `POST /config` edit. `error` is set iff the write failed. */
+export interface ConfigWriteResult {
+  currentValue?: string | null;
+  error?: string;
+  /** True when the value was persisted but needs a server restart to apply. */
+  pendingRestart?: boolean;
 }
 
 export interface ConnectionInfo {
@@ -229,6 +243,43 @@ export class DiscAPIClient {
       // deno-lint-ignore no-console
       console.error("Failed to fetch config:", error);
       return [];
+    }
+  }
+
+  /**
+   * POST /config — persist a single setting via `ALTER SYSTEM SET`. Returns
+   * the now-live value and whether a restart is still required, or `error`
+   * when the server rejects the write (unknown/secret key, read-only mode,
+   * or a value PostgreSQL won't accept). (#5988 + #6444)
+   */
+  async setConfig(name: string, value: string): Promise<ConfigWriteResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/config`, {
+        body: JSON.stringify({ name, value }),
+        headers: this.headers,
+        method: "POST"
+      });
+
+      const body = await response.json().catch(() => ({})) as {
+        currentValue?: string | null;
+        error?: string;
+        pendingRestart?: boolean;
+      };
+
+      if (!response.ok) {
+        return {
+          error: body.error ?? `Request failed (HTTP ${response.status})`
+        };
+      }
+
+      return {
+        currentValue: body.currentValue ?? null,
+        pendingRestart: body.pendingRestart ?? false
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
     }
   }
 

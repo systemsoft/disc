@@ -21,7 +21,7 @@ import type { DataWatchRegistry } from "./admin/data-watch-registry.ts";
 import { handleDataWatch } from "./admin/data-watch.ts";
 import { handleSchemaApply } from "./admin/schema-apply.ts";
 import { handleSchemaWatch } from "./admin/schema-watch.ts";
-import { handleGetConfig } from "./config-endpoint.ts";
+import { handleGetConfig, handleSetConfig } from "./config-endpoint.ts";
 import {
   ConnectionManager,
   SessionManager,
@@ -124,7 +124,7 @@ export class HttpServer {
     request: Request,
     info: Deno.ServeHandlerInfo
   ) => Response | Promise<Response>;
-  private cleanup_interval_ids: number[] = [];
+  private cleanup_interval_ids: ReturnType<typeof setInterval>[] = [];
   private startTime: Date;
   private in_flight_requests = 0;
   private shutting_down = false;
@@ -637,8 +637,14 @@ export class HttpServer {
         case "/migrations":
           return await this.handle_migrations(request);
         case "/config":
-          return handleGetConfig({
-            defaultHeaders: () => this.get_default_headers("application/json")
+          if (request.method === "POST") {
+            return await this.handle_config_write(request);
+          }
+          return await handleGetConfig({
+            defaultHeaders: () => this.get_default_headers("application/json"),
+            fetchCurrentValues: this.protocolHandler.getConfigValues ?
+              names => this.protocolHandler.getConfigValues!(names) :
+              undefined
           });
         default:
           return this.create_error_response("Not Found", 404, request);
@@ -1016,7 +1022,7 @@ export class HttpServer {
       const timeoutMs = this.config.requestTimeout;
 
       if (timeoutMs && timeoutMs > 0) {
-        let timerId: number | undefined;
+        let timerId: ReturnType<typeof setTimeout> | undefined;
 
         const timeoutPromise = new Promise<Types.QueryResponse>(
           (_resolve, reject) => {
@@ -1787,6 +1793,40 @@ export class HttpServer {
     return await handleGetMigrations({
       migrationsProvider: this.migrationsProvider,
       defaultHeaders: () => this.get_default_headers("application/json")
+    });
+  }
+
+  /**
+   * Handle `POST /config` — persist a single setting via `ALTER SYSTEM`.
+   * Refused in read-only mode (mirrors the query path's write gate) and
+   * when the protocol handler exposes no writer (dry-run / no pool).
+   */
+  private async handle_config_write(request: Request): Promise<Response> {
+    if (this.config.readOnly) {
+      return this.create_error_response(
+        "the server is currently in read-only mode; configuration cannot be changed",
+        403,
+        request
+      );
+    }
+    if (!this.protocolHandler.setConfigValue) {
+      return this.create_error_response(
+        "Configuration editing is not available",
+        503,
+        request
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(await request.text());
+    } catch {
+      return this.create_error_response("Invalid JSON", 400, request);
+    }
+
+    return await handleSetConfig(body, {
+      defaultHeaders: () => this.get_default_headers("application/json"),
+      setValue: (pgName, value) => this.protocolHandler.setConfigValue!(pgName, value)
     });
   }
 

@@ -742,6 +742,83 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   /**
+   * Resolve live PostgreSQL setting values for the given GUC names.
+   * Backs the `/config` admin endpoint's current-value column.
+   *
+   * `current_setting(name)` yields the same human-formatted string `SHOW`
+   * returns ("128MB", "30s", "on") rather than the raw block/unit count in
+   * `pg_settings.setting`. Restricting the SELECT to `pg_settings` rows
+   * guarantees `current_setting()` only ever sees names PostgreSQL knows,
+   * so it cannot throw on an unrecognized GUC. Keys absent from
+   * `pg_settings` simply don't appear in the result map (→ null upstream).
+   */
+  async getConfigValues(
+    pgNames: string[]
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (!this.pool || this.pool.isClosed() || pgNames.length === 0) {
+      return out;
+    }
+
+    const result = await this.pool.query(
+      "SELECT name, current_setting(name) AS value " +
+        "FROM pg_settings WHERE name = ANY($1::text[])",
+      [pgNames]
+    );
+    for (const row of result.rows) {
+      out.set(row.name as string, (row.value ?? null) as string | null);
+    }
+    return out;
+  }
+
+  /**
+   * Persist a new value for a single PostgreSQL GUC and report the value
+   * that is now live. Backs the `/config` admin endpoint's edit affordance.
+   *
+   * `ALTER SYSTEM SET` is the only write that round-trips through
+   * `getConfigValues()`: SESSION (`SET LOCAL`) is per-transaction and the
+   * `disc_config` table (DATABASE/INSTANCE scope) is not applied to pooled
+   * connections, so neither is visible on the next read. After writing we
+   * `pg_reload_conf()` so SIGHUP-class settings take effect immediately,
+   * then re-read. Restart-class settings (e.g. `shared_buffers`,
+   * `max_connections`) report `pendingRestart: true` and keep their old
+   * live value until the server restarts.
+   *
+   * `ALTER SYSTEM` is a utility statement and cannot be parameterized, so
+   * the value is interpolated as a single-quoted literal with embedded
+   * quotes doubled. `pgName` is whitelisted by the caller against the
+   * registry; we re-validate its identifier shape here as defense in depth
+   * since it is interpolated into DDL.
+   */
+  async setConfigValue(
+    pgName: string,
+    value: string
+  ): Promise<{ value: string | null; pendingRestart: boolean; }> {
+    if (!this.pool || this.pool.isClosed()) {
+      throw new Error("No database connection configured");
+    }
+    if (!/^[a-z_][a-z0-9_]*$/.test(pgName)) {
+      throw new Error(`Invalid configuration key: ${pgName}`);
+    }
+
+    const escaped = value.replace(/'/g, "''");
+    await this.pool.query(`ALTER SYSTEM SET ${pgName} = '${escaped}'`);
+    await this.pool.query("SELECT pg_reload_conf()");
+
+    const result = await this.pool.query(
+      "SELECT current_setting($1) AS value, " +
+        "(SELECT pending_restart FROM pg_settings WHERE name = $1) " +
+        "AS pending_restart",
+      [pgName]
+    );
+    const row = result.rows[0] ?? {};
+    return {
+      value: (row.value ?? null) as string | null,
+      pendingRestart: row.pending_restart === true
+    };
+  }
+
+  /**
    * Set the database registry for multi-database pool routing.
    */
   setDatabaseRegistry(registry: DatabaseRegistry): void {

@@ -374,6 +374,22 @@ export interface ProtocolHandler {
     active: number;
     waiters: number;
   } | null;
+  /**
+   * Resolve live PostgreSQL setting values for the given GUC names, keyed
+   * by GUC name. Backs the `/config` admin endpoint's current-value
+   * column. Returns an empty map when no pool is configured.
+   */
+  getConfigValues?(pgNames: string[]): Promise<Map<string, string | null>>;
+  /**
+   * Persist a new value for a single GUC (via `ALTER SYSTEM SET` + reload)
+   * and return the now-live value plus whether a restart is still required
+   * for it to take effect. Backs the `/config` edit affordance. Throws when
+   * no pool is configured or PostgreSQL rejects the value.
+   */
+  setConfigValue?(
+    pgName: string,
+    value: string
+  ): Promise<{ value: string | null; pendingRestart: boolean; }>;
 }
 
 export interface ConnectionManager {
