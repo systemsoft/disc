@@ -79,13 +79,13 @@ export class DataWatchRegistry {
   private pruneLookbackSeconds: number;
 
   private subscribers = new Map<string, DataWatchSubscriber>();
-  private debounceTimers = new Map<string, number>();
+  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pendingInvalidations = new Map<string, Set<string>>();
 
   /** Cursor: rows newer than this id have not yet been processed. */
   private lastSeenId = 0;
-  private pollTimer?: number;
-  private pruneTimer?: number;
+  private pollTimer?: ReturnType<typeof setInterval>;
+  private pruneTimer?: ReturnType<typeof setInterval>;
   private polling = false;
   private stopped = false;
 

@@ -204,7 +204,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
   const encoder = new TextEncoder();
   const abortController = new AbortController();
   let watcher: Deno.FsWatcher | undefined;
-  let debounceTimer: number | undefined;
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

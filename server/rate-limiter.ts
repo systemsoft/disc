@@ -31,7 +31,7 @@ export class RateLimiter {
   private readonly nowFn: () => number;
   private readonly buckets = new Map<string, Bucket>();
   private rejectedCount = 0;
-  private readonly cleanup_timer: number;
+  private readonly cleanup_timer: ReturnType<typeof setInterval>;
 
   constructor(config: RateLimitConfig) {
     this.refill_rate = config.requestsPerMinute / 60 / 1000;

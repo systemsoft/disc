@@ -40,7 +40,7 @@ interface PooledConnection {
 interface WaitQueueEntry {
   resolve: (conn: DatabaseConnection) => void;
   reject: (error: Error) => void;
-  timeoutId: number;
+  timeoutId?: ReturnType<typeof setTimeout>;
   /** Marked true when the entry times out; consumers skip it. (P2-28) */
   cancelled: boolean;
 }
@@ -63,10 +63,10 @@ export class ConnectionPool {
   private connectionToPooled: Map<DatabaseConnection, PooledConnection> = new Map();
   private idleConnections: PooledConnection[] = [];
   private waitQueue: WaitQueueEntry[] = [];
-  private cleanupIntervalId?: number;
+  private cleanupIntervalId?: ReturnType<typeof setInterval>;
   private closed = false;
   private activeCount = 0;
-  private leakTimers: Map<string, number> = new Map();
+  private leakTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private stats: PoolStatistics = {
     totalConnections: 0,
     activeConnections: 0,
@@ -186,7 +186,6 @@ export class ConnectionPool {
       const entry: WaitQueueEntry = {
         resolve,
         reject,
-        timeoutId: 0,
         cancelled: false
       };
       entry.timeoutId = setTimeout(() => {
@@ -265,7 +264,7 @@ export class ConnectionPool {
       return this.query(sql, params as any[]);
     }
 
-    let timerId: number | undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
 
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timerId = setTimeout(() => {
@@ -511,7 +510,7 @@ export class ConnectionPool {
       const heldMs = pooled.acquiredAt ?
         Date.now() - pooled.acquiredAt.getTime() :
         timeout;
-      logger.debug(
+      logger.warn(
         `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
           pooled.acquireStackTrace || "unavailable"
         }`

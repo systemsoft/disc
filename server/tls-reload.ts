@@ -64,7 +64,7 @@ export interface TlsCertWatcherOptions {
 export class TlsCertWatcher {
   private opts: Required<TlsCertWatcherOptions>;
   private watcher?: Deno.FsWatcher;
-  private debounceTimer?: number;
+  private debounceTimer?: ReturnType<typeof setTimeout>;
   private running = false;
   private loopPromise?: Promise<void>;
 

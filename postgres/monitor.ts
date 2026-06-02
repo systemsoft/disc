@@ -30,7 +30,7 @@ export class PostgresMonitor {
   private isMonitoring = false;
   private lastHealthStatus?: HealthStatus;
   private maxRestartAttempts: number;
-  private monitorHandle?: number;
+  private monitorHandle?: ReturnType<typeof setInterval>;
   private restartAttempts = 0;
   private restartDelayMs: number;
   private startupGraceMs: number;

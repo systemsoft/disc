@@ -95,7 +95,7 @@ export function handleDataWatch(options: DataWatchOptions): Response {
   const tableSet = new Set<string>(requestedTables);
   const subId = `dw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const encoder = new TextEncoder();
-  let heartbeatTimer: number | undefined;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

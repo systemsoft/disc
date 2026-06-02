@@ -43,7 +43,7 @@ export interface FileChangeEvent {
 
 export class WatchCommand {
   private abortController?: AbortController;
-  private debounceTimer?: number;
+  private debounceTimer?: ReturnType<typeof setTimeout>;
   private isWatching = false;
   private lastSchemaHash?: string;
 

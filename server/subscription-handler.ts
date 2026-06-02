@@ -24,14 +24,17 @@ export class SubscriptionHandler {
   private subscriptions = new Map<string, ActiveSubscription>();
   private connection_subscriptions = new Map<string, Set<string>>();
   private options: Required<SubscriptionOptions>;
-  private heartbeat_id: number | undefined;
-  private pending_timeouts = new Set<number>();
+  private heartbeat_id: ReturnType<typeof setInterval> | undefined;
+  private pending_timeouts = new Set<ReturnType<typeof setTimeout>>();
   /**
    * Per-subscription timeouts so stop_subscription() can cancel the
    * in-flight update timer. Before this, pending_timeouts was cleared only
    * on dispose() — churned subscriptions leaked a timer each. (P1-11)
    */
-  private subscription_timeouts = new Map<string, Set<number>>();
+  private subscription_timeouts = new Map<
+    string,
+    Set<ReturnType<typeof setTimeout>>
+  >();
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
@@ -176,7 +179,7 @@ export class SubscriptionHandler {
     this.send_data(subscription.websocket, subscription.id, initialData);
 
     // Start periodic updates (for demonstration/mock purposes)
-    const trackTimer = (id: number) => {
+    const trackTimer = (id: ReturnType<typeof setTimeout>) => {
       this.pending_timeouts.add(id);
       let subTimers = this.subscription_timeouts.get(subscription.id);
       if (!subTimers) {
