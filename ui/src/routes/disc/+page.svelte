@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount } from "svelte";
   import {
     discAPI,
     type SchemaLinkDescription,
     type SchemaTypeDescription,
-  } from '$lib/api/client';
-  import { layoutDisc, type OrbitalPoint } from '$lib/identity-disc-layout';
+  } from "$lib/api/client";
+  import { layoutDisc, type OrbitalPoint } from "$lib/identity-disc-layout";
 
   // Disc-original feature #3d — identity-disc visualization.
   //
-  // The TRON metaphor taken seriously: a row's outgoing links and
+  // The TRON metaphor taken seriously: a row’s outgoing links and
   // incoming references rendered as a literal disc — the centered
   // object at the middle, links radiating outward, linked objects
   // orbiting at the rim. Click an orbital to recenter on that object;
   // breadcrumb tracks recent centers so navigation is reversible.
   //
-  // Outgoing links read from the centered object's own row (one query).
+  // Outgoing links read from the centered object’s own row (one query).
   // Incoming references are discovered by walking the schema for any
   // (SourceType, linkName) pair whose link targets the centered type;
   // each such pair becomes one orbital cluster fetched via a forward
@@ -24,7 +24,7 @@
 
   interface OrbitalCluster {
     /** What the orbital represents — outgoing means "I link to that"; incoming means "they link to me". */
-    direction: 'outgoing' | 'incoming';
+    direction: "outgoing" | "incoming";
     /** Edge label drawn along the radius. */
     edgeLabel: string;
     /** Type name to navigate to when the orbital is clicked. */
@@ -53,13 +53,13 @@
   let typeIndex: Record<string, SchemaTypeDescription> = {};
   let loadingSchema = true;
 
-  let selectedType = '';
+  let selectedType = "";
   let objectList: Array<{ id: string; label: string }> = [];
-  let selectedObjectId = '';
+  let selectedObjectId = "";
 
   let discData: DiscData | null = null;
   let loadingDisc = false;
-  let loadError = '';
+  let loadError = "";
   let breadcrumb: Crumb[] = [];
 
   // SVG dimensions.
@@ -69,7 +69,7 @@
 
   function pickDisplayField(type: SchemaTypeDescription | undefined): string | null {
     if (!type) return null;
-    const preferred = ['name', 'title', 'email', 'label'];
+    const preferred = ["name", "title", "email", "label"];
     for (const n of preferred) {
       if (type.properties.some((p) => p.name === n)) return n;
     }
@@ -77,32 +77,57 @@
   }
 
   function rowLabel(row: any, displayField: string | null, fallbackId: string): string {
-    if (displayField && row && typeof row[displayField] === 'string') return row[displayField];
-    if (row && typeof row.id === 'string') return row.id.slice(0, 8) + '…';
-    return fallbackId.slice(0, 8) + '…';
+    if (displayField && row && typeof row[displayField] === "string") return row[displayField];
+    if (row && typeof row.id === "string") return row.id.slice(0, 8) + "…";
+    return fallbackId.slice(0, 8) + "…";
+  }
+
+  // Type names arrive bare (`Merchant`) with the module carried separately,
+  // but link targets arrive qualified for cross-module links (`api::ApiKey`).
+  // Resolve either form to its loaded type, and always re-qualify before a
+  // query so non-default modules compile. (Mirrors the data viewer.)
+  function findType(ref: string): SchemaTypeDescription | undefined {
+    if (ref.includes("::")) {
+      const [mod, name] = ref.split("::");
+      return types.find((t) => t.module === mod && t.name === name);
+    }
+    return typeIndex[ref] ?? types.find((t) => t.name === ref);
+  }
+
+  function qualify(type: SchemaTypeDescription): string {
+    return `${type.module}::${type.name}`;
+  }
+
+  /** Module-stripped name for display in the cramped disc nodes. */
+  function bare(ref: string): string {
+    return ref.includes("::") ? ref.split("::")[1] : ref;
   }
 
   onMount(async () => {
     const schema = await discAPI.getSchema();
     types = schema.types.filter((t) => !t.abstract);
     typeIndex = Object.fromEntries(types.map((t) => [t.name, t]));
-    if (types.length > 0) selectedType = types[0].name;
+    if (types.length > 0) selectedType = qualify(types[0]);
     loadingSchema = false;
   });
 
-  let lastSelectedType = '';
+  let lastSelectedType = "";
   $: if (selectedType !== lastSelectedType) {
     lastSelectedType = selectedType;
     objectList = [];
-    selectedObjectId = '';
+    selectedObjectId = "";
     if (selectedType) void loadObjectList(selectedType);
   }
 
-  async function loadObjectList(typeName: string) {
-    const type = typeIndex[typeName];
+  async function loadObjectList(typeRef: string) {
+    const type = findType(typeRef);
+    if (!type) {
+      objectList = [];
+      return;
+    }
     const display = pickDisplayField(type);
     const shape = display ? `{ id, ${display} }` : `{ id }`;
-    const query = `select ${typeName} ${shape} limit 25`;
+    const query = `select ${qualify(type)} ${shape} limit 25`;
     const result = await discAPI.executeQuery(query);
     if (result.error || !Array.isArray(result.data)) {
       objectList = [];
@@ -114,11 +139,16 @@
     }));
   }
 
-  function findIncomingPairs(typeName: string): Array<{ sourceType: string; link: SchemaLinkDescription }> {
-    const pairs: Array<{ sourceType: string; link: SchemaLinkDescription }> = [];
+  function findIncomingPairs(center: SchemaTypeDescription): Array<{ source: SchemaTypeDescription; link: SchemaLinkDescription }> {
+    const pairs: Array<{ source: SchemaTypeDescription; link: SchemaLinkDescription }> = [];
     for (const t of types) {
       for (const link of t.links) {
-        if (link.target === typeName) pairs.push({ sourceType: t.name, link });
+        // link.target may be bare or qualified; resolve before comparing so
+        // cross-module references aren't missed (`default::Merchant` vs `Merchant`).
+        const resolved = findType(link.target);
+        if (resolved && resolved.module === center.module && resolved.name === center.name) {
+          pairs.push({ source: t, link });
+        }
       }
     }
     return pairs;
@@ -126,10 +156,10 @@
 
   async function loadDisc(typeName: string, id: string) {
     loadingDisc = true;
-    loadError = '';
+    loadError = "";
     discData = null;
 
-    const type = typeIndex[typeName];
+    const type = findType(typeName);
     if (!type) {
       loadError = `Type ${JSON.stringify(typeName)} is not in the current schema.`;
       loadingDisc = false;
@@ -138,14 +168,14 @@
     const centerDisplay = pickDisplayField(type);
 
     // Compose a single query that pulls the centered row + every
-    // outgoing link's id (multi-link arrays come back already sized).
+    // outgoing link"s id (multi-link arrays come back already sized).
     const linkShapes = type.links.map((l) => {
-      const targetType = typeIndex[l.target];
+      const targetType = findType(l.target);
       const targetDisplay = pickDisplayField(targetType);
       return targetDisplay ? `${l.name}: { id, ${targetDisplay} }` : `${l.name}: { id }`;
     });
-    const centerShape = ['id', ...(centerDisplay ? [centerDisplay] : []), ...linkShapes].join(', ');
-    const centerQuery = `select ${typeName} { ${centerShape} } filter .id = <uuid>$id limit 1`;
+    const centerShape = ["id", ...(centerDisplay ? [centerDisplay] : []), ...linkShapes].join(", ");
+    const centerQuery = `select ${qualify(type)} { ${centerShape} } filter .id = <uuid>$id limit 1`;
     const centerResult = await discAPI.executeQuery(centerQuery, { id });
     if (centerResult.error || !Array.isArray(centerResult.data) || centerResult.data.length === 0) {
       loadError = centerResult.error ?? `Object ${id} not found.`;
@@ -160,50 +190,56 @@
     // Outgoing — one cluster per link.
     for (const link of type.links) {
       const raw = centerRow[link.name];
-      const targetTypeDesc = typeIndex[link.target];
+      const targetTypeDesc = findType(link.target);
       const targetDisplay = pickDisplayField(targetTypeDesc);
-      if (link.cardinality === 'multi') {
+      // Carry a qualified, resolvable name so the click handler can recenter.
+      const targetRef = targetTypeDesc ? qualify(targetTypeDesc) : link.target;
+      if (link.cardinality === "multi") {
         const arr = Array.isArray(raw) ? raw : [];
-        if (arr.length === 0) continue; // skip empty multi-link orbitals
         const first = arr[0];
+        // Skip empty multi-links and any entry without a real id — a missing
+        // record must not render as an "undefined" orbital.
+        if (!first || typeof first.id !== "string") continue;
         clusters.push({
-          direction: 'outgoing',
+          direction: "outgoing",
           edgeLabel: link.name,
-          targetType: link.target,
-          primaryId: String(first.id),
-          primaryLabel: rowLabel(first, targetDisplay, String(first.id)),
+          targetType: targetRef,
+          primaryId: first.id,
+          primaryLabel: rowLabel(first, targetDisplay, first.id),
           totalCount: arr.length,
         });
       } else {
-        if (!raw) continue; // skip null single links
+        // Single links come back wrapped in a one-element array; unwrap it.
+        const obj = Array.isArray(raw) ? raw[0] : raw;
+        if (!obj || typeof obj.id !== "string") continue; // skip null/undefined single links
         clusters.push({
-          direction: 'outgoing',
+          direction: "outgoing",
           edgeLabel: link.name,
-          targetType: link.target,
-          primaryId: String(raw.id),
-          primaryLabel: rowLabel(raw, targetDisplay, String(raw.id)),
+          targetType: targetRef,
+          primaryId: obj.id,
+          primaryLabel: rowLabel(obj, targetDisplay, obj.id),
           totalCount: 1,
         });
       }
     }
 
     // Incoming — schema-walk every type that links here, run one filter per pair.
-    const incomingPairs = findIncomingPairs(typeName);
+    const incomingPairs = findIncomingPairs(type);
     await Promise.all(
-      incomingPairs.map(async ({ sourceType, link }) => {
-        const sourceTypeDesc = typeIndex[sourceType];
-        const sourceDisplay = pickDisplayField(sourceTypeDesc);
+      incomingPairs.map(async ({ source, link }) => {
+        const sourceDisplay = pickDisplayField(source);
         const shape = sourceDisplay ? `{ id, ${sourceDisplay} }` : `{ id }`;
-        const q = `select ${sourceType} ${shape} filter .${link.name}.id = <uuid>$id limit 6`;
+        const q = `select ${qualify(source)} ${shape} filter .${link.name}.id = <uuid>$id limit 6`;
         const r = await discAPI.executeQuery(q, { id });
         if (r.error || !Array.isArray(r.data) || r.data.length === 0) return;
         const first = r.data[0];
+        if (!first || typeof first.id !== "string") return; // skip records without a real id
         clusters.push({
-          direction: 'incoming',
-          edgeLabel: `${sourceType}.${link.name}`,
-          targetType: sourceType,
-          primaryId: String(first.id),
-          primaryLabel: rowLabel(first, sourceDisplay, String(first.id)),
+          direction: "incoming",
+          edgeLabel: `${source.name}.${link.name}`,
+          targetType: qualify(source),
+          primaryId: first.id,
+          primaryLabel: rowLabel(first, sourceDisplay, first.id),
           totalCount: r.data.length,
         });
       }),
@@ -234,8 +270,8 @@
     void loadDisc(prev.type, prev.id);
   }
 
-  $: outgoingCount = discData?.clusters.filter((c) => c.direction === 'outgoing').length ?? 0;
-  $: incomingCount = discData?.clusters.filter((c) => c.direction === 'incoming').length ?? 0;
+  $: outgoingCount = discData?.clusters.filter((c) => c.direction === "outgoing").length ?? 0;
+  $: incomingCount = discData?.clusters.filter((c) => c.direction === "incoming").length ?? 0;
   $: layout = layoutDisc({ cx: CENTER, cy: CENTER, radius: RADIUS, outgoingCount, incomingCount });
 
   // Pair clusters with their layout points in source order.
@@ -245,7 +281,7 @@
     let oi = 0;
     let ii = 0;
     for (const c of discData.clusters) {
-      const pt = c.direction === 'outgoing' ? layout.outgoing[oi++] : layout.incoming[ii++];
+      const pt = c.direction === "outgoing" ? layout.outgoing[oi++] : layout.incoming[ii++];
       if (pt) out.push({ cluster: c, pt });
     }
     return out;
@@ -423,7 +459,7 @@
 <div class="identity-disc">
   <header class="page-header">
     <h1>Identity Disc</h1>
-    <p class="subtitle">A row's outgoing links + incoming references, rendered as a circle. Click any orbital to recenter.</p>
+    <p class="subtitle">A row"s outgoing links + incoming references, rendered as a circle. Click any orbital to recenter.</p>
   </header>
 
   {#if loadingSchema}
@@ -433,7 +469,7 @@
       <label>Type
         <select bind:value={selectedType}>
           {#each types as t}
-            <option value={t.name}>{t.name}</option>
+            <option value={qualify(t)}>{t.name}</option>
           {/each}
         </select>
       </label>
@@ -454,7 +490,7 @@
     {#if breadcrumb.length > 0}
       <div class="breadcrumb">
         {#each breadcrumb as crumb, i}
-          <span class="crumb">{crumb.type}: {crumb.label}</span>{#if i < breadcrumb.length - 1}<span class="crumb-sep"> → </span>{/if}
+          <span class="crumb">{bare(crumb.type)}: {crumb.label}</span>{#if i < breadcrumb.length - 1}<span class="crumb-sep"> → </span>{/if}
         {/each}
       </div>
     {/if}
@@ -482,8 +518,8 @@
               x2={pt.x}
               y2={pt.y}
               class="edge"
-              class:edge-outgoing={cluster.direction === 'outgoing'}
-              class:edge-incoming={cluster.direction === 'incoming'}
+              class:edge-outgoing={cluster.direction === "outgoing"}
+              class:edge-incoming={cluster.direction === "incoming"}
             />
             <text
               x={(CENTER + pt.x) / 2}
@@ -495,9 +531,9 @@
 
           <!-- Orbital nodes -->
           {#each positionedClusters as { cluster, pt }}
-            <g class="orbital" on:click={() => navigateTo(cluster.targetType, cluster.primaryId)} on:keydown={(e) => e.key === 'Enter' && navigateTo(cluster.targetType, cluster.primaryId)} role="button" tabindex="0">
-              <circle cx={pt.x} cy={pt.y} r="28" class="orbital-bg" class:orbital-incoming={cluster.direction === 'incoming'} />
-              <text x={pt.x} y={pt.y - 2} class="orbital-type" text-anchor="middle">{cluster.targetType}</text>
+            <g class="orbital" on:click={() => navigateTo(cluster.targetType, cluster.primaryId)} on:keydown={(e) => e.key === "Enter" && navigateTo(cluster.targetType, cluster.primaryId)} role="button" tabindex="0">
+              <circle cx={pt.x} cy={pt.y} r="28" class="orbital-bg" class:orbital-incoming={cluster.direction === "incoming"} />
+              <text x={pt.x} y={pt.y - 2} class="orbital-type" text-anchor="middle">{bare(cluster.targetType)}</text>
               <text x={pt.x} y={pt.y + 12} class="orbital-label" text-anchor="middle">{cluster.primaryLabel}</text>
               {#if cluster.totalCount > 1}
                 <g>
@@ -511,7 +547,7 @@
           <!-- Center node (rendered last so it sits on top) -->
           <g class="center-node">
             <circle cx={CENTER} cy={CENTER} r="46" class="center-bg" />
-            <text x={CENTER} y={CENTER - 6} class="center-type" text-anchor="middle">{discData.type}</text>
+            <text x={CENTER} y={CENTER - 6} class="center-type" text-anchor="middle">{bare(discData.type)}</text>
             <text x={CENTER} y={CENTER + 14} class="center-label" text-anchor="middle">{discData.label}</text>
           </g>
         </svg>
