@@ -6,6 +6,7 @@
   /*** UTILITY ------------------------------------------ ***/
 
   import { discAPI } from "$lib/api/client";
+  import { formatQuery as formatQueryLibrary } from "$lib/format-query";
 
   interface JsonResult {
     kind: "json";
@@ -71,13 +72,33 @@
     queryResult = shapeResult(result.data, Math.round(result.durationMs));
   }
 
+  function formatCell(value: any): string {
+    if (value === null || value === undefined)
+      return "";
+
+    if (typeof value === "object")
+      return JSON.stringify(value);
+
+    return String(value);
+  }
+
   function formatQuery() {
-    // Simple formatting - in production would use proper parser
-    queryText = queryText
-      .replace(/\s+/g, " ")
-      .replace(/\{/g, " {\n  ")
-      .replace(/\}/g, "\n}")
-      .replace(/,/g, ",\n  ");
+    queryText = formatQueryLibrary(queryText);
+  }
+
+  function getDataLink(value: any) {
+    if (Array.isArray(value) && value.some(v => v.id))
+      return value.find(v => v.id).id;
+    else
+      return "";
+  }
+
+  function isDataLink(value: any): boolean {
+    /*** A link will most likely have an ID ***/
+    if (Array.isArray(value) && value.some(v => v.id))
+      return true;
+
+    return false;
   }
 
   function loadQuery(query: string) {
@@ -109,103 +130,130 @@
       const rows = data.map((row: any) =>
         columns.map((c) => {
           const v = row[c];
-          if (v === null || v === undefined) return "";
-          if (typeof v === "object") return JSON.stringify(v);
+
+          if (v === null || v === undefined)
+            return "";
+
+          if (typeof v === "object")
+            return JSON.stringify(v);
+
           return v;
         })
       );
-      return { kind: "table", columns, rows, executionTime };
+
+      return {
+        columns,
+        executionTime,
+        kind: "table",
+        rows
+      };
     }
-    return { kind: "json", text: JSON.stringify(data, null, 2), executionTime };
+
+    return {
+      executionTime,
+      kind: "json",
+      text: JSON.stringify(data, null, 2)
+    };
   }
 </script>
 
 <style lang="scss">
-  .query-editor {
+  @use "@inc/uchu/scss" as *;
+  @use "../../styles/mixins" as *;
+
+  .data-viewer {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 120px);
-    margin: 0 auto;
-    max-width: 1400px;
+    gap: calc(var(--grid-unit) * 2);
   }
 
-  .editor-toolbar {
+  .viewer-body {
+    display: flex;
+    gap: calc(var(--grid-unit) * 3);
+    min-height: 60vh;
+  }
+
+  .error-banner {
+    background-color: oklch(var(--uchu-red-1-raw) / 20%);
+    color: var(--uchu-red-5);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    margin-top: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+  }
+
+  .controls {
     align-items: center;
     display: flex;
-    justify-content: space-between;
-    margin-bottom: calc(var(--grid-unit) * 3);
+    gap: calc(var(--grid-unit) * 2);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
 
-    h1 {
-      font-size: 1.5rem;
-    }
-
-    .toolbar-actions {
-      display: flex;
-      gap: var(--grid-unit);
+    button {
+      font-size: inherit;
+      text-transform: inherit;
     }
   }
 
-  .editor-container {
-    display: flex;
-    gap: calc(var(--grid-unit) * 3);
-    flex: 1;
-    overflow: hidden;
-  }
+  .query-list {
+    width: 300px; height: 80vh;
 
-  .editor-sidebar {
+    border-bottom: 1px solid var(--uchu-gray-1);
     display: flex;
     flex-direction: column;
-    gap: calc(var(--grid-unit) * 3);
-    width: 250px;
-
-    .sidebar-section {
-      /* background: var(--color-surface); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
-      padding: calc(var(--grid-unit) * 2);
-
-      h3 {
-        font-size: 0.875rem;
-        margin-bottom: calc(var(--grid-unit) * 2);
-      }
-    }
-
-    .query-list {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--grid-unit) * 0.5);
-    }
+    gap: calc(var(--grid-unit) * 0.5);
+    overflow-y: auto;
+    padding-bottom: var(--grid-unit);
 
     .query-item {
-      /* background: var(--color-background); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
-      /* color: var(--color-text); */
+      align-items: center;
+      background-color: oklch(var(--uchu-gray-1-raw) / 30%);
+      border: 1px solid var(--uchu-gray-1);
+      border-image-slice: 1;
       cursor: pointer;
+      display: flex;
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      padding: var(--grid-unit);
+      font-size: 0.875rem;
+      gap: var(--grid-unit);
+      justify-content: start;
+      padding: var(--grid-unit) var(--grid-unit) var(--grid-unit) calc(var(--grid-unit) * 2);
+      position: relative;
       text-align: left;
       transition: all var(--transition-fast);
+      width: 100%;
 
-      &:hover {
-        /* border-color: var(--color-primary); */
-        /* background: var(--color-surface-hover); */
+      &:not(:last-of-type) {
+        margin-bottom: calc(var(--grid-unit) * 0.5);
       }
 
-      &.history-item {
-        code {
-          /* color: var(--color-info); */
-          font-size: 0.7rem;
-        }
+      &:hover {
+        background-color: var(--uchu-gray-1);
+        border-image-source: linear-gradient(
+          to right,
+          var(--uchu-gray-2),
+          var(--uchu-gray-2) 1%,
+          var(--uchu-gray-1) 1%,
+          var(--uchu-gray-1) 99%,
+          var(--uchu-gray-2) 99%,
+          var(--uchu-gray-2)
+        );
       }
     }
 
-    .empty-text {
-      /* color: var(--color-text-dim); */
+    .empty {
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
       font-size: 0.75rem;
+      letter-spacing: 0.05rem;
       padding: calc(var(--grid-unit) * 2);
       text-align: center;
+    }
+  }
+
+  h5 {
+    &:not(:first-of-type) {
+      margin-top: calc(var(--grid-unit) * 2.5);
     }
   }
 
@@ -213,22 +261,24 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: calc(var(--grid-unit) * 3);
     overflow-y: auto;
+
+    h5 {
+      &:not(:first-of-type) {
+        margin-top: calc(var(--grid-unit) * 2.5);
+      }
+    }
   }
 
   .code-editor {
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
     display: flex;
     min-height: 300px;
     overflow: hidden;
     position: relative;
 
     .line-numbers {
-      /* background: var(--color-background-dark); */
-      /* border-right: 1px solid var(--color-border); */
+      background-color: var(--uchu-gray-1);
+      color: var(--uchu-yin-3);
       display: flex;
       flex-direction: column;
       font-family: var(--font-mono);
@@ -236,20 +286,17 @@
       line-height: 1.5rem;
       padding: calc(var(--grid-unit) * 2);
       user-select: none;
-      /* color: var(--color-text-dim); */
 
 
       span {
-        min-width: 30px;
-        padding-right: var(--grid-unit);
+        min-width: 3ch;
         text-align: right;
       }
     }
 
     .query-input {
-      /* background: transparent; */
-      /* border: none; */
-      /* color: var(--color-info); */
+      border: 1px solid var(--uchu-gray-1);
+      color: var(--uchu-yin-7);
       flex: 1;
       font-family: var(--font-mono);
       font-size: 0.875rem;
@@ -260,95 +307,80 @@
       &:focus {
         outline: none;
       }
-
-      &::selection {
-        background: rgb(var(--color-primary-rgb) / 0.3);
-      }
     }
   }
 
-  .error-message {
-    align-items: center;
-    color: var(--color-danger);
-    display: flex;
+  .results-json {
+    margin: 0; padding: calc(var(--grid-unit) * 2);
+
     font-family: var(--font-mono);
     font-size: 0.875rem;
-    gap: var(--grid-unit);
-    padding: calc(var(--grid-unit) * 2);
-    /* background: rgb(var(--color-danger-rgb) / 0.1); */
-    /* border: 1px solid var(--color-danger); */
-    /* border-radius: var(--border-radius); */
-
-    .error-icon {
-      font-size: 1.25rem;
-    }
+    max-height: 400px;
+    overflow: auto;
   }
 
-  .query-results {
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
-    overflow: hidden;
+  .data-wrap {
+    display: grid;
+    gap: calc(var(--grid-unit) * 2);
+    grid-template-columns: repeat(2, 1fr);
+    margin-top: var(--grid-unit);
+  }
 
-    .results-header {
+  .data {
+    border: 1px solid var(--uchu-gray-1);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    padding-bottom: var(--grid-unit);
+    transition: box-shadow 0.2s;
+
+    .data-header {
+      background-color: oklch(var(--uchu-gray-1-raw) / 50%);
+      border-bottom: 1px solid var(--uchu-gray-1);
+      flex-direction: row;
+      font-weight: 500;
+      margin-bottom: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+    }
+
+    input {
+      border: none;
+      border-bottom: 1px solid transparent;
+      padding: 0;
+      width: 100%;
+
+      &[readonly] {
+        cursor: default;
+      }
+    }
+
+    .data-bit {
       align-items: center;
-      /* border-bottom: 1px solid var(--color-border); */
       display: flex;
-      gap: calc(var(--grid-unit) * 2);
-      padding: calc(var(--grid-unit) * 2);
+      flex-direction: row;
+      padding-left: calc(var(--grid-unit) * 2);
+      padding-right: calc(var(--grid-unit) * 2);
 
-      h3 {
-        font-size: 1rem;
-        flex: 1;
+      .null {
+        color: var(--uchu-gray-3);
       }
 
-      .execution-time {
-        color: var(--color-success);
+      .parameter {
         font-family: var(--font-mono);
-        font-size: 0.75rem;
-      }
-    }
-
-    .results-json {
-      margin: 0; padding: calc(var(--grid-unit) * 2);
-
-      /* background: var(--color-background-dark); */
-      /* color: var(--color-info); */
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      max-height: 400px;
-      overflow: auto;
-    }
-
-    .results-table {
-      overflow-x: auto;
-
-      table {
-        border-collapse: collapse;
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
+        font-weight: 500;
+        margin-right: 0.5ch;
+        max-width: 18ch;
+        overflow: hidden;
+        position: relative;
+        text-overflow: ellipsis;
         width: 100%;
 
-        th, td {
-          /* border-bottom: 1px solid var(--color-border); */
-          padding: calc(var(--grid-unit) * 1.5);
-          text-align: left;
-        }
+        &::after {
+          width: calc(100% - var(--ch)); height: 100%;
+          bottom: 0; right: 0;
 
-        th {
-          /* background: var(--color-background-dark); */
-          /* color: var(--color-primary); */
-          font-weight: 500;
-          letter-spacing: 0.05rem;
-          text-transform: uppercase;
-        }
-
-        tr:hover td {
-          background: var(--color-surface-hover);
-        }
-
-        tbody tr:last-child td {
-          border-bottom: none;
+          color: var(--uchu-gray-1);
+          content: "....................";
+          position: absolute;
         }
       }
     }
@@ -359,54 +391,57 @@
   <title>Disc Viewer &bull; Query Editor</title>
 </svelte:head>
 
-<div class="query-editor">
-  <div class="editor-container">
-    <div class="editor-sidebar">
-      <div class="sidebar-section">
-        <h3>Saved Queries</h3>
+<div class="data-viewer">
+  <div class="viewer-body">
+    <aside class="query-list">
+      <h5 style="--ch: 13ch;">Saved Queries</h5>
 
-        <div class="query-list">
-          {#each savedQueries as saved}
-            <button
-              class="query-item"
-              onclick={() => loadQuery(saved.query)}>
-              {saved.name}
-            </button>
-          {/each}
+      {#each savedQueries as saved}
+        <button
+          class="query-item"
+          onclick={() => loadQuery(saved.query)}>
+          {saved.name}
+        </button>
+      {/each}
 
-          {#if savedQueries.length === 0}
-            <div class="empty-text">No saved queries</div>
+      {#if savedQueries.length === 0}
+        <div class="empty">No saved queries</div>
+      {/if}
+
+      <h5 style="--ch: 7ch;">History</h5>
+
+      {#each queryHistory.slice(0, 5) as query}
+        <button
+          class="query-item"
+          onclick={() => loadQuery(query)}>
+          {#if query.length > 30}
+            {query.slice(0, 30)}&hellip;
+          {:else}
+            {query}
           {/if}
-        </div>
-      </div>
+        </button>
+      {/each}
 
-      <div class="sidebar-section">
-        <h3>History</h3>
+      {#if queryHistory.length === 0}
+        <div class="empty">No history</div>
+      {/if}
+    </aside>
 
-        <div class="query-list">
-          {#each queryHistory.slice(0, 5) as query}
-            <button
-              class="query-item history-item"
-              onclick={() => loadQuery(query)}>
-              <code>{query.slice(0, 50)}&hellip;</code>
-            </button>
-          {/each}
+    <section class="editor-main">
+      <h5 style="--ch: 14ch;">Query Controls</h5>
 
-          {#if queryHistory.length === 0}
-            <div class="empty-text">No history</div>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <div class="editor-main">
-      <div class="toolbar-actions">
+      <div class="controls">
         <button class="button" onclick={formatQuery}>Format</button>
         <button class="button" onclick={saveQuery}>Save</button>
-        <button class="button primary" onclick={executeQuery} disabled={isExecuting}>
-          {isExecuting ? "Executing..." : "Execute"}
+        <button
+          class="button primary"
+          disabled={isExecuting}
+          onclick={executeQuery}>
+          {isExecuting ? "Executing…" : "Execute"}
         </button>
       </div>
+
+      <h5 style="--ch: 12ch;">Query Editor</h5>
 
       <div class="code-editor">
         <div class="line-numbers">
@@ -417,54 +452,57 @@
 
         <textarea
           class="query-input"
+          id="query-editor"
           placeholder="Enter your EdgeQL query…"
           spellcheck="false"
-          bind:value={queryText}/>
+          bind:value={queryText}></textarea>
       </div>
 
       {#if errorMessage}
-        <div class="error-message">
-          <span class="error-icon">⚠</span>
-          {errorMessage}
-        </div>
+        <div class="error-banner">{errorMessage}</div>
       {/if}
 
       {#if queryResult}
-        <div class="query-results">
-          <div class="results-header">
-            <h3>Results</h3>
-            <span class="execution-time">
-              Executed in {queryResult.executionTime}ms
-            </span>
-            <button class="button" onclick={clearResults}>Clear</button>
-          </div>
+        <h5 style="--ch: 12ch;">Query Result</h5>
 
+        <div class="controls">
+          <button class="button" onclick={clearResults}>Clear</button>
+          <span class="execution-time">Executed in {queryResult.executionTime}ms</span>
+        </div>
+
+        <div class="data-wrap">
           {#if queryResult.kind === "table"}
-            <div class="results-table">
-              <table>
-                <thead>
-                  <tr>
-                    {#each queryResult.columns as column}
-                      <th>{column}</th>
-                    {/each}
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each queryResult.rows as row}
-                    <tr>
-                      {#each row as cell}
-                        <td>{cell}</td>
-                      {/each}
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+            {#each queryResult.rows as row}
+              <div class="data">
+                {#each queryResult.columns as col, i}
+                  {#if col === "id"}
+                    <header class="data-header">
+                      {formatCell(row[i])}
+                    </header>
+                  {:else if !isDataLink(row[i])}
+                    <div class="data-bit">
+                      <span class="parameter" style={`--ch: ${col.length}ch`}>{col}</span>
+
+                      {#if formatCell(row[i]).length}
+                        <input
+                          autocomplete="off"
+                          name={`${col}`}
+                          readonly
+                          type="text"
+                          value={formatCell(row[i])}/>
+                      {:else}
+                        <span class="null">null</span>
+                      {/if}
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/each}
           {:else}
             <pre class="results-json">{queryResult.text}</pre>
           {/if}
         </div>
       {/if}
-    </div>
+    </section>
   </div>
 </div>

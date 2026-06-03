@@ -15,6 +15,7 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
+import { DISC_VERSION } from "../lib/version.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
 import * as Types from "./types.ts";
@@ -1143,7 +1144,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   getCompilerInfo(): { version: string; features: string[]; } {
     return {
-      version: "0.1.0",
+      version: DISC_VERSION,
       features: [
         "EdgeQL SELECT queries",
         "EdgeQL INSERT/UPDATE/DELETE operations",

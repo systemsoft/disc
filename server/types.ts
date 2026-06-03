@@ -227,6 +227,8 @@ export interface SubscriptionMessage {
 }
 
 export interface ServerStats {
+  /** Disc server version. */
+  version?: string;
   /** Database resolved for this request (X-Database header, ?database= param, or default). */
   database?: string;
   /** All databases registered with the server. */

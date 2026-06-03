@@ -40,9 +40,8 @@ export class MigrationEngine {
   private latestAppliedSchemaHash: string | null = null;
 
   constructor(private config: Types.MigrationConfig) {
-    if (config.connectionPool) {
+    if (config.connectionPool)
       this.pool = config.connectionPool;
-    }
   }
 
   /**
@@ -51,15 +50,15 @@ export class MigrationEngine {
    * migration. (gh/geldata#7490)
    */
   private emit(event: Types.MigrationProgressEvent): void {
-    if (!this.config.onProgress) {
+    if (!this.config.onProgress)
       return;
-    }
+
     try {
       this.config.onProgress(event);
     } catch (err) {
       logger.warn("migration progress listener threw", {
-        kind: event.kind,
-        error: err instanceof Error ? err.message : String(err)
+        error: err instanceof Error ? err.message : String(err),
+        kind: event.kind
       });
     }
   }
@@ -73,6 +72,7 @@ export class MigrationEngine {
       await this.tracker.initialize();
       // Load previously applied migrations from DB
       const applied = await this.tracker.getAppliedMigrations();
+
       if (applied.ok) {
         for (const id of applied.value) {
           this.appliedMigrations.add(id);
@@ -85,16 +85,16 @@ export class MigrationEngine {
       // diffs against null and emits "create everything" ops that
       // collide with existing types/tables.
       const modules = await this.tracker.getLatestSchemaModules();
-      if (modules.ok && modules.value !== null) {
+
+      if (modules.ok && modules.value !== null)
         this.latestAppliedModules = modules.value;
-      }
 
       // Also cache the latest schema_hash as a fallback baseline
       // detector for rows that pre-date the schema_modules column.
       const hash = await this.tracker.getLatestSchemaHash();
-      if (hash.ok && hash.value !== null) {
+
+      if (hash.ok && hash.value !== null)
         this.latestAppliedSchemaHash = hash.value;
-      }
     }
   }
 
@@ -144,26 +144,21 @@ export class MigrationEngine {
    * runs prime currentModules directly and skip the fallback.
    */
   async backfillLatestAppliedModules(modules: Module[]): Promise<void> {
-    if (!this.tracker) {
+    if (!this.tracker)
       return;
-    }
+
     const result = await this.tracker.backfillLatestSchemaModules(modules);
-    if (result.ok) {
+
+    if (result.ok)
       this.latestAppliedModules = modules;
-    } else {
-      logger.warn("failed to backfill schema_modules on latest row", {
-        error: result.error.message
-      });
-    }
+    else
+      logger.warn("failed to backfill schema_modules on latest row", { error: result.error.message });
   }
 
   /**
    * Generate a migration plan from schema changes
    */
-  planMigration(
-    oldSchema: Module[] | null,
-    newSchema: Module[]
-  ): Result<Types.MigrationPlan, MigrationError> {
+  planMigration(oldSchema: Module[] | null, newSchema: Module[]): Result<Types.MigrationPlan, MigrationError> {
     try {
       // Prime the DDL generator's enum scalar registry from the
       // post-state schema. (gh/geldata#8517) Without this, properties
@@ -179,28 +174,24 @@ export class MigrationEngine {
         this.generateInitialMigration(newSchema);
 
       const migration: Types.Migration = {
+        createdAt: new Date(),
+        description: this.generateMigrationDescription(operations),
         id: this.generateMigrationId(),
         name: this.generateMigrationName(operations),
-        description: this.generateMigrationDescription(operations),
-        createdAt: new Date(),
-        schemaHash: this.hashSchema(newSchema),
-        operations
+        operations,
+        schemaHash: this.hashSchema(newSchema)
       };
 
       const plan: Types.MigrationPlan = {
+        estimatedDuration: this.estimateDuration(operations),
         migrations: [migration],
-        targetSchemaHash: migration.schemaHash,
         operationsCount: operations.length,
-        estimatedDuration: this.estimateDuration(operations)
+        targetSchemaHash: migration.schemaHash
       };
 
       return Ok(plan);
     } catch (error) {
-      return Err(
-        new MigrationError(
-          `Failed to plan migration: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      return Err(new MigrationError(`Failed to plan migration: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -217,20 +208,14 @@ export class MigrationEngine {
         statements.push(`-- Created: ${migration.createdAt.toISOString()}`);
         statements.push("");
 
-        const ddlStatements = this.ddlGenerator.generateDDL(
-          migration.operations
-        );
+        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
         statements.push(...ddlStatements);
         statements.push("");
       }
 
       return Ok(statements);
     } catch (error) {
-      return Err(
-        new MigrationError(
-          `Failed to generate DDL: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      return Err(new MigrationError(`Failed to generate DDL: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -247,7 +232,7 @@ export class MigrationEngine {
    */
   async executeMigration(
     plan: Types.MigrationPlan,
-    options?: { skipHistory?: boolean; postStateModules?: Module[]; }
+    options?: { postStateModules?: Module[]; skipHistory?: boolean; }
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const planStartTime = Date.now();
     const results: Types.MigrationResult[] = [];
@@ -255,30 +240,26 @@ export class MigrationEngine {
     this.emit({
       kind: "plan-started",
       totalMigrations: plan.migrations.length,
-      totalOperations: plan.migrations.reduce(
-        (sum, m) => sum + m.operations.length,
-        0
-      )
+      totalOperations: plan.migrations.reduce((sum, m) => sum + m.operations.length, 0)
     });
 
     let migrationIndex = 0;
+
     for (const migration of plan.migrations) {
       migrationIndex += 1;
       const startTime = Date.now();
 
       this.emit({
+        index: migrationIndex,
         kind: "migration-started",
         migrationId: migration.id,
         name: migration.name,
-        index: migrationIndex,
         total: plan.migrations.length
       });
 
       try {
         // In a real implementation, this would execute against a database
-        const ddlStatements = this.ddlGenerator.generateDDL(
-          migration.operations
-        );
+        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
 
         if (ddlStatements.length > 0) {
           this.emit({
@@ -292,9 +273,8 @@ export class MigrationEngine {
         await this.executeStatements(ddlStatements);
 
         // Run matching data migration if one exists
-        const dataMigrationName = await this.runDataMigrationForSchema(
-          migration
-        );
+        const dataMigrationName = await this.runDataMigrationForSchema(migration);
+
         if (dataMigrationName) {
           this.emit({
             kind: "data-migration-running",
@@ -305,10 +285,10 @@ export class MigrationEngine {
         const endTime = Date.now();
 
         results.push({
-          success: true,
-          migrationId: migration.id,
           appliedAt: new Date(),
-          durationMs: endTime - startTime
+          durationMs: endTime - startTime,
+          migrationId: migration.id,
+          success: true
         });
 
         this.appliedMigrations.add(migration.id);
@@ -321,50 +301,49 @@ export class MigrationEngine {
             results[results.length - 1],
             options?.postStateModules ?? null
           );
+
           // Refresh the cached baseline so subsequent plan/apply calls
           // on this engine instance see the just-applied state.
-          if (options?.postStateModules) {
+          if (options?.postStateModules)
             this.latestAppliedModules = options.postStateModules;
-          }
+
           this.latestAppliedSchemaHash = migration.schemaHash;
         }
 
         this.emit({
+          durationMs: endTime - startTime,
           kind: "migration-completed",
-          migrationId: migration.id,
-          durationMs: endTime - startTime
+          migrationId: migration.id
         });
       } catch (error) {
         const errorMessage = error instanceof Error ?
           error.message :
           String(error);
+
         const failureDuration = Date.now() - startTime;
 
         this.emit({
+          durationMs: failureDuration,
+          error: errorMessage,
           kind: "migration-failed",
           migrationId: migration.id,
-          error: errorMessage,
-          durationMs: failureDuration,
           rollbackAttempted: false
         });
+
         this.emit({
-          kind: "plan-failed",
+          durationMs: Date.now() - planStartTime,
           error: errorMessage,
-          durationMs: Date.now() - planStartTime
+          kind: "plan-failed"
         });
 
-        return Err(
-          new MigrationError(
-            `Failed to execute migration: ${errorMessage}`
-          )
-        );
+        return Err(new MigrationError(`Failed to execute migration: ${errorMessage}`));
       }
     }
 
     this.emit({
+      durationMs: Date.now() - planStartTime,
       kind: "plan-completed",
-      migrationCount: results.length,
-      durationMs: Date.now() - planStartTime
+      migrationCount: results.length
     });
 
     return Ok(results);
@@ -386,28 +365,20 @@ export class MigrationEngine {
     return {
       appliedMigrations: appliedMigrations,
       currentSchemaHash: this.getCurrentSchemaHash(),
-      lastMigrationId: appliedMigrations[appliedMigrations.length - 1],
-      lastAppliedAt: new Date() // Would come from database in real implementation
+      lastAppliedAt: new Date(), // Would come from database in real implementation
+      lastMigrationId: appliedMigrations[appliedMigrations.length - 1]
     };
   }
 
   /**
    * Generate rollback SQL for a migration
    */
-  generateRollbackSQL(
-    migration: Types.Migration
-  ): Result<string[], MigrationError> {
+  generateRollbackSQL(migration: Types.Migration): Result<string[], MigrationError> {
     try {
-      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(
-        migration.operations
-      );
+      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(migration.operations);
       return Ok(rollbackSQL);
     } catch (error) {
-      return Err(
-        new MigrationError(
-          `Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      return Err(new MigrationError(`Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -424,37 +395,33 @@ export class MigrationEngine {
     this.emit({
       kind: "plan-started",
       totalMigrations: plan.migrations.length,
-      totalOperations: plan.migrations.reduce(
-        (sum, m) => sum + m.operations.length,
-        0
-      )
+      totalOperations: plan.migrations.reduce((sum, m) => sum + m.operations.length, 0)
     });
 
     let migrationIndex = 0;
+
     for (const migration of plan.migrations) {
       migrationIndex += 1;
       const startTime = Date.now();
       let rollbackSQL: string[] | null = null;
 
       this.emit({
+        index: migrationIndex,
         kind: "migration-started",
         migrationId: migration.id,
         name: migration.name,
-        index: migrationIndex,
         total: plan.migrations.length
       });
 
       try {
         // Generate rollback SQL before executing
         const rollbackResult = this.generateRollbackSQL(migration);
-        if (rollbackResult.ok) {
+
+        if (rollbackResult.ok)
           rollbackSQL = rollbackResult.value;
-        }
 
         // Execute the migration
-        const ddlStatements = this.ddlGenerator.generateDDL(
-          migration.operations
-        );
+        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
 
         if (ddlStatements.length > 0) {
           this.emit({
@@ -467,9 +434,8 @@ export class MigrationEngine {
         await this.executeStatements(ddlStatements);
 
         // Run matching data migration if one exists
-        const dataMigrationName = await this.runDataMigrationForSchema(
-          migration
-        );
+        const dataMigrationName = await this.runDataMigrationForSchema(migration);
+
         if (dataMigrationName) {
           this.emit({
             kind: "data-migration-running",
@@ -480,11 +446,11 @@ export class MigrationEngine {
         const endTime = Date.now();
 
         results.push({
-          success: true,
-          migrationId: migration.id,
           appliedAt: new Date(),
           durationMs: endTime - startTime,
-          rollbackSql: rollbackSQL || undefined
+          migrationId: migration.id,
+          rollbackSql: rollbackSQL || undefined,
+          success: true
         });
 
         this.appliedMigrations.add(migration.id);
@@ -495,29 +461,31 @@ export class MigrationEngine {
             results[results.length - 1],
             options?.postStateModules ?? null
           );
-          if (options?.postStateModules) {
+
+          if (options?.postStateModules)
             this.latestAppliedModules = options.postStateModules;
-          }
+
           this.latestAppliedSchemaHash = migration.schemaHash;
         }
 
         this.emit({
+          durationMs: endTime - startTime,
           kind: "migration-completed",
-          migrationId: migration.id,
-          durationMs: endTime - startTime
+          migrationId: migration.id
         });
       } catch (error) {
         const errorMessage = error instanceof Error ?
           error.message :
           String(error);
+
         const failureDuration = Date.now() - startTime;
         const rollbackAttempted = !!(this.config.rollbackOnError && rollbackSQL);
 
         this.emit({
+          durationMs: failureDuration,
+          error: errorMessage,
           kind: "migration-failed",
           migrationId: migration.id,
-          error: errorMessage,
-          durationMs: failureDuration,
           rollbackAttempted
         });
 
@@ -530,29 +498,33 @@ export class MigrationEngine {
                 rollbackError.message :
                 String(rollbackError)
             }`;
+
             this.emit({
-              kind: "plan-failed",
+              durationMs: Date.now() - planStartTime,
               error: combined,
-              durationMs: Date.now() - planStartTime
+              kind: "plan-failed"
             });
+
             return Err(new MigrationError(combined));
           }
         }
 
         const planFailureMessage = `Migration execution failed: ${errorMessage}`;
+
         this.emit({
-          kind: "plan-failed",
+          durationMs: Date.now() - planStartTime,
           error: planFailureMessage,
-          durationMs: Date.now() - planStartTime
+          kind: "plan-failed"
         });
+
         return Err(new MigrationError(planFailureMessage));
       }
     }
 
     this.emit({
+      durationMs: Date.now() - planStartTime,
       kind: "plan-completed",
-      migrationCount: results.length,
-      durationMs: Date.now() - planStartTime
+      migrationCount: results.length
     });
 
     return Ok(results);
@@ -561,12 +533,9 @@ export class MigrationEngine {
   /**
    * Rollback a specific migration by executing its stored rollback SQL
    */
-  rollbackMigration(
-    migrationId: string
-  ): Result<boolean, MigrationError> {
-    if (!this.appliedMigrations.has(migrationId)) {
+  rollbackMigration(migrationId: string): Result<boolean, MigrationError> {
+    if (!this.appliedMigrations.has(migrationId))
       return Err(new MigrationError(`Migration ${migrationId} is not applied`));
-    }
 
     try {
       // In a real implementation, we would load migration details from database
@@ -574,11 +543,7 @@ export class MigrationEngine {
       this.appliedMigrations.delete(migrationId);
       return Ok(true);
     } catch (error) {
-      return Err(
-        new MigrationError(
-          `Failed to rollback migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      return Err(new MigrationError(`Failed to rollback migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -586,30 +551,21 @@ export class MigrationEngine {
    * Rollback a specific migration using stored rollback SQL from the tracker.
    * Executes rollback SQL in a transaction, then removes the migration record.
    */
-  async executeRollback(
-    migrationId: string
-  ): Promise<Result<void, MigrationError>> {
-    if (!this.tracker) {
-      return Err(
-        new MigrationError(
-          "Cannot execute rollback without a database connection (tracker not initialized)"
-        )
-      );
-    }
+  async executeRollback(migrationId: string): Promise<Result<void, MigrationError>> {
+    if (!this.tracker)
+      return Err(new MigrationError("Cannot execute rollback without a database connection (tracker not initialized)"));
 
     // Load rollback SQL from tracker
     const rollbackSqlResult = await this.tracker.getRollbackSQL(migrationId);
-    if (!rollbackSqlResult.ok) {
+
+    if (!rollbackSqlResult.ok)
       return Err(rollbackSqlResult.error);
-    }
 
     const rollbackSql = rollbackSqlResult.value;
+
     if (rollbackSql.length === 0) {
       return Err(
-        new MigrationError(
-          `No rollback SQL available for migration ${migrationId}. ` +
-            "The migration was recorded without rollback instructions."
-        )
+        new MigrationError(`No rollback SQL available for migration ${migrationId}. The migration was recorded without rollback instructions.`)
       );
     }
 
@@ -620,9 +576,9 @@ export class MigrationEngine {
 
       // Remove the migration record from the tracker
       const removeResult = await this.tracker.removeMigration(migrationId);
-      if (!removeResult.ok) {
+
+      if (!removeResult.ok)
         return Err(removeResult.error);
-      }
 
       // Update in-memory state
       this.appliedMigrations.delete(migrationId);
@@ -631,9 +587,7 @@ export class MigrationEngine {
       return Ok(void 0);
     } catch (error) {
       return Err(
-        new MigrationError(
-          `Failed to execute rollback for migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`
-        )
+        new MigrationError(`Failed to execute rollback for migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`)
       );
     }
   }
@@ -642,35 +596,25 @@ export class MigrationEngine {
    * Rollback all migrations applied after the specified migration ID.
    * Rolls back in reverse chronological order (most recent first).
    */
-  async executeRollbackTo(
-    migrationId: string
-  ): Promise<Result<void, MigrationError>> {
-    if (!this.tracker) {
-      return Err(
-        new MigrationError(
-          "Cannot execute rollback without a database connection (tracker not initialized)"
-        )
-      );
-    }
+  async executeRollbackTo(migrationId: string): Promise<Result<void, MigrationError>> {
+    if (!this.tracker)
+      return Err(new MigrationError("Cannot execute rollback without a database connection (tracker not initialized)"));
 
     // Get all migrations after the target
     const migrationsResult = await this.tracker.getMigrationsAfter(migrationId);
-    if (!migrationsResult.ok) {
+
+    if (!migrationsResult.ok)
       return Err(migrationsResult.error);
-    }
 
     const migrationsToRollback = migrationsResult.value;
+
     if (migrationsToRollback.length === 0) {
-      logger.info(
-        `No migrations to rollback after ${migrationId} — already at target`
-      );
+      logger.info(`No migrations to rollback after ${migrationId} — already at target`);
       return Ok(void 0);
     }
 
     // Migrations are already in DESC order (most recent first) from getMigrationsAfter
-    logger.info(
-      `Rolling back ${migrationsToRollback.length} migration(s) to reach ${migrationId}...`
-    );
+    logger.info(`Rolling back ${migrationsToRollback.length} migration(s) to reach ${migrationId}…`);
 
     for (const migration of migrationsToRollback) {
       const rollbackResult = await this.executeRollback(migration.id);
@@ -1233,14 +1177,11 @@ export class MigrationEngine {
     return `migration_${operations.length}_operations`;
   }
 
-  private generateMigrationDescription(
-    operations: Types.MigrationOperation[]
-  ): string {
+  private generateMigrationDescription(operations: Types.MigrationOperation[]): string {
     const descriptions = operations.slice(0, 3).map(op => this.getOperationDescription(op));
 
-    if (operations.length > 3) {
-      descriptions.push(`... and ${operations.length - 3} more operations`);
-    }
+    if (operations.length > 3)
+      descriptions.push(`…and ${operations.length - 3} more operations`);
 
     return descriptions.join(", ");
   }
@@ -1391,15 +1332,11 @@ export class MigrationEngine {
     switch (operation.kind) {
       case "DropType":
         // Check if type has dependencies
-        issues.push(
-          ...this.validateDropType(operation as Types.DropTypeOperation)
-        );
+        issues.push(...this.validateDropType(operation as Types.DropTypeOperation));
         break;
       case "AlterType":
         // Check for breaking changes
-        issues.push(
-          ...this.validateAlterType(operation as Types.AlterTypeOperation)
-        );
+        issues.push(...this.validateAlterType(operation as Types.AlterTypeOperation));
         break;
     }
 

@@ -191,6 +191,30 @@ textarea {
   }
 }
 
+input[type="checkbox"] {
+  width: calc(var(--grid-unit) * 1.75); height: calc(var(--grid-unit) * 1.75);
+
+  aspect-ratio: 1;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: calc(var(--grid-unit) * 2);
+  border-radius: 0;
+  padding: 0;
+
+  &:checked {
+    background-image: url("data:image/svg+xml,<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M17.2835 7.51131L11.0738 17.4468L6.68933 13.0623L7.74999 12.0016L10.8012 15.0528L16.0115 6.71631L17.2835 7.51131Z\"/></svg>");
+  }
+}
+
+select {
+  &:not(.blank) {
+    background-image: url("data:image/svg+xml,<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M4.00011 7.93945L12.0001 15.9395L20.0001 7.93945L21.0608 9.00011L12.0001 18.0608L2.93945 9.00011L4.00011 7.93945Z\"/></svg>");
+    background-position: center right 1.5ch;
+    background-repeat: no-repeat;
+    background-size: 2ch;
+  }
+}
+
 /* ::-webkit-scrollbar {
   width: 8px; height: 8px;
 } */

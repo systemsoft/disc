@@ -1,7 +1,7 @@
 <script lang="ts">
   /*** IMPORT ------------------------------------------- ***/
 
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
   /*** UTILITY ------------------------------------------ ***/
 
@@ -28,6 +28,7 @@
   let connectionStatus: ConnectionStatus = "connecting";
   let currentPath = "";
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+  let discVersion = "";
 
   /*** RUNTIME ------------------------------------------ ***/
 
@@ -41,9 +42,15 @@
   onMount(() => {
     checkHealth();
     pollHandle = setInterval(checkHealth, 10_000);
+    getVersion();
   });
 
   /*** HELPER ------------------------------------------- ***/
+
+  async function getVersion() {
+    const { version } = await discAPI.getStats();
+    discVersion = version;
+  }
 
   async function checkHealth() {
     const health = await discAPI.getHealth();
@@ -113,7 +120,11 @@
       }
 
       &:not(.active) {
-        color: $uchu-yin-3;
+        color: var(--uchu-yin-3);
+
+        &:hover {
+          text-decoration: line-through;
+        }
       }
 
       &.active {
@@ -174,6 +185,38 @@
     padding: calc(var(--grid-unit) * 2);
     position: relative;
   }
+
+  footer {
+    align-items: center;
+    border-top: 1px solid var(--uchu-gray-1);
+    display: flex;
+    flex-direction: row;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    gap: var(--grid-unit);
+    justify-content: space-between;
+    letter-spacing: 0.05rem;
+    line-height: 1.33;
+    padding-bottom: calc(var(--grid-unit) * 2);
+    padding-top: calc(var(--grid-unit) * 2);
+    text-transform: uppercase;
+
+    span {
+      color: var(--uchu-yin-3);
+
+      strong {
+        color: var(--uchu-yin-9);
+      }
+
+      a {
+        color: var(--uchu-blue-5);
+
+        &:hover {
+          text-decoration: line-through;
+        }
+      }
+    }
+  }
 </style>
 
 <svelte:head>
@@ -215,4 +258,15 @@
       <slot/>
     </div>
   </main>
+
+  <footer>
+    <div class="undershirt">
+      <span><strong>Disc</strong> / ver.{discVersion} / database for the users</span>
+
+      <span>
+        <a href="https://disc.sh" target="_blank">homepage</a>
+        <a href="https://github.com/systemsoft/disc" target="_blank">code</a>
+      </span>
+    </div>
+  </footer>
 </div>

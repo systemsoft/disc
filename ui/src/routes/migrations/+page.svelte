@@ -1,14 +1,48 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { discAPI, type MigrationHistoryEntry } from '$lib/api/client';
+  /*** IMPORT ------------------------------------------- ***/
 
-  let migrations: MigrationHistoryEntry[] = [];
-  let loading = true;
+  import { onMount } from "svelte";
+
+  /*** UTILITY ------------------------------------------ ***/
+
+  import { discAPI, type MigrationHistoryEntry } from "$lib/api/client";
+
   let loadError: string | null = null;
+  let loading = true;
+  let migrations: MigrationHistoryEntry[] = [];
+
+  /*** RUNTIME ------------------------------------------ ***/
+
+  onMount(reload);
+
+  /*** HELPER ------------------------------------------- ***/
+
+  function formatDate(value: string): string {
+    if (!value)
+      return "";
+
+    const d = new Date(value);
+
+    if (Number.isNaN(d.getTime()))
+      return value;
+
+    return d.toLocaleString();
+  }
+
+  function formatDuration(ms: number): string {
+    if (ms === null)
+      return "";
+
+    if (ms < 1000)
+      return `${ms}ms`;
+
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
 
   async function reload() {
     loading = true;
     loadError = null;
+
     try {
       migrations = await discAPI.getMigrations();
     } catch (err) {
@@ -17,52 +51,37 @@
       loading = false;
     }
   }
-
-  onMount(reload);
-
-  function formatDate(value: string): string {
-    if (!value) return '';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleString();
-  }
-
-  function formatDuration(ms: number): string {
-    if (ms == null) return '';
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
 </script>
 
 <style lang="scss">
   .migrations {
-    max-width: 1400px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 2);
   }
 
   .page-header {
+    align-items: center;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+
+    h1 {
+      line-height: 1;
+    }
+
+    button {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
   }
 
   .error-banner {
-    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
-    background: rgb(var(--color-danger-rgb) / 0.1);
-    border: 1px solid var(--color-danger);
-    border-radius: var(--border-radius);
-    color: var(--color-danger);
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
   }
 
   .empty {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
     padding: calc(var(--grid-unit) * 4);
     text-align: center;
 
@@ -72,59 +91,91 @@
     }
 
     p {
-      color: var(--color-text-dim);
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      line-height: 1.5;
     }
+  }
 
-    code {
-      color: var(--color-info);
+  code {
+    color: var(--uchu-yin-7);
+    position: relative;
+    z-index: 1;
+
+    &::after {
+      width: calc(100% + var(--grid-unit)); height: 100%;
+      bottom: 0; left: calc(var(--grid-unit) / 2 * -1);
+
+      background-color: var(--uchu-yellow-1);
+      content: "";
+      position: absolute;
+      z-index: -1;
     }
   }
 
   .table-wrap {
+    border-top: 1px solid var(--uchu-gray-1);
+    margin-top: var(--grid-unit);
     overflow: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
+    padding-top: calc(var(--grid-unit) * 3);
   }
 
   table {
-    width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    width: 100%;
+
+    thead {
+      letter-spacing: 0.05rem;
+      text-transform: uppercase;
+
+      th {
+        padding-left: var(--grid-unit);
+        padding-right: var(--grid-unit);
+      }
+    }
 
     th, td {
-      padding: calc(var(--grid-unit) * 1.5);
       text-align: left;
-      border-bottom: 1px solid var(--color-border);
-      white-space: nowrap;
+      vertical-align: top;
     }
 
     th {
-      background: var(--color-background-dark);
-      color: var(--color-primary);
       position: sticky;
       top: 0;
+      white-space: nowrap;
     }
 
-    tbody tr:last-child td { border-bottom: none; }
-    tr:hover td { background: var(--color-surface-hover); }
+    tbody tr {
+      &:nth-child(odd) {
+        background-color: oklch(var(--uchu-yin-1-raw) / 30%);
+      }
 
-    code {
-      color: var(--color-info);
-      font-size: 0.75rem;
+      &.editing {
+        /* background-color: var(--uchu-yellow-1); */
+        background-color: oklch(var(--uchu-yellow-1-raw) / 30%);
+      }
+
+      &:not(.editing):hover {
+        background-color: var(--uchu-gray-1);
+      }
+
+      td {
+        padding: calc(var(--grid-unit) / 2) var(--grid-unit);
+      }
     }
   }
 </style>
+
+<svelte:head>
+  <title>Disc Viewer &bull; Migration History</title>
+</svelte:head>
 
 <div class="migrations">
   <header class="page-header">
     <h1>Migration History</h1>
     <button class="button" on:click={reload} disabled={loading}>
-      {loading ? 'Loading…' : 'Refresh'}
+      {loading ? "Loading…" : "Refresh"}
     </button>
   </header>
 
@@ -135,11 +186,7 @@
   {#if !loading && migrations.length === 0 && !loadError}
     <div class="empty">
       <h3>No migrations applied yet</h3>
-      <p>
-        When the schema is applied (via <code>disc serve</code> auto-migrate
-        on a fresh database, or <code>disc migrate</code> manually) the
-        history will appear here.
-      </p>
+      <p>When the schema is applied (via <code>disc serve</code> auto-migrate on a fresh database, or <code>disc migrate</code> manually) the history will appear here.</p>
     </div>
   {/if}
 
@@ -156,6 +203,7 @@
             <th>Schema Hash</th>
           </tr>
         </thead>
+
         <tbody>
           {#each migrations as m}
             <tr>

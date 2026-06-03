@@ -7,28 +7,21 @@
 
   import { discAPI, type ConfigKeyDef } from "$lib/api/client";
 
-  // #5988 + #6444: the server returns each key's live PostgreSQL value in
-  // `currentValue` (a SHOW/SELECT roundtrip through pg_settings), already
-  // run through maskIfSecret() — so secret keys arrive as null and their
-  // value never crosses the wire. We render the live value when present,
-  // the mask for secrets, and a placeholder when no value is available
-  // (no pool configured, or PostgreSQL exposes no setting for the key).
-  const UNAVAILABLE_VALUE = "(unavailable)";
-  const SECRET_HIDDEN = "(hidden by server)";
   const MASK = "••••••••";
+  const SECRET_HIDDEN = "(hidden by server)";
+  const UNAVAILABLE_VALUE = "(unavailable)";
   let configKeys: ConfigKeyDef[] = [];
+  let editError: string | null = null;
+  /*** Inline edit state. Editing writes `ALTER SYSTEM SET` server-side and reloads PostgreSQL
+       config; the returned `currentValue` is patched into the row. `editingKey` is the key.name
+       currently open for editing. ***/
+  let editingKey: string | null = null;
+  let editValue = "";
   let loadError: string | null = null;
   let loading = true;
   let revealed = new Set<string>();
-
-  // Inline edit state. Editing writes `ALTER SYSTEM SET` server-side and
-  // reloads PostgreSQL config; the returned `currentValue` is patched into
-  // the row. `editingKey` is the key.name currently open for editing.
-  let editingKey: string | null = null;
-  let editValue = "";
-  let saving = false;
-  let editError: string | null = null;
   let rowNotice = new Map<string, string>();
+  let saving = false;
 
   /*** RUNTIME ------------------------------------------ ***/
 
@@ -36,12 +29,17 @@
 
   /*** HELPER ------------------------------------------- ***/
 
+  function cancelEdit() {
+    editingKey = null;
+    editError = null;
+  }
+
   function displayValue(key: ConfigKeyDef): string {
     if (key.secret && !revealed.has(key.name))
       return MASK;
 
-    // Live value from PostgreSQL. Secret keys are nulled server-side, so a
-    // revealed secret falls through to SECRET_HIDDEN rather than real data.
+    /*** Live value from PostgreSQL. Secret keys are nulled server-side, so a revealed secret falls
+         through to SECRET_HIDDEN rather than real data. ***/
     if (key.currentValue !== null && key.currentValue !== undefined)
       return key.currentValue;
 
@@ -67,33 +65,11 @@
     }
   }
 
-  function toggleReveal(name: string) {
-    if (revealed.has(name))
-      revealed.delete(name);
-    else
-      revealed.add(name);
-
-    revealed = revealed; /*** trigger reactivity ***/
-  }
-
-  function startEdit(key: ConfigKeyDef) {
-    editingKey = key.name;
-    editError = null;
-    editValue = key.currentValue ??
-      (key.defaultValue !== undefined ? String(key.defaultValue) : "");
-  }
-
-  function cancelEdit() {
-    editingKey = null;
-    editError = null;
-  }
-
   async function saveEdit(key: ConfigKeyDef) {
     saving = true;
     editError = null;
 
     const result = await discAPI.setConfig(key.name, editValue.trim());
-
     saving = false;
 
     if (result.error) {
@@ -101,7 +77,7 @@
       return;
     }
 
-    // Patch the live value into the row without a full reload.
+    /*** Patch the live value into the row without a full reload. ***/
     key.currentValue = result.currentValue ?? null;
     configKeys = configKeys; /*** trigger reactivity ***/
 
@@ -111,50 +87,65 @@
         "Saved — restart required before this takes effect" :
         "Saved"
     );
+
     rowNotice = rowNotice;
     editingKey = null;
+  }
+
+  function startEdit(key: ConfigKeyDef) {
+    editingKey = key.name;
+    editError = null;
+    editValue = key.currentValue ?? (key.defaultValue !== undefined ? String(key.defaultValue) : "");
+  }
+
+  function toggleReveal(name: string) {
+    if (revealed.has(name))
+      revealed.delete(name);
+    else
+      revealed.add(name);
+
+    revealed = revealed; /*** trigger reactivity ***/
   }
 </script>
 
 <style lang="scss">
   .config {
-    max-width: 1400px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 2);
   }
 
   .page-header {
+    align-items: center;
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: calc(var(--grid-unit) * 2);
 
-    h1 { margin: 0; }
+    h1 {
+      line-height: 1;
+    }
 
     .subtitle {
-      /* color: var(--color-text-dim); */
+      color: var(--uchu-yin-3);
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      margin: calc(var(--grid-unit) * 0.5) 0 0;
+      line-height: 1.33;
+      margin-top: var(--grid-unit);
+      max-width: 100ch;
+    }
+
+    button {
+      font-size: 0.75rem;
+      text-transform: uppercase;
     }
   }
 
   .error-banner {
-    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
-    /* background: rgb(var(--color-danger-rgb) / 0.1); */
-    /* border: 1px solid var(--color-danger); */
-    /* border-radius: var(--border-radius); */
-    /* color: var(--color-danger); */
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
   }
 
   .empty {
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
     padding: calc(var(--grid-unit) * 4);
     text-align: center;
 
@@ -164,50 +155,82 @@
     }
 
     p {
-      /* color: var(--color-text-dim); */
       font-family: var(--font-mono);
       font-size: 0.875rem;
     }
   }
 
+  code {
+    color: var(--uchu-yin-7);
+    position: relative;
+    z-index: 1;
+
+    &::after {
+      width: calc(100% + var(--grid-unit)); height: 100%;
+      bottom: 0; left: calc(var(--grid-unit) / 2 * -1);
+
+      background-color: var(--uchu-yellow-1);
+      content: "";
+      position: absolute;
+      z-index: -1;
+    }
+  }
+
   .table-wrap {
+    border-top: 1px solid var(--uchu-gray-1);
+    margin-top: var(--grid-unit);
     overflow: auto;
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
+    padding-top: calc(var(--grid-unit) * 3);
   }
 
   table {
-    width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
     font-size: 0.875rem;
+    width: 100%;
+
+    thead {
+      letter-spacing: 0.05rem;
+      text-transform: uppercase;
+
+      th {
+        padding-left: var(--grid-unit);
+        padding-right: var(--grid-unit);
+      }
+    }
 
     th, td {
-      padding: calc(var(--grid-unit) * 1.5);
       text-align: left;
-      /* border-bottom: 1px solid var(--color-border); */
       vertical-align: top;
     }
 
     th {
-      /* background: var(--color-background-dark); */
-      /* color: var(--color-primary); */
       position: sticky;
       top: 0;
       white-space: nowrap;
     }
 
-    tbody tr:last-child td { border-bottom: none; }
-    /* tr:hover td { background: var(--color-surface-hover); } */
+    tbody tr {
+      &:nth-child(odd) {
+        background-color: oklch(var(--uchu-yin-1-raw) / 30%);
+      }
 
-    /* tr.secret td:first-child {
-      border-left: 2px solid var(--color-warning);
-    } */
+      &.editing {
+        /* background-color: var(--uchu-yellow-1); */
+        background-color: oklch(var(--uchu-yellow-1-raw) / 30%);
+      }
 
-    code {
-      /* color: var(--color-info); */
-      font-size: 0.875rem;
+      &:not(.editing):hover {
+        background-color: var(--uchu-gray-1);
+      }
+
+      td {
+        padding: calc(var(--grid-unit) / 2) var(--grid-unit);
+      }
+    }
+
+    tr.secret td:first-child {
+      border-left: 2px solid var(--uchu-red-4);
     }
 
     .badge {
@@ -215,23 +238,20 @@
       margin-left: calc(var(--grid-unit) * 0.75);
       padding: 1px calc(var(--grid-unit) * 0.75);
       font-size: 0.7rem;
-      /* color: var(--color-warning); */
-      /* border: 1px solid rgb(var(--color-warning-rgb, 250 200 50) / 0.5); */
-      /* border-radius: 999px; */
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
 
-    .type {
-      /* color: var(--color-text-dim); */
+    /* .type {
       font-size: 0.8rem;
-    }
+    } */
 
     .value {
-      white-space: nowrap;
-      display: flex;
       align-items: center;
+      display: flex;
       gap: var(--grid-unit);
+      white-space: nowrap;
+      width: 200px;
     }
 
     .value-text {
@@ -241,54 +261,54 @@
       }
     }
 
+    .editor-actions {}
+
     .reveal-btn {
-      /* background: transparent; */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
-      /* color: var(--color-text-dim); */
-      padding: 2px calc(var(--grid-unit) * 1);
-      font-family: var(--font-mono);
+      /* cursor: pointer; */
+      /* font-family: var(--font-mono); */
       font-size: 0.7rem;
+      /* letter-spacing: 0.05rem; */
+      padding: calc(var(--grid-unit) / 4) var(--grid-unit);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      cursor: pointer;
 
       &:hover {
-        color: var(--color-primary);
-        border-color: var(--color-primary);
+        /* color: var(--color-primary); */
+        /* border-color: var(--color-primary); */
       }
     }
 
     .description {
-      /* color: var(--color-text-dim); */
-      white-space: normal;
       max-width: 480px;
+      white-space: normal;
     }
 
     .editor {
+      align-items: baseline;
       display: flex;
+      flex-direction: column;
       flex-wrap: wrap;
-      align-items: center;
       gap: var(--grid-unit);
-    }
 
-    .edit-input {
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
-      padding: 2px calc(var(--grid-unit) * 1);
-      min-width: 160px;
+      .edit-input {
+        font-family: var(--font-mono);
+        font-size: inherit;
+        /* font-size: 0.875rem; */
+        min-width: 160px;
+        padding: 2px calc(var(--grid-unit) * 1);
+        width: 100%;
+      }
     }
 
     .edit-error {
+      color: var(--uchu-red-5);
       flex-basis: 100%;
-      color: var(--color-danger);
-      white-space: normal;
       font-size: 0.8rem;
+      white-space: normal;
     }
 
     .row-notice {
-      color: var(--color-text-dim);
-      font-size: 0.75rem;
+      color: var(--uchu-yin-3);
+      /* font-size: 0.75rem; */
       font-style: italic;
     }
   }
@@ -302,13 +322,13 @@
   <header class="page-header">
     <div>
       <h1>Configuration</h1>
-      <p class="subtitle">
-        CONFIGURE-able settings registry. Editing writes
-        <code>ALTER SYSTEM SET</code> and reloads PostgreSQL; some settings
-        need a restart to take effect. Secret values are masked.
-      </p>
+      <p class="subtitle">CONFIGURE-able settings registry. Editing writes <code>ALTER SYSTEM SET</code> and reloads PostgreSQL; some settings need a restart to take effect. Secret values are masked.</p>
     </div>
-    <button class="button" on:click={reload} disabled={loading}>
+
+    <button
+      class="button"
+      disabled={loading}
+      onclick={reload}>
       {loading ? "Loading…" : "Refresh"}
     </button>
   </header>
@@ -336,48 +356,58 @@
             <th>Description</th>
           </tr>
         </thead>
+
         <tbody>
           {#each configKeys as k (k.name)}
-            <tr class:secret={k.secret}>
+            <tr class:secret={k.secret} class:editing={editingKey === k.name}>
               <td>
                 <code>{k.name}</code>
+
                 {#if k.secret}
-                  <span class="badge" title="Marked secret — value is masked">🔒 secret</span>
+                  <span class="badge" title="Marked secret — value is masked">[secret]</span>
                 {/if}
               </td>
+
               <td><span class="type">{k.edgeqlType}</span></td>
+
               <td>{k.defaultScope}</td>
+
               <td class="value">
                 {#if editingKey === k.name}
                   <div class="editor">
                     <!-- svelte-ignore a11y-autofocus -->
                     <input
-                      class="edit-input"
-                      type="text"
                       autofocus
-                      bind:value={editValue}
+                      class="edit-input"
                       disabled={saving}
-                      on:keydown={e => {
-                        if (e.key === "Enter") saveEdit(k);
-                        else if (e.key === "Escape") cancelEdit();
+                      onkeydown={e => {
+                        if (e.key === "Enter")
+                          saveEdit(k);
+                        else if (e.key === "Escape")
+                          cancelEdit();
                       }}
+                      type="text"
+                      bind:value={editValue}
                     />
-                    <button
-                      class="reveal-btn"
-                      type="button"
-                      on:click={() => saveEdit(k)}
-                      disabled={saving}
-                    >
-                      {saving ? "saving…" : "save"}
-                    </button>
-                    <button
-                      class="reveal-btn"
-                      type="button"
-                      on:click={cancelEdit}
-                      disabled={saving}
-                    >
-                      cancel
-                    </button>
+
+                    <div class="editor-actions">
+                      <button
+                        class="reveal-btn"
+                        disabled={saving}
+                        onclick={() => saveEdit(k)}
+                        type="button">
+                        {saving ? "saving…" : "save"}
+                      </button>
+
+                      <button
+                        class="reveal-btn"
+                        disabled={saving}
+                        onclick={cancelEdit}
+                        type="button">
+                        cancel
+                      </button>
+                    </div>
+
                     {#if editError}
                       <span class="edit-error">{editError}</span>
                     {/if}
@@ -389,27 +419,27 @@
                   {#if k.secret}
                     <button
                       class="reveal-btn"
-                      type="button"
-                      on:click={() => toggleReveal(k.name)}
+                      onclick={() => toggleReveal(k.name)}
                       title={revealed.has(k.name) ? "Hide value" : "Reveal value"}
-                    >
+                      type="button">
                       {revealed.has(k.name) ? "hide" : "reveal"}
                     </button>
                   {:else}
                     <button
                       class="reveal-btn"
-                      type="button"
-                      on:click={() => startEdit(k)}
+                      onclick={() => startEdit(k)}
                       title="Edit value (ALTER SYSTEM SET)"
-                    >
+                      type="button">
                       edit
                     </button>
                   {/if}
+
                   {#if rowNotice.has(k.name)}
                     <span class="row-notice">{rowNotice.get(k.name)}</span>
                   {/if}
                 {/if}
               </td>
+
               <td class="description">{k.description ?? ""}</td>
             </tr>
           {/each}

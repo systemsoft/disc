@@ -16,6 +16,7 @@
  * transport.
  */
 
+import { DISC_VERSION } from "../lib/version.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
 import { analyzeDiscDocument } from "./diagnostics.ts";
@@ -116,7 +117,7 @@ export class LanguageServer {
               full: true
             }
           },
-          serverInfo: { name: "disc-lsp", version: "0.1.0" }
+          serverInfo: { name: "disc-lsp", version: DISC_VERSION }
         };
         this.respond(req.id, result);
         return;

@@ -456,6 +456,10 @@
   }
 </style>
 
+<svelte:head>
+  <title>Disc Viewer &bull; Identity Disc</title>
+</svelte:head>
+
 <div class="identity-disc">
   <header class="page-header">
     <h1>Identity Disc</h1>

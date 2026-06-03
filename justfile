@@ -62,8 +62,8 @@ release: version clean build
 # start:
 #   deno run --allow-read --allow-env --allow-net entry.ts
 
-# generate version.txt
+# generate version.txt and update everywhere
 version:
   @echo "[INFO] Updating version.txt with ChronVer"
-  @deno eval "const now = new Date(); const version = \`\${now.getFullYear()}.\${String(now.getMonth() + 1).padStart(2, '0')}.\${String(now.getDate()).padStart(2, '0')}\`; console.log(version); await Deno.writeTextFile('version.txt', version);"
+  @deno run --allow-read=deno.json,lib/version.ts --allow-write=version.txt,deno.json,lib/version.ts scripts/version.ts
   @echo "[INFO] Version updated: $(cat version.txt)"

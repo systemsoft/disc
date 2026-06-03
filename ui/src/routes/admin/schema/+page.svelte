@@ -373,7 +373,7 @@
     line-height: 1;
     text-transform: uppercase;
 
-    input[type="checkbox"] {
+    /* input[type="checkbox"] {
       width: calc(var(--grid-unit) * 1.75); height: calc(var(--grid-unit) * 1.75);
 
       background-position: center;
@@ -385,7 +385,7 @@
       &:checked {
         background-image: url("data:image/svg+xml,<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M17.2835 7.51131L11.0738 17.4468L6.68933 13.0623L7.74999 12.0016L10.8012 15.0528L16.0115 6.71631L17.2835 7.51131Z\"/></svg>");
       }
-    }
+    } */
   }
 
   .apply-button {

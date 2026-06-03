@@ -21,6 +21,7 @@ import type {
   Schema,
   TypeDef
 } from "../../compiler/context.ts";
+import { DISC_VERSION } from "../../lib/version.ts";
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -136,7 +137,7 @@ export function renderOpenApiSpec(
         "endpoints. All routes pass through the standard EdgeQL " +
         "pipeline, so access policies, read-only mode, and the auth " +
         "gate apply.",
-      version: options.version ?? "0.1.0"
+      version: options.version ?? DISC_VERSION
     },
     paths,
     components: {

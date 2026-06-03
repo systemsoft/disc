@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { EditorView, basicSetup } from 'codemirror';

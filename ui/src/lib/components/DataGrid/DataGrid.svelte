@@ -1,6 +1,3 @@
-/*** SPDX-License-Identifier: Apache-2.0
-     Copyright 2026 Ideas Never Cease ***/
-
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -446,7 +443,7 @@
           <input
             type="text"
             class="search-input"
-            placeholder="Search..."
+            placeholder="Search…"
             bind:value={searchQuery}
           />
           <span class="search-icon">⊙</span>

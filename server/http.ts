@@ -6,6 +6,7 @@
  */
 
 import { getLogger } from "../lib/logger.ts";
+import { DISC_VERSION } from "../lib/version.ts";
 import { renderMetrics } from "./metrics.ts";
 import type { MetricsSource } from "./metrics.ts";
 import { computeCertExpiry } from "./tls-cert-info.ts";
@@ -852,7 +853,7 @@ export class HttpServer {
 
     const info = {
       name: "Disc Database",
-      version: "0.1.0",
+      version: DISC_VERSION,
       protocol: "HTTP/JSON",
       endpoints
     };
@@ -1213,6 +1214,7 @@ export class HttpServer {
     const stats: Types.ServerStats & {
       subscriptions: typeof subscriptionStats;
     } = {
+      version: DISC_VERSION,
       database,
       databases,
       connections: this.connection_manager.get_stats(),

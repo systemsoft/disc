@@ -159,6 +159,8 @@ export interface ServerHealth {
 }
 
 export interface ServerStats {
+  /** Disc server version. */
+  version?: string;
   /** Database resolved for this request — the one the UI is viewing. */
   database?: string;
   /** All databases registered with the server. */
@@ -250,7 +252,7 @@ export class DiscAPIClient {
    * POST /config — persist a single setting via `ALTER SYSTEM SET`. Returns
    * the now-live value and whether a restart is still required, or `error`
    * when the server rejects the write (unknown/secret key, read-only mode,
-   * or a value PostgreSQL won't accept). (#5988 + #6444)
+   * or a value PostgreSQL won't accept).
    */
   async setConfig(name: string, value: string): Promise<ConfigWriteResult> {
     try {
