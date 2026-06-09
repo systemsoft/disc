@@ -5,6 +5,7 @@
  * HTTP Server implementation for Disc Database
  */
 
+import { parseConnectionString } from "../lib/database.ts";
 import { getLogger } from "../lib/logger.ts";
 import { DISC_VERSION } from "../lib/version.ts";
 import { renderMetrics } from "./metrics.ts";
@@ -1204,11 +1205,13 @@ export class HttpServer {
     // Gather handler-level cache/metrics stats if available
     const handlerStats = this.protocolHandler.getStats?.();
 
-    // Resolve database name from the request (X-Database / ?database= / "disc").
-    // The UI surfaces this so users know which database the dashboard reflects.
+    // Resolve database name for display. An explicit X-Database / ?database=
+    // selection wins; otherwise fall back to the server's configured database
+    // (the project instance name from the DSN) rather than the bare registry
+    // default, so the UI shows the user's instance next to "Database Overview".
     const database = request ?
-      this.resolveDatabaseName(request, new URL(request.url)) :
-      "disc";
+      this.resolveDatabaseName(request, new URL(request.url), this.configuredDatabaseName()) :
+      this.configuredDatabaseName();
     const databases = this.databaseRegistry?.listDatabases() ?? [database];
 
     const stats: Types.ServerStats & {
@@ -2019,7 +2022,11 @@ export class HttpServer {
    * Resolve the target database name from the request.
    * Precedence: X-Database header > ?database= query param > "disc" (default).
    */
-  private resolveDatabaseName(request: Request, url: URL): string {
+  private resolveDatabaseName(
+    request: Request,
+    url: URL,
+    fallback = "disc"
+  ): string {
     const headerValue = request.headers.get("X-Database");
     if (headerValue) {
       return headerValue;
@@ -2030,7 +2037,22 @@ export class HttpServer {
       return paramValue;
     }
 
-    return "disc";
+    return fallback;
+  }
+
+  /**
+   * The database the server is configured to connect to, derived from the
+   * DSN. For the bundled instance this is the project's instance name (the
+   * DSN path segment), which the dashboard surfaces next to "Database
+   * Overview" so users see their instance rather than the bare registry
+   * default. Falls back to "disc" when the DSN can't be parsed.
+   */
+  private configuredDatabaseName(): string {
+    try {
+      return parseConnectionString(this.config.databaseUrl).database || "disc";
+    } catch {
+      return "disc";
+    }
   }
 
   private parse_client_info(
