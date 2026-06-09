@@ -775,6 +775,122 @@ Deno.test("typeInfo link thunks strip module-qualified target prefix", () => {
   assertEquals(content.includes("::"), false);
 });
 
+/*** --- Single links in Insert/Update types and methods --- ***/
+
+Deno.test("PaymentInsert includes required single link as UUID string", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const insertStart = content.indexOf("export interface PaymentInsert");
+  assertEquals(insertStart !== -1, true);
+
+  const insertEnd = content.indexOf("}", insertStart);
+  const insertBlock = content.substring(insertStart, insertEnd + 1);
+  /*** Required link → required UUID field ***/
+  assertStringIncludes(insertBlock, "merchant: string;");
+  assertEquals(insertBlock.includes("merchant?: string"), false);
+});
+
+Deno.test("PaymentUpdate includes single link as optional UUID string", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const updateStart = content.indexOf("export interface PaymentUpdate");
+  assertEquals(updateStart !== -1, true);
+
+  const updateEnd = content.indexOf("}", updateStart);
+  const updateBlock = content.substring(updateStart, updateEnd + 1);
+  assertStringIncludes(updateBlock, "merchant?: string;");
+});
+
+Deno.test("Insert type excludes multi and computed links, keeps optional links optional", () => {
+  const authorLink: Context.LinkDef = {
+    columnName: "author_id",
+    multi: false,
+    name: "author",
+    required: false,
+    target: "Merchant"
+  };
+
+  const latestLink: Context.LinkDef = {
+    computed: true,
+    multi: false,
+    name: "latest",
+    required: false,
+    target: "Merchant"
+  };
+
+  const tagsLink: Context.LinkDef = {
+    junctionTable: "post_tags",
+    multi: true,
+    name: "tags",
+    required: false,
+    target: "Merchant"
+  };
+
+  const postType: Context.TypeDef = {
+    kind: "object",
+    links: new Map([
+      ["author", authorLink],
+      ["latest", latestLink],
+      ["tags", tagsLink]
+    ]),
+    name: "Post",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        edgeqlType: "uuid",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }]
+    ]),
+    tableName: "posts"
+  };
+
+  const schema: Context.Schema = {
+    functions: new Map(),
+    types: new Map([["Post", postType]])
+  };
+
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "types")!.content;
+
+  const insertStart = content.indexOf("export interface PostInsert");
+  const insertEnd = content.indexOf("}", insertStart);
+  const insertBlock = content.substring(insertStart, insertEnd + 1);
+
+  assertStringIncludes(insertBlock, "author?: string;");
+  assertEquals(insertBlock.includes("latest"), false);
+  assertEquals(insertBlock.includes("tags"), false);
+});
+
+Deno.test("builder _typeCasts includes single links as <uuid>", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "queries")!.content;
+
+  /*** insert()/update() look up casts by key, so the link name must map to <uuid> for
+       `merchant := <uuid>$merchant` to compile onto the FK column ***/
+  const start = content.indexOf("class PaymentQueryBuilder");
+  const end = content.indexOf("_typeInfo", start);
+  const castsBlock = content.substring(start, end);
+
+  assertStringIncludes(castsBlock, `merchant: "<uuid>"`);
+});
+
 Deno.test("client.ts constructor uses bare type names for multi-module schemas", () => {
   /*** Regression: the constructor used to iterate this.schema.types and use the map key (e.g.
        "api::ApiKey") as both property and builder identifier, producing `this.api::apikey = new

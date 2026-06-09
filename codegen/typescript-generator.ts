@@ -339,6 +339,18 @@ export class TypeScriptGenerator {
       content += `${indent}  ${propName}${optional}: ${tsType};\n`;
     }
 
+    /*** Single links are settable by target UUID — insert() casts them as <uuid> and the
+         compiler maps the link onto its FK column. Multi links need junction rows and computed
+         links aren't stored, so both are excluded. ***/
+    for (const [linkName, link] of typeDef.links) {
+      if (link.multi || link.computed)
+        continue;
+
+      const optional = link.required ? "" : "?";
+      content += `${indent}  /** UUID of the linked ${link.target} */\n`;
+      content += `${indent}  ${linkName}${optional}: string;\n`;
+    }
+
     content += `${indent}}\n`;
     return content;
   }
@@ -553,6 +565,16 @@ export class TypeScriptGenerator {
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
       typeCastEntries.push(`    ${propName}: "${cast}"`);
+    }
+
+    /*** Single links are set by target UUID, so insert()/update() cast them as <uuid> and the
+         compiler maps the link name onto its FK column. Multi links (junction rows) and computed
+         links (not stored) are excluded — matching the Insert/Update interfaces. ***/
+    for (const [linkName, link] of typeDef.links) {
+      if (link.multi || link.computed)
+        continue;
+
+      typeCastEntries.push(`    ${linkName}: "<uuid>"`);
     }
 
     /*** Build the typeInfo entries (Stage C). Includes id (queryable) and every link as a thunk
@@ -859,6 +881,15 @@ export class TypeScriptGenerator {
 
       /*** Everything in update is optional ***/
       content += `${indent}  ${propName}?: ${tsType};\n`;
+    }
+
+    /*** Single links — same UUID-string convention as Insert, always optional ***/
+    for (const [linkName, link] of typeDef.links) {
+      if (link.multi || link.computed)
+        continue;
+
+      content += `${indent}  /** UUID of the linked ${link.target} */\n`;
+      content += `${indent}  ${linkName}?: string;\n`;
     }
 
     content += `${indent}}\n`;

@@ -228,6 +228,8 @@ class UserQueryBuilder {
 
 Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.
 
+Single links appear in the `Insert`/`Update` types as the target object's UUID (`string`) and are cast as `<uuid>`, so `client.post.insert({ title, author: userId })` assigns the link directly. Multi links and computed links are excluded — set multi links via raw EdgeQL for now.
+
 ### `client.ts` -- Typed Client
 
 Extends the SDK `DiscClient` with query builder properties:
