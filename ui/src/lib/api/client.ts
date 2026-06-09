@@ -159,13 +159,11 @@ export interface ServerHealth {
 }
 
 export interface ServerStats {
-  /** Disc server version. */
-  version?: string;
+  connections: any;
   /** Database resolved for this request — the one the UI is viewing. */
   database?: string;
   /** All databases registered with the server. */
   databases?: string[];
-  connections: any;
   memoryUsage?: any;
   queries: {
     avgDurationMs: number;
@@ -175,6 +173,8 @@ export interface ServerStats {
   };
   transactions: any;
   uptimeMs: number;
+  /** Disc server version. */
+  version?: string;
 }
 
 export class DiscAPIClient {

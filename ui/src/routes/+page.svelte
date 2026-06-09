@@ -1,43 +1,50 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { discAPI } from '$lib/api/client';
+  /*** IMPORT ------------------------------------------- ***/
 
-  // P1-23: dashboard wired to real /stats, /schema, /migrations endpoints.
-  // "Total objects" was previously a fictional stat — there's no efficient
-  // server-side count across every type. Replaced with "Migrations applied"
-  // which has a dedicated endpoint and is actually useful at a glance.
-  // Recent queries are read from `discQueryHistory` localStorage (shared
-  // with the query editor route) since there's no server-side query log.
+  import { onMount } from "svelte";
+
+  /*** UTILITY ------------------------------------------ ***/
+
+  import { discAPI } from "$lib/api/client";
+
+  /*** Dashboard wired to real /stats, /schema, /migrations endpoints. "Total objects" was
+       previously a fictional stat — there’s no efficient server-side count across every type.
+       Replaced with "Migrations applied" which has a dedicated endpoint and is actually useful at a
+       glance. Recent queries are read from `discQueryHistory` localStorage (shared with the query
+       editor route) since there’s no server-side query log. ***/
   interface Stats {
-    types: number;
-    migrations: number;
     connections: number;
+    migrations: number;
     queries: number;
+    types: number;
   }
 
   let stats: Stats = {
-    types: 0,
-    migrations: 0,
     connections: 0,
-    queries: 0
+    migrations: 0,
+    queries: 0,
+    types: 0
   };
 
-  let databaseName = '';
-  let recentQueries: string[] = [];
+  let databaseName = "";
+  let errorMessage = "";
   let isLoading = true;
-  let errorMessage = '';
+  let recentQueries: string[] = [];
+
+  /*** RUNTIME ------------------------------------------ ***/
 
   onMount(async () => {
-    if (typeof localStorage !== 'undefined') {
-      const history = localStorage.getItem('discQueryHistory');
+    if (typeof localStorage !== "undefined") {
+      const history = localStorage.getItem("discQueryHistory");
+
       if (history) {
         try {
           const parsed = JSON.parse(history);
-          if (Array.isArray(parsed)) {
+
+          if (Array.isArray(parsed))
             recentQueries = parsed.slice(0, 5);
-          }
         } catch {
-          // Ignore malformed history
+          /*** Ignore malformed history ***/
         }
       }
     }
@@ -50,15 +57,15 @@
       ]);
 
       stats = {
-        types: schema?.types?.length ?? 0,
-        migrations: migrations?.length ?? 0,
         connections: serverStats?.connections?.active ?? 0,
-        queries: serverStats?.queries?.total ?? 0
+        migrations: migrations?.length ?? 0,
+        queries: serverStats?.queries?.total ?? 0,
+        types: schema?.types?.length ?? 0
       };
 
-      databaseName = serverStats?.database ?? '';
+      databaseName = serverStats?.database ?? "";
     } catch (error) {
-      errorMessage = error instanceof Error ? error.message : 'Failed to load dashboard';
+      errorMessage = error instanceof Error ? error.message : "Failed to load dashboard";
     } finally {
       isLoading = false;
     }
@@ -69,14 +76,8 @@
   @use "@inc/uchu/scss" as *;
   @use "../styles/mixins" as *;
 
-  .dashboard {
-    /* margin: 0 auto; */
-    /* max-width: 1400px; */
-  }
-
   h1 {
     border-bottom: 1px solid $uchu-gray-1;
-    /* margin-bottom: calc(var(--grid-unit) * 2); */
     line-height: 1;
     padding-bottom: calc(var(--grid-unit) * 2);
 
@@ -95,10 +96,6 @@
 
   .error-banner {
     align-items: center;
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-error, #ff4444); */
-    /* border-radius: var(--border-radius); */
-    /* color: var(--color-error, #ff4444); */
     display: flex;
     font-family: var(--font-mono);
     font-size: 0.875rem;
@@ -124,30 +121,19 @@
   }
 
   .stat-card {
-    /* background: var(--color-surface); */
-    /* border: 1px solid var(--color-border); */
-    /* border-radius: var(--border-radius); */
     line-height: 1;
     overflow: hidden;
     padding: calc(var(--grid-unit) * 3) calc(var(--grid-unit) * 2);
     position: relative;
     transition: all var(--transition-fast);
 
-    &:hover {
-      /* @include glow(var(--color-primary-rgb), 0.2); */
-      /* border-color: var(--color-primary); */
-    }
-
     .stat-value {
-      /* @include neon-text(var(--color-primary-rgb)); */
-      /* color: var(--color-primary); */
       font-family: var(--font-display);
       font-size: 2rem;
       font-weight: 500;
     }
 
     .stat-label {
-      /* color: var(--color-text-dim); */
       font-family: var(--font-mono);
       font-size: 0.875rem;
       letter-spacing: 0.05rem;
@@ -158,7 +144,6 @@
     .stat-icon {
       top: calc(var(--grid-unit) * 2); right: calc(var(--grid-unit) * 2);
 
-      /* color: var(--color-primary); */
       font-size: 3rem;
       opacity: 0.2;
       position: absolute;
@@ -168,7 +153,14 @@
   .content-grid {
     display: grid;
     gap: calc(var(--grid-unit) * 3);
-    grid-template-columns: 1fr 1fr;
+
+    @media (min-width: 769px) {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
   }
 
   section {
@@ -180,16 +172,10 @@
 
   .recent-queries {
     .query-list {
-      /* background: var(--color-surface); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
       padding: calc(var(--grid-unit) * 2);
     }
 
     .query-item {
-      /* background: var(--color-background); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
       margin-bottom: var(--grid-unit);
       padding: calc(var(--grid-unit) * 1.5);
       transition: all var(--transition-fast);
@@ -198,19 +184,12 @@
         margin-bottom: 0;
       }
 
-      &:hover {
-        /* background: var(--color-surface-hover); */
-        /* border-color: var(--color-primary); */
-      }
-
       code {
-        /* color: var(--color-info); */
         font-size: 0.875rem;
       }
     }
 
     .empty-state {
-      /* color: var(--color-text-dim); */
       font-family: var(--font-mono);
       padding: calc(var(--grid-unit) * 4);
       text-align: center;
@@ -226,9 +205,6 @@
 
     .action-card {
       align-items: center;
-      /* background: var(--color-surface); */
-      /* border: 1px solid var(--color-border); */
-      /* border-radius: var(--border-radius); */
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -237,35 +213,23 @@
       transition: all var(--transition-fast);
 
       &:hover {
-        /* @include glow(var(--color-primary-rgb), 0.3); */
-        /* background: var(--color-surface-hover); */
-        /* border-color: var(--color-primary); */
-
         .action-icon {
           transform: scale(1.1);
         }
       }
 
       .action-icon {
-        /* color: var(--color-primary); */
         font-size: 2.5rem;
         margin-bottom: var(--grid-unit);
         transition: transform var(--transition-fast);
       }
 
       .action-label {
-        /* color: var(--color-text); */
         font-family: var(--font-mono);
         font-size: 0.875rem;
         letter-spacing: 0.05rem;
         text-transform: uppercase;
       }
-    }
-  }
-
-  @media (max-width: 768px) {
-    .content-grid {
-      grid-template-columns: 1fr;
     }
   }
 </style>

@@ -48,8 +48,9 @@
   /*** HELPER ------------------------------------------- ***/
 
   async function getVersion() {
-    const { version } = await discAPI.getStats();
-    discVersion = version;
+    // const { version } = await discAPI.getStats();
+    const info = await discAPI.getStats();
+    discVersion = String(info?.version);
   }
 
   async function checkHealth() {
@@ -245,7 +246,7 @@
         <span class="status-text">{connectionStatus}</span>
       </div>
 
-      <a class="logo" href="/ui">
+      <a class="logo" aria-label="Disc dashboard" href="/ui">
         <svg viewBox="0 0 620 200" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
           <path d="M475 55l0 -30l120 0l0 30l-120 0Zm0 90l-30 0l0 -90l30 0l0 90Zm0 0l120 0l0 30l-120 0l0 -30Zm-90 0l0 30l-120 0l0 -30l120 0Zm0 0l0 -30l-120 0l0 -60l30 0l0 30l120 0l0 60l-30 0Zm-90 -90l0 -30l120 0l0 30l-120 0Zm-150 90l0 30l-120 0l0 -150l120 0l0 30l-90 0l0 90l90 0Zm0 -90l30 0l0 90l-30 0l0 -90Zm60 120l0 -150l30 0l0 150l-30 0Z"/>
         </svg>

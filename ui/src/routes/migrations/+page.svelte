@@ -151,12 +151,7 @@
         background-color: oklch(var(--uchu-yin-1-raw) / 30%);
       }
 
-      &.editing {
-        /* background-color: var(--uchu-yellow-1); */
-        background-color: oklch(var(--uchu-yellow-1-raw) / 30%);
-      }
-
-      &:not(.editing):hover {
+      &:hover {
         background-color: var(--uchu-gray-1);
       }
 

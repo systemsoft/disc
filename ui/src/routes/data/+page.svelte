@@ -916,11 +916,6 @@
       margin: 0;
     }
 
-    h4 {
-      font-size: 0.875rem;
-      margin-bottom: var(--grid-unit);
-    }
-
     &.live-pulse {
       // TRON-aesthetic pulse — green ring on invalidate, fades over 600ms.
       border-color: var(--color-grid-line, #00d2ff);
@@ -972,77 +967,10 @@
     }
   }
 
-  :global(.button-live-on) {
-    /* background: var(--color-grid-line, #00d2ff); */
-    /* color: var(--color-bg, #000); */
-  }
-
   .insert-wrap {
     display: grid;
     gap: calc(var(--grid-unit) * 2);
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .insert-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--grid-unit);
-    padding: calc(var(--grid-unit) * 2);
-
-    label {
-      display: flex;
-      flex-direction: column;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      gap: calc(var(--grid-unit) * 0.5);
-
-      input {
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
-        padding: var(--grid-unit);
-      }
-    }
-
-    .type-tag {
-      display: inline-block;
-      font-size: 0.7rem;
-      margin-left: var(--grid-unit);
-    }
-
-    .form-actions {
-      display: flex;
-      gap: var(--grid-unit);
-      margin-top: var(--grid-unit);
-    }
-
-    .link-row {
-      select {
-        font-family: var(--font-mono);
-        font-size: 0.875rem;
-        padding: var(--grid-unit);
-      }
-
-      .link-mode-toggle {
-        align-self: flex-start;
-        margin-top: calc(var(--grid-unit) * 0.5);
-      }
-    }
-  }
-
-  :global(.button-small) {
-    font-size: 0.75rem !important;
-    padding: calc(var(--grid-unit) * 0.5) var(--grid-unit) !important;
-  }
-
-  :global(.button-secondary) {
-    /* background: var(--color-background) !important; */
-    /* color: var(--color-text) !important; */
-  }
-
-  :global(.button-danger) {
-    /* background: rgb(var(--color-danger-rgb) / 0.1) !important; */
-    /* border-color: var(--color-danger) !important; */
-    /* color: var(--color-danger) !important; */
   }
 
   .empty {
@@ -1199,10 +1127,6 @@
       padding-left: calc(var(--grid-unit) * 2);
       padding-right: calc(var(--grid-unit) * 2);
 
-      .null {
-        color: var(--uchu-gray-3);
-      }
-
       .parameter {
         font-family: var(--font-mono);
         font-weight: 500;
@@ -1230,6 +1154,12 @@
             position: absolute;
           }
         }
+      }
+    }
+
+    .data-bit {
+      .null {
+        color: var(--uchu-gray-3);
       }
     }
 
