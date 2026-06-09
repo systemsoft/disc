@@ -342,13 +342,11 @@ Deno.test("EdgeQL to SQL - SELECT with computed backlink + type intersection", a
   const normalized = normalizeSQL(sql);
 
   // Should emit a correlated subquery against the target table, filtered
-  // by the FK column that points back to the current type. Column name is
-  // `options` (not `options_id`) because the SDL uses colon-form which
-  // schema-manager reclassifies as a link with a bare column name; the
-  // arrow-form (`options -> PaymentOption`) would yield `options_id`.
+  // by the FK column that points back to the current type. Colon-form and
+  // arrow-form links share the `<name>_id` column convention.
   assertStringIncludes(normalized, "'requirements'");
   assertStringIncludes(normalized, `FROM "payment_requirements"`);
-  assertStringIncludes(normalized, `"payment_requirements"."options"`);
+  assertStringIncludes(normalized, `"payment_requirements"."options_id"`);
   assertStringIncludes(normalized, "jsonb_agg");
 });
 

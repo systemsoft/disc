@@ -47,7 +47,7 @@ import {
 } from "../schema/ast.ts";
 import {
   Module,
-  normalizeArrowsToProperties,
+  normalizeModules,
   SDLConverter
 } from "../schema/converter.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
@@ -530,12 +530,18 @@ export class SchemaManager {
             objectTypeNames.has(sdlTypeName.replace(/^default::/, ""));
           if (isObjectTarget && !propDecl.computed) {
             const linkAnnotations = extractAnnotationMap(propDecl.annotations);
+            const isMultiLink = propDecl.multi ?? false;
             links.set(propName, {
               name: propName,
               target: sdlTypeName,
               required: propDecl.required ?? false,
-              multi: propDecl.multi ?? false,
-              columnName: propNameToColumnName(propName),
+              multi: isMultiLink,
+              // Same column convention as the LinkDeclaration branch below:
+              // single links live in a snake_case `<name>_id` FK column,
+              // multi links in a junction table (no inline column).
+              columnName: isMultiLink ?
+                undefined :
+                `${propNameToColumnName(propName)}_id`,
               computed: propDecl.computed !== undefined,
               annotations: linkAnnotations
             });
@@ -938,7 +944,7 @@ export class SchemaManager {
     // the differ sees the AST. Without this, the differ treats every arrow
     // as a link and emits FK constraints to non-existent scalar tables
     // (e.g. `REFERENCES datetime (id)`).
-    const newModules = normalizeArrowsToProperties(parseResult.value);
+    const newModules = normalizeModules(parseResult.value);
 
     // Ensure engine exists
     if (!this.engine) {
@@ -1073,7 +1079,7 @@ export class SchemaManager {
     }
     // Reclassify scalar arrows as properties so the differ doesn't emit
     // FK constraints to scalar "tables".
-    const newModules = normalizeArrowsToProperties(parseResult.value);
+    const newModules = normalizeModules(parseResult.value);
 
     // Ensure engine exists
     if (!this.engine) {
@@ -1111,7 +1117,7 @@ export class SchemaManager {
 
     // Reclassify scalar arrows as properties so the differ doesn't emit
     // FK constraints to scalar "tables".
-    const newModules = normalizeArrowsToProperties(rawModules);
+    const newModules = normalizeModules(rawModules);
 
     // Hash-fallback baseline check: when `currentModules` couldn't be
     // primed (latest applied migration row pre-dates the schema_modules
@@ -1238,7 +1244,7 @@ export class SchemaManager {
       );
     }
 
-    const newModules = normalizeArrowsToProperties(rawModules);
+    const newModules = normalizeModules(rawModules);
     return this.engine.planMigration(this.currentModules, newModules);
   }
 
@@ -1454,7 +1460,7 @@ export class SchemaManager {
       );
     }
 
-    const newModules = normalizeArrowsToProperties(rawModules);
+    const newModules = normalizeModules(rawModules);
     const planResult = this.engine.planMigration(
       this.currentModules,
       newModules
@@ -1524,7 +1530,7 @@ export class SchemaManager {
          planMigrationFromSDL, etc). Without this, the baseline keeps arrow-syntax fields as links
          while applySchema normalizes them to properties — every existing field then diffs as a
          DropLink, falsely tripping the unsafe-op gate. ***/
-    const normalized = normalizeArrowsToProperties(parseResult.value);
+    const normalized = normalizeModules(parseResult.value);
     this.currentModules = normalized;
     this.currentSchema = this.modulesToSchema(normalized);
 
@@ -1580,7 +1586,7 @@ export class SchemaManager {
       // otherwise).
       const baseline = this.engine.getLatestAppliedModules();
       if (baseline !== null) {
-        this.currentModules = normalizeArrowsToProperties(baseline);
+        this.currentModules = normalizeModules(baseline);
         this.currentSchema = this.modulesToSchema(this.currentModules);
       }
     }

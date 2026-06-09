@@ -1726,16 +1726,15 @@ Deno.test({
       ));
 
       // Insert with the link assigned via a bare select subquery — the
-      // canonical Gel pattern. Must store the user's id in the FK column
-      // (named after the link by SchemaManager).
+      // canonical Gel pattern. Must store the user's id in the FK column.
       await pool.query(compileEdgeQL(
         `insert LinkPost { title := "Hello", author := (select LinkUser filter .email = "ada@example.com") }`,
         schema
       ));
 
       const inserted = await pool.query(`
-        SELECT p.author, u.email
-        FROM link_post p JOIN link_user u ON u.id = CAST(p.author AS uuid)
+        SELECT p.author_id, u.email
+        FROM link_post p JOIN link_user u ON u.id = p.author_id
         WHERE p.title = 'Hello'
       `);
       assertEquals(inserted.rowCount, 1, "Post should reference a user");
@@ -1749,7 +1748,7 @@ Deno.test({
 
       const updated = await pool.query(`
         SELECT u.email
-        FROM link_post p JOIN link_user u ON u.id = CAST(p.author AS uuid)
+        FROM link_post p JOIN link_user u ON u.id = p.author_id
         WHERE p.title = 'Hello'
       `);
       assertEquals(updated.rows[0].email, "billie@example.com");

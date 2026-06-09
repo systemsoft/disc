@@ -757,3 +757,47 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
   // plan-failed must be the terminal event
   assertEquals(events[events.length - 1].kind, "plan-failed");
 });
+
+Deno.test("Migration Engine - colon-form and link-keyword links produce identical DDL", async () => {
+  const { SDLParser } = await import("../schema/parser.ts");
+  const { normalizeModules, SDLConverter } = await import("../schema/converter.ts");
+
+  // Strip `-- Migration:` / `-- ID:` / `-- Created:` headers — they carry
+  // ids and timestamps that differ between runs.
+  const ddlFor = (sdl: string): string[] => {
+    const converter = new SDLConverter();
+    const modules = normalizeModules(
+      converter.convertToModules(new SDLParser(sdl).parse())
+    );
+    const engine = new MigrationEngine(config);
+    const plan = engine.planMigration(null, modules);
+    assertEquals(plan.ok, true);
+    if (!plan.ok)
+      throw plan.error;
+
+    const ddl = engine.generateDDL(plan.value);
+    assertEquals(ddl.ok, true);
+    if (!ddl.ok)
+      throw ddl.error;
+
+    return ddl.value.filter(line => !line.startsWith("--"));
+  };
+
+  const colonDdl = ddlFor(`
+    type User { required email: str; }
+    type Post { required title: str; required author: User; }
+  `);
+  const keywordDdl = ddlFor(`
+    type User { required email: str; }
+    type Post { required title: str; required link author -> User; }
+  `);
+
+  assertEquals(colonDdl, keywordDdl);
+
+  // Both lay down the snake_case FK column with a REFERENCES constraint —
+  // not a bare text column named after the link.
+  const joined = colonDdl.join("\n");
+  assertStringIncludes(joined, "author_id");
+  assertStringIncludes(joined, "REFERENCES");
+  assertEquals(/\bauthor\b(?!_id)[^\n]*TEXT/i.test(joined), false);
+});

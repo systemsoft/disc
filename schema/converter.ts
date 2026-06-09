@@ -31,7 +31,7 @@ export interface Module {
  * Object link declarations, properties, constraints, indexes, and access
  * policies pass through unchanged.
  */
-export function normalizeArrowsToProperties(modules: Module[]): Module[] {
+function collectObjectTypeNames(modules: Module[]): Set<string> {
   const objectTypeNames = new Set<string>();
   for (const module of modules) {
     for (const item of module.items) {
@@ -43,12 +43,21 @@ export function normalizeArrowsToProperties(modules: Module[]): Module[] {
       }
     }
   }
+  return objectTypeNames;
+}
 
-  const isObjectTarget = (target: AST.TypeRef): boolean => {
+function makeIsObjectTarget(
+  objectTypeNames: Set<string>
+): (target: AST.TypeRef) => boolean {
+  return (target: AST.TypeRef): boolean => {
     const fullName = target.name.parts.join("::");
     return objectTypeNames.has(fullName) ||
       objectTypeNames.has(fullName.replace(/^default::/, ""));
   };
+}
+
+export function normalizeArrowsToProperties(modules: Module[]): Module[] {
+  const isObjectTarget = makeIsObjectTarget(collectObjectTypeNames(modules));
 
   return modules.map(module => ({
     name: module.name,
@@ -96,6 +105,86 @@ export function normalizeArrowsToProperties(modules: Module[]): Module[] {
       return { ...typeDecl, members: newMembers };
     })
   }));
+}
+
+/**
+ * Reclassify colon-form `PropertyDeclaration`s that target an object type as
+ * `LinkDeclaration`s.
+ *
+ * Modern SDL declares links with the bare colon form (`author: User`), which
+ * the parser emits as a PropertyDeclaration — whether the target is a scalar
+ * or an object type is a cross-module question. Without normalization the
+ * migration differ treats these as scalar properties and lays down a bare
+ * text column named after the link, while the explicit `link` keyword path
+ * produces a `<name>_id` uuid FK column for the same schema.
+ *
+ * Returns a new Module[] with rewritten members; inputs are not mutated.
+ * Abstract, computed, and rewrite-bearing properties pass through unchanged
+ * (computed members create no columns; rewrites have no link counterpart).
+ */
+export function normalizeObjectPropertiesToLinks(modules: Module[]): Module[] {
+  const isObjectTarget = makeIsObjectTarget(collectObjectTypeNames(modules));
+
+  return modules.map(module => ({
+    name: module.name,
+    items: module.items.map(item => {
+      if (item.kind !== "TypeDeclaration") {
+        return item;
+      }
+      const typeDecl = item as AST.TypeDeclaration;
+      const newMembers = typeDecl.members.map((member): AST.TypeMember => {
+        if (member.kind !== "PropertyDeclaration") {
+          return member;
+        }
+        const property = member as AST.PropertyDeclaration;
+        if (
+          property.abstract ||
+          property.computed ||
+          (property.rewrites && property.rewrites.length > 0) ||
+          !isObjectTarget(property.type)
+        ) {
+          return member;
+        }
+        const link: AST.LinkDeclaration = {
+          kind: "LinkDeclaration",
+          name: property.name,
+          target: property.type
+        };
+        if (property.required !== undefined) {
+          link.required = property.required;
+        }
+        if (property.multi !== undefined) {
+          link.multi = property.multi;
+        }
+        if (property.overloaded !== undefined) {
+          link.overloaded = property.overloaded;
+        }
+        if (property.readonly !== undefined) {
+          link.readonly = property.readonly;
+        }
+        if (property.default !== undefined) {
+          link.default = property.default;
+        }
+        if (property.constraints !== undefined) {
+          link.constraints = property.constraints;
+        }
+        if (property.annotations !== undefined) {
+          link.annotations = property.annotations;
+        }
+        return link;
+      });
+      return { ...typeDecl, members: newMembers };
+    })
+  }));
+}
+
+/**
+ * Run both normalization passes over parsed modules. Every path that feeds
+ * modules to the migration differ or `modulesToSchema` must use this so the
+ * arrow and colon forms produce identical storage layouts.
+ */
+export function normalizeModules(modules: Module[]): Module[] {
+  return normalizeObjectPropertiesToLinks(normalizeArrowsToProperties(modules));
 }
 
 /**

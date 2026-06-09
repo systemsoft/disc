@@ -7,7 +7,7 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import * as SDLAST from "./ast.ts";
-import { SDLConverter } from "./converter.ts";
+import { normalizeModules, normalizeObjectPropertiesToLinks, SDLConverter } from "./converter.ts";
 import { SDLParser } from "./parser.ts";
 
 Deno.test("SDL Converter - Convert Simple Type", () => {
@@ -258,4 +258,110 @@ Deno.test("SDL Converter - Convert Access Policies", () => {
 
   assertExists(policy);
   assertEquals(policy.name.value, "owner_only");
+});
+
+Deno.test("normalizeObjectPropertiesToLinks - colon-form object target becomes a LinkDeclaration", () => {
+  const source = `
+    type User {
+      required email: str;
+    }
+    type Post {
+      required title: str;
+      required author: User;
+      multi tags: User;
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const converter = new SDLConverter();
+  const modules = normalizeObjectPropertiesToLinks(
+    converter.convertToModules(parser.parse())
+  );
+
+  const post = modules[0].items.find(
+    i => (i as SDLAST.TypeDeclaration).name?.value === "Post"
+  ) as SDLAST.TypeDeclaration;
+
+  const author = post.members.find(
+    m => (m as SDLAST.LinkDeclaration).name?.value === "author"
+  ) as SDLAST.LinkDeclaration;
+  assertEquals(author.kind, "LinkDeclaration");
+  assertEquals(author.required, true);
+  assertEquals(author.target.name.parts.join("::"), "User");
+
+  const tags = post.members.find(
+    m => (m as SDLAST.LinkDeclaration).name?.value === "tags"
+  ) as SDLAST.LinkDeclaration;
+  assertEquals(tags.kind, "LinkDeclaration");
+  assertEquals(tags.multi, true);
+
+  // Scalar property is untouched
+  const title = post.members.find(
+    m => (m as SDLAST.PropertyDeclaration).name?.value === "title"
+  ) as SDLAST.PropertyDeclaration;
+  assertEquals(title.kind, "PropertyDeclaration");
+});
+
+Deno.test("normalizeObjectPropertiesToLinks - computed object properties pass through", () => {
+  const source = `
+    type User {
+      required email: str;
+    }
+    type Post {
+      required author: User;
+      latest := (select User limit 1);
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const converter = new SDLConverter();
+  const modules = normalizeObjectPropertiesToLinks(
+    converter.convertToModules(parser.parse())
+  );
+
+  const post = modules[0].items.find(
+    i => (i as SDLAST.TypeDeclaration).name?.value === "Post"
+  ) as SDLAST.TypeDeclaration;
+
+  const latest = post.members.find(
+    m => (m as SDLAST.PropertyDeclaration).name?.value === "latest"
+  );
+  assertExists(latest);
+  // Computed members create no columns; leave their classification alone
+  assertEquals(latest!.kind === "LinkDeclaration", false);
+});
+
+Deno.test("normalizeModules - colon-form link and explicit link keyword normalize identically", () => {
+  const colonForm = `
+    type User { required email: str; }
+    type Post { required author: User; }
+  `;
+  const keywordForm = `
+    type User { required email: str; }
+    type Post { required link author -> User; }
+  `;
+
+  const converter = new SDLConverter();
+  const fromColon = normalizeModules(
+    converter.convertToModules(new SDLParser(colonForm).parse())
+  );
+  const fromKeyword = normalizeModules(
+    converter.convertToModules(new SDLParser(keywordForm).parse())
+  );
+
+  const linkOf = (modules: typeof fromColon) => {
+    const post = modules[0].items.find(
+      i => (i as SDLAST.TypeDeclaration).name?.value === "Post"
+    ) as SDLAST.TypeDeclaration;
+    return post.members.find(
+      m => (m as SDLAST.LinkDeclaration).name?.value === "author"
+    ) as SDLAST.LinkDeclaration;
+  };
+
+  const colonLink = linkOf(fromColon);
+  const keywordLink = linkOf(fromKeyword);
+  assertEquals(colonLink.kind, "LinkDeclaration");
+  assertEquals(keywordLink.kind, "LinkDeclaration");
+  assertEquals(colonLink.required, keywordLink.required);
+  assertEquals(colonLink.target.name.parts, keywordLink.target.name.parts);
 });

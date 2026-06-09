@@ -229,10 +229,10 @@ Deno.test("Integration - Cross-module inheritance via qualified name", async () 
   const sdlDocument = parser.parse();
   // Arrow-form scalar declarations (`required created -> datetime`) parse as
   // LinkDeclaration nodes; the differ only sees PropertyDeclarations, so the
-  // production code path runs `normalizeArrowsToProperties` first. Mirror
+  // production code path runs `normalizeModules` first. Mirror
   // that here so the test exercises realistic input.
-  const { normalizeArrowsToProperties } = await import("../schema/converter.ts");
-  const modules = normalizeArrowsToProperties(validator.convertToModules(sdlDocument));
+  const { normalizeModules } = await import("../schema/converter.ts");
+  const modules = normalizeModules(validator.convertToModules(sdlDocument));
 
   const planResult = engine.planMigration(null, modules);
   assertEquals(planResult.ok, true);
