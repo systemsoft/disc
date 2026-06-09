@@ -23,7 +23,7 @@ const rows = (page: import("@playwright/test").Page) => page.locator(".data-wrap
 function nameValues(page: import("@playwright/test").Page): Promise<string[]> {
   return page
     .locator("input[name=\"name\"]")
-    .evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    .evaluateAll(els => els.map(e => (e as HTMLInputElement).value));
 }
 
 test.describe("Data viewer — read", () => {
@@ -52,7 +52,7 @@ test.describe("Data viewer — read", () => {
     await expect.poll(async () => (await nameValues(page)).sort()).toEqual([
       "Disc identity disc",
       "Light cycle",
-      "Recognizer",
+      "Recognizer"
     ]);
   });
 

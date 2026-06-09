@@ -124,7 +124,7 @@ Deno.test("TlsCertWatcher - fires onReload after debounce when cert is rewritten
     "-----BEGIN CERTIFICATE-----\nnew-cert\n-----END CERTIFICATE-----\n"
   );
 
-  let timeoutId: number | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     fired.promise,
     new Promise<void>((_, rej) => {
@@ -181,7 +181,7 @@ Deno.test("TlsCertWatcher - debounces a burst of writes into a single reload", a
     await new Promise(r => setTimeout(r, 20));
   }
 
-  let timeoutId: number | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     fired.promise,
     new Promise<void>((_, rej) => {

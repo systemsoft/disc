@@ -74,7 +74,7 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 | `cli/`       | `disc` CLI — project init, migrate, shell, codegen                         | P1       |
 | `codegen/`   | TypeScript type generation from schemas                                    | P2       |
 | `ui/`        | SvelteKit-based admin UI (schema browser, query editor, data viewer, REPL) | P2       |
-| `auth/`      | Built-in auth module (Gel Let`ext::auth` equivalent)                       | P3       |
+| `auth/`      | Built-in auth module (Gel's `ext::auth` equivalent)                        | P3       |
 | `access/`    | Object-level access policies                                               | P3       |
 
 ## Tech Stack
@@ -85,6 +85,7 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 - **Testing**: `deno test`
 - **Linting/Formatting**: `deno task lint` and `deno task format` with project config
 - **Package registry**: JSR (jsr.io) preferred, npm via `npm:` specifiers when necessary
+- **Dependency locking**: disabled (`"lock": false` in `deno.json`) — a deliberate choice while JSR dependencies move quickly; no `deno.lock` is committed, so ranged deps resolve at cache time
 
 ## Conventions
 
@@ -103,22 +104,39 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 
 ```
 disc/
-├── access/            # Access policy engine
-├── auth/              # Auth extension module
-├── cli/               # CLI entry point and commands
-├── codegen/           # TypeScript client type generation
-├── compiler/          # EdgeQL → SQL compilation
-├── edgeql/            # EdgeQL lexer, parser, AST nodes
-├── lib/               # Shared utilities (errors, types, logging, project context)
-├── migration/         # Schema diff engine and DDL generation
-├── postgres/          # Bundled PostgreSQL binary management and lifecycle
-├── schema/            # SDL lexer, parser, AST nodes, validation
-├── server/            # Protocol, connections, sessions
-├── tests/             # Integration and end-to-end tests
-├── ui/                # SvelteKit admin UI (bundled with server)
-├── CLAUDE.md          # This file
-└── deno.json          # Deno configuration
+├── access/                # Access policy engine
+├── auth/                  # Auth extension module
+├── benchmarks/            # deno bench performance suites
+├── cli/                   # CLI entry point and commands
+├── codegen/               # TypeScript client type generation
+├── compiler/              # EdgeQL → SQL compilation
+├── deploy/                # Deployment artifact generators (Docker, compose, systemd, Helm)
+├── docs/                  # User-facing documentation
+├── edgeql/                # EdgeQL lexer, parser, AST nodes
+├── ext-custom-functions/  # Extension: user-defined functions
+├── ext-fts/               # Extension: full-text search
+├── ext-graphql/           # Extension: GraphQL endpoint
+├── ext-oauth/             # Extension: OAuth providers
+├── ext-vector/            # Extension: vector search
+├── extensions/            # Extension framework (registry, base class, adapters)
+├── homebrew/              # Homebrew formula
+├── lib/                   # Shared utilities (errors, types, logging, project context)
+├── lsp/                   # Language server (stdio JSON-RPC)
+├── migration/             # Schema diff engine and DDL generation
+├── postgres/              # Bundled PostgreSQL binary management and lifecycle
+├── protocol/              # Binary wire protocol (Gel-compatible)
+├── schema/                # SDL lexer, parser, AST nodes, validation
+├── scripts/               # Repo maintenance scripts (versioning)
+├── sdk/                   # TypeScript client SDK
+├── server/                # HTTP/WebSocket server, connections, sessions
+├── smtp/                  # SMTP client (auth email delivery)
+├── tests/                 # Integration and end-to-end tests
+├── ui/                    # SvelteKit admin UI (bundled with server)
+├── CLAUDE.md              # This file
+└── deno.json              # Deno configuration
 ```
+
+Note: `extensions/` is the framework (registry, lifecycle, base `Extension` class); the top-level `ext-*` directories are the concrete extension implementations registered through it.
 
 ### Naming
 
@@ -334,16 +352,25 @@ Gel uses a custom binary protocol. For Disc v1, prioritize:
 
 ```bash
 disc init                  # Initialize a new Disc project (downloads Postgres if needed)
-disc start                 # Start the Disc server and bundled PostgreSQL
-disc stop                  # Stop the Disc server and bundled PostgreSQL
-disc status                # Show instance status (server, Postgres, port, data dir)
+disc start                 # Start bundled PostgreSQL instance
+disc stop                  # Stop bundled PostgreSQL instance
+disc restart               # Restart bundled PostgreSQL instance
+disc status                # Show PostgreSQL status
 disc migrate               # Generate and apply migrations
 disc migrate --create      # Create migration without applying
 disc shell                 # Interactive EdgeQL REPL
 disc codegen               # Generate TypeScript types
 disc watch                 # Watch schema files and auto-migrate in dev
-disc serve                 # Start the Disc server (alias for disc start)
+disc serve                 # Start the Disc server (HTTP/WS; ensures PostgreSQL is running)
 disc ui                    # Open admin UI in default browser
+disc build                 # Compile Disc into a self-contained binary
+disc deploy                # Generate deployment artifacts (docker, compose, systemd, env)
+disc db <subcommand>       # create | list | drop | wipe | dump | restore | push
+disc schema export         # Export current schema as a single SDL file
+disc schema introspect     # Generate SDL from an existing PostgreSQL database
+disc admin <subcommand>    # create-superuser | set-password | assign-role | list-roles |
+                           # list-policies | test-policy
+disc lsp                   # Run the Disc language server (stdio JSON-RPC)
 disc pg upgrade            # Upgrade bundled PostgreSQL version
 disc pg log                # Tail PostgreSQL logs
 ```
@@ -458,12 +485,13 @@ deno task test
 deno task cli --help
 ```
 
-> **Note**: `postgres/embedded-pg-manifest.ts` is git-ignored and regenerated by the build. `deno task` entries (`test`, `check`, `build`, `dev`, `serve`, `cli`, `bench`) chain `deno task prep` first, which writes an empty stub when the file is missing so the module graph type-checks on a fresh clone. If you invoke `deno test` / `deno check` directly (bypassing tasks), run `deno task prep` once after cloning.
+> **Note**: `postgres/embedded-pg-manifest.ts` is git-ignored and regenerated by the build. `deno task` entries (`test`, `check`, `typecheck`, `build`, `dev`, `serve`, `cli`, `bench`) chain `deno task prep` first, which writes an empty stub when the file is missing so the module graph type-checks on a fresh clone. If you invoke `deno test` / `deno check` directly (bypassing tasks), run `deno task prep` once after cloning.
 
 ### Before Committing
 
-- `deno task format` — formatting
+- `deno task format` — formatting (dprint; `deno fmt` is intentionally unused)
 - `deno task lint` — linting
+- `deno task typecheck` — type-check all Deno modules (tests run with `--no-check`, so this is the only gate)
 - `deno task test` — all tests pass
 - No `console.log` left in library code (use the logger from `lib/`)
 

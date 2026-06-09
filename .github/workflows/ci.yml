@@ -35,6 +35,14 @@ jobs:
         with:
           bun-version: latest
 
+      # Cache Bun's global install cache so `bun install` is a link-only
+      # operation on warm runs.
+      - name: Cache Bun install cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('ui/bun.lock') }}
+
       # Build the UI before the deno test step so `server/ui-assets.test.ts`
       # exercises the real embed-and-serve path. Without this, the four
       # tests in that file probe-skip when `ui/build/` is absent (the
@@ -46,8 +54,11 @@ jobs:
       - name: Build UI
         run: cd ui && bun run build
 
-      # - name: Check formatting
-      #   run: deno fmt --check
+      # dprint is the project formatter (`deno task format`); deno fmt is
+      # intentionally unused. bunx fetches the dprint CLI; plugins come
+      # from dprint.json.
+      - name: Check formatting (dprint)
+        run: bunx dprint check
 
       # Write the git-ignored embedded-PG manifest stub so the module
       # graph resolves. `deno task` chains this via prep, but the raw
@@ -57,6 +68,12 @@ jobs:
 
       - name: Lint
         run: deno lint
+
+      # Enforce the strict compilerOptions in deno.json — tests run with
+      # --no-check, so without this gate type errors only surface at
+      # runtime. Covers every Deno module (ui/ has its own svelte-check).
+      - name: Typecheck
+        run: deno task typecheck
 
       - name: Tests (no PG) with coverage
         # P3-05: collect coverage on every push/PR so regressions in test
@@ -93,6 +110,12 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('ui/bun.lock') }}
 
       - name: Install UI dependencies
         run: cd ui && bun install --frozen-lockfile

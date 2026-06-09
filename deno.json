@@ -11,6 +11,7 @@
     "strictNullChecks": true,
     "strictPropertyInitialization": true
   },
+  "exclude": ["tests/gel-compat/node/"],
   "exports": {
     ".": "./mod.ts",
     "./cli": "./cli/mod.ts",
@@ -56,7 +57,7 @@
     "build:darwin-x64": "deno task prep && deno run --allow-all --no-check cli/main.ts build --platform darwin-x64",
     "build:linux-arm64": "deno task prep && deno run --allow-all --no-check cli/main.ts build --platform linux-arm64",
     "build:linux-x64": "deno task prep && deno run --allow-all --no-check cli/main.ts build --platform linux-x64",
-    "check": "deno task prep && deno task lint && deno task format --check && deno task test",
+    "check": "deno task prep && deno task lint && deno task format:check && deno task typecheck && deno task test",
     "cli": "deno task prep && deno run --allow-all --no-check cli/main.ts",
     "dev": "deno task prep && deno run --watch --allow-all --no-check cli/main.ts",
     "docker:build": "docker build -t disc .",
@@ -67,12 +68,13 @@
     "lint": "deno lint",
     "prep": "deno run --allow-read --allow-write cli/prep.ts",
     "serve": "deno task prep && deno run --allow-net --allow-read --allow-env server/server.ts",
-    "test": "deno task prep && deno test --allow-env --allow-net --allow-read --allow-write --no-check",
-    "test:all": "deno task prep && DISC_PG_AUTO=1 deno test --allow-all --no-check --ignore=ui/",
-    "test:pg": "deno task prep && DISC_PG_AUTO=1 deno test --allow-all --no-check --ignore=ui/"
+    "test": "deno task prep && deno test --allow-env --allow-net --allow-read --allow-write --allow-run --no-check",
+    "test:pg": "deno task prep && DISC_PG_AUTO=1 deno test --allow-all --no-check",
+    "typecheck": "deno task prep && deno check access/ auth/ benchmarks/ cli/ codegen/ compiler/ deploy/ edgeql/ ext-custom-functions/ ext-fts/ ext-graphql/ ext-oauth/ ext-vector/ extensions/ lib/ lsp/ migration/ postgres/ protocol/ schema/ scripts/ sdk/ server/ smtp/ tests/ mod.ts",
+    "version:bump": "deno run --allow-read=deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml --allow-write=version.txt,deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml scripts/version.ts"
   },
   "test": {
-    "exclude": ["reference-gel/**"],
+    "exclude": ["reference-gel/**", "ui/**"],
     "include": ["**/*.test.ts", "tests/**/*.ts"]
   },
   "version": "2026.06.09"

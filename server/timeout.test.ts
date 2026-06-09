@@ -50,7 +50,7 @@ function makeSlowPool(delayMs: number): {
   pool: ConnectionPool;
   cleanup: () => void;
 } {
-  const timerIds: number[] = [];
+  const timerIds: ReturnType<typeof setTimeout>[] = [];
 
   const pool = {
     query: () =>
@@ -232,7 +232,7 @@ function createSlowProtocolHandler(delayMs: number): {
   handler: ProtocolHandler;
   cleanup: () => void;
 } {
-  const timerIds: number[] = [];
+  const timerIds: ReturnType<typeof setTimeout>[] = [];
 
   const handler: ProtocolHandler = {
     async handleRequest(

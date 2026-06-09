@@ -28,8 +28,42 @@ permissions:
   packages: write # ghcr.io push (gh/geldata#5699 + #4901)
 
 jobs:
+  # The UI bundle is platform-independent static output — build it once
+  # and share it with every platform job instead of rebuilding 3x.
+  build-ui:
+    name: Build UI bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('ui/bun.lock') }}
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: bun install --frozen-lockfile
+
+      - name: Build UI
+        working-directory: ui
+        run: bun run build
+
+      - name: Upload UI bundle
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ui-build
+          path: ui/build
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: build-ui
     strategy:
       # `darwin-x64` removed from the release matrix because the
       # macos-13 runner job hangs indefinitely on the GitHub-hosted
@@ -60,14 +94,11 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Build UI (needed for bundled binary)
-        working-directory: ui
-        run: |
-          curl -fsSL https://bun.sh/install | bash
-          export BUN_INSTALL="$HOME/.bun"
-          export PATH="$BUN_INSTALL/bin:$PATH"
-          bun install
-          bun run build
+      - name: Download UI bundle (needed for bundled binary)
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: ui-build
+          path: ui/build
 
       - name: Prep (write manifest stub)
         run: deno task prep
