@@ -189,6 +189,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2.0.4
+        with:
+          deno-version: v2.x
+
       - name: Prep (write manifest stub)
         run: deno task prep
 
