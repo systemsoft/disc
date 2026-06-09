@@ -218,10 +218,10 @@ Deno.test(
         target: "client"
       });
 
-      /*** The console output should reference Widget (from the SDL), not fallback types like
-           User/Post from the test schema. ***/
-      const logs = capture.getLogs();
-      const allOutput = logs.join("\n");
+      /*** The output should reference Widget (from the SDL), not fallback types like User/Post
+           from the test schema. Informational output flows through the logger (stderr), so we
+           inspect both captured streams. ***/
+      const allOutput = [...capture.getLogs(), ...capture.getErrors()].join("\n");
 
       assert(allOutput.includes("Widget"), `Codegen output should reference "Widget" from SDL, got:\n${allOutput}`);
     } finally {
@@ -309,9 +309,9 @@ Deno.test(
       });
 
       /*** Dry-run should complete without error. The output should mention migration planning or
-           "DRY RUN" or "up to date". ***/
-      const logs = capture.getLogs();
-      const allOutput = logs.join("\n");
+           "DRY RUN" or "up to date". Informational output flows through the logger (stderr), so
+           we inspect both captured streams. ***/
+      const allOutput = [...capture.getLogs(), ...capture.getErrors()].join("\n");
 
       /*** The command should produce some output about the migration ***/
       assert(allOutput.length > 0, "Dry-run migrate should produce console output");
@@ -354,9 +354,9 @@ Deno.test(
         schema: schemaFile
       });
 
-      /*** Create mode should show the plan info ***/
-      const logs = capture.getLogs();
-      const allOutput = logs.join("\n");
+      /*** Create mode should show the plan info. Informational output flows through the logger
+           (stderr), so we inspect both captured streams. ***/
+      const allOutput = [...capture.getLogs(), ...capture.getErrors()].join("\n");
 
       assert(
         allOutput.includes("Migration Plan") ||

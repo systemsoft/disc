@@ -505,6 +505,7 @@ describe("AuthProvider", () => {
       const events: Array<Record<string, unknown>> = [];
 
       configureLogging({
+        format: "json",
         output: line => {
           try {
             const entry = JSON.parse(line);
@@ -531,7 +532,7 @@ describe("AuthProvider", () => {
           "expected at least one auth.session_revoked event with reason=max_sessions_per_user"
         );
       } finally {
-        configureLogging({ output: undefined });
+        configureLogging({ format: "text", output: undefined });
       }
     });
   });
@@ -541,6 +542,7 @@ describe("AuthProvider", () => {
       const events: Array<Record<string, unknown>> = [];
 
       configureLogging({
+        format: "json",
         output: line => {
           try {
             const entry = JSON.parse(line);
@@ -562,7 +564,7 @@ describe("AuthProvider", () => {
         assertEquals(eventNames.includes("login_succeeded"), true);
         assertEquals(eventNames.includes("session_created"), true);
       } finally {
-        configureLogging({ output: undefined });
+        configureLogging({ format: "text", output: undefined });
       }
     });
   });
