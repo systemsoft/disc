@@ -137,7 +137,6 @@ export class InitCommand {
     const lines: string[] = [
       `# Disc Project Configuration`,
       `name = "${projectName}"`,
-      `version = "0.1.0"`,
       ``,
       `[database]`
     ];
