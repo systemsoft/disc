@@ -102,6 +102,10 @@ host = "0.0.0.0"
     assertEquals(result!.backendDsn, "postgresql://user:pass@host:5432/mydb");
     assertEquals(result!.serverPort, 8080);
     assertEquals(result!.serverHost, "0.0.0.0");
+    /*** port/host must also reach serverOverrides so `disc serve` applies them
+         (the serve command consumes serverOverrides, not serverPort/Host). ***/
+    assertEquals(result!.serverOverrides?.port, 8080);
+    assertEquals(result!.serverOverrides?.host, "0.0.0.0");
     assertEquals(result!.projectRoot, dir);
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -192,6 +196,31 @@ rate_limit_rpm = 600
     assertEquals(overrides!.rateLimitRpm, 600);
   } finally {
     await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - [server] port/host reach overrides; absent leaves them out", async () => {
+  const withPort = await makeTempDir();
+  try {
+    await writeToml(withPort, `name = "ported"\n[server]\nport = 9000\nhost = "0.0.0.0"\n`);
+    const result = resolveProjectContext(withPort);
+    assertEquals(result!.serverOverrides?.port, 9000);
+    assertEquals(result!.serverOverrides?.host, "0.0.0.0");
+  } finally {
+    await Deno.remove(withPort, { recursive: true });
+  }
+
+  /*** When [server] omits port/host, they must NOT appear in overrides — that
+       absence is what lets the env-derived DISC_PORT/DISC_HOST defaults survive
+       (#1325 precedence: env < disc.toml < CLI flag). ***/
+  const noPort = await makeTempDir();
+  try {
+    await writeToml(noPort, `name = "unported"\n[server]\nrequire_auth = true\n`);
+    const result = resolveProjectContext(noPort);
+    assertEquals(result!.serverOverrides?.port, undefined);
+    assertEquals(result!.serverOverrides?.host, undefined);
+  } finally {
+    await Deno.remove(noPort, { recursive: true });
   }
 });
 

@@ -28,7 +28,9 @@ export interface ServerOverrides {
   enableMetrics?: boolean;
   enableRest?: boolean;
   enableWebsockets?: boolean;
+  host?: string;
   maxRequestBodyBytes?: number;
+  port?: number;
   rateLimitRpm?: number;
   readOnly?: boolean;
   requestTimeout?: number;
@@ -343,6 +345,23 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
 
   if (fields.corsOrigins !== undefined) {
     overrides.corsOrigins = fields.corsOrigins;
+  }
+
+  /*** `host`/`port` are mirrored here (in addition to the top-level
+       `ctx.serverHost`/`ctx.serverPort`) so they flow through the same
+       "present-only" override path as every other [server] key. The top-level
+       fields always carry a default, which can't express "absent" — applying
+       them unconditionally would clobber the DISC_HOST/DISC_PORT env layer.
+       Only keys actually set in disc.toml land here, so the serve command's
+       `Object.assign(config, serverOverrides)` preserves env defaults when the
+       file omits them while still letting CLI flags win. ***/
+  if (fields.host !== undefined) {
+    overrides.host = fields.host;
+  }
+
+  const port = parsePositiveInt(fields.port);
+  if (port !== undefined) {
+    overrides.port = port;
   }
 
   const maxRequestBodyBytes = parsePositiveInt(fields.maxRequestBodyBytes);
