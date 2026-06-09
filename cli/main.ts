@@ -117,7 +117,7 @@ const HELP_TEXT = dedent`
     --squash-from ${gray("<id>")} ${gray(".".repeat(7))} Start of squash range (inclusive)
     --squash-to ${gray("<id>")} ${gray(".".repeat(9))} End of squash range (inclusive)
     --unsafe ${gray(".".repeat(17))} Permit data-destroying migrations (DropType, DropTable, DropProperty, DropLink).
-                              Off by default, refused with a summary of the unsafe operations.
+                               Off by default, refused with a summary of the unsafe operations.
 
   ${inverse("  FLAG SCOPE ")} (run ${gray("disc <command> --help")} for command-specific details)
 
@@ -125,18 +125,18 @@ const HELP_TEXT = dedent`
     init ${gray(".".repeat(21))} --template, --backend-dsn, --skip-postgres, --force, --directory
     start/stop/restart/status  --no-monitor (start only), --foreground (start only)
     migrate ${gray(".".repeat(18))} --schema, --dry-run, --auto-approve, --create, --status,
-                              --rollback, --rollback-to, --squash, --squash-{from,to},
-                              --unsafe, --backend-dsn
+                               --rollback, --rollback-to, --squash, --squash-{from,to},
+                               --unsafe, --backend-dsn
     shell/serve ${gray(".".repeat(14))} --backend-dsn; serve adds --jwt-secret, --enable-auth,
-                              --enable-access-policies, --binary-port, --tls-cert, --tls-key
+                               --enable-access-policies, --binary-port, --tls-cert, --tls-key
     codegen ${gray(".".repeat(18))} --schema, --schema-dir, --output, --target, --no-queries,
-                              --no-mutations, --no-client, --no-format, --js
+                               --no-mutations, --no-client, --no-format, --js
     watch ${gray(".".repeat(20))} --schema, --output
     build ${gray(".".repeat(20))} --platform, --output, --lite
     deploy ${gray(".".repeat(19))} --format, --output
     db create/list/drop ${gray(".".repeat(6))} --force (drop), --database-url
     db wipe/dump/restore ${gray(".".repeat(5))} --force (wipe), --output (dump), --format (dump),
-                              --input (restore), --clean (restore), --database-url
+                               --input (restore), --clean (restore), --database-url
     pg log ${gray(".".repeat(19))} --follow, --lines, --level
     pg upgrade ${gray(".".repeat(15))} --target-version, --dry-run
 
