@@ -13,6 +13,8 @@
  * — apps assume the defaults when fields are omitted.
  */
 
+import { hmac } from "../lib/crypto.ts";
+
 /*** UTILITY ------------------------------------------ ***/
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -209,15 +211,7 @@ async function hotp(
   new DataView(counterBytes.buffer).setUint32(0, hi, false);
   new DataView(counterBytes.buffer).setUint32(4, lo, false);
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    key as BufferSource,
-    { name: "HMAC", hash: algorithm },
-    false,
-    ["sign"]
-  );
-
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, counterBytes as BufferSource));
+  const sig = await hmac(algorithm, key, counterBytes);
 
   /*** Dynamic truncation (RFC 4226 §5.3). ***/
   const offset = sig[sig.length - 1] & 0x0f;

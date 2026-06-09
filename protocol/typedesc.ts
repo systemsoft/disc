@@ -15,6 +15,7 @@
  */
 
 import type { TypeDef } from "../compiler/context.ts";
+import { sha256 } from "../lib/crypto.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import { Cardinality } from "./enums.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
@@ -460,11 +461,8 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
 export async function generateDescriptorId(
   content: Uint8Array
 ): Promise<Uint8Array> {
-  const hash = await crypto.subtle.digest(
-    "SHA-256",
-    content as Uint8Array<ArrayBuffer>
-  );
-  return new Uint8Array(hash.slice(0, 16));
+  const hash = await sha256(content);
+  return hash.slice(0, 16);
 }
 
 /**

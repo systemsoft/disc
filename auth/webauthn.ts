@@ -25,6 +25,8 @@
  * credential username-less flows.
  */
 
+import { sha256 } from "../lib/crypto.ts";
+
 /*** UTILITY ------------------------------------------ ***/
 
 const FLAG_ATTESTED_CREDENTIAL_DATA = 0x40;
@@ -234,8 +236,7 @@ export function base64UrlEncode(bytes: Uint8Array): string {
  * against `authData[0..32]`.
  */
 export async function hashRpId(rpId: string): Promise<Uint8Array> {
-  const bytes = new TextEncoder().encode(rpId);
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource));
+  return await sha256(rpId);
 }
 
 /**
@@ -303,7 +304,7 @@ export async function verifyAssertionSignature(opts: {
   publicKey: ParsedPublicKey;
   signature: Uint8Array;
 }): Promise<boolean> {
-  const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", opts.clientDataJSON as BufferSource));
+  const clientDataHash = await sha256(opts.clientDataJSON);
   const signedData = concat(opts.authData, clientDataHash);
   const key = await importCoseKey(opts.publicKey);
   /*** ES256 raw signatures from authenticators are DER-encoded ECDSA (r,s sequences). WebCrypto

@@ -18,10 +18,12 @@
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { encodeHex } from "@std/encoding";
+
+import { hmacSha256 } from "../lib/crypto.ts";
 import { getLogger } from "../lib/logger.ts";
 
 const log = getLogger("auth-webhooks");
-const textEncoder = new TextEncoder();
 
 /*** EXPORT ------------------------------------------- ***/
 
@@ -299,17 +301,5 @@ export function newEventTimestamp(): string {
 /*** HELPER ------------------------------------------- ***/
 
 async function signHmacSha256(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    textEncoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const sig = await crypto.subtle.sign("HMAC", key, textEncoder.encode(body));
-
-  return [...new Uint8Array(sig)]
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
+  return encodeHex(await hmacSha256(secret, body));
 }

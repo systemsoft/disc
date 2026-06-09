@@ -8,6 +8,8 @@
  * (crypto.subtle) for all cryptographic operations. No external dependencies.
  */
 
+import { hmacSha256, sha256 } from "../lib/crypto.ts";
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -52,32 +54,6 @@ export const MIN_SCRAM_ITERATIONS = 4096;
 // ---------------------------------------------------------------------------
 // Crypto helpers (all using Web Crypto API)
 // ---------------------------------------------------------------------------
-
-/**
- * Compute HMAC-SHA-256 of `data` under `key`.
- */
-async function hmacSha256(
-  key: Uint8Array,
-  data: Uint8Array
-): Promise<Uint8Array> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    asBuf(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, asBuf(data));
-  return new Uint8Array(sig);
-}
-
-/**
- * Compute SHA-256 digest.
- */
-async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  const digest = await crypto.subtle.digest("SHA-256", asBuf(data));
-  return new Uint8Array(digest);
-}
 
 /**
  * Hi() — PBKDF2 with HMAC-SHA-256.

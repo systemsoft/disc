@@ -19,6 +19,7 @@
  */
 
 import type { DatabaseInterface } from "../../auth/database-interface.ts";
+import { sha256Hex } from "../crypto.ts";
 import { getLogger } from "../logger.ts";
 import type { FileMetadata, FileStorageBackend, FileUpload } from "./types.ts";
 
@@ -242,12 +243,4 @@ function rowToMetadata(row: Record<string, unknown>): FileMetadata {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
-  return Array
-    .from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
 }

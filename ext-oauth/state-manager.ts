@@ -12,6 +12,8 @@
  */
 
 import { encodeBase64Url } from "@std/encoding/base64url";
+
+import { sha256 } from "../lib/crypto.ts";
 import type { OAuthState } from "./types.ts";
 
 export class OAuthStateManager {
@@ -36,11 +38,7 @@ export class OAuthStateManager {
     const verifierBytes = new Uint8Array(32);
     crypto.getRandomValues(verifierBytes);
     const codeVerifier = encodeBase64Url(verifierBytes);
-    const challengeDigest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(codeVerifier)
-    );
-    const codeChallenge = encodeBase64Url(new Uint8Array(challengeDigest));
+    const codeChallenge = encodeBase64Url(await sha256(codeVerifier));
 
     const oauthState: OAuthState = {
       createdAt: now,
