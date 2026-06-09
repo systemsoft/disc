@@ -189,6 +189,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Prep (write manifest stub)
+        run: deno task prep
+
       # Build once, tag twice. `:latest` and the version tag come from
       # the same image build so they're always in sync — closing the
       # mismatch documented in #4901.
