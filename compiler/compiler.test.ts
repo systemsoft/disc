@@ -389,6 +389,79 @@ Deno.test("SQL Compiler - UPDATE Query", () => {
   assertEquals(sql.includes("RETURNING"), true);
 });
 
+Deno.test("SQL Compiler - INSERT link via select subquery projects target id", () => {
+  const source = `
+    INSERT Post {
+      title := "Hello",
+      body := "World",
+      author := (SELECT User FILTER .email = "ada@example.com")
+    }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("INSERT INTO"), true);
+  assertEquals(sql.includes("author_id"), true);
+  // The subquery must yield the target's id for the FK column, not a jsonb
+  // shape (alias counter depends on test order, so match any user_N)
+  assertEquals(/user_\d+\.id/.test(sql), true);
+  assertEquals(sql.includes("jsonb_build_object"), false);
+});
+
+Deno.test("SQL Compiler - INSERT link via direct uuid cast still compiles to a plain cast", () => {
+  const source = `
+    INSERT Post {
+      title := "Hello",
+      body := "World",
+      author := <uuid>$author
+    }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("author_id"), true);
+  assertEquals(sql.includes("CAST($1 AS uuid)") || sql.includes("CAST($2 AS uuid)") || sql.includes("CAST($3 AS uuid)"), true);
+});
+
+Deno.test("SQL Compiler - UPDATE link via select subquery projects target id", () => {
+  const source = `
+    UPDATE Post
+    FILTER .title = "Hello"
+    SET {
+      author := (SELECT User FILTER .email = "ada@example.com")
+    }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("author_id ="), true);
+  assertEquals(/user_\d+\.id/.test(sql), true);
+  assertEquals(sql.includes("jsonb_build_object"), false);
+});
+
+Deno.test("SQL Compiler - UPSERT else clause link via select subquery projects target id", () => {
+  const source = `
+    INSERT Post {
+      title := "Hello",
+      body := "World",
+      author := (SELECT User FILTER .email = "ada@example.com")
+    }
+    UNLESS CONFLICT ON .title
+    ELSE (
+      UPDATE Post
+      SET {
+        author := (SELECT User FILTER .email = "billie@example.com")
+      }
+    )
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("ON CONFLICT"), true);
+  assertEquals(sql.includes("DO UPDATE"), true);
+  assertEquals(sql.includes("jsonb_build_object"), false);
+});
+
 Deno.test("SQL Compiler - DELETE Query", () => {
   const source = `
     DELETE User

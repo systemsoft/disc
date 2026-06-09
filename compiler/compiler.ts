@@ -353,6 +353,42 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
   }
 
+  // Compile the value of a link assignment in INSERT/UPDATE. A bare
+  // `(select Target filter ...)` in link position must yield the target's id
+  // — the FK column stores a uuid, so the default jsonb shape would produce
+  // invalid SQL. Any other expression (uuid cast, parameter) compiles
+  // normally.
+  private compileLinkAssignmentExpression(
+    expr: EdgeQLAST.Expression
+  ): SQL.SQLExpression {
+    const query = expr.kind === "Subquery" ?
+      (expr as EdgeQLAST.Subquery).query :
+      expr;
+
+    if (query.kind === "SelectQuery") {
+      const select = query as EdgeQLAST.SelectQuery;
+
+      // Only TypeName sources — compileSelectQueryRaw produces a plain
+      // `SELECT * FROM table AS alias` for those; narrow it to the id column.
+      if (select.expr.kind === "TypeName") {
+        const statement = this.compileSelectQueryRaw(select);
+        const table = statement.from?.tables[0];
+
+        if (table?.alias) {
+          statement.select = SQL.createSelectClause([
+            SQL.createSelectItem(
+              SQL.createColumnReference("id", table.alias)
+            )
+          ]);
+
+          return SQL.createSubqueryExpression(statement);
+        }
+      }
+    }
+
+    return this.compileExpression(expr);
+  }
+
   private compileInsertQuery(
     query: EdgeQLAST.InsertQuery
   ): SQL.InsertStatement {
@@ -375,10 +411,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       const propName = element.name.name;
       const property = Context.getProperty(this.ctx, typeName, propName);
+      let isLink = false;
       if (!property) {
         const link = Context.getLink(this.ctx, typeName, propName);
         if (link && link.columnName) {
           columns.push(link.columnName);
+          isLink = true;
         } else {
           throw new CompilationError(
             `Property '${propName}' not found on type '${typeName}'`
@@ -388,7 +426,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         columns.push(property.columnName);
       }
 
-      const value = this.compileExpression(element.expr);
+      const value = isLink ?
+        this.compileLinkAssignmentExpression(element.expr) :
+        this.compileExpression(element.expr);
       values.push(value);
     }
 
@@ -444,7 +484,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
               setClauses.push({
                 kind: "SetClause",
                 column: link.columnName,
-                value: this.compileExpression(element.expr)
+                value: this.compileLinkAssignmentExpression(element.expr)
               });
             } else {
               throw new CompilationError(
@@ -522,7 +562,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           setClauses.push({
             kind: "SetClause",
             column: link.columnName,
-            value: this.compileExpression(element.expr)
+            value: this.compileLinkAssignmentExpression(element.expr)
           });
         } else {
           throw new CompilationError(

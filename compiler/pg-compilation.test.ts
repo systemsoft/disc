@@ -1689,3 +1689,80 @@ Deno.test({
     }
   }
 });
+
+Deno.test({
+  name: "PG E2E: link assignment via select subquery stores the target id",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+
+      const result = await manager.applySchema(`
+        type LinkUser {
+          required email: str;
+        }
+        type LinkPost {
+          required title: str;
+          required author: LinkUser;
+        }
+      `);
+      assertEquals(result.ok, true, "applySchema should succeed");
+
+      const schema = manager.getSchema()!;
+
+      // Seed two users via EdgeQL inserts
+      await pool.query(compileEdgeQL(
+        `insert LinkUser { email := "ada@example.com" }`,
+        schema
+      ));
+      await pool.query(compileEdgeQL(
+        `insert LinkUser { email := "billie@example.com" }`,
+        schema
+      ));
+
+      // Insert with the link assigned via a bare select subquery — the
+      // canonical Gel pattern. Must store the user's id in the FK column
+      // (named after the link by SchemaManager).
+      await pool.query(compileEdgeQL(
+        `insert LinkPost { title := "Hello", author := (select LinkUser filter .email = "ada@example.com") }`,
+        schema
+      ));
+
+      const inserted = await pool.query(`
+        SELECT p.author, u.email
+        FROM link_post p JOIN link_user u ON u.id = CAST(p.author AS uuid)
+        WHERE p.title = 'Hello'
+      `);
+      assertEquals(inserted.rowCount, 1, "Post should reference a user");
+      assertEquals(inserted.rows[0].email, "ada@example.com");
+
+      // Re-point the link via update with the same subquery pattern
+      await pool.query(compileEdgeQL(
+        `update LinkPost filter .title = "Hello" set { author := (select LinkUser filter .email = "billie@example.com") }`,
+        schema
+      ));
+
+      const updated = await pool.query(`
+        SELECT u.email
+        FROM link_post p JOIN link_user u ON u.id = CAST(p.author AS uuid)
+        WHERE p.title = 'Hello'
+      `);
+      assertEquals(updated.rows[0].email, "billie@example.com");
+
+      await manager.close();
+    } finally {
+      await pool.query("DROP TABLE IF EXISTS link_post CASCADE");
+      await pool.query("DROP TABLE IF EXISTS link_user CASCADE");
+      await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
+      );
+      await pool.close();
+    }
+  }
+});
