@@ -75,5 +75,5 @@
     "exclude": ["reference-gel/**"],
     "include": ["**/*.test.ts", "tests/**/*.ts"]
   },
-  "version": "2026.06.08"
+  "version": "2026.06.09"
 }
