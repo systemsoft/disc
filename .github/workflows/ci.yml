@@ -49,6 +49,12 @@ jobs:
       # - name: Check formatting
       #   run: deno fmt --check
 
+      # Write the git-ignored embedded-PG manifest stub so the module
+      # graph resolves. `deno task` chains this via prep, but the raw
+      # `deno test`/`deno lint` invocations below bypass that chain.
+      - name: Prep (write manifest stub)
+        run: deno task prep
+
       - name: Lint
         run: deno lint
 
