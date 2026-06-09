@@ -12,9 +12,19 @@ import { clearItems, insertItem, itemCount, runQuery } from "./helpers";
 /*** RUNTIME ------------------------------------------ ***/
 
 /*** The data viewer renders each row as a `.data` card inside `.data-wrap`, not a `<table>`. Cell
-     values live in readonly `<input value="…">` elements, so assert on display value rather than
-     `getByRole("cell")`. ***/
+     values live in readonly `<input name="<col>" value="…">` elements. Playwright has no
+     `getByDisplayValue` (that's a Testing-Library query), and Svelte sets the input value as a DOM
+     *property* rather than a reflected attribute, so a `[value=…]` CSS selector won't match either.
+     Assert on the value property via `toHaveValue`, scoping by the column's `name`. ***/
 const rows = (page: import("@playwright/test").Page) => page.locator(".data-wrap .data");
+
+/*** Display values for the `name` column across every rendered row card. Used for order-independent
+     set assertions where no explicit sort has been applied. ***/
+function nameValues(page: import("@playwright/test").Page): Promise<string[]> {
+  return page
+    .locator("input[name=\"name\"]")
+    .evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+}
 
 test.describe("Data viewer — read", () => {
   test.beforeEach(async () => {
@@ -37,10 +47,13 @@ test.describe("Data viewer — read", () => {
     /*** Type list shows the seeded type (the sidebar button is the bare type name). ***/
     await expect(page.getByRole("button", { name: "Item", exact: true })).toBeVisible();
 
-    /*** Three row cards appear. ***/
+    /*** Three row cards appear, one per seeded row (order-independent — no sort applied). ***/
     await expect(rows(page)).toHaveCount(3);
-    await expect(page.getByDisplayValue("Light cycle")).toBeVisible();
-    await expect(page.getByDisplayValue("Recognizer")).toBeVisible();
+    await expect.poll(async () => (await nameValues(page)).sort()).toEqual([
+      "Disc identity disc",
+      "Light cycle",
+      "Recognizer",
+    ]);
   });
 
   test("sorts by clicking a property column header", async ({ page }) => {
@@ -49,10 +62,10 @@ test.describe("Data viewer — read", () => {
     /*** The count column’s sort toggle is a button labelled "count" in the filter aside. First click
          → asc → first row should be count=1. ***/
     await page.getByRole("button", { name: /^count/ }).click();
-    await expect(rows(page).first().getByDisplayValue("Disc identity disc")).toBeVisible();
+    await expect(rows(page).first().locator("input[name=\"name\"]")).toHaveValue("Disc identity disc");
     /*** Click again → desc → first row should be count=3. ***/
     await page.getByRole("button", { name: /^count/ }).click();
-    await expect(rows(page).first().getByDisplayValue("Recognizer")).toBeVisible();
+    await expect(rows(page).first().locator("input[name=\"name\"]")).toHaveValue("Recognizer");
   });
 
   test("filters by string column with ilike substring match", async ({ page }) => {
@@ -63,7 +76,7 @@ test.describe("Data viewer — read", () => {
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
     await expect(rows(page)).toHaveCount(1);
-    await expect(page.getByDisplayValue("Light cycle")).toBeVisible();
+    await expect(page.locator("input[name=\"name\"]")).toHaveValue("Light cycle");
   });
 
   test("filters numeric column with range syntax (>=N, a..b)", async ({ page }) => {
@@ -130,7 +143,7 @@ test.describe("Data viewer — CRUD", () => {
     await page.getByLabel(/^count/).fill("7");
     await page.getByRole("button", { name: "Save" }).click();
     /*** After insert the form closes and the row appears. ***/
-    await expect(page.getByDisplayValue("Tron")).toBeVisible();
+    await expect(page.locator("input[name=\"name\"]")).toHaveValue("Tron");
     expect(await itemCount()).toBe(1);
   });
 
@@ -145,7 +158,7 @@ test.describe("Data viewer — CRUD", () => {
     const editingInputs = page.locator(".data.editing input[type=\"text\"]");
     await editingInputs.nth(2).fill("Sark v2");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByDisplayValue("Sark v2")).toBeVisible();
+    await expect(page.locator("input[name=\"name\"]")).toHaveValue("Sark v2");
 
     const result = await runQuery(`select default::Item { name } filter .name = "Sark v2";`);
     expect(Array.isArray(result.data) ? result.data.length : 0).toBe(1);
@@ -159,7 +172,7 @@ test.describe("Data viewer — CRUD", () => {
     await page.getByRole("button", { name: "Delete" }).click();
 
     /*** Row gone from UI and DB. ***/
-    await expect(page.getByDisplayValue("CLU")).toHaveCount(0);
+    await expect(page.locator("input[name=\"name\"]")).toHaveCount(0);
     expect(await itemCount()).toBe(0);
   });
 });

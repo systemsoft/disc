@@ -102,7 +102,7 @@
           const r = parseRange(raw);
           const isDateOnly = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
 
-          if (r.op === "='"&& isDateOnly(r.a)) {
+          if (r.op === "=" && isDateOnly(r.a)) {
             const day = r.a.trim();
             /*** Compute next day with date-only math; the cast happens at emission time so we don’t
                  need a timezone-aware library. ***/
