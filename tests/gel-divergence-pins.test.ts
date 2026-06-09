@@ -427,7 +427,7 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
   // shared listen options). A future API addition like `cipherSuites`
   // or `tlsCiphers` would land as a typed property and trip this pin.
   const httpServerSrc = Deno.readTextFileSync(
-    new URL("../server/http.ts", import.meta.url)
+    new URL("../server/http-base.ts", import.meta.url)
   );
   // Disc passes only { hostname, port, cert, key } to Deno.serve when TLS
   // is enabled. If a future bundle adds cipher config it has to touch this
@@ -436,7 +436,7 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
     !httpServerSrc.includes("cipherSuites") &&
       !httpServerSrc.includes("tlsCiphers") &&
       !httpServerSrc.includes("tls_ciphers"),
-    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface " +
+    "server/http-base.ts mentions cipher-suite config — Deno doesn't expose this surface " +
       "(Gel #3872 pin). Remove the reference or update the divergence note."
   );
 });
@@ -1333,17 +1333,17 @@ Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", a
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to evaluator", async () => {
   const httpSrc = await Deno.readTextFile(
-    new URL("../server/http.ts", import.meta.url)
+    new URL("../server/http-handlers.ts", import.meta.url)
   );
   // The header parser must be admin-gated and produce a Set.
   assert(
     /X-Disc-Disable-Policies/.test(httpSrc) &&
       /disabledPolicies = new Set\(names\)/.test(httpSrc),
-    "server/http.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin)."
+    "server/http-handlers.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin)."
   );
   assert(
     /disableHeader && callerIsAdmin/.test(httpSrc),
-    "server/http.ts must admin-gate the disabled-policies header (Gel #6432 slice 3 pin)."
+    "server/http-handlers.ts must admin-gate the disabled-policies header (Gel #6432 slice 3 pin)."
   );
 
   const protoSrc = await Deno.readTextFile(

@@ -12,12 +12,12 @@ import { create, verify } from "@zaubrik/djwt";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import * as webAuthn from "./webauthn.ts";
-import { buildOtpauthUri, generateSecret as generateTotpSecret, verifyTOTP } from "./totp.ts";
+import { AuthProviderMfa } from "./provider-mfa.ts";
 import { createMailer } from "../smtp/mailer.ts";
 import { DatabaseInterface } from "./database-interface.ts";
 import { EmailEventListener } from "./email-listener.ts";
 import { getLogger } from "../lib/logger.ts";
+import { sha256Hex } from "../lib/crypto.ts";
 import { validateBranding, validateMagicLinkUrlTemplate } from "./branding.ts";
 
 import {
@@ -25,6 +25,14 @@ import {
   type CaptchaVerifier,
   type RemoteCaptchaVerifierOptions
 } from "./captcha.ts";
+
+import {
+  importHmacKey,
+  importRsaKeys,
+  validateAuthConfig,
+  type ConditionalAuthFields,
+  type ResolvedAuthConfig
+} from "./provider-helpers.ts";
 
 import {
   newEventId,
@@ -47,41 +55,8 @@ import {
   Session,
   TokenPayload,
   User,
-  type LoginResult,
-  type MfaChallenge,
-  type TotpEnrollment,
-  type WebAuthnLoginFinish,
-  type WebAuthnLoginOptions,
-  type WebAuthnRegistrationFinish,
-  type WebAuthnRegistrationOptions
+  type LoginResult
 } from "./types.ts";
-
-/**
- * Conditional config fields whose presence depends on `jwtAlgorithm`:
- *  - HS256 needs `jwtSecret`
- *  - RS256 needs `jwtPrivateKey` + `jwtPublicKey`
- * They’re excluded from the defaults map (no sensible default) and
- * validated at runtime in `initialize()`.
- */
-type ConditionalAuthFields =
-  | "branding"
-  | "captcha"
-  | "emailBaseUrl"
-  | "emailTemplates"
-  | "jwtPrivateKey"
-  | "jwtPublicKey"
-  | "jwtSecret"
-  | "magicLinkUrlTemplate"
-  | "smtp"
-  | "webauthn";
-
-/**
- * Resolved config after defaults merge — every non-conditional field is
- * required (so the constructor can rely on it without fallbacks), while
- * the algorithm-specific keys remain optional and are checked in
- * `initialize()`.
- */
-type ResolvedAuthConfig = Required<Omit<AuthConfig, ConditionalAuthFields>> & Pick<AuthConfig, ConditionalAuthFields>;
 
 const authLogger = getLogger("auth");
 
@@ -114,20 +89,15 @@ const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> = 
   webhooks: []
 };
 
-/*** Crockford-ish base32: alphanum minus visually-confusing 0/O, 1/I/L, and U (which the original
-     spec drops to avoid accidental profanity). 25 codes in the alphabet × 10 chars = ~58 bits of
-     entropy. Plenty for codes also gated by a 5-min MFA challenge window. ***/
-const RECOVERY_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
-
 /*** EXPORT ------------------------------------------- ***/
 
-export class AuthProvider implements IAuthProvider {
+export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
   /*** Pluggable captcha gate for public auth endpoints. Always present; when no `captcha` config
        is supplied, this is a `NoopCaptchaVerifier` that reports `isGated() === false` for every
        endpoint so route handlers can call it unconditionally. (gh/geldata#7341) ***/
   public readonly captchaVerifier: CaptchaVerifier;
-  private config: ResolvedAuthConfig;
-  private db: DatabaseInterface;
+  protected config: ResolvedAuthConfig;
+  protected db: DatabaseInterface;
   /*** Pre-computed bcrypt hash used by `login()` to equalize response time when the supplied
        email/username doesn’t exist. Without this, an attacker can enumerate valid accounts by
        stopwatch — wrong-password takes ~100ms (bcrypt.compare), no-such-user returns in ~1ms.
@@ -148,6 +118,8 @@ export class AuthProvider implements IAuthProvider {
     webhookOptions: WebhookSenderOptions = {},
     captchaOptions: RemoteCaptchaVerifierOptions = {}
   ) {
+    super();
+
     /*** Merge defaults with user config, dropping `undefined` values from `config` so an
          explicitly-undefined optional doesn’t shadow the default. ***/
     const overrides: Partial<AuthConfig> = {};
@@ -257,163 +229,6 @@ export class AuthProvider implements IAuthProvider {
   }
 
   /**
-   * Begin the WebAuthn login ceremony. If `email` is provided we look
-   * up the user’s credentials to scope `allowCredentials`; otherwise
-   * we issue an unscoped challenge (discoverable-credential / username-
-   * less flows).
-   */
-  async beginWebAuthnLogin(email?: string): Promise<WebAuthnLoginOptions> {
-    if (!this.config.webauthn)
-      throw new AuthError("WebAuthn not configured", AuthErrorCode.INVALID_OPERATION, 500);
-
-    const challenge = randomBytes(32);
-    const challengeId = this.generateId();
-    let allowCredentials: Array<{ id: string; type: "public-key"; }> = [];
-    let userId: string | null = null;
-
-    if (email) {
-      const userResult = await this.db.query("SELECT id FROM users WHERE email = ? AND active = ?", [email, true]);
-
-      if (userResult.rows.length > 0) {
-        userId = userResult.rows[0].id;
-        const creds = await this.db.query("SELECT credential_id FROM webauthn_credentials WHERE user_id = ?", [userId]);
-
-        allowCredentials = creds.rows.map(r => ({
-          id: r.credential_id,
-          type: "public-key" as const
-        }));
-      }
-    }
-
-    await this.db.execute(
-      `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [
-        challengeId,
-        webAuthn.base64UrlEncode(challenge),
-        "login",
-        userId,
-        new Date(Date.now() + 5 * 60 * 1000).toISOString()
-      ]
-    );
-
-    return {
-      challengeId,
-      publicKey: {
-        allowCredentials: allowCredentials.length > 0 ?
-          allowCredentials :
-          undefined,
-        challenge: webAuthn.base64UrlEncode(challenge),
-        rpId: this.config.webauthn.rpId,
-        timeout: 60000,
-        userVerification: "preferred"
-      }
-    };
-  }
-
-  /**
-   * Begin the WebAuthn registration ceremony. Mints a fresh challenge,
-   * persists it (with `purpose = "register"` and a 5-min expiry), and
-   * returns the `PublicKeyCredentialCreationOptions` payload that the
-   * caller hands to `navigator.credentials.create({ publicKey })`.
-   *
-   * `userId` is required because passkeys are user-scoped; pre-existing
-   * credentials are listed under `excludeCredentials` so the
-   * authenticator refuses to re-register the same key.
-   */
-  async beginWebAuthnRegistration(userId: string): Promise<WebAuthnRegistrationOptions> {
-    if (!this.config.webauthn)
-      throw new AuthError("WebAuthn not configured (set AuthConfig.webauthn)", AuthErrorCode.INVALID_OPERATION, 500);
-
-    const userResult = await this.db.query("SELECT id, email, username FROM users WHERE id = ?", [userId]);
-
-    if (userResult.rows.length === 0)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    const user = userResult.rows[0];
-    const challenge = randomBytes(32);
-    const challengeId = this.generateId();
-
-    await this.db.execute(
-      `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [
-        challengeId,
-        webAuthn.base64UrlEncode(challenge),
-        "register",
-        userId,
-        new Date(Date.now() + 5 * 60 * 1000).toISOString()
-      ]
-    );
-
-    const existing = await this.db.query("SELECT credential_id FROM webauthn_credentials WHERE user_id = ?", [userId]);
-    this.auditEvent("webauthn_registration_started", userId);
-
-    /*** Discoverable-credential preference (gh/geldata#7196). Defaults to `"preferred"` so
-         passkey-capable authenticators store user-handle metadata locally — future logins can then
-         start without the user typing their email first. Operators can flip
-         `webauthn.requireResidentKey` to `true` to refuse non-resident
-         authenticators outright. ***/
-    const requireResident = this.config.webauthn.requireResidentKey === true;
-
-    return {
-      challengeId,
-      publicKey: {
-        attestation: "none",
-        authenticatorSelection: {
-          requireResidentKey: requireResident,
-          residentKey: requireResident ? "required" : "preferred",
-          userVerification: "preferred"
-        },
-        challenge: webAuthn.base64UrlEncode(challenge),
-        excludeCredentials: existing.rows.map(r => ({
-          id: r.credential_id,
-          type: "public-key" as const
-        })),
-        pubKeyCredParams: [{
-          alg: webAuthn.COSE_ALG_ES256,
-          type: "public-key"
-        }],
-        rp: {
-          id: this.config.webauthn.rpId,
-          name: this.config.webauthn.rpName
-        },
-        timeout: 60000,
-        user: {
-          displayName: user.username || user.email,
-          id: user.id,
-          name: user.email
-        }
-      }
-    };
-  }
-
-  /**
-   * Complete TOTP enrollment by verifying that the user can read codes
-   * from their authenticator app. On success, marks the secret as
-   * confirmed — subsequent logins must include a TOTP code.
-   *
-   * Throws `INVALID_CREDENTIALS` (401) on a wrong code so probing the
-   * code space hits the same error shape as a wrong password.
-   */
-  async confirmTOTP(userId: string, code: string): Promise<void> {
-    const result = await this.db.query("SELECT secret FROM mfa_totp WHERE user_id = ?", [userId]);
-
-    if (result.rows.length === 0)
-      throw new AuthError("TOTP not enrolled", AuthErrorCode.INVALID_OPERATION, 400);
-
-    const offset = await verifyTOTP(result.rows[0].secret, code);
-
-    if (offset === null) {
-      this.auditEvent("totp_confirm_failed", userId);
-      throw new AuthError("Invalid TOTP code", AuthErrorCode.INVALID_CREDENTIALS, 401);
-    }
-
-    await this.db.execute("UPDATE mfa_totp SET confirmed_at = CURRENT_TIMESTAMP WHERE user_id = ?", [userId]);
-    this.auditEvent("totp_confirmed", userId);
-  }
-
-  /**
    * Redeem a magic-link token and complete login. Single-use — the
    * row’s `consumed_at` is set on success. If the user has TOTP
    * enrolled, returns an `MfaChallenge` instead of a session, matching
@@ -466,36 +281,6 @@ export class AuthProvider implements IAuthProvider {
   }
 
   /**
-   * Burn a recovery code. Used by `loginWithRecoveryCode` and exposed
-   * publicly for callers who want to verify outside the login flow
-   * (e.g. step-up auth before account-deletion). Returns true on
-   * successful consumption, false on bad / already-used code.
-   *
-   * Constant-time-ish: looks up the hash, which is by primary key, so
-   * present-vs-absent is a B-tree lookup either way.
-   */
-  async consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
-    const hash = await this.hashToken(normalizeRecoveryCode(code));
-    const result = await this.db.query("SELECT user_id, used_at FROM recovery_codes WHERE code_hash = ?", [hash]);
-
-    if (result.rows.length === 0)
-      return false;
-
-    const row = result.rows[0];
-
-    if (row.user_id !== userId)
-      return false;
-
-    if (row.used_at)
-      return false;
-
-    await this.db.execute("UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE code_hash = ?", [hash]);
-    this.auditEvent("recovery_code_consumed", userId);
-
-    return true;
-  }
-
-  /**
    * Register a new role in the role registry. Idempotent — if the role
    * already exists with the same description, this is a no-op; if the
    * description differs, the existing description is updated.
@@ -519,252 +304,6 @@ export class AuthProvider implements IAuthProvider {
   async deleteRole(name: string): Promise<void> {
     await this.db.execute("DELETE FROM roles WHERE name = ?", [name]);
     this.auditEvent("role_deleted", null, { role: name });
-  }
-
-  /** Remove a passkey from the user’s account. */
-  async deleteWebAuthnCredential(userId: string, credentialId: string): Promise<void> {
-    await this.db.execute("DELETE FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?", [userId, credentialId]);
-    this.auditEvent("webauthn_credential_deleted", userId, { credentialId });
-  }
-
-  /**
-   * Disable TOTP for a user. The row is deleted, not just flagged —
-   * keeps a fresh `enrollTOTP()` from accidentally re-using a
-   * compromised secret. The caller is responsible for whatever
-   * authorization gate makes sense (typically: re-prompt for password).
-   */
-  async disableTOTP(userId: string): Promise<void> {
-    await this.db.execute("DELETE FROM mfa_totp WHERE user_id = ?", [userId]);
-    this.auditEvent("totp_disabled", userId);
-  }
-
-  /**
-   * Begin TOTP enrollment for a user. Generates a fresh base32 secret
-   * and stores it in `mfa_totp` with `confirmed_at = NULL` — until the
-   * user proves they can produce a valid code (via `confirmTOTP`), the
-   * secret is just sitting there and the login flow ignores it.
-   *
-   * Calling enroll twice resets the secret. The old QR code becomes
-   * invalid the moment a new secret is written; this is intentional —
-   * the user clicked "set up MFA" again, presumably because they lost
-   * the previous setup.
-   */
-  async enrollTOTP(userId: string): Promise<TotpEnrollment> {
-    const userResult = await this.db.query("SELECT id, email, username FROM users WHERE id = ?", [userId]);
-
-    if (userResult.rows.length === 0)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    const user = userResult.rows[0];
-    const secret = generateTotpSecret();
-
-    const existing = await this.db.query("SELECT user_id FROM mfa_totp WHERE user_id = ?", [userId]);
-
-    if (existing.rows.length > 0)
-      await this.db.execute("UPDATE mfa_totp SET secret = ?, confirmed_at = NULL WHERE user_id = ?", [secret, userId]);
-    else
-      await this.db.execute("INSERT INTO mfa_totp (user_id, secret) VALUES (?, ?)", [userId, secret]);
-
-    const otpauthUri = buildOtpauthUri({
-      accountName: user.username || user.email,
-      issuer: this.config.jwtIssuer || "Disc",
-      secret
-    });
-
-    this.auditEvent("totp_enrollment_started", userId);
-    return { otpauthUri, secret };
-  }
-
-  /**
-   * Finish login: verify the assertion signature, validate counter
-   * monotonicity (cloning detection), and either issue a session or —
-   * if the user has TOTP confirmed — return an MfaChallenge so the
-   * second factor still gates them. (Phase A composition.)
-   */
-  async finishWebAuthnLogin(finish: WebAuthnLoginFinish, meta?: RequestMeta): Promise<LoginResult> {
-    if (!this.config.webauthn)
-      throw new AuthError("WebAuthn not configured", AuthErrorCode.INVALID_OPERATION, 500);
-
-    const challenge = await this.consumeWebAuthnChallenge(finish.challengeId, "login");
-
-    const credResult = await this.db.query(
-      `SELECT user_id, public_key_jwk, alg, counter
-       FROM webauthn_credentials WHERE credential_id = ?`,
-      [finish.credentialId]
-    );
-
-    if (credResult.rows.length === 0)
-      throw new AuthError("Unknown credential", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const cred = credResult.rows[0];
-
-    /*** If begin() bound a userId, the credential must belong to them. ***/
-    if (challenge.user_id && cred.user_id !== challenge.user_id)
-      throw new AuthError("Credential does not belong to the challenged user", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const authData = webAuthn.base64UrlDecode(finish.authenticatorData);
-    const clientDataJSON = webAuthn.base64UrlDecode(finish.clientDataJSON);
-    const signature = webAuthn.base64UrlDecode(finish.signature);
-
-    webAuthn.verifyClientData({
-      clientDataJSON,
-      expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
-      expectedOrigin: this.config.webauthn.origin,
-      expectedType: "webauthn.get"
-    });
-
-    const parsed = webAuthn.parseAuthenticatorData(authData);
-    const expectedRpHash = await webAuthn.hashRpId(this.config.webauthn.rpId);
-
-    if (!byteArraysEqual(parsed.rpIdHash, expectedRpHash))
-      throw new AuthError("WebAuthn rpIdHash mismatch", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const verified = await webAuthn.verifyAssertionSignature({
-      publicKey: {
-        alg: cred.alg,
-        jwk: JSON.parse(cred.public_key_jwk)
-      },
-      authData,
-      clientDataJSON,
-      signature
-    });
-
-    if (!verified) {
-      this.auditEvent("webauthn_signature_failed", cred.user_id, { ipAddress: meta?.ipAddress });
-      throw new AuthError("WebAuthn signature did not verify", AuthErrorCode.INVALID_CREDENTIALS, 401);
-    }
-
-    /*** Counter monotonicity (cloning detection per W3C §6.1.1). A counter of 0 from the
-         authenticator means the device doesn’t implement counters — accept it but never
-         bump the stored value. ***/
-    if (parsed.counter !== 0) {
-      if (parsed.counter <= cred.counter) {
-        this.auditEvent("webauthn_counter_regression", cred.user_id, { received: parsed.counter, stored: cred.counter });
-        throw new AuthError("WebAuthn counter regression — possible cloned credential", AuthErrorCode.INVALID_TOKEN, 401);
-      }
-
-      await this.db.execute(
-        `UPDATE webauthn_credentials
-         SET counter = ?, last_used_at = CURRENT_TIMESTAMP
-         WHERE credential_id = ?`,
-        [parsed.counter, finish.credentialId]
-      );
-    } else {
-      await this.db.execute(
-        `UPDATE webauthn_credentials
-         SET last_used_at = CURRENT_TIMESTAMP
-         WHERE credential_id = ?`,
-        [finish.credentialId]
-      );
-    }
-
-    const user = await this.getUser(cred.user_id);
-
-    if (!user || !user.active || user.isAnonymous)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    if (await this.hasConfirmedTOTP(user.id)) {
-      const challengeOut = await this.issueMfaChallenge(user.id);
-      this.auditEvent("webauthn_mfa_challenge_issued", user.id, { ipAddress: meta?.ipAddress });
-
-      return challengeOut;
-    }
-
-    this.auditEvent("webauthn_login_succeeded", user.id, { ipAddress: meta?.ipAddress });
-    return await this.completeLogin(user, meta);
-  }
-
-  /**
-   * Finish registration: parse the attestation object, verify the
-   * client data, and persist the credential. The challenge row is
-   * burned even on success (single-use) and on every error path that
-   * read it.
-   */
-  async finishWebAuthnRegistration(finish: WebAuthnRegistrationFinish): Promise<{ credentialId: string; }> {
-    if (!this.config.webauthn)
-      throw new AuthError("WebAuthn not configured", AuthErrorCode.INVALID_OPERATION, 500);
-
-    const challenge = await this.consumeWebAuthnChallenge(finish.challengeId, "register");
-
-    if (!challenge.user_id)
-      throw new AuthError("Registration challenge has no user binding", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const attestationBytes = webAuthn.base64UrlDecode(finish.attestationObject);
-    const clientDataBytes = webAuthn.base64UrlDecode(finish.clientDataJSON);
-
-    webAuthn.verifyClientData({
-      clientDataJSON: clientDataBytes,
-      expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
-      expectedOrigin: this.config.webauthn.origin,
-      expectedType: "webauthn.create"
-    });
-
-    const parsed = webAuthn.parseAttestationObject(attestationBytes);
-    const expectedRpHash = await webAuthn.hashRpId(this.config.webauthn.rpId);
-
-    if (!byteArraysEqual(parsed.rpIdHash, expectedRpHash))
-      throw new AuthError("WebAuthn rpIdHash mismatch", AuthErrorCode.INVALID_TOKEN, 401);
-
-    if (parsed.fmt !== "none" && parsed.fmt !== "packed")
-      throw new AuthError(`Unsupported attestation format: ${parsed.fmt}`, AuthErrorCode.INVALID_OPERATION, 400);
-
-    const credentialIdB64 = webAuthn.base64UrlEncode(parsed.credentialId);
-
-    if (credentialIdB64 !== finish.credentialId)
-      throw new AuthError("credentialId mismatch between client and authenticatorData", AuthErrorCode.INVALID_TOKEN, 401);
-
-    await this.db.execute(
-      `INSERT INTO webauthn_credentials
-        (credential_id, user_id, public_key_jwk, alg, counter, name)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        credentialIdB64,
-        challenge.user_id,
-        JSON.stringify(parsed.publicKey.jwk),
-        parsed.publicKey.alg,
-        parsed.counter,
-        finish.name ?? null
-      ]
-    );
-
-    this.auditEvent("webauthn_registered", challenge.user_id, { credentialId: credentialIdB64 });
-    return { credentialId: credentialIdB64 };
-  }
-
-  /**
-   * (Re)generate a fresh batch of recovery codes for the user. Returns
-   * the plaintext array — this is the *only* time the user can see
-   * them; they’re stored hashed. Calling this again invalidates every
-   * previous code (including unused ones), matching the standard
-   * "regenerate codes" UX where the user clicks the button after
-   * losing their old printout.
-   *
-   * Default count is 8, mirroring what GitHub / GitLab / Google use.
-   */
-  async generateRecoveryCodes(userId: string, count = 8): Promise<string[]> {
-    const userResult = await this.db.query("SELECT id FROM users WHERE id = ?", [userId]);
-
-    if (userResult.rows.length === 0)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    if (count < 1 || count > 50)
-      throw new AuthError("count must be between 1 and 50", AuthErrorCode.INVALID_OPERATION, 400);
-
-    /*** Wipe any existing codes — `generateRecoveryCodes` always means "issue a new set", never
-         "append to the existing set". ***/
-    await this.db.execute("DELETE FROM recovery_codes WHERE user_id = ?", [userId]);
-    const plaintext: string[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const code = generateRecoveryCode();
-      plaintext.push(code);
-
-      const hash = await this.hashToken(code);
-      await this.db.execute("INSERT INTO recovery_codes (code_hash, user_id) VALUES (?, ?)", [hash, userId]);
-    }
-
-    this.auditEvent("recovery_codes_generated", userId, { count });
-    return plaintext;
   }
 
   async getUser(userId: string): Promise<User | null> {
@@ -819,31 +358,6 @@ export class AuthProvider implements IAuthProvider {
     return result.rows.map(r => ({
       description: r.description ?? undefined,
       name: r.name
-    }));
-  }
-
-  /** List the user’s registered passkeys. */
-  async listWebAuthnCredentials(userId: string): Promise<
-    Array<{
-      createdAt: string;
-      credentialId: string;
-      lastUsedAt: string | null;
-      name: string | null;
-    }>
-  > {
-    const result = await this.db.query(
-      `SELECT credential_id, name, created_at, last_used_at
-       FROM webauthn_credentials
-       WHERE user_id = ?
-       ORDER BY created_at DESC`,
-      [userId]
-    );
-
-    return result.rows.map(r => ({
-      createdAt: String(r.created_at),
-      credentialId: r.credential_id,
-      lastUsedAt: r.last_used_at ? String(r.last_used_at) : null,
-      name: r.name ?? null
     }));
   }
 
@@ -966,115 +480,9 @@ export class AuthProvider implements IAuthProvider {
     };
   }
 
-  /**
-   * Complete an MFA-gated login by submitting a recovery code instead
-   * of a TOTP code. Same challenge-token shape as `loginWithTOTP`. On
-   * success, burns the code and the challenge.
-   */
-  async loginWithRecoveryCode(challengeToken: string, code: string, meta?: RequestMeta): Promise<AuthResponse> {
-    const tokenHash = await this.hashToken(challengeToken);
-
-    const result = await this.db.query(
-      `SELECT user_id, expires_at, consumed_at
-       FROM mfa_challenges
-       WHERE token_hash = ?`,
-      [tokenHash]
-    );
-
-    if (result.rows.length === 0)
-      throw new AuthError("Invalid or expired MFA challenge", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const row = result.rows[0];
-
-    if (row.consumed_at)
-      throw new AuthError("MFA challenge already used", AuthErrorCode.INVALID_TOKEN, 401);
-
-    if (new Date(row.expires_at).getTime() < Date.now())
-      throw new AuthError("MFA challenge expired", AuthErrorCode.TOKEN_EXPIRED, 401);
-
-    const burned = await this.consumeRecoveryCode(row.user_id, code);
-
-    if (!burned) {
-      this.auditEvent("login_recovery_code_failed", row.user_id, { ipAddress: meta?.ipAddress });
-      throw new AuthError("Invalid recovery code", AuthErrorCode.INVALID_CREDENTIALS, 401);
-    }
-
-    await this.db.execute("UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?", [tokenHash]);
-    const user = await this.getUser(row.user_id);
-
-    if (!user)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    return await this.completeLogin(user, meta);
-  }
-
-  /**
-   * Complete an MFA-gated login by submitting the TOTP code.
-   * `challengeToken` is the plaintext token returned from `login()`’s
-   * `MfaChallenge`. On success, returns a normal `AuthResponse`. On
-   * failure, the challenge stays valid (until expiry) so users can
-   * retry typos — but each individual code is rate-limited by the
-   * 30-second TOTP step plus the auth-route per-IP limiter.
-   */
-  async loginWithTOTP(challengeToken: string, code: string, meta?: RequestMeta): Promise<AuthResponse> {
-    const tokenHash = await this.hashToken(challengeToken);
-
-    const result = await this.db.query(
-      `SELECT user_id, expires_at, consumed_at
-       FROM mfa_challenges
-       WHERE token_hash = ?`,
-      [tokenHash]
-    );
-
-    if (result.rows.length === 0)
-      throw new AuthError("Invalid or expired MFA challenge", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const row = result.rows[0];
-
-    if (row.consumed_at)
-      throw new AuthError("MFA challenge already used", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const expiresAt = new Date(row.expires_at);
-
-    if (expiresAt.getTime() < Date.now())
-      throw new AuthError("MFA challenge expired", AuthErrorCode.TOKEN_EXPIRED, 401);
-
-    const totp = await this.db.query("SELECT secret FROM mfa_totp WHERE user_id = ?", [row.user_id]);
-
-    if (totp.rows.length === 0) {
-      /*** User disabled MFA between password-step and code-step. Be conservative — fail closed
-           rather than promote. ***/
-      throw new AuthError("MFA not configured", AuthErrorCode.INVALID_OPERATION, 400);
-    }
-
-    const offset = await verifyTOTP(totp.rows[0].secret, code);
-
-    if (offset === null) {
-      this.auditEvent("login_mfa_failed", row.user_id, { ipAddress: meta?.ipAddress });
-      throw new AuthError("Invalid TOTP code", AuthErrorCode.INVALID_CREDENTIALS, 401);
-    }
-
-    /*** Burn the challenge before issuing the session. A consumed_at marker keeps the row around
-         for forensics but blocks reuse. ***/
-    await this.db.execute("UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?", [tokenHash]);
-
-    const user = await this.getUser(row.user_id);
-
-    if (!user)
-      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
-
-    return await this.completeLogin(user, meta);
-  }
-
   async logout(sessionId: string): Promise<void> {
     await this.db.execute("UPDATE sessions SET revoked = TRUE WHERE id = ?", [sessionId]);
     this.auditEvent("session_revoked", null, { sessionId, reason: "logout" });
-  }
-
-  /** How many recovery codes does the user have left to burn? */
-  async recoveryCodesRemaining(userId: string): Promise<number> {
-    const result = await this.db.query("SELECT code_hash FROM recovery_codes WHERE user_id = ? AND used_at IS NULL", [userId]);
-    return result.rows.length;
   }
 
   async refresh(refreshToken: string, meta?: RequestMeta): Promise<AuthResponse> {
@@ -1849,7 +1257,7 @@ export class AuthProvider implements IAuthProvider {
    * a stable `event=auth.<name>` prefix so log aggregators can filter on
    * auth events. Best-effort: failures in logging never propagate. (P2-23)
    */
-  private auditEvent(event: string, userId: string | null, details: Record<string, unknown> = {}): void {
+  protected auditEvent(event: string, userId: string | null, details: Record<string, unknown> = {}): void {
     try {
       authLogger.info(`auth.${event}`, {
         event,
@@ -1866,7 +1274,7 @@ export class AuthProvider implements IAuthProvider {
    * Used by both the password-only `login()` and the MFA-completing
    * `loginWithTOTP()` so they emit the same events and shape.
    */
-  private async completeLogin(user: User, meta?: RequestMeta): Promise<AuthResponse> {
+  protected async completeLogin(user: User, meta?: RequestMeta): Promise<AuthResponse> {
     const session = await this.createSession(user.id, meta);
     const token = await this.generateJWT(user);
     const refreshToken = this.generateToken();
@@ -1962,42 +1370,6 @@ export class AuthProvider implements IAuthProvider {
 
     this.auditEvent("magic_link_signup_consumed", userId, { ipAddress: meta?.ipAddress });
     return await this.completeLogin(user, meta);
-  }
-
-  /**
-   * Fetch + validate (and burn) a WebAuthn ceremony challenge. Throws
-   * on missing / consumed / expired / wrong-purpose.
-   */
-  private async consumeWebAuthnChallenge(
-    challengeId: string,
-    purpose: "login" | "register"
-  ): Promise<{ challenge: string; user_id: string | null; }> {
-    const result = await this.db.query(
-      `SELECT challenge, purpose, user_id, expires_at, consumed_at
-       FROM webauthn_challenges WHERE id = ?`,
-      [challengeId]
-    );
-
-    if (result.rows.length === 0)
-      throw new AuthError("Unknown WebAuthn challenge", AuthErrorCode.INVALID_TOKEN, 401);
-
-    const row = result.rows[0];
-
-    if (row.consumed_at)
-      throw new AuthError("WebAuthn challenge already used", AuthErrorCode.INVALID_TOKEN, 401);
-
-    if (row.purpose !== purpose)
-      throw new AuthError("WebAuthn challenge purpose mismatch", AuthErrorCode.INVALID_TOKEN, 401);
-
-    if (new Date(row.expires_at).getTime() < Date.now())
-      throw new AuthError("WebAuthn challenge expired", AuthErrorCode.TOKEN_EXPIRED, 401);
-
-    await this.db.execute("UPDATE webauthn_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?", [challengeId]);
-
-    return {
-      challenge: row.challenge,
-      user_id: row.user_id ?? null
-    };
   }
 
   private async createSession(userId: string, meta?: { ipAddress?: string; userAgent?: string; }): Promise<Session> {
@@ -2332,7 +1704,7 @@ export class AuthProvider implements IAuthProvider {
     });
   }
 
-  private generateId(): string {
+  protected generateId(): string {
     return crypto.randomUUID();
   }
 
@@ -2394,7 +1766,7 @@ export class AuthProvider implements IAuthProvider {
     }
   }
 
-  private generateToken(): string {
+  protected generateToken(): string {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
 
@@ -2402,12 +1774,6 @@ export class AuthProvider implements IAuthProvider {
       .from(bytes)
       .map(b => b.toString(16).padStart(2, "0"))
       .join("");
-  }
-
-  /** Does the user have a confirmed TOTP enrollment? */
-  private async hasConfirmedTOTP(userId: string): Promise<boolean> {
-    const result = await this.db.query("SELECT 1 FROM mfa_totp WHERE user_id = ? AND confirmed_at IS NOT NULL", [userId]);
-    return result.rows.length > 0;
   }
 
   /**
@@ -2419,36 +1785,8 @@ export class AuthProvider implements IAuthProvider {
    * or bypass email verification — the attacker would need the original
    * plaintext token, which was only sent to the user’s email. (P0-03)
    */
-  private async hashToken(plaintext: string): Promise<string> {
-    const bytes = new TextEncoder().encode(plaintext);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-
-    return Array
-      .from(new Uint8Array(digest))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
-  /**
-   * Internal: mint a single-use MFA challenge token, store its hash,
-   * and return the plaintext bundled into an `MfaChallenge` for the
-   * caller to relay back via `loginWithTOTP`.
-   */
-  private async issueMfaChallenge(userId: string): Promise<MfaChallenge> {
-    const plaintext = this.generateToken();
-    const tokenHash = await this.hashToken(plaintext);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); /*** 5 min ***/
-    await this.db.execute(
-      `INSERT INTO mfa_challenges (token_hash, user_id, expires_at)
-       VALUES (?, ?, ?)`,
-      [tokenHash, userId, expiresAt.toISOString()]
-    );
-
-    return {
-      challengeToken: plaintext,
-      factors: ["totp"],
-      mfaRequired: true
-    };
+  protected async hashToken(plaintext: string): Promise<string> {
+    return await sha256Hex(plaintext);
   }
 
   /**
@@ -2586,201 +1924,4 @@ export class AuthProvider implements IAuthProvider {
       valid: errors.length === 0
     };
   }
-}
-
-/*** HELPER ------------------------------------------- ***/
-
-function byteArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length)
-    return false;
-
-  let diff = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    diff |= a[i] ^ b[i];
-  }
-
-  return diff === 0;
-}
-
-/**
- * Generate one human-readable recovery code formatted as
- * `XXXXX-XXXXX` (10 chars, dash for legibility on a printed card).
- */
-function generateRecoveryCode(): string {
-  const buf = new Uint8Array(10);
-  let raw = "";
-  crypto.getRandomValues(buf);
-
-  for (let i = 0; i < buf.length; i++) {
-    raw += RECOVERY_ALPHABET[buf[i] % RECOVERY_ALPHABET.length];
-  }
-
-  return `${raw.slice(0, 5)}-${raw.slice(5)}`;
-}
-
-/**
- * Import an HS256 HMAC key from a shared secret. Enforces a 32-byte
- * minimum (RFC 7518 §3.2 recommends ≥ key-length bits, i.e. 256 for
- * SHA-256) so weak secrets are caught at startup, not at first verify.
- */
-async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
-  if (!secret)
-    throw new Error("AuthProvider: jwtSecret is required when jwtAlgorithm is HS256");
-
-  const keyData = new TextEncoder().encode(secret);
-
-  if (keyData.length < 32)
-    throw new Error(`AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`);
-
-  return await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    true,
-    ["sign", "verify"]
-  );
-}
-
-/**
- * Import an RS256 sign/verify pair from PEM-encoded keys. Private key
- * must be PKCS#8 (`BEGIN PRIVATE KEY`); public key must be SPKI
- * (`BEGIN PUBLIC KEY`). RFC 7518 §3.3 mandates ≥ 2048-bit modulus —
- * not enforced here because Web Crypto doesn’t expose modulus length
- * post-import; document the requirement and trust the operator.
- */
-async function importRsaKeys(
-  privateKeyPem: string | undefined,
-  publicKeyPem: string | undefined
-): Promise<{ signKey: CryptoKey; verifyKey: CryptoKey; }> {
-  if (!publicKeyPem)
-    throw new Error("AuthProvider: jwtPublicKey is required when jwtAlgorithm is RS256");
-
-  if (!privateKeyPem)
-    throw new Error("AuthProvider: jwtPrivateKey is required when jwtAlgorithm is RS256 (verify-only deployments are not yet supported)");
-
-  const algorithm = { hash: "SHA-256", name: "RSASSA-PKCS1-v1_5" } as const;
-
-  const signKey = await crypto.subtle.importKey(
-    "pkcs8",
-    pemToBytes(privateKeyPem, "PRIVATE KEY"),
-    algorithm,
-    false,
-    ["sign"]
-  );
-
-  const verifyKey = await crypto.subtle.importKey(
-    "spki",
-    pemToBytes(publicKeyPem, "PUBLIC KEY"),
-    algorithm,
-    true,
-    ["verify"]
-  );
-
-  return { signKey, verifyKey };
-}
-
-/**
- * Normalize user input: uppercase, strip every non-alphanumeric char
- * (so `xxxxx-xxxxx`, `XXXXX XXXXX`, `xxxxxxxxxx` all match the same
- * stored hash). Then re-insert the dash so the hash input is canonical.
- */
-function normalizeRecoveryCode(input: string): string {
-  const cleaned = input.toUpperCase().replace(/[^0-9A-Z]/g, "");
-
-  if (cleaned.length !== 10)
-    return input; /*** let the lookup fail ***/
-
-  return `${cleaned.slice(0, 5)}-${cleaned.slice(5)}`;
-}
-
-/**
- * Strip PEM armor (`-----BEGIN <label>-----` / `-----END <label>-----`)
- * and base64-decode the body to raw DER bytes. Throws on a missing or
- * mismatched label — operators see the issue at startup instead of
- * `crypto.subtle.importKey` returning the opaque "data is not valid".
- */
-function pemToBytes(pem: string, expectedLabel: string): Uint8Array<ArrayBuffer> {
-  const begin = `-----BEGIN ${expectedLabel}-----`;
-  const end = `-----END ${expectedLabel}-----`;
-  const startIdx = pem.indexOf(begin);
-  const endIdx = pem.indexOf(end);
-
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx)
-    throw new Error(`AuthProvider: PEM key missing "${begin}" / "${end}" armor — got ${pem.slice(0, 30)}…`);
-
-  const body = pem
-    .slice(startIdx + begin.length, endIdx)
-    .replace(/[\r\n\s]+/g, "");
-
-  const binary = atob(body);
-
-  /*** Allocate a fresh ArrayBuffer (not ArrayBufferLike) so the returned Uint8Array satisfies
-       WebCrypto’s `BufferSource` parameter — Deno’s strict TypeScript lib rejects the default
-       `new Uint8Array(N)` because its inferred buffer type widens to ArrayBufferLike. ***/
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
-function randomBytes(n: number): Uint8Array {
-  const out = new Uint8Array(n);
-  crypto.getRandomValues(out);
-
-  return out;
-}
-
-/**
- * Validate every numeric / enum field in `AuthConfig` so a bad config
- * fails at `initialize()` rather than at the first auth request. Each
- * error message points to the offending field plus the allowed range,
- * so an operator can fix the config without reading the source.
- *
- * Algorithm-specific keys (`jwtSecret`, `jwtPrivateKey`, `jwtPublicKey`)
- * are still validated downstream by `importHmacKey` / `importRsaKeys`,
- * since those have richer per-algorithm semantics. (gh/geldata#7006)
- */
-function validateAuthConfig(config: ResolvedAuthConfig): void {
-  /*** bcrypt rejects rounds outside [4, 31]; the practical upper bound (rounds=15 is already
-       ~1s/hash on commodity hardware) is what we enforce — beyond that, registration becomes a
-       DoS amplifier. ***/
-  if (!Number.isInteger(config.bcryptRounds) || config.bcryptRounds < 4 || config.bcryptRounds > 15)
-    throw new Error(`AuthProvider: bcryptRounds must be an integer in [4, 15]; got ${config.bcryptRounds}`);
-
-  if (config.tokenExpiry <= 0 || !Number.isFinite(config.tokenExpiry))
-    throw new Error(`AuthProvider: tokenExpiry must be a positive number of seconds; got ${config.tokenExpiry}`);
-
-  if (config.refreshTokenExpiry <= 0 || !Number.isFinite(config.refreshTokenExpiry))
-    throw new Error(`AuthProvider: refreshTokenExpiry must be a positive number of seconds; got ${config.refreshTokenExpiry}`);
-
-  if (config.refreshTokenExpiry < config.tokenExpiry) {
-    throw new Error(
-      `AuthProvider: refreshTokenExpiry (${config.refreshTokenExpiry}s) must be ≥ tokenExpiry (${config.tokenExpiry}s) — refresh tokens shorter than access tokens defeat the purpose`
-    );
-  }
-
-  if (config.sessionTimeout <= 0 || !Number.isFinite(config.sessionTimeout))
-    throw new Error(`AuthProvider: sessionTimeout must be a positive number of seconds; got ${config.sessionTimeout}`);
-
-  if (!Number.isInteger(config.passwordMinLength) || config.passwordMinLength < 1)
-    throw new Error(`AuthProvider: passwordMinLength must be a positive integer; got ${config.passwordMinLength}`);
-
-  if (!Number.isInteger(config.maxSessionsPerUser) || config.maxSessionsPerUser < 0)
-    throw new Error(`AuthProvider: maxSessionsPerUser must be a non-negative integer (0 disables the cap); got ${config.maxSessionsPerUser}`);
-
-  /*** jwtAlgorithm is type-checked at compile time, but TypeScript’s type narrowing doesn’t
-       survive untrusted JSON config. ***/
-  if (config.jwtAlgorithm !== "HS256" && config.jwtAlgorithm !== "RS256")
-    throw new Error(`AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${JSON.stringify(config.jwtAlgorithm)}`);
-
-  if (typeof config.jwtIssuer !== "string" || config.jwtIssuer.length === 0)
-    throw new Error("AuthProvider: jwtIssuer must be a non-empty string");
-
-  if (typeof config.jwtAudience !== "string" || config.jwtAudience.length === 0)
-    throw new Error("AuthProvider: jwtAudience must be a non-empty string");
 }
