@@ -111,6 +111,9 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd ui && bunx playwright install chromium --with-deps
 
+      - name: Prep (write manifest stub)
+        run: deno task prep
+
       # Cache the bundled PostgreSQL binary that `disc serve` downloads
       # on first run. Keyed on the version baked into postgres/downloader.ts.
       - name: Cache bundled PostgreSQL
@@ -182,6 +185,9 @@ jobs:
         with:
           path: ~/.disc/postgres
           key: ${{ runner.os }}-disc-pg-16.4
+
+      - name: Prep (write manifest stub)
+        run: deno task prep
 
       - name: Run Gel client compatibility smoke
         run: bash tests/gel-compat/run.sh
