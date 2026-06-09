@@ -1,5 +1,10 @@
 <script lang="ts">
+  /*** IMPORT ------------------------------------------- ***/
+
   import { onMount } from "svelte";
+
+  /*** UTILITY ------------------------------------------ ***/
+
   import { discAPI, type SchemaTypeDescription } from "$lib/api/client";
 
   let loadError: string | null = null;
@@ -7,6 +12,8 @@
   let schemaTypes: SchemaTypeDescription[] = [];
   let searchQuery = "";
   let selectedType: SchemaTypeDescription | null = null;
+
+  /*** RUNTIME ------------------------------------------ ***/
 
   $: filteredTypes = schemaTypes.filter(type => type.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -23,6 +30,8 @@
       loading = false;
     }
   });
+
+  /*** HELPER ------------------------------------------- ***/
 
   function annotationEntries(a: Record<string, string> | undefined): Array<[string, string]> {
     return a ? Object.entries(a) : [];

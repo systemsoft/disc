@@ -47,7 +47,7 @@ const PUNCTUATION: Record<string, TokenType> = {
   "}": "rbrace",
   ",": "comma",
   ":": "colon",
-  ";": "semicolon",
+  ";": "semicolon"
 };
 
 const CALL_PREFIX = new Set<TokenType | null>(["word", "string", "rparen", "rbracket"]);
