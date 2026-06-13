@@ -26,6 +26,22 @@ deno --version
 
 Pick whichever path matches your environment. Each option puts the `disc` binary on your PATH so the rest of this guide can run `disc init`/`serve`/etc. directly.
 
+### Install script (recommended)
+
+The quickest path — downloads the prebuilt `disc` binary for your platform and adds it to your PATH:
+
+```bash
+curl -fsSL https://disc.sh/install | sh
+```
+
+This installs `disc` into `~/.disc/bin`. Pin a specific release by passing it through to the script:
+
+```bash
+curl -fsSL https://disc.sh/install | sh -s -- v2026.06.13
+```
+
+Prebuilt binaries are published for macOS (arm64), Linux (x64/arm64), and Windows (x64), and verified against a published SHA-256 checksum on download. On Intel macOS there is no prebuilt binary — use Homebrew or build from source (the Apple Silicon binary also runs under Rosetta 2). Pass `--no-modify-path` to skip the PATH edit.
+
 ### Homebrew (macOS, Linux)
 
 The Homebrew Formula builds Disc from source via `deno compile` and installs the binary into `$(brew --prefix)/bin`. `deno` and `bun` are pulled in automatically.

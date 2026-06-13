@@ -10,24 +10,29 @@ A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel
 - **EdgeQL preserved** — the query language is the best part of Gel, so it stays
 - **Schema-first** — SDL drives database schema, TypeScript types, and access policies
 
+## Install
+
+```bash
+curl -fsSL https://disc.sh/install | sh
+```
+
+This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](docs/getting-started.md#install-disc).
+
 ## Quick Start
 
 ```bash
-# Install Deno
-curl -fsSL https://deno.land/install.sh | sh
-
 # Initialize a new project (downloads PostgreSQL automatically)
-deno task cli init my-project
+disc init my-project
 cd my-project
 
 # Start the server
-deno task cli serve
+disc serve
 
 # Open the admin UI
-deno task cli ui
+disc ui
 
 # Interactive EdgeQL shell
-deno task cli shell
+disc shell
 ```
 
 ## Schema Definition
