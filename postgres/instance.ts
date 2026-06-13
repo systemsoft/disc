@@ -46,7 +46,7 @@ export class PostgresInstance {
     this.dataDir = options.dataDir;
     this.port = options.port || 0; // 0 means Unix socket only
     this.socketDir = options.socketDir || join(this.dataDir, "..", "socket");
-    this.postgresVersion = options.postgresVersion || "16.4";
+    this.postgresVersion = options.postgresVersion || "18.4";
     this.downloader = new PostgresBinaryDownloader();
     this.config = new PostgresConfig();
 

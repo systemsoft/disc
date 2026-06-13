@@ -23,7 +23,8 @@ Deno.test("PostgresBinaryDownloader - platform detection", () => {
     "darwin-arm64",
     "darwin-x64",
     "linux-arm64",
-    "linux-x64"
+    "linux-x64",
+    "windows-x64"
   ];
   assertEquals(supportedPlatforms.includes(platform), true);
 });
@@ -120,20 +121,42 @@ Deno.test("PostgresBinaryDownloader - handles missing binaries", async () => {
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 });
 
-Deno.test("PostgresBinaryDownloader - handles unsupported platforms", () => {
-  // We can't actually change Deno.build properties, so we test the logic directly
-
-  // Test Windows detection (not yet supported)
-  if (Deno.build.os === "windows") {
-    assertRejects(
-      async () => {
-        const d = new PostgresBinaryDownloader(TEST_BASE_DIR);
-        await d.ensurePostgres("16.4");
-      },
-      Error,
-      "Windows support not yet implemented"
-    );
+Deno.test("PostgresBinaryDownloader - 18.4 is published for every supported platform", () => {
+  // 18.4 is the current default; it must resolve for all platforms,
+  // including windows-x64, or a default `disc init` / build would fail.
+  for (
+    const platform of [
+      "darwin-arm64",
+      "darwin-x64",
+      "linux-arm64",
+      "linux-x64",
+      "windows-x64"
+    ]
+  ) {
+    const downloader = new PostgresBinaryDownloader({
+      baseDir: TEST_BASE_DIR,
+      platform
+    });
+    const manifest = (downloader as any).getManifest("18.4");
+    assertExists(manifest, `18.4 manifest missing for ${platform}`);
+    assertEquals(manifest.url.includes("18.4.0"), true);
+    assertEquals(manifest.version, "18.4");
   }
+});
+
+Deno.test("PostgresBinaryDownloader - resolves the windows-amd64 JAR for a windows target", () => {
+  // Pin the downloader to windows-x64 so the manifest lookup is exercised
+  // regardless of the host the test runs on. Windows PG comes from Zonky's
+  // `windows-amd64` artifact, same as every other platform.
+  const downloader = new PostgresBinaryDownloader({
+    baseDir: TEST_BASE_DIR,
+    platform: "windows-x64"
+  });
+
+  const manifest = (downloader as any).getManifest("16.4");
+  assertExists(manifest);
+  assertEquals(manifest.platform, "windows-x64");
+  assertEquals(manifest.url.includes("embedded-postgres-binaries-windows-amd64"), true);
 });
 
 Deno.test("PostgresBinaryDownloader - makeExecutable sets correct permissions", async () => {

@@ -40,7 +40,7 @@ export interface ResolveEmbeddedOptions {
    */
   manifestEntries: readonly EmbeddedPgEntry[];
   /**
-   * Distribution version (e.g. `16.4`). Used as the directory name so
+   * Distribution version (e.g. `18.4`). Used as the directory name so
    * upgrades don't clobber existing extractions.
    */
   version: string;

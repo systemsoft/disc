@@ -1,7 +1,7 @@
 default:
   @just --list
 
-build: build-linux build-mac
+build: build-linux build-mac build-windows
 
 build-linux:
   @echo "[INFO] Building Linux executables…"
@@ -21,6 +21,12 @@ build-mac:
   mkdir -p build/mac
   deno task build:darwin-arm64
   mv disc-darwin-arm64 build/mac/disc
+
+build-windows:
+  @echo "[INFO] Building Windows executable…"
+  mkdir -p build/windows-64
+  deno task build:windows-x64
+  mv disc-windows-x64.exe build/windows-64/disc.exe
 
 clean:
   rm -rf build

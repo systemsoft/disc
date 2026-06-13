@@ -306,7 +306,7 @@ export class PgUpgradeCommand {
    * Return the list of known PostgreSQL versions available for download.
    */
   private getAvailableVersions(): string[] {
-    return ["16.4", "17.0"];
+    return ["16.4", "17.0", "18.4"];
   }
 }
 

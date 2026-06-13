@@ -169,7 +169,7 @@ Disc ships with PostgreSQL — users never install, configure, or manage Postgre
 │       ├── socket/               # Unix domain socket
 │       └── disc.toml             # Instance configuration
 └── postgres/
-    └── 16.4/                     # PostgreSQL version
+    └── 18.4/                     # PostgreSQL version
         ├── bin/                  # pg binaries (postgres, initdb, pg_ctl, etc.)
         ├── lib/                  # shared libraries
         └── share/                # extensions, configs
@@ -212,15 +212,19 @@ When `--backend-dsn` is provided, Disc skips binary download and instance creati
 
 ### Platform Binary Strategy
 
-| Platform      | Source                                                 |
-| ------------- | ------------------------------------------------------ |
-| macOS (arm64) | Pre-built from PostgreSQL official or Homebrew bottles |
-| macOS (x64)   | Pre-built from PostgreSQL official or Homebrew bottles |
-| Linux (x64)   | Pre-built static/portable binaries                     |
-| Linux (arm64) | Pre-built static/portable binaries                     |
-| Windows       | Pre-built from EDB installers or Docker fallback       |
+All platforms are sourced from [Zonky](https://github.com/zonkyio/embedded-postgres-binaries)'s `embedded-postgres-binaries` artifacts on Maven Central — one JAR per platform, each wrapping a `postgres-<platform>.txz` (see `postgres/downloader.ts`).
 
-Binaries are checksummed and verified on download. Disc should maintain a manifest of supported PostgreSQL versions and their download URLs.
+| Platform      | Zonky artifact   |
+| ------------- | ---------------- |
+| macOS (arm64) | `darwin-arm64v8` |
+| macOS (x64)   | `darwin-amd64`   |
+| Linux (x64)   | `linux-amd64`    |
+| Linux (arm64) | `linux-arm64v8`  |
+| Windows (x64) | `windows-amd64`  |
+
+Binaries are checksummed and verified on download. Disc maintains a manifest of supported PostgreSQL versions (`16.4`, `17.0`, `18.4` default) and their download URLs.
+
+> Windows is x64-only: `deno compile` has no `aarch64-pc-windows` target and Zonky publishes no `windows-arm64` PostgreSQL build, so `windows-x64` is the sole Windows target (Windows-on-ARM runs it under x64 emulation). The build/release pipeline produces and ships `disc-windows-x64.exe` with PG embedded; the bundled-PostgreSQL runtime lifecycle on Windows is not yet validated — `--backend-dsn` (external PostgreSQL) is the supported path on Windows for now.
 
 ## Project Context & Auto-Start
 

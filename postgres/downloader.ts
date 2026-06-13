@@ -23,18 +23,31 @@ function zonkyJar(platformSlug: string, version: string): string {
   return `${ZONKY_BASE}/${artifact}/${version}/${artifact}-${version}.jar`;
 }
 
+// 18.4 is the default (latest Zonky publishes). 16.4 and 17.0 are kept
+// for `disc pg upgrade` compatibility and existing on-disk instances —
+// the data directory format is major-version-specific, so an instance
+// initialized under 16/17 can't be swapped in place to 18.
 const POSTGRES_VERSIONS = {
   "16.4": {
     "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "16.4.0") },
     "darwin-x64": { url: zonkyJar("darwin-amd64", "16.4.0") },
     "linux-arm64": { url: zonkyJar("linux-arm64v8", "16.4.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") }
+    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") },
+    "windows-x64": { url: zonkyJar("windows-amd64", "16.4.0") }
   },
   "17.0": {
     "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "17.0.0") },
     "darwin-x64": { url: zonkyJar("darwin-amd64", "17.0.0") },
     "linux-arm64": { url: zonkyJar("linux-arm64v8", "17.0.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") }
+    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") },
+    "windows-x64": { url: zonkyJar("windows-amd64", "17.0.0") }
+  },
+  "18.4": {
+    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "18.4.0") },
+    "darwin-x64": { url: zonkyJar("darwin-amd64", "18.4.0") },
+    "linux-arm64": { url: zonkyJar("linux-arm64v8", "18.4.0") },
+    "linux-x64": { url: zonkyJar("linux-amd64", "18.4.0") },
+    "windows-x64": { url: zonkyJar("windows-amd64", "18.4.0") }
   }
 };
 
@@ -54,8 +67,8 @@ export class PostgresBinaryDownloader {
    * Pass an explicit directory (e.g. a per-platform staging dir under
    * `dist/`) when cross-compiling. `platform` defaults to the running
    * platform's detected slug; pass an explicit slug
-   * (`darwin-arm64`/`darwin-x64`/`linux-arm64`/`linux-x64`) when
-   * staging PG for a target other than the current host (Bundle I
+   * (`darwin-arm64`/`darwin-x64`/`linux-arm64`/`linux-x64`/`windows-x64`)
+   * when staging PG for a target other than the current host (Bundle I
    * follow-up: cross-platform reproducible builds).
    */
   constructor(
@@ -82,15 +95,24 @@ export class PostgresBinaryDownloader {
     } else if (os === "linux") {
       return arch === "aarch64" ? "linux-arm64" : "linux-x64";
     } else if (os === "windows") {
-      throw new Error("Windows support not yet implemented");
+      // Only an x64 Windows PG is published (Zonky has no windows-arm64
+      // build); Windows-on-ARM runs the x64 binary under emulation.
+      return "windows-x64";
     }
 
     throw new Error(`Unsupported platform: ${os}-${arch}`);
   }
 
-  async download(version = "16.4"): Promise<string> {
+  // The postgres executable is `postgres.exe` on Windows, `postgres`
+  // everywhere else. Used for the already-downloaded short-circuit and
+  // nested-directory normalization so both work for a windows target.
+  private postgresBinName(): string {
+    return this.platform.startsWith("windows") ? "postgres.exe" : "postgres";
+  }
+
+  async download(version = "18.4"): Promise<string> {
     const versionDir = join(this.baseDir, version);
-    const binPath = join(versionDir, "bin", "postgres");
+    const binPath = join(versionDir, "bin", this.postgresBinName());
 
     // Check if already downloaded
     try {
@@ -188,7 +210,7 @@ export class PostgresBinaryDownloader {
       // If there's only one directory and it contains postgres binaries, move its contents up
       if (entries.length === 1 && entries[0].isDirectory) {
         const nestedDir = join(versionDir, entries[0].name);
-        const nestedBinPath = join(nestedDir, "bin", "postgres");
+        const nestedBinPath = join(nestedDir, "bin", this.postgresBinName());
 
         try {
           await Deno.stat(nestedBinPath);
@@ -330,7 +352,7 @@ export class PostgresBinaryDownloader {
     }
   }
 
-  async ensurePostgres(version = "16.4"): Promise<string> {
+  async ensurePostgres(version = "18.4"): Promise<string> {
     return await this.download(version);
   }
 }

@@ -35,7 +35,7 @@ Deno.test("PgUpgradeCommand - error includes available versions", async () => {
         targetVersion: "15.0"
       }),
     Error,
-    "16.4, 17.0"
+    "16.4, 17.0, 18.4"
   );
 });
 
@@ -67,7 +67,8 @@ Deno.test("PgUpgradeCommand - getAvailableVersions returns known versions", () =
 
   assertEquals(versions.includes("16.4"), true);
   assertEquals(versions.includes("17.0"), true);
-  assertEquals(versions.length, 2);
+  assertEquals(versions.includes("18.4"), true);
+  assertEquals(versions.length, 3);
 });
 
 Deno.test("PgUpgradeCommand - instance not found error", async () => {

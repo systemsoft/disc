@@ -33,10 +33,14 @@ git push origin primary --tags
 
 Pushing the tag triggers `.github/workflows/release.yml`, which:
 
-1. Builds native binaries for `linux-x64`, `linux-arm64`, and
-   `darwin-arm64` (UI is bundled via `bun run build` + `disc build`).
+1. Builds native binaries for `linux-x64`, `linux-arm64`,
+   `darwin-arm64`, and `windows-x64` (UI is bundled via `bun run build` +
+   `disc build`). The `windows-x64` binary is cross-compiled on the Linux
+   runner — `deno compile --target x86_64-pc-windows-msvc` plus the PG
+   staging extract chain (unzip + xz) both run there — and ships as
+   `disc-windows-x64.exe`.
 2. Computes `sha256` checksums.
-3. Publishes a GitHub release named `v$VERSION` with the three binaries,
+3. Publishes a GitHub release named `v$VERSION` with the four binaries,
    a `CHECKSUMS.txt` file, and auto-generated release notes.
 
 > **`darwin-x64` is not in the release matrix.** The macos-13 GitHub-hosted

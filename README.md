@@ -180,6 +180,7 @@ The canonical build path is the `disc build` CLI command (wraps `deno compile` w
 disc build                          # Build for current platform
 disc build --platform linux-x64     # Cross-compile for Linux
 disc build --platform linux-arm64   # Cross-compile for Linux ARM
+disc build --platform windows-x64   # Cross-compile for Windows (-> disc-windows-x64.exe)
 ```
 
 For release automation, the equivalent `deno task` aliases (`build:darwin-arm64`, `build:linux-x64`, etc.) call `disc build` under the hood. The `justfile` targets are retained for hands-on development but are not part of the release pipeline.

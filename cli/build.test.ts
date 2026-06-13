@@ -32,9 +32,16 @@ Deno.test("BuildCommand - maps darwin-arm64 to aarch64-apple-darwin", () => {
   assertEquals(command.mapPlatform("darwin-arm64"), "aarch64-apple-darwin");
 });
 
+Deno.test("BuildCommand - maps windows-x64 to x86_64-pc-windows-msvc", () => {
+  const command = new BuildCommand();
+  assertEquals(command.mapPlatform("windows-x64"), "x86_64-pc-windows-msvc");
+});
+
 Deno.test("BuildCommand - rejects invalid platform with helpful message", () => {
   const command = new BuildCommand();
-  assertThrows(() => command.validatePlatform("windows-x64"), Error, "Invalid platform");
+  /*** windows-arm64 is intentionally unsupported: `deno compile` has no
+       aarch64-pc-windows target and Zonky ships no windows-arm64 PG. ***/
+  assertThrows(() => command.validatePlatform("windows-arm64"), Error, "Invalid platform");
 });
 
 Deno.test("BuildCommand - default output path is ./disc", () => {
@@ -49,12 +56,21 @@ Deno.test("BuildCommand - output path includes platform suffix when cross-compil
   assertEquals(path, "./disc-linux-x64");
 });
 
-Deno.test("BuildCommand - available platforms list contains all 4 platforms", () => {
-  assertEquals(AVAILABLE_PLATFORMS.length, 4);
+Deno.test("BuildCommand - windows output path gets a .exe suffix", () => {
+  const command = new BuildCommand();
+  /*** `deno compile --target x86_64-pc-windows-msvc` writes a `.exe`; the resolved path must match
+       so the size report and CI artifact name line up with the real file. ***/
+  const path = command.resolveOutputPath(undefined, "windows-x64");
+  assertEquals(path, "./disc-windows-x64.exe");
+});
+
+Deno.test("BuildCommand - available platforms list contains all 5 platforms", () => {
+  assertEquals(AVAILABLE_PLATFORMS.length, 5);
   assertEquals(AVAILABLE_PLATFORMS.includes("darwin-arm64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("darwin-x64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("linux-arm64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("linux-x64"), true);
+  assertEquals(AVAILABLE_PLATFORMS.includes("windows-x64"), true);
 });
 
 Deno.test("generateUiManifest - emits manifest from build dir contents", async () => {
@@ -341,6 +357,23 @@ Deno.test("assertEmbeddedPgPresent - no-op when --platform set and full PG distr
   const command = new BuildCommand();
   /*** No throw expected — bin/postgres present + ample files. ***/
   command.assertEmbeddedPgPresent({ platform: "linux-x64" }, fakePgPaths("/staging", 137), "/staging");
+});
+
+Deno.test("assertEmbeddedPgPresent - accepts bin/postgres.exe for a windows target", () => {
+  const command = new BuildCommand();
+  /*** Windows PG ships `bin/postgres.exe`, not `bin/postgres`; the gate must recognize it or every
+       windows-x64 release build would fail the "missing bin/postgres" check. ***/
+  const paths = [
+    "/staging/bin/postgres.exe",
+    "/staging/bin/initdb.exe",
+    "/staging/bin/pg_ctl.exe"
+  ];
+
+  for (let i = 0; paths.length < 137; i++) {
+    paths.push(`/staging/share/timezone/zone-${i}`);
+  }
+
+  command.assertEmbeddedPgPresent({ platform: "windows-x64" }, paths, "/staging");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when no --platform (host build)", () => {

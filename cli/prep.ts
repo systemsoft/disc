@@ -46,7 +46,7 @@ import type { EmbeddedPgEntry } from "./embedded-extractor.ts";
 
 export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = [];
 
-export const EMBEDDED_PG_VERSION = "16.4";\n`;
+export const EMBEDDED_PG_VERSION = "18.4";\n`;
 
 /*** MAIN --------------------------------------------- ***/
 

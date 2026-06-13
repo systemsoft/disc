@@ -28,7 +28,10 @@ const PLATFORM_MAP: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
-  "linux-x64": "x86_64-unknown-linux-gnu"
+  "linux-x64": "x86_64-unknown-linux-gnu",
+  /*** Only x64 Windows: `deno compile` has no aarch64-pc-windows target and Zonky ships no
+       windows-arm64 PG. Windows-on-ARM runs the x64 binary under emulation. ***/
+  "windows-x64": "x86_64-pc-windows-msvc"
 };
 
 /*** EXPORT ------------------------------------------- ***/
@@ -105,7 +108,8 @@ export class BuildCommand {
       );
     }
 
-    const hasPostgresBinary = paths.some(p => p.endsWith("/bin/postgres"));
+    /*** Windows PG ships `bin/postgres.exe`; every other platform ships `bin/postgres`. ***/
+    const hasPostgresBinary = paths.some(p => p.endsWith("/bin/postgres") || p.endsWith("/bin/postgres.exe"));
 
     if (!hasPostgresBinary) {
       throw new Error(
@@ -323,7 +327,7 @@ export class BuildCommand {
           pgSourceOverride = await ensurePlatformPgStaging(Deno.cwd(), options.platform);
         }
 
-        const refreshed = await refreshEmbeddedPgManifest(Deno.cwd(), "16.4", pgSourceOverride);
+        const refreshed = await refreshEmbeddedPgManifest(Deno.cwd(), "18.4", pgSourceOverride);
         embeddedPgPaths = refreshed.includePaths;
         embeddedPgSourceDir = refreshed.pgSourceDir;
 
@@ -449,8 +453,12 @@ export class BuildCommand {
     if (output)
       return output;
 
-    if (platform)
-      return `./disc-${platform}`;
+    if (platform) {
+      /*** `deno compile` appends `.exe` for windows targets; bake it into the resolved path so the
+           size report and any downstream artifact handling reference the file deno actually writes. ***/
+      const ext = platform.startsWith("windows") ? ".exe" : "";
+      return `./disc-${platform}${ext}`;
+    }
 
     return "./disc";
   }
@@ -480,7 +488,7 @@ export const buildCommand = new BuildCommand();
  * Returns the staging dir’s `<version>` subpath so the caller can pass
  * it to `refreshEmbeddedPgManifest(..., override)`.
  */
-export async function ensurePlatformPgStaging(rootDir: string, platform: string, pgVersion: string = "16.4"): Promise<string> {
+export async function ensurePlatformPgStaging(rootDir: string, platform: string, pgVersion: string = "18.4"): Promise<string> {
   const stagingBase = join(rootDir, "dist", "embedded-pg", platform);
   const downloader = new PostgresBinaryDownloader({ baseDir: stagingBase, platform });
 
@@ -713,7 +721,7 @@ export function platformPgStagingDir(rootDir: string, platform: string, pgVersio
  */
 export async function refreshEmbeddedPgManifest(
   rootDir: string = Deno.cwd(),
-  pgVersion: string = "16.4",
+  pgVersion: string = "18.4",
   pgSourceDirOverride?: string
 ): Promise<RefreshEmbeddedPgResult> {
   const manifestDir = join(rootDir, "postgres");

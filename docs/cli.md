@@ -546,7 +546,7 @@ PostgreSQL Status for project: my-project
 
   Data Directory: /Users/you/.disc/instances/my-project/data
   Socket Path: /Users/you/.disc/instances/my-project/socket
-  Version: PostgreSQL 16.4
+  Version: PostgreSQL 18.4
 ```
 
 **Output when stopped:**
@@ -558,7 +558,7 @@ PostgreSQL Status for project: my-project
 
   Data Directory: /Users/you/.disc/instances/my-project/data
   Socket Path: /Users/you/.disc/instances/my-project/socket
-  Version: PostgreSQL 16.4
+  Version: PostgreSQL 18.4
 ```
 
 ---
@@ -623,6 +623,9 @@ disc build [options]
 | `darwin-x64`   | `x86_64-apple-darwin`       |
 | `linux-arm64`  | `aarch64-unknown-linux-gnu` |
 | `linux-x64`    | `x86_64-unknown-linux-gnu`  |
+| `windows-x64`  | `x86_64-pc-windows-msvc`    |
+
+> Windows ARM64 has no `deno compile` target and no Zonky PG build, so `windows-x64` is the only Windows target. Windows-on-ARM runs it under x64 emulation. The compiled binary is written with a `.exe` extension (`disc-windows-x64.exe`).
 
 **Examples:**
 
@@ -642,7 +645,7 @@ disc build --platform linux-arm64 --output ./disc-linux-arm64
 
 **Cross-platform PG staging:**
 
-When `--platform <p>` is set, `disc build` stages the target platform's PostgreSQL distribution into `dist/embedded-pg/<platform>/<version>/` before regenerating the embedded-PG manifest. The resulting binary embeds the right PG for its target — without this step, the build machine's host PG would be embedded into every cross-compiled binary, breaking on extraction. Per-platform staging caches are reused across builds, so producing all four platform binaries from a single CI runner only downloads each PG distribution once.
+When `--platform <p>` is set, `disc build` stages the target platform's PostgreSQL distribution into `dist/embedded-pg/<platform>/<version>/` before regenerating the embedded-PG manifest. The resulting binary embeds the right PG for its target — without this step, the build machine's host PG would be embedded into every cross-compiled binary, breaking on extraction. Per-platform staging caches are reused across builds, so producing every platform binary from a single CI runner only downloads each PG distribution once.
 
 **Output:**
 
@@ -916,7 +919,7 @@ disc pg upgrade --target-version <version> [options]
 | `--dry-run`                  | Show the upgrade plan without executing | `false`                |
 | `--name <project>`           | Project name (overrides auto-detection) | Current directory name |
 
-**Available versions:** `16.4`, `17.0`
+**Available versions:** `16.4`, `17.0`, `18.4` (default)
 
 **Examples:**
 
@@ -933,7 +936,7 @@ disc pg upgrade --target-version 17.0
 ```
 PostgreSQL Upgrade Plan:
   Project: my-project
-  Current version: 16.4
+  Current version: 18.4
   Target version: 17.0
   Strategy: pg_dump/pg_restore
   Backup: yes

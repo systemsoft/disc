@@ -1,6 +1,6 @@
 # Release automation (P3-06).
 #
-# Triggered on tag push (v*) — builds native binaries for the 4 supported
+# Triggered on tag push (v*) — builds native binaries for the supported
 # platforms, computes SHA-256 checksums, and attaches everything to a
 # GitHub release. The version is read from version.txt (ChronVer); the
 # git tag is the source of truth for "what should this release be named".
@@ -85,6 +85,15 @@ jobs:
           - platform: darwin-arm64
             runner: macos-14
             artifact: disc-darwin-arm64
+          # Cross-compiled on ubuntu-latest (not windows-latest): `deno
+          # compile --target x86_64-pc-windows-msvc` produces the .exe,
+          # and the PG-staging JAR→txz extract chain needs unzip + tar
+          # with xz support, which the Linux runner has but a Windows
+          # runner does not. deno writes `disc-windows-x64.exe`, so the
+          # artifact name carries the extension through checksum + upload.
+          - platform: windows-x64
+            runner: ubuntu-latest
+            artifact: disc-windows-x64.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6

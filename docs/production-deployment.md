@@ -561,6 +561,7 @@ disc build --platform linux-x64
 disc build --platform linux-arm64
 disc build --platform darwin-x64
 disc build --platform darwin-arm64
+disc build --platform windows-x64
 ```
 
 Platform-specific Deno tasks are also available:
@@ -570,9 +571,10 @@ deno task build:linux-x64
 deno task build:linux-arm64
 deno task build:darwin-x64
 deno task build:darwin-arm64
+deno task build:windows-x64
 ```
 
-When cross-compiling, the output binary is named `./disc-{platform}` (e.g., `./disc-linux-x64`). You can override the output path with `--output`:
+When cross-compiling, the output binary is named `./disc-{platform}` (e.g., `./disc-linux-x64`); the `windows-x64` target adds a `.exe` extension (`./disc-windows-x64.exe`). You can override the output path with `--output`:
 
 ```bash
 disc build --platform linux-x64 --output ./dist/disc-server
@@ -586,6 +588,7 @@ disc build --platform linux-x64 --output ./dist/disc-server
 | `darwin-x64`   | `x86_64-apple-darwin`       |
 | `linux-arm64`  | `aarch64-unknown-linux-gnu` |
 | `linux-x64`    | `x86_64-unknown-linux-gnu`  |
+| `windows-x64`  | `x86_64-pc-windows-msvc`    |
 
 ### Cross-Compilation Limitations
 
@@ -594,6 +597,7 @@ Deno's cross-compilation downloads a platform-specific runtime snapshot. This wo
 - The binary size may differ across platforms
 - Native plugins or FFI bindings (if any) are not cross-compiled
 - The resulting binary cannot be executed on the build host when targeting a different OS or architecture
+- The `windows-x64` target is produced and shipped by the build/release pipeline (with PostgreSQL embedded from Zonky's `windows-amd64` distribution), but the bundled-PostgreSQL runtime lifecycle on Windows is not yet validated — use the `--backend-dsn` external-PostgreSQL escape hatch on Windows for now
 
 ### Deployment with Native Binary
 

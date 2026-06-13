@@ -107,7 +107,7 @@ const HELP_TEXT = dedent`
     --lines ${gray("<n>")} ${gray(".".repeat(14))} Number of log lines to show (default: ${bgBrightYellow("50")})
     --level ${gray("<level>")} ${gray(".".repeat(10))} Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
     --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version for upgrade
-    --platform ${gray("<platform>")} ${gray(".".repeat(4))} Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
+    --platform ${gray("<platform>")} ${gray(".".repeat(4))} Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64)
     --lite ${gray(".".repeat(19))} Skip UI assets in build (future use)
     --format ${gray("<format>")} ${gray(".".repeat(8))} Deploy format: docker, compose, systemd, env
     --status ${gray(".".repeat(17))} Show migration status (applied count, latest migration)
@@ -205,11 +205,11 @@ const HELP_TEXT = dedent`
     ${gray("# Show only ERROR level log lines")}
     disc pg log --level ERROR
 
-    ${gray("# Upgrade PostgreSQL to version 17.0")}
-    disc pg upgrade --target-version 17.0
+    ${gray("# Upgrade PostgreSQL to version 18.4")}
+    disc pg upgrade --target-version 18.4
 
     ${gray("# Preview upgrade plan")}
-    disc pg upgrade --target-version 17.0 --dry-run
+    disc pg upgrade --target-version 18.4 --dry-run
 
     ${gray("# Build binary for current platform")}
     disc build
@@ -329,7 +329,7 @@ const COMMAND_HELP: Record<string, string> = {
 
       --lite ${gray(".".repeat(19))} Skip bundling UI assets (smaller binary)
       -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output binary path
-      --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64
+      --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64 | windows-x64
   `,
 
   codegen: dedent`
@@ -506,7 +506,7 @@ const COMMAND_HELP: Record<string, string> = {
 
     ${inverse("  OPTIONS ")}
 
-      --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version (e.g. 17.0)
+      --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version (e.g. 18.4)
       --dry-run ${gray(".".repeat(16))} Preview upgrade plan
   `,
 

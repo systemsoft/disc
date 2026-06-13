@@ -30,7 +30,7 @@ import {
       logs/           # PostgreSQL log files
       socket/         # Unix domain socket
   postgres/
-    16.4/             # Downloaded PostgreSQL version
+    18.4/             # Downloaded PostgreSQL version
       bin/            # pg_ctl, initdb, postgres, etc.
       lib/            # Shared libraries
       share/          # Extensions and configs
@@ -54,7 +54,7 @@ const manager = new PostgresManager("/custom/path/instances");
 // Create and initialize a new instance
 const instance = await manager.createInstance("my-project", {
   port: 5433, // optional, 0 = Unix socket only (default)
-  postgresVersion: "16.4" // optional (default: "16.4")
+  postgresVersion: "18.4" // optional (default: "18.4")
 });
 
 // Start with health monitor
@@ -117,7 +117,7 @@ const instance = new PostgresInstance({
   dataDir: "/path/to/data",
   socketDir: "/path/to/socket", // optional
   port: 0, // 0 = Unix socket only
-  postgresVersion: "16.4", // optional
+  postgresVersion: "18.4", // optional
   pgBinDir: "/custom/pg/bin" // optional: skip download, use existing binaries
 });
 ```
@@ -135,7 +135,7 @@ await instance.restart(); // stop + start
 
 ```typescript
 const status = await instance.status();
-// { running: true, pid: 12345, port: 0, dataDir: "...", socketPath: "...", version: "16.4" }
+// { running: true, pid: 12345, port: 0, dataDir: "...", socketPath: "...", version: "18.4" }
 
 const dsn = instance.dsn();
 // Unix socket: "postgresql://disc@/my-project?host=/path/to/socket"
@@ -156,22 +156,25 @@ const downloader = new PostgresBinaryDownloader();
 const downloader = new PostgresBinaryDownloader("/custom/path/postgres");
 
 // Download (or verify already downloaded)
-const versionDir = await downloader.download("16.4");
+const versionDir = await downloader.download("18.4");
 
 // Convenience: ensure + return path
-const versionDir = await downloader.ensurePostgres("16.4");
+const versionDir = await downloader.ensurePostgres("18.4");
 ```
 
 ### Platform Support
 
-| Platform      | Source                           |
-| ------------- | -------------------------------- |
-| macOS (arm64) | EDB official binaries            |
-| macOS (x64)   | EDB official binaries            |
-| Linux (x64)   | Zonky embedded-postgres-binaries |
-| Linux (arm64) | Zonky embedded-postgres-binaries |
+All binaries come from [Zonky](https://github.com/zonkyio/embedded-postgres-binaries)'s `embedded-postgres-binaries` artifacts on Maven Central — one JAR per platform, each wrapping a `postgres-<platform>.txz`.
 
-Supported versions: `16.4`, `17.0`. Downloads are SHA-256 checksummed.
+| Platform      | Zonky artifact   |
+| ------------- | ---------------- |
+| macOS (arm64) | `darwin-arm64v8` |
+| macOS (x64)   | `darwin-amd64`   |
+| Linux (x64)   | `linux-amd64`    |
+| Linux (arm64) | `linux-arm64v8`  |
+| Windows (x64) | `windows-amd64`  |
+
+Supported versions: `16.4`, `17.0`, `18.4` (default). Downloads are SHA-256 checksummed.
 
 ## PostgresConfig
 

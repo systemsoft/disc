@@ -8,7 +8,7 @@ Disc downloads and manages PostgreSQL automatically. Users never install, config
 
 When you run `disc init`, the following happens:
 
-1. **Platform detection.** Disc detects your operating system and CPU architecture (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`).
+1. **Platform detection.** Disc detects your operating system and CPU architecture (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`).
 2. **Binary download.** A pre-built PostgreSQL binary is downloaded from a trusted source and cached at `~/.disc/postgres/<version>/`. If the binary is already cached, the download is skipped.
 3. **Checksum verification.** The downloaded archive is verified against a SHA-256 checksum before extraction. If the checksum does not match, the download is rejected.
 4. **Archive extraction.** The binary archive is extracted and the directory structure is normalized so that `bin/`, `lib/`, and `share/` are directly under the version directory.
@@ -32,7 +32,7 @@ All Disc-managed PostgreSQL data lives under `~/.disc/`:
       socket/     # Unix domain socket directory
       disc.toml   # Instance configuration
   postgres/
-    16.4/         # Cached PostgreSQL 16.4 binary
+    18.4/         # Cached PostgreSQL 18.4 binary
       bin/        # postgres, initdb, pg_ctl, psql, etc.
       lib/        # Shared libraries
       share/      # Extensions, timezone data, configs
@@ -56,7 +56,7 @@ Each project gets its own instance directory under `~/.disc/instances/`. Data di
 | Linux    | arm64        | Zonky embedded-postgres-binaries      |
 | Windows  | x64          | Docker fallback (not yet implemented) |
 
-Supported PostgreSQL versions: **16.4** (default), **17.0**.
+Supported PostgreSQL versions: **16.4**, **17.0**, **18.4** (default).
 
 The platform is detected automatically from `Deno.build.os` and `Deno.build.arch`. If Disc does not recognize your platform, it will report an error with the detected OS and architecture.
 
@@ -372,7 +372,7 @@ const health = await monitor.checkHealth();
 //   lastCheck: 2026-03-20T14:30:00.000Z,
 //   latencyMs: 5,
 //   uptime: 86400,
-//   version: "PostgreSQL 16.4 on ..."
+//   version: "PostgreSQL 18.4 on ..."
 // }
 
 monitor.isHealthy(); // true
@@ -550,6 +550,6 @@ disc stop && disc start
 If the download URL is unreachable or the checksum does not match, Disc reports the error and exits. Check your network connection and try again. The cached binary at `~/.disc/postgres/<version>/` can be deleted to force a fresh download:
 
 ```bash
-rm -rf ~/.disc/postgres/16.4
+rm -rf ~/.disc/postgres/18.4
 disc start
 ```

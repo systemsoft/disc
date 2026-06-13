@@ -88,7 +88,8 @@ async function findBinary(): Promise<string | null> {
       join(REPO_ROOT, "disc-darwin-arm64"),
       join(REPO_ROOT, "disc-darwin-x64"),
       join(REPO_ROOT, "disc-linux-arm64"),
-      join(REPO_ROOT, "disc-linux-x64")
+      join(REPO_ROOT, "disc-linux-x64"),
+      join(REPO_ROOT, "disc-windows-x64.exe")
     ]
   ) {
     try {
