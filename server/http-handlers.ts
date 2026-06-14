@@ -585,16 +585,24 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
     request: Request,
     info: Deno.ServeHandlerInfo
   ): Response {
-    const { socket, response } = Deno.upgradeWebSocket(request);
-
+    // Read everything we need off the request/info BEFORE upgrading. As of
+    // Deno 2.8.3, `Deno.upgradeWebSocket()` consumes the request — any
+    // subsequent access to `request.headers` or `info.remoteAddr` throws
+    // `TypeError: Request closed`, which would bubble up as a failed upgrade
+    // ("Upgrade response was not returned from callback") and hang every WS
+    // client. (2.8.2 and earlier tolerated post-upgrade access.)
     const remoteAddr = "hostname" in info.remoteAddr ?
       info.remoteAddr.hostname :
       "unknown";
+    const userAgent = request.headers.get("user-agent") || undefined;
+
+    const { socket, response } = Deno.upgradeWebSocket(request);
+
     const connection = this.connection_manager.createConnection(
       "websocket",
       remoteAddr,
       undefined,
-      request.headers.get("user-agent") || undefined
+      userAgent
     );
 
     socket.onopen = () => {
