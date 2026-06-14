@@ -980,12 +980,14 @@ export class BinaryProtocolServer {
     } catch {
       // listener may already be closed
     }
-    for (const conn of this.connections) {
-      conn.close();
-    }
+    // Gracefully tear down each connection: send a FIN (closeWrite) before
+    // closing the resource. A plain close() while the connection's read loop
+    // is blocked in an in-flight read() is platform-sensitive in Deno — on
+    // Linux the peer may never observe EOF, hanging any client blocked in
+    // read() (this is what wedged CI for hours). An explicit closeWrite()
+    // flushes a FIN so the peer sees EOF deterministically on every platform.
+    await Promise.all([...this.connections].map(conn => conn.shutdown()));
     this.connections.clear();
-    // Give a brief moment for resources to settle
-    await new Promise(r => setTimeout(r, 10));
   }
 
   /** The port the server is actually listening on. */
@@ -1143,6 +1145,26 @@ export class BinaryConnection {
     } finally {
       this.close();
     }
+  }
+
+  /**
+   * Graceful teardown used by the server on stop(): send a FIN (closeWrite)
+   * so the peer observes EOF even though our read loop is blocked in an
+   * in-flight read(), then release the resource. A plain close() during a
+   * pending read does not reliably flush a FIN on Linux, leaving the peer
+   * hung; an explicit closeWrite() makes shutdown deterministic across
+   * platforms.
+   */
+  async shutdown(): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+    try {
+      await this.conn.closeWrite();
+    } catch {
+      // peer may have already closed its read half
+    }
+    this.close();
   }
 
   /** Close the underlying TCP connection. */

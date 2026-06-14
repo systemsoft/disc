@@ -84,6 +84,24 @@ async function readExact(
 }
 
 /**
+ * Race a promise against a timeout so a wedged read — e.g. a peer that never
+ * sends EOF after shutdown — fails the test in seconds instead of hanging CI
+ * for hours. The ceiling sits far above real message timings (~100ms) but far
+ * below any reasonable CI job budget. The timer is always cleared so a normal
+ * resolution never leaks an op into the test runner.
+ */
+function withTimeout<T>(op: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const guard = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`withTimeout: ${label} exceeded ${ms}ms`)),
+      ms
+    );
+  });
+  return Promise.race([op, guard]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+/**
  * Decode a raw protocol message into a ServerMessage.
  */
 function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
@@ -726,8 +744,14 @@ Deno.test("binary-server - server stop closes all connections", async () => {
   // Stop the server — should close all connections
   await server.stop();
 
-  // Connection should be closed
-  const raw = await readMessage(conn);
+  // Connection should be closed. Guard the read: if a shutdown regression
+  // ever stops flushing a FIN to the peer (the Linux hang this test caught),
+  // fail in seconds instead of wedging CI for hours.
+  const raw = await withTimeout(
+    readMessage(conn),
+    10_000,
+    "readMessage after server.stop()"
+  );
   assertEquals(raw, null);
 
   conn.close();
