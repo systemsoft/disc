@@ -5,7 +5,7 @@ A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel
 ## Why Disc?
 
 - **Single-language stack** — TypeScript from schema to query to server
-- **Deno-native** — leverages Deno's built-in TypeScript, permissions model, and standard library
+- **Deno-native** — leverages Deno’s built-in TypeScript, permissions model, and standard library
 - **Bundled PostgreSQL** — `disc init` just works; users never install or manage Postgres directly
 - **EdgeQL preserved** — the query language is the best part of Gel, so it stays
 - **Schema-first** — SDL drives database schema, TypeScript types, and access policies
@@ -84,22 +84,22 @@ Compiles to PostgreSQL SQL automatically.
 All commands auto-detect the project from `disc.toml` in the current (or parent) directory and auto-start PostgreSQL when needed. No manual DSN configuration required.
 
 ```bash
-disc init                      # Initialize a new Disc project
-disc start                     # Start the server and bundled PostgreSQL
-disc stop                      # Stop the server and PostgreSQL
-disc status                    # Show instance status
-disc migrate                   # Generate and apply migrations
-disc shell                     # Interactive EdgeQL REPL
-disc codegen                   # Generate TypeScript types
-disc watch                     # Watch schema files and auto-migrate in dev
-disc serve                     # Start the Disc server
-disc ui                        # Open admin UI in browser
-disc build                     # Compile to native binary
-disc build --platform linux-x64  # Cross-compile for Linux
-disc deploy --format <fmt>     # Generate deployment scaffolds (docker, compose, systemd, env)
-disc pg log                    # View PostgreSQL logs
-disc pg log -f                 # Follow log output
-disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL
+disc init                              # Initialize a new Disc project
+disc start                             # Start the server and bundled PostgreSQL
+disc stop                              # Stop the server and PostgreSQL
+disc status                            # Show instance status
+disc migrate                           # Generate and apply migrations
+disc shell                             # Interactive EdgeQL REPL
+disc codegen                           # Generate TypeScript types
+disc watch                             # Watch schema files and auto-migrate in dev
+disc serve                             # Start the Disc server
+disc ui                                # Open admin UI in browser
+disc build                             # Compile to native binary
+disc build --platform linux-x64        # Cross-compile for Linux
+disc deploy --format <fmt>             # Generate deployment scaffolds (docker, compose, systemd, env)
+disc pg log                            # View PostgreSQL logs
+disc pg log -f                         # Follow log output
+disc pg upgrade --target-version 19.0  # Upgrade PostgreSQL
 ```
 
 ## Architecture
