@@ -102,7 +102,6 @@ function withTestServer(
   cleanup: () => Promise<void>;
   server: HttpServer;
   testServer: Deno.HttpServer<Deno.NetAddr>;
-  abortController: AbortController;
 } {
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({
@@ -110,12 +109,10 @@ function withTestServer(
     protocolHandler: handler
   });
 
-  const abortController = new AbortController();
   const testServer = Deno.serve(
     {
       hostname: "127.0.0.1",
       port: 0,
-      signal: abortController.signal,
       onListen() {}
     },
     (request: Request, info: Deno.ServeHandlerInfo) => {
@@ -125,13 +122,16 @@ function withTestServer(
 
   const port = testServer.addr.port;
 
+  // Graceful teardown via shutdown() rather than abortController.abort():
+  // the abort path fires Deno.serve's internal abort listener, which on
+  // Linux CI can throw BadResource from inside the callback (uncaught,
+  // fails the module). See production-ws-e2e.test.ts for the full note.
   const cleanup = async () => {
-    abortController.abort();
-    await testServer.finished;
+    await testServer.shutdown();
     await server.stop();
   };
 
-  return { port, cleanup, server, testServer, abortController };
+  return { port, cleanup, server, testServer };
 }
 
 // --- Tests ---

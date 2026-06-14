@@ -300,12 +300,10 @@ Deno.test(
       protocolHandler: handler
     });
 
-    const abortController = new AbortController();
     const testServer = Deno.serve(
       {
         hostname: "127.0.0.1",
         port: 0,
-        signal: abortController.signal,
         onListen() {}
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
@@ -335,8 +333,10 @@ Deno.test(
       assertStringIncludes(body.errors[0].message, "timed out");
     } finally {
       handlerCleanup();
-      abortController.abort();
-      await testServer.finished;
+      // Graceful teardown — shutdown() instead of abortController.abort(),
+      // which can throw an uncaught BadResource from Deno.serve's internal
+      // abort listener on Linux CI. See production-ws-e2e.test.ts.
+      await testServer.shutdown();
       await server.stop();
     }
   }
@@ -352,12 +352,10 @@ Deno.test(
       protocolHandler: handler
     });
 
-    const abortController = new AbortController();
     const testServer = Deno.serve(
       {
         hostname: "127.0.0.1",
         port: 0,
-        signal: abortController.signal,
         onListen() {}
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
@@ -385,8 +383,10 @@ Deno.test(
       assert(body.data !== undefined, "Expected data in body");
       assertEquals(body.data.ok, true);
     } finally {
-      abortController.abort();
-      await testServer.finished;
+      // Graceful teardown — shutdown() instead of abortController.abort(),
+      // which can throw an uncaught BadResource from Deno.serve's internal
+      // abort listener on Linux CI. See production-ws-e2e.test.ts.
+      await testServer.shutdown();
       await server.stop();
     }
   }
