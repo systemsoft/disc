@@ -61,11 +61,13 @@ async function startServer(opts: {
     await fileManager.initialize();
   }
 
-  const port = 20000 + Math.floor(Math.random() * 5000);
   const server = new HttpServer({
     config: {
       host: TEST_HOST,
-      port,
+      // Bind on 0 for an OS-assigned free port — a random fixed port
+      // collides under load (AddrInUse). Read the real port from
+      // `server.boundPort` after the listener binds.
+      port: 0,
       databaseUrl: "postgresql://localhost:5432/test",
       maxConnections: 10,
       requestTimeout: 5000,
@@ -85,11 +87,13 @@ async function startServer(opts: {
 
   // server.start() awaits `server.finished` (resolves on shutdown), so
   // the existing pattern in `server/auth-integration.test.ts` is fire-
-  // and-forget + a brief sleep until the listener is bound.
+  // and-forget + a brief sleep until the listener is bound. Attach a catch
+  // immediately so a bind failure can't escape as an unhandled rejection.
   const _running = server.start();
+  _running.catch(() => undefined);
   await new Promise(r => setTimeout(r, 200));
   return {
-    baseUrl: `http://${TEST_HOST}:${port}`,
+    baseUrl: `http://${TEST_HOST}:${server.boundPort}`,
     token: login.token,
     userId: reg.user.id,
     cleanup: async () => {

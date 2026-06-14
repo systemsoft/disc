@@ -18,7 +18,6 @@ import { AuthProvider } from "../auth/provider.ts";
 import { TestDatabase } from "../auth/test-database.ts";
 import { HttpServer } from "./http.ts";
 
-const TEST_PORT = 19876; // High port unlikely to conflict
 const TEST_HOST = "127.0.0.1";
 const TEST_JWT_SECRET = "test-secret-key-for-integration-tests";
 
@@ -27,7 +26,6 @@ async function createAuthServer(): Promise<{
   server: HttpServer;
   provider: AuthProvider;
   db: TestDatabase;
-  port: number;
 }> {
   const db = new TestDatabase();
   await db.connect();
@@ -41,13 +39,12 @@ async function createAuthServer(): Promise<{
   const middleware = new AuthMiddleware(provider);
   const routes = new AuthRoutes(provider, middleware);
 
-  // Find an available port
-  const port = TEST_PORT + Math.floor(Math.random() * 1000);
-
   const server = new HttpServer({
     config: {
       host: TEST_HOST,
-      port,
+      // OS-assigned free port; read `server.boundPort` after start() to
+      // learn it. Avoids AddrInUse flakes from random fixed ports.
+      port: 0,
       databaseUrl: "postgresql://localhost:5432/test",
       maxConnections: 10,
       requestTimeout: 5000,
@@ -65,15 +62,15 @@ async function createAuthServer(): Promise<{
     authRoutes: routes
   });
 
-  return { server, provider, db, port };
+  return { server, provider, db };
 }
 
 /** Create a minimal HttpServer WITHOUT auth configured */
-function createNoAuthServer(port: number): HttpServer {
+function createNoAuthServer(): HttpServer {
   return new HttpServer({
     config: {
       host: TEST_HOST,
-      port,
+      port: 0,
       databaseUrl: "postgresql://localhost:5432/test",
       maxConnections: 10,
       requestTimeout: 5000,
@@ -90,14 +87,14 @@ function createNoAuthServer(port: number): HttpServer {
 // --- Auth disabled tests ---
 
 Deno.test("auth routes return 404 when auth not configured", async () => {
-  const port = TEST_PORT + Math.floor(Math.random() * 1000) + 1000;
-  const server = createNoAuthServer(port);
+  const server = createNoAuthServer();
 
   // Start server in background
   void server.start();
 
   // Wait for server to start
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/auth/register`, {
@@ -118,11 +115,11 @@ Deno.test("auth routes return 404 when auth not configured", async () => {
 });
 
 Deno.test("root endpoint excludes auth when not configured", async () => {
-  const port = TEST_PORT + Math.floor(Math.random() * 1000) + 2000;
-  const server = createNoAuthServer(port);
+  const server = createNoAuthServer();
 
   void server.start();
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -137,10 +134,11 @@ Deno.test("root endpoint excludes auth when not configured", async () => {
 // --- Auth enabled tests ---
 
 Deno.test("root endpoint includes auth endpoints when configured", async () => {
-  const { server, db, port } = await createAuthServer();
+  const { server, db } = await createAuthServer();
 
   void server.start();
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -158,10 +156,11 @@ Deno.test("root endpoint includes auth endpoints when configured", async () => {
 });
 
 Deno.test("register and login flow via HTTP", async () => {
-  const { server, db, port } = await createAuthServer();
+  const { server, db } = await createAuthServer();
 
   void server.start();
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     // Register
@@ -208,10 +207,11 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
-    const { server, db, port } = await createAuthServer();
+    const { server, db } = await createAuthServer();
 
     void server.start();
     await new Promise(r => setTimeout(r, 200));
+    const port = server.boundPort;
 
     try {
       // Profile without token should fail
@@ -273,12 +273,10 @@ Deno.test({
     const middleware = new AuthMiddleware(provider);
     const routes = new AuthRoutes(provider, middleware);
 
-    const port = TEST_PORT + Math.floor(Math.random() * 1000) + 5000;
-
     const server = new HttpServer({
       config: {
         host: TEST_HOST,
-        port,
+        port: 0,
         databaseUrl: "postgresql://localhost:5432/test",
         maxConnections: 10,
         requestTimeout: 5000,
@@ -301,6 +299,7 @@ Deno.test({
 
     void server.start();
     await new Promise(r => setTimeout(r, 200));
+    const port = server.boundPort;
 
     try {
       // Register to get a token
@@ -345,10 +344,11 @@ Deno.test({
 });
 
 Deno.test("query endpoint works without token (optional auth)", async () => {
-  const { server, db, port } = await createAuthServer();
+  const { server, db } = await createAuthServer();
 
   void server.start();
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     const queryRes = await fetch(`http://${TEST_HOST}:${port}/query`, {
@@ -367,10 +367,11 @@ Deno.test("query endpoint works without token (optional auth)", async () => {
 });
 
 Deno.test("unknown auth endpoint returns 404", async () => {
-  const { server, db, port } = await createAuthServer();
+  const { server, db } = await createAuthServer();
 
   void server.start();
   await new Promise(r => setTimeout(r, 200));
+  const port = server.boundPort;
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/auth/nonexistent`, {

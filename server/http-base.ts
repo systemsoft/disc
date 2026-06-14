@@ -154,6 +154,21 @@ export abstract class HttpServerBase {
     }
   }
 
+  /**
+   * The port the listener actually bound to. When the server is started
+   * with `port: 0` the OS assigns a free ephemeral port; read this after
+   * `start()` to learn it. Tests should bind on 0 and use this instead of
+   * guessing a port, which avoids `AddrInUse` flakes from port collisions.
+   * Throws if read before the listener is bound.
+   */
+  get boundPort(): number {
+    const addr = this.server?.addr;
+    if (!addr) {
+      throw new Error("boundPort read before the server bound a listener");
+    }
+    return addr.port;
+  }
+
   async start(): Promise<void> {
     log.debug("Starting Disc HTTP server", {
       host: this.config.host,

@@ -124,11 +124,14 @@ async function startServer(opts: {
 }> {
   const schema = buildSchema();
   const { handler, captured } = makeStubHandler(opts.responder);
-  const port = 30000 + Math.floor(Math.random() * 5000);
   const server = new HttpServer({
     config: {
       host: TEST_HOST,
-      port,
+      // Bind on 0 so the OS hands us a free ephemeral port. A random fixed
+      // port collides under load (AddrInUse), and the unawaited start()
+      // below would surface that as an uncaught rejection that fails the
+      // whole module. Read the real port from `server.boundPort` after bind.
+      port: 0,
       databaseUrl: "postgresql://localhost:5432/test",
       maxConnections: 10,
       requestTimeout: 5000,
@@ -139,10 +142,14 @@ async function startServer(opts: {
     protocolHandler: handler,
     schemaProvider: () => schema
   });
+  // start() blocks on server.finished, so it's intentionally not awaited.
+  // Attach a catch immediately so a bind failure can't escape as an
+  // unhandled rejection before cleanup runs.
   const _running = server.start();
+  _running.catch(() => undefined);
   await new Promise(r => setTimeout(r, 200));
   return {
-    baseUrl: `http://${TEST_HOST}:${port}`,
+    baseUrl: `http://${TEST_HOST}:${server.boundPort}`,
     captured,
     cleanup: async () => {
       await server.stop();
