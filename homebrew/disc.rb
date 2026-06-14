@@ -14,19 +14,19 @@
 #     has no `<DISC_HOME>/postgres/<version>/` cache, so the embedded-PG
 #     manifest is empty and the runtime falls back to the network downloader
 #     on first `disc init` / `disc serve`. This matches `DISC_BUILD_NO_BUNDLE_PG=1`
-#     behavior and keeps the formula's brew install footprint small.
-#   - The UI IS bundled (the formula's build steps run `bun run build` first
+#     behavior and keeps the formula’s brew install footprint small.
+#   - The UI IS bundled (the formula’s build steps run `bun run build` first
 #     so `server/ui-assets.test.ts` and the runtime SPA path both work).
 
 class Disc < Formula
   desc "TypeScript-native, schema-first database (Gel/EdgeDB compatible)"
-  homepage "https://github.com/systemsoft/disc"
-  license "AGPL-3.0-or-later"
+  homepage "https://disc.sh"
+  license "Apache-2.0"
 
   # Stable: tagged release. Update on each new tag.
-  url "https://github.com/systemsoft/disc/archive/refs/tags/v2026.05.04.tar.gz"
-  sha256 "REPLACE_WITH_TAG_SHA256_AT_PUBLISH_TIME"
-  version "2026.05.04"
+  url "https://github.com/systemsoft/disc/archive/refs/tags/v2026.06.13.1.tar.gz"
+  sha256 "b86e642a2741b798edc01c5d90d9e9fb0035270f66118019676776bff29f4076"
+  version "2026.06.13.1"
 
   # Cutting-edge: install from `primary` branch via `brew install --HEAD disc`.
   # Useful while bundles ship faster than tags.
@@ -43,7 +43,7 @@ class Disc < Formula
     end
 
     # Compile the Disc binary. `DISC_BUILD_NO_BUNDLE_PG=1` skips the PG
-    # cache walk explicitly — the brew machine wouldn't have one anyway,
+    # cache walk explicitly — the brew machine wouldn’t have one anyway,
     # but setting the var avoids a misleading "no embedded PG (no cache
     # at <path>)" log line during the build.
     ENV["DISC_BUILD_NO_BUNDLE_PG"] = "1"
