@@ -158,11 +158,13 @@ Deno.test({
       schema,
       connectionPool: pool
     });
-    const port = 35000 + Math.floor(Math.random() * 5000);
     const server = new HttpServer({
       config: {
         host: TEST_HOST,
-        port,
+        // Bind on 0 for an OS-assigned free port — a random fixed port
+        // collides under load (AddrInUse). Read the real port from
+        // `server.boundPort` after bind.
+        port: 0,
         databaseUrl: dsn,
         maxConnections: 10,
         requestTimeout: 5000,
@@ -172,11 +174,15 @@ Deno.test({
       protocolHandler: handler,
       schemaProvider: () => schema
     });
+    // start() blocks on server.finished, so it's intentionally not awaited.
+    // Attach a catch immediately so a bind failure can't escape as an
+    // unhandled rejection.
     const _running = server.start();
+    _running.catch(() => undefined);
     await new Promise(r => setTimeout(r, 200));
 
     try {
-      const baseUrl = `http://${TEST_HOST}:${port}`;
+      const baseUrl = `http://${TEST_HOST}:${server.boundPort}`;
 
       // 1. Initial GET — empty table
       let res = await fetch(`${baseUrl}/api/User`);
