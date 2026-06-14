@@ -22,24 +22,42 @@ import { dirname, join } from "@std/path";
 
 const MARKER_FILE = ".disc-embedded-pg-marker";
 
-export interface EmbeddedPgEntry {
+/** A regular file embedded from the PG distribution. */
+export interface EmbeddedPgFileEntry {
   /**
-   * Source URL to read from. In the compiled binary this resolves
-   * through Deno's embedded asset table; in development it's a normal
-   * `file://` URL.
+   * POSIX mode bits to set on the extracted file. Use `0o755` for
+   * binaries in `bin/`, `0o644` for plain data.
    */
-  sourceUrl: URL;
+  mode: number;
   /**
    * Path relative to the target directory (e.g. `bin/postgres`,
    * `lib/postgresql/llvmjit.so`).
    */
   relPath: string;
   /**
-   * POSIX mode bits to set on the extracted file. Use `0o755` for
-   * binaries in `bin/`, `0o644` for plain data.
+   * Source URL to read from. In the compiled binary this resolves
+   * through Deno's embedded asset table; in development it's a normal
+   * `file://` URL.
    */
-  mode: number;
+  sourceUrl: URL;
 }
+
+/**
+ * A symlink in the PG distribution that must be recreated at extraction
+ * time. macOS ICU libraries ship as a versioned file plus an unversioned
+ * symlink (`libicudata.77.dylib -> libicudata.77.1.dylib`), and the PG
+ * binaries' load commands reference the unversioned name — drop the
+ * symlink and `initdb` dies with "Library not loaded: …libicudata.77.dylib".
+ * Symlinks have no embedded bytes; only the link itself is recreated.
+ */
+export interface EmbeddedPgSymlinkEntry {
+  /** The symlink's target, verbatim from `Deno.readLink` (relative). */
+  linkTarget: string;
+  /** Path of the symlink relative to the target directory. */
+  relPath: string;
+}
+
+export type EmbeddedPgEntry = EmbeddedPgFileEntry | EmbeddedPgSymlinkEntry;
 
 export interface ExtractResult {
   alreadyExtracted: boolean;
@@ -89,6 +107,20 @@ export async function extractEmbeddedPg(
   for (const entry of entries) {
     const dest = join(targetDir, entry.relPath);
     await ensureDir(dirname(dest));
+
+    if ("linkTarget" in entry) {
+      // Recreate the symlink. Remove any stale dest first so extracting
+      // into a dirty dir is deterministic (symlink() fails on EEXIST).
+      try {
+        await Deno.remove(dest);
+      } catch {
+        // Nothing there yet — fine.
+      }
+      await Deno.symlink(entry.linkTarget, dest);
+      extracted++;
+      continue;
+    }
+
     const bytes = await Deno.readFile(entry.sourceUrl);
     await Deno.writeFile(dest, bytes, { mode: entry.mode });
     // Re-chmod after write because writeFile's mode arg is honored only

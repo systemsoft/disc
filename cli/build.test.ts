@@ -204,6 +204,39 @@ Deno.test("generateEmbeddedPgManifest - emits import.meta.resolve URLs + correct
   }
 });
 
+Deno.test("generateEmbeddedPgManifest - emits symlink entries with linkTarget, not bytes", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-pg-link-" });
+
+  try {
+    const sourceDir = join(tmp, "pg");
+    const manifestDir = join(tmp, "postgres");
+    await Deno.mkdir(join(sourceDir, "lib"), { recursive: true });
+    await Deno.mkdir(manifestDir, { recursive: true });
+    /*** A versioned ICU lib plus the unversioned symlink PG loads by name. ***/
+    await Deno.writeTextFile(join(sourceDir, "lib", "libicudata.77.1.dylib"), "icu");
+    await Deno.symlink(
+      "libicudata.77.1.dylib",
+      join(sourceDir, "lib", "libicudata.77.dylib")
+    );
+
+    const generated = await generateEmbeddedPgManifest({
+      manifestDir,
+      pgVersion: "18.4",
+      sourceDir
+    });
+
+    /*** The real file is embedded with a sourceUrl. ***/
+    assertStringIncludes(generated, `import.meta.resolve("../pg/lib/libicudata.77.1.dylib")`);
+    /*** The symlink becomes a linkTarget entry — no embedded bytes. ***/
+    assertStringIncludes(generated, `linkTarget: "libicudata.77.1.dylib"`);
+    assertStringIncludes(generated, "\"lib/libicudata.77.dylib\"");
+    /*** The symlink path itself must NOT be embedded as a file. ***/
+    assertEquals(generated.includes(`import.meta.resolve("../pg/lib/libicudata.77.dylib")`), false);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
 Deno.test("BuildCommand.buildCompileArgs - includes PG paths when supplied", () => {
   const command = new BuildCommand();
 

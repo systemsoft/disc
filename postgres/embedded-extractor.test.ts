@@ -135,3 +135,37 @@ Deno.test("extractEmbeddedPg - re-extracts when marker is missing even if files 
     await Deno.remove(tmp, { recursive: true });
   }
 });
+
+Deno.test("extractEmbeddedPg - recreates symlink entries (macOS ICU libs)", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-link-" });
+  try {
+    // The real-world shape: a versioned file plus an unversioned symlink
+    // pointing at it, which PG's binaries load by the unversioned name.
+    const src = await makeSourceFile(
+      tmp,
+      "src/lib/libicudata.77.1.dylib",
+      new Uint8Array([9, 9, 9])
+    );
+    const target = join(tmp, "target");
+
+    const entries: EmbeddedPgEntry[] = [
+      { sourceUrl: src, relPath: "lib/libicudata.77.1.dylib", mode: 0o644 },
+      { linkTarget: "libicudata.77.1.dylib", relPath: "lib/libicudata.77.dylib" }
+    ];
+
+    const result = await extractEmbeddedPg(target, entries);
+    assertEquals(result.extracted, 2);
+
+    // The symlink exists, is an actual symlink, and points at the versioned file.
+    const linkPath = join(target, "lib/libicudata.77.dylib");
+    const linfo = await Deno.lstat(linkPath);
+    assertEquals(linfo.isSymlink, true);
+    assertEquals(await Deno.readLink(linkPath), "libicudata.77.1.dylib");
+
+    // Reading through the link resolves to the target file's bytes.
+    const viaLink = await Deno.readFile(linkPath);
+    assertEquals(Array.from(viaLink), [9, 9, 9]);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});

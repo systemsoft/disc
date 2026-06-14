@@ -513,7 +513,7 @@ export async function ensurePlatformPgStaging(rootDir: string, platform: string,
  * table.
  */
 export async function generateEmbeddedPgManifest(options: { manifestDir: string; pgVersion: string; sourceDir: string; }): Promise<string> {
-  const entries: { abs: string; mode: number; rel: string; }[] = [];
+  const entries: PgSourceEntry[] = [];
   let exists = false;
 
   try {
@@ -532,20 +532,22 @@ export async function generateEmbeddedPgManifest(options: { manifestDir: string;
   const body = entries.length === 0 ? "[]" : `[\n${
     entries
       .map((e, i, arr) => {
+        const trailing = arr[i + 1] ? "," : "";
+
+        // Symlink entry: no embedded bytes, just the link target.
+        if (e.linkTarget !== undefined)
+          return `  {
+    linkTarget: ${JSON.stringify(e.linkTarget)},
+    relPath: ${JSON.stringify(e.rel)}
+  }${trailing}`;
+
         const relFromManifest = toPosixRel(relative(options.manifestDir, e.abs));
 
-        if (arr[i + 1])
-          return `  {
-    mode: 0o${e.mode.toString(8)},
+        return `  {
+    mode: 0o${e.mode!.toString(8)},
     relPath: ${JSON.stringify(e.rel)},
     sourceUrl: new URL(import.meta.resolve(${JSON.stringify(relFromManifest)}))
-  },`;
-        else
-          return `  {
-    mode: 0o${e.mode.toString(8)},
-    relPath: ${JSON.stringify(e.rel)},
-    sourceUrl: new URL(import.meta.resolve(${JSON.stringify(relFromManifest)}))
-  }`;
+  }${trailing}`;
       })
       .join("\n")
   }\n]`;
@@ -753,7 +755,7 @@ export async function refreshEmbeddedPgManifest(
        via `import.meta.resolve(...)` rather than absolute `file://` literals, so a regex over the
        generated source no longer recovers the build-time absolute paths that
        `deno compile --include` needs. ***/
-  const walked: { abs: string; rel: string; mode: number; }[] = [];
+  const walked: PgSourceEntry[] = [];
   let exists = false;
 
   try {
@@ -768,7 +770,11 @@ export async function refreshEmbeddedPgManifest(
     walked.sort((a, b) => a.rel.localeCompare(b.rel));
   }
 
-  const includePaths = walked.map(e => e.abs);
+  // Symlinks carry no bytes of their own — only their target file is
+  // embedded via `--include`; the link is recreated from the manifest at
+  // extraction time. Including the symlink path here would either duplicate
+  // the target's bytes or confuse `deno compile`.
+  const includePaths = walked.filter(e => e.linkTarget === undefined).map(e => e.abs);
 
   return {
     fileCount: includePaths.length,
@@ -1022,7 +1028,19 @@ function toPosixRel(p: string): string {
  * Pulled out so the parent function stays at the top level (lint:
  * `no-inner-declarations`).
  */
-async function walkPgSource(rootDir: string, dir: string, entries: { abs: string; mode: number; rel: string; }[]): Promise<void> {
+/**
+ * A walked entry from the on-disk PG distribution. Regular files carry a
+ * `mode`; symlinks carry a `linkTarget` (and are excluded from the
+ * `deno compile --include` set since only their target's bytes get embedded).
+ */
+interface PgSourceEntry {
+  abs: string;
+  linkTarget?: string;
+  mode?: number;
+  rel: string;
+}
+
+async function walkPgSource(rootDir: string, dir: string, entries: PgSourceEntry[]): Promise<void> {
   for await (const entry of Deno.readDir(dir)) {
     const full = join(dir, entry.name);
 
@@ -1031,10 +1049,20 @@ async function walkPgSource(rootDir: string, dir: string, entries: { abs: string
       continue;
     }
 
+    const rel = relative(rootDir, full).split("\\").join("/");
+
+    // Preserve symlinks (e.g. macOS ICU libs ship `libicudata.77.dylib ->
+    // libicudata.77.1.dylib`; PG binaries load the unversioned name). The
+    // old code skipped them via `!entry.isFile`, so the extracted binary was
+    // missing them and `initdb` failed to load ICU on macOS.
+    if (entry.isSymlink) {
+      entries.push({ abs: full, linkTarget: await Deno.readLink(full), rel });
+      continue;
+    }
+
     if (!entry.isFile)
       continue;
 
-    const rel = relative(rootDir, full).split("\\").join("/");
     const mode = rel.startsWith("bin/") ? 0o755 : 0o644;
     entries.push({ abs: full, mode, rel });
   }
