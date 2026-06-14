@@ -27,6 +27,9 @@
   let insertLinkMode: Record<string, 'select' | 'id'> = {};
   let insertSubmitting = false;
   let limit = 50;
+  /*** Monotonic token so overlapping loadRows() calls commit in issue order —
+       only the latest-issued load writes its result. See loadRows(). ***/
+  let loadSeq = 0;
   /*** Link picker state for insert. Each link gets either a `<select>` populated from
        `select Target { id, label } limit 100` or, when toggled, a free-text UUID input — covering
        targets that exceed the 100-row cap or rows that don’t yet exist locally. ***/
@@ -478,6 +481,15 @@
     if (!selectedType)
       return;
 
+    /*** Guard against out-of-order overlapping loads. Clicking "Clear Filters"
+         while a filter input has focus fires the input's `onblur={loadRows}`
+         (a filtered query) immediately before the click runs `clearFilters`
+         (an unfiltered query). Both are in flight at once; without this token
+         the slower-resolving one wins and can leave stale rows on screen (the
+         filtered 1-row result clobbering the cleared 3-row result). Only the
+         most recently issued load is allowed to commit its result. ***/
+    const seq = ++loadSeq;
+
     loadError = null;
     loading = true;
     rows = [];
@@ -486,6 +498,11 @@
     columns = cols;
 
     const result = await discAPI.executeQuery(query);
+
+    /*** A newer load started while we were awaiting — drop this stale result. ***/
+    if (seq !== loadSeq)
+      return;
+
     loading = false;
 
     if (result.error) {
