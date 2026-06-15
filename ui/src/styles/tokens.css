@@ -1,7 +1,7 @@
 /*
  * Disc UI design tokens — CSS custom properties.
  *
- * Source of truth for the TRON-inspired visual system. Imported once
+ * Source of truth for the visual system. Imported once
  * in app.scss so :root applies globally; SCSS partials reference
  * `var(--name)` directly and no longer rely on Vite's `additionalData`
  * to inject Sass variables into every <style> block.
@@ -30,7 +30,7 @@
 }
 
 :root {
-  /* TRON-inspired surfaces */
+  /* Surfaces */
   --color-background: #0a0e1b;
   --color-background-rgb: 10 14 27;
   --color-background-dark: #040609;

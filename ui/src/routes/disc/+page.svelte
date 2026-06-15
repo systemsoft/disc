@@ -13,7 +13,7 @@
 
   import { layoutDisc, type OrbitalPoint } from "$lib/identity-disc-layout";
 
-  /*** The TRON metaphor taken seriously: a row’s outgoing links and incoming references rendered as
+  /*** The identity-disc metaphor taken seriously: a row’s outgoing links and incoming references rendered as
        a literal disc — the centered object at the middle, links radiating outward, linked objects
        orbiting at the rim. Click an orbital to recenter on that object; breadcrumb tracks recent
        centers so navigation is reversible.
@@ -547,14 +547,10 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Identity Disc</title>
+  <title>Disc &bull; Identity Disc</title>
 </svelte:head>
 
 <div class="identity-disc">
-  <!-- <header class="page-header">
-    <h1>Identity Disc</h1>
-    <p class="subtitle">A row’s outgoing links + incoming references, rendered as a circle. Click any orbital to recenter.</p>
-  </header> -->
   <aside class="sidebar">
     <h5 style="--ch: 11ch;">Object Type</h5>
 

@@ -8,14 +8,14 @@
   import "../app.scss";
 
   import { discAPI } from "$lib/api/client";
-  import favicon from "$lib/assets/disc.svg";
+  import favicon from "$lib/assets/favicon.svg";
   import { page } from "$app/stores";
 
   type ConnectionStatus = "connecting" | "offline" | "online";
 
   const navItems = [
     { path: "/ui/schema", label: "Schema" },
-    { path: "/ui/admin/schema", label: "Diff" },
+    { path: "/ui/diff", label: "Diff" },
     { path: "/ui/data", label: "Data" },
     { path: "/ui/query", label: "Query" },
     { path: "/ui/query-builder", label: "Builder" },
@@ -69,7 +69,7 @@
   .app-layout {
     width: 100vw; height: 100vh;
 
-    color: $uchu-yin-9;
+    color: var(--uchu-yin-9);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -77,7 +77,7 @@
 
   .app-header {
     align-items: center;
-    border-bottom: 1px solid $uchu-gray-1;
+    border-bottom: 1px solid var(--uchu-gray-1);
     display: flex;
     gap: calc(var(--grid-unit) * 4);
     padding: calc(var(--grid-unit) * 2);
@@ -111,7 +111,7 @@
         &::after {
           top: var(--grid-unit); right: calc(var(--grid-unit) * -1);
 
-          color: $uchu-yin-3;
+          color: var(--uchu-yin-3);
           content: "/";
           font-weight: normal;
           opacity: 0.2;
@@ -149,18 +149,18 @@
     user-select: none;
 
     &:not(.online):not(.offline) {
-      background-color: $uchu-orange-4;
-      color: $uchu-yin-8;
+      background-color: var(--uchu-orange-4);
+      color: var(--uchu-yin-8);
     }
 
     &.offline {
-      background-color: $uchu-red-4;
-      color: $uchu-yin-8;
+      background-color: var(--uchu-red-4);
+      color: var(--uchu-red-1);
     }
 
     &.online {
-      background-color: $uchu-green-4;
-      color: $uchu-yin-8;
+      background-color: var(--uchu-green-4);
+      color: var(--uchu-yin-8);
     }
   }
 

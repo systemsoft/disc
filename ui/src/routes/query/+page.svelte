@@ -388,7 +388,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Query Editor</title>
+  <title>Disc &bull; Query Editor</title>
 </svelte:head>
 
 <div class="data-viewer">

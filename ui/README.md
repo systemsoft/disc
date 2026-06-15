@@ -1,10 +1,10 @@
 # Disc Admin UI
 
-A TRON-inspired admin interface for Disc Database, built with SvelteKit and TypeScript.
+A modern, lightly-futuristic admin interface for Disc Database, built with SvelteKit and TypeScript.
 
 ## Features
 
-- 🎨 **TRON-inspired Design** - Dark theme with luminous accents and grid-based layouts
+- 🎨 **Modern, lightly-futuristic design** - Light theme with crisp accents and grid-based layouts
 - 📊 **Schema Browser** - Visual representation of database schema
 - 📝 **Query Editor** - EdgeQL query editor with syntax highlighting
 - 📋 **Data Viewer** - Browse and edit database objects
@@ -69,29 +69,26 @@ disc serve --no-ui
 
 ## Design System
 
+A modern, lightly-futuristic **light theme** built on the [Uchū](https://uchu.style) color palette, with crisp accents, grid-based layouts, and monospaced type for data.
+
 ### Colors
 
-- **Background**: `#0a0e1b` - Deep space black
-- **Primary**: `#00d9ff` - Cyan glow (main accent)
-- **Secondary**: `#ff9f00` - Orange glow
-- **Success**: `#00ff88` - Green glow
-- **Warning**: `#ffbb00` - Yellow glow
-- **Danger**: `#ff0055` - Red glow
+Colors come from the Uchū palette, exposed as `$uchu-*` Sass variables and `--uchu-*` custom properties. Semantic accents (info, success, warning, danger) draw from its blue, green, orange, and red ramps. See `src/styles/tokens.css` and `@inc/uchu/scss` for the source of truth.
 
 ### Typography
 
-- **Display**: Orbitron - Used for headings
-- **Monospace**: Space Mono - Used for code and data
-- **Body**: System font stack
+- **Display**: Tektur - Used for headings
+- **Monospace**: Berkeley Mono - Used for code and data
+- **Body**: Inter
 
 ### Components
 
-All components follow the TRON aesthetic with:
+Components share a consistent, restrained aesthetic:
 
-- Glowing borders on hover/focus
+- Crisp borders and subtle focus states
 - Grid-based layouts
 - Monospace typography for data
-- Luminous accent colors
+- A light surface with measured accent color
 - Subtle animations
 
 ## Building for Production

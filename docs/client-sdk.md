@@ -665,7 +665,7 @@ The server resolves the database name in this order:
 
 ## Codegen-free query builder
 
-A runtime DSL that gives the same end-to-end type safety as [`disc codegen`](codegen.md) without producing any generated files. Useful when CI shouldn't carry a codegen step or when the schema lives in TypeScript next to the application code.
+A runtime DSL that gives the same end-to-end type safety as [`disc codegen`](codegen.md) without producing any generated files. Useful when CI shouldn’t carry a codegen step or when the schema lives in TypeScript next to the application code.
 
 ### Declare the schema in TypeScript
 

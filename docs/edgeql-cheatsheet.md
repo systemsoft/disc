@@ -1,6 +1,6 @@
 # EdgeQL Cheat Sheet
 
-One-page reference of the EdgeQL forms you reach for daily. For full prose and edge cases, see [EdgeQL](edgeql.md).
+One-page reference of the EdgeQL forms you reach for daily. For full prose and edge cases, see [EdgeQL](edgeql.md).
 
 ---
 
@@ -305,4 +305,4 @@ In `disc shell`:
 
 ---
 
-For longer prose, edge cases, and topics not covered here (window functions, polymorphic shapes, GROUP BY, set operations, DESCRIBE, CONFIGURE, globals), see [EdgeQL](edgeql.md).
+For longer prose, edge cases, and topics not covered here (window functions, polymorphic shapes, GROUP BY, set operations, DESCRIBE, CONFIGURE, globals), see [EdgeQL](edgeql.md).

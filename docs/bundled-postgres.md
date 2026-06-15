@@ -171,7 +171,7 @@ The upgrade process:
 
 The old PostgreSQL binary remains cached at `~/.disc/postgres/<old-version>/` and is not deleted, so rollback is always possible.
 
-> **Status:** the full `pg_dump`/`pg_restore` upgrade pipeline isn't implemented yet — `upgradeInstance` currently throws an error indicating the feature is in development. The CLI surface and the flow described above are the intended behavior. The command is gated until the pipeline ships, so running it on a real instance is safe (it errors out before touching anything).
+> **Status:** the full `pg_dump`/`pg_restore` upgrade pipeline isn’t implemented yet — `upgradeInstance` currently throws an error indicating the feature is in development. The CLI surface and the flow described above are the intended behavior. The command is gated until the pipeline ships, so running it on a real instance is safe (it errors out before touching anything).
 
 ---
 
@@ -318,7 +318,7 @@ When connecting to an external PostgreSQL over TCP, append `?sslmode=<mode>` to 
 disc init my-app --backend-dsn "postgres://user:pass@db.example.com:5432/disc?sslmode=require"
 ```
 
-Unix-socket DSNs ignore `sslmode` — sockets don't carry TLS. Unknown values are dropped at parse time so a typo never silently downgrades a `require` connection to plaintext. (`lib/database.ts:parseConnectionString`, gh/geldata#2292)
+Unix-socket DSNs ignore `sslmode` — sockets don’t carry TLS. Unknown values are dropped at parse time so a typo never silently downgrades a `require` connection to plaintext. (`lib/database.ts:parseConnectionString`, gh/geldata#2292)
 
 ---
 

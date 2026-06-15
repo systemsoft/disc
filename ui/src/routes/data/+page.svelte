@@ -934,7 +934,7 @@
     }
 
     &.live-pulse {
-      // TRON-aesthetic pulse — green ring on invalidate, fades over 600ms.
+      // Pulse — green ring on invalidate, fades over 600ms.
       border-color: var(--color-grid-line, #00d2ff);
       box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
     }
@@ -1221,7 +1221,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Data Explorer</title>
+  <title>Disc &bull; Data Explorer</title>
 </svelte:head>
 
 <div class="data-viewer">

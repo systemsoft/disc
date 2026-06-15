@@ -27,7 +27,7 @@ uninitialized -> initializing -> ready -> shutdown
 
 1. **Registration** -- The extension is registered with the `ExtensionRegistry`.
 2. **Database setup** -- Any SQL setup statements (e.g., `CREATE EXTENSION IF NOT EXISTS vector`) are executed.
-3. **Initialization** -- The extension's `initialize()` method is called with access to the connection pool, schema, server config, and logger.
+3. **Initialization** -- The extension’s `initialize()` method is called with access to the connection pool, schema, server config, and logger.
 4. **Ready** -- The extension is active. Its functions, routes, and middleware are available.
 5. **Shutdown** -- On server stop, `shutdown()` is called in reverse initialization order.
 
@@ -97,17 +97,17 @@ const server = new DiscServer({
 await server.start();
 ```
 
-Extension HTTP routes are served under `/ext/<extension-name>/`. For example, the GraphQL extension's query endpoint is at `/ext/graphql/graphql`.
+Extension HTTP routes are served under `/ext/<extension-name>/`. For example, the GraphQL extension’s query endpoint is at `/ext/graphql/graphql`.
 
 ---
 
 ## Full-Text Search (ext::fts)
 
-Full-text search uses PostgreSQL's built-in tsvector and tsquery infrastructure. No additional PostgreSQL extension is needed.
+Full-text search uses PostgreSQL’s built-in tsvector and tsquery infrastructure. No additional PostgreSQL extension is needed.
 
 ### Schema Setup
 
-Add an FTS index to your type's properties using the index builder:
+Add an FTS index to your type’s properties using the index builder:
 
 ```typescript
 import {
@@ -158,7 +158,7 @@ Columns without an explicit weight get the default (D) treatment.
 
 The FTS extension registers two EdgeQL functions:
 
-**`fts::search(query: str) -> bool`** -- Returns true if the row's `fts_vector` matches the search query.
+**`fts::search(query: str) -> bool`** -- Returns true if the row’s `fts_vector` matches the search query.
 
 **`fts::rank(query: str) -> float64`** -- Returns a relevance score for ranking results.
 
@@ -173,7 +173,7 @@ filter fts::search("database TypeScript")
 order by fts::rank("database TypeScript") desc;
 ```
 
-These compile to PostgreSQL's `@@` (match) and `ts_rank()` operators:
+These compile to PostgreSQL’s `@@` (match) and `ts_rank()` operators:
 
 ```sql
 SELECT jsonb_build_object(
@@ -206,7 +206,7 @@ Vector search enables similarity queries on embedding vectors using the [pgvecto
 
 ### Prerequisites
 
-The pgvector extension must be available in your PostgreSQL installation. Disc's database setup automatically runs `CREATE EXTENSION IF NOT EXISTS vector;` when the extension initializes.
+The pgvector extension must be available in your PostgreSQL installation. Disc’s database setup automatically runs `CREATE EXTENSION IF NOT EXISTS vector;` when the extension initializes.
 
 ### Configuration
 
@@ -316,20 +316,9 @@ The extension registers three HTTP routes:
 
 ### Rate limiting (gh/geldata#718)
 
-GraphQL endpoints inherit the server's HTTP-level rate limiter — the
-same per-client-IP, per-minute gate that applies to `/query` and every
-other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the
-server config; the limiter runs _before_ extension routing in
-`server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected
-with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
+GraphQL endpoints inherit the server’s HTTP-level rate limiter — the same per-client-IP, per-minute gate that applies to `/query` and every other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the server config; the limiter runs _before_ extension routing in `server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
 
-Disc does **not** currently apply per-query-complexity weighting (deep
-nested queries count the same as `{ __typename }`). The `maxDepth`
-config above caps recursion depth as a coarse safety net, but a
-proper cost-based limiter — counting nested fields, list multipliers,
-and aliased duplicates — is future work and would require introducing
-a query-cost analyzer in `query-translator.ts`. File an issue if you
-hit a real DoS pattern this misses.
+Disc does **not** currently apply per-query-complexity weighting (deep nested queries count the same as `{ __typename }`). The `maxDepth` config above caps recursion depth as a coarse safety net, but a proper cost-based limiter — counting nested fields, list multipliers, and aliased duplicates — is future work and would require introducing a query-cost analyzer in `query-translator.ts`. File an issue if you hit a real DoS pattern this misses.
 
 ### Schema Generation
 
@@ -899,7 +888,7 @@ override getCompilerHooks(): CompilerHook[] {
       name: "my-functions",
       transformFunctionCall: (funcName: string, args: string[]): string | undefined => {
         if (funcName === "my_extension::greet")
-          return `'Hello, ' || ${args[0]}`;
+          return `"Hello, " || ${args[0]}`;
 
         return undefined;  // return undefined to skip (let other hooks handle it)
       },
@@ -908,7 +897,7 @@ override getCompilerHooks(): CompilerHook[] {
 }
 ```
 
-When the compiler encounters a function call, it checks each hook's `transformFunctionCall`. The first hook that returns a non-undefined string wins. If no hook handles the function, the default compilation behavior is used.
+When the compiler encounters a function call, it checks each hook’s `transformFunctionCall`. The first hook that returns a non-undefined string wins. If no hook handles the function, the default compilation behavior is used.
 
 ### Health Reporting
 

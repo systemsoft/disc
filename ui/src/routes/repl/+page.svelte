@@ -244,7 +244,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Interactive REPL</title>
+  <title>Disc &bull; REPL</title>
 </svelte:head>
 
 <div class="repl">

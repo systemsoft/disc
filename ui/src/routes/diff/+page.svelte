@@ -208,7 +208,8 @@
 </script>
 
 <style lang="scss">
-  @use "../../../styles/mixins" as *;
+  @use "@inc/uchu/scss" as *;
+  @use "../../styles/mixins" as *;
 
   .schema-diff {
     display: flex;
@@ -238,7 +239,7 @@
 
         &::after {
           width: calc(100% + var(--grid-unit)); height: 100%;
-          bottom: 0; left: calc(calc(var(--grid-unit)/2) * -1);
+          bottom: 0; left: calc(calc(var(--grid-unit) / 2) * -1);
 
           background-color: var(--uchu-yellow-1);
           content: "";
@@ -607,7 +608,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Diff Viewer</title>
+  <title>Disc &bull; Diff Viewer</title>
 </svelte:head>
 
 <div class="schema-diff">

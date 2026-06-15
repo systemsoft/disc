@@ -82,39 +82,37 @@ The query editor provides a code editing environment for writing and executing E
 
 **Error display.** If a query fails, an error message appears between the editor and results area with the error text from the server.
 
-**Multi-tab support.** The `QueryEditor` component supports multiple tabs. Click the "+" button to open a new query tab. Each tab maintains its own query text independently. Close tabs with the "x" button on the tab  label.
+**Multi-tab support.** The `QueryEditor` component supports multiple tabs. Click the "+" button to open a new query tab. Each tab maintains its own query text independently. Close tabs with the "x" button on the tab label.
 
 ## Builder
 
-Navigate to **Builder** in the header bar, or go to `/ui/query-builder`. This is Disc's visual query builder — a Disc-original feature (Bundle N, #3b in `docs/disc-original-features.md`) that doesn't exist in Gel's UI.
+Navigate to **Builder** in the header bar, or go to `/ui/query-builder`. This is Disc’s visual query builder — a Disc-original feature (Bundle N, #3b in `docs/disc-original-features.md`) that doesn’t exist in Gel’s UI.
 
-The page is a two-column layout. The **left column** is the form: pick a root type from the dropdown, tick the scalar fields you want returned, optionally tick links and the fields to inline from each link, add filter rows (operator + parameterized value), set order/limit/offset. The **right column** is the synthesized EdgeQL — it updates live as you change the form, so every choice you make corresponds to a line in the query that runs.
+The page is a two-column layout. The **left column** is the form: pick a root type from the dropdown, tick the scalar fields you want returned, optionally tick links and the fields to inline from each link, add filter rows (operator + parameterized value), set order/limit/offset. The **right column** is the synthesized EdgeQL — it updates live as you change the form, so every choice you make corresponds to a line in the query that runs.
 
-A **Copy** button in the EdgeQL pane copies the current query + variables to the clipboard. A **Run** button executes the query through the same `/query` pipeline as the Query editor — so access policies, read-only mode, and the auth gate compose identically. Results render in the same table-or-JSON view as the Query and Data pages, so the mental model carries over.
+A **Copy** button in the EdgeQL pane copies the current query + variables to the clipboard. A **Run** button executes the query through the same `/query` pipeline as the Query editor — so access policies, read-only mode, and the auth gate compose identically. Results render in the same table-or-JSON view as the Query and Data pages, so the mental model carries over.
 
-Filter operators supported: `=`, `!=`, `<`, `<=`, `>`, `>=`. Multiple filters AND together with parens. Link expansion is one level deep — deeper nesting is supported by EdgeQL but the form doesn't surface it (use the Query editor for those). Cross-link filters (e.g., `.author.email = ...`) are scoped out of v1.
+Filter operators supported: `=`, `!=`, `<`, `<=`, `>`, `>=`. Multiple filters AND together with parens. Link expansion is one level deep — deeper nesting is supported by EdgeQL but the form doesn’t surface it (use the Query editor for those). Cross-link filters (e.g., `.author.email = ...`) are scoped out of v1.
 
-Identifier safety is enforced before any name lands in the EdgeQL string: type names, shape fields, link names, and order fields are all validated against `^[a-zA-Z_][a-zA-Z0-9_]*$`. Synthesis errors surface inline.
+Identifier safety is enforced before any name lands in the EdgeQL string: type names, shape fields, link names, and order fields are all validated against `^[a-zA-Z_][a-zA-Z0-9_]*$`. Synthesis errors surface inline.
 
-The Builder pairs naturally with the Query editor: build a starting query visually, copy it across, then refine in raw EdgeQL.
+The Builder pairs naturally with the Query editor: build a starting query visually, copy it across, then refine in raw EdgeQL.
 
 ---
 
 ## Disc
 
-Navigate to **Disc** in the header bar, or go to `/ui/disc`. This is the **identity-disc visualization** — a Disc-original feature (Bundle O, #3d in `docs/disc-original-features.md`) and the page that gave the project its name. Click an object and see it as a luminous TRON-style disc, with outgoing links radiating out one side and incoming references arriving on the other.
+Navigate to **Disc** in the header bar, or go to `/ui/disc`. This is the **identity-disc visualization** — a Disc-original feature (Bundle O, #3d in `docs/disc-original-features.md`) and the page that gave the project its name. Click an object and see it rendered as a luminous disc, with outgoing links radiating out one side and incoming references arriving on the other.
 
-**Picker bar.** Pick a type from the first dropdown; the second dropdown populates with up to 25 of that type's objects (using a heuristic display field — `name` → `title` → `email` → `label`, falling back to a truncated id). Click **Show disc** to render.
+**Picker bar.** Pick a type from the first dropdown; the second dropdown populates with up to 25 of that type’s objects (using a heuristic display field — `name` → `title` → `email` → `label`, falling back to a truncated id). Click **Show disc** to render.
 
-**Disc canvas.** The selected object sits at the center, glowing. Two TRON-aesthetic concentric rings frame the orbit. Outgoing links sweep a 120° arc on the right semicircle (centered on 3 o'clock). Incoming references sweep the same arc on the left (centered on 9 o'clock). Each cluster carries one orbital node labeled with the type and target; clusters of multiple links show a `+N` count badge.
+**Disc canvas.** The selected object sits at the center, glowing. Two concentric rings frame the orbit. Outgoing links sweep a 120° arc on the right semicircle (centered on 3 o'clock). Incoming references sweep the same arc on the left (centered on 9 o'clock). Each cluster carries one orbital node labeled with the type and target; clusters of multiple links show a `+N` count badge.
 
-**Navigation.** Click any orbital node to recenter the disc on that object. The previous center pushes onto a breadcrumb stack — a **← Back (N)** button pops back through the trail, so you can drill into a graph and walk back without losing your place.
+**Navigation.** Click any orbital node to recenter the disc on that object. The previous center pushes onto a breadcrumb stack — a **← Back (N)** button pops back through the trail, so you can drill into a graph and walk back without losing your place.
 
-**Data shape.** Outgoing data comes from one query that walks `type.links` and inlines `{ id, displayField }` for every link. Incoming data comes from a schema-walk of every type's links looking for ones that target the centered type, followed by a parallel `Promise.all` of `select Source filter .linkName.id = <uuid>$id limit 6` — forward-filter syntax keeps the request layer free of EdgeQL backlink syntax.
+**Data shape.** Outgoing data comes from one query that walks `type.links` and inlines `{ id, displayField }` for every link. Incoming data comes from a schema-walk of every type’s links looking for ones that target the centered type, followed by a parallel `Promise.all` of `select Source filter .linkName.id = <uuid>$id limit 6` — forward-filter syntax keeps the request layer free of EdgeQL backlink syntax.
 
-What's deliberately not in v1: orbit animations, per-cluster expansion (multi-link clusters show `+N` but only navigate to the first target), abstract-type backlink walking, smarter display-field heuristics, and history persistence across page reloads.
-
----
+What’s deliberately not in v1: orbit animations, per-cluster expansion (multi-link clusters show `+N` but only navigate to the first target), abstract-type backlink walking, smarter display-field heuristics, and history persistence across page reloads.
 
 ---
 
@@ -137,35 +135,36 @@ The data viewer communicates with the server through the API client, which provi
 
 ### Live Mode (Bundle L — Disc-original feature #3c)
 
-The header bar's **Live** toggle subscribes the data viewer to changes on the currently-selected type's table. With Live on, every INSERT, UPDATE, or DELETE to that table — from any client, including other Disc connections, REST callers, or `disc shell` — triggers an automatic re-fetch within ~250 ms. The rows pane briefly pulses with a luminous green border each time an invalidation lands so it's obvious that the table updated even when row counts didn't change.
+The header bar’s **Live** toggle subscribes the data viewer to changes on the currently-selected type’s table. With Live on, every INSERT, UPDATE, or DELETE to that table — from any client, including other Disc connections, REST callers, or `disc shell` — triggers an automatic re-fetch within ~250 ms. The rows pane briefly pulses with a luminous green border each time an invalidation lands so it’s obvious that the table updated even when row counts didn’t change.
 
 Under the hood:
 
-- `GET /admin/data-watch?tables=<comma-separated-pg-table-names>` opens an SSE stream of `invalidate` events.
-- The first event is `ready` with the resolved table set so the client can verify it subscribed to what it intended.
-- Subsequent `invalidate` events carry `{ tables: [...], at: <ms> }`. The client refetches the same `select` it ran initially, so access policies, read-only mode, and the auth gate all apply identically to the refetch.
-- Server-side, AFTER INSERT/UPDATE/DELETE triggers (statement-level — one log row per bulk mutation, not per row) write to a `disc_change_log` table. A polling registry reads new rows on a 250 ms cadence and fans invalidations to subscribers.
+- `GET /admin/data-watch?tables=<comma-separated-pg-table-names>` opens an SSE stream of `invalidate` events.
+- The first event is `ready` with the resolved table set so the client can verify it subscribed to what it intended.
+- Subsequent `invalidate` events carry `{ tables: [...], at: <ms> }`. The client refetches the same `select` it ran initially, so access policies, read-only mode, and the auth gate all apply identically to the refetch.
+- Server-side, AFTER INSERT/UPDATE/DELETE triggers (statement-level — one log row per bulk mutation, not per row) write to a `disc_change_log` table. A polling registry reads new rows on a 250 ms cadence and fans invalidations to subscribers.
 
 Reusable from custom Svelte routes:
 
 ```svelte
 <script lang="ts">
-  import { liveQuery } from '$lib/stores/live-query';
-  import { onDestroy } from 'svelte';
+  import { liveQuery } from "$lib/stores/live-query";
+  import { onDestroy } from "svelte";
 
   const { store, close } = liveQuery({
-    edgeql: 'select User { name, email }',
-    tables: ['users'],
+    edgeql: "select User { name, email }",
+    tables: ["users"],
   });
+
   $: ({ data, status } = $store);
   onDestroy(close);
 </script>
 
-{#if status === 'loading'}<p>Loading…</p>{/if}
+{#if status === "loading"}<p>Loading…</p>{/if}
 {#if data}<pre>{JSON.stringify(data, null, 2)}</pre>{/if}
 ```
 
-Disabled via `disc.toml` `[server] enable_data_watch = false`, env `DISC_ENABLE_DATA_WATCH=false` (see [Server → Admin Features env vars](server.md#admin-features)), or `ServerConfig.enableDataWatch: false`. When disabled, both the trigger bootstrap and the SSE endpoint are skipped — production deployments that don't surface the admin UI can opt out to avoid the per-mutation log row.
+Disabled via `disc.toml` `[server] enable_data_watch = false`, env `DISC_ENABLE_DATA_WATCH=false` (see [Server → Admin Features env vars](server.md#admin-features)), or `ServerConfig.enableDataWatch: false`. When disabled, both the trigger bootstrap and the SSE endpoint are skipped — production deployments that don’t surface the admin UI can opt out to avoid the per-mutation log row.
 
 ---
 
@@ -189,82 +188,35 @@ The REPL uses the same API endpoint (`/api/repl`) as the CLI shell, so behavior 
 
 Navigate to **Diff** in the header bar, or go to `/ui/admin/schema`.
 
-The live schema diff watches your project's `dbschema/default.disc`
-file in real time and shows the difference between the **applied
-schema** (what the running server believes is in the database) and
-the **on-disk schema** (whatever the editor most recently saved).
-This is a Disc-original feature -- Gel's UI shows the applied schema
-only, so operators have to switch to their editor and CLI to make
-changes.
+The live schema diff watches your project’s `dbschema/default.disc` file in real time and shows the difference between the **applied schema** (what the running server believes is in the database) and the **on-disk schema** (whatever the editor most recently saved). This is a Disc-original feature -- Gel’s UI shows the applied schema only, so operators have to switch to their editor and CLI to make changes.
 
-**Connection status.** A status pip in the page header shows
-`connecting` (amber pulsing) → `live` (green) → `disconnected`
-(red). The page subscribes to a Server-Sent Events stream at
-`/admin/schema-watch`; if the connection drops, the pip turns red
-and a banner appears.
+**Connection status.** A status pip in the page header shows `connecting` (amber pulsing) → `live` (green) → `disconnected` (red). The page subscribes to a Server-Sent Events stream at `/admin/schema-watch`; if the connection drops, the pip turns red and a banner appears.
 
-**Diff layout.** When the schema is in sync, a single "Schema is in
-sync" banner appears. When changes exist, the page renders a grid
-of diff cards:
+**Diff layout.** When the schema is in sync, a single "Schema is in sync" banner appears. When changes exist, the page renders a grid of diff cards:
 
-- **Added types** appear with a green border and a `+ added` badge.
-  Each card lists the type's properties + links so you can review
-  the full surface before applying.
-- **Removed types** appear with a red border and a `− removed`
-  badge.
-- **Modified types** appear with a yellow border and a `~ modified`
-  badge. The card body groups changes by category: added properties
-  (green), removed properties (red), changed properties (yellow,
-  with a before → after triple), and the same three groups for
-  links.
+- **Added types** appear with a green border and a `+ added` badge. Each card lists the type’s properties + links so you can review the full surface before applying.
+- **Removed types** appear with a red border and a `− removed` badge.
+- **Modified types** appear with a yellow border and a `~ modified` badge. The card body groups changes by category: added properties (green), removed properties (red), changed properties (yellow, with a before → after triple), and the same three groups for links.
 
-**Apply strip.** When the diff is non-empty, a horizontal strip
-appears above the grid showing total counts (`+N ~M −K`) and an
-**Apply Migration** button. Clicking it sends a `POST` to
-`/admin/schema-apply` which runs the migration through the same
-engine the CLI uses (`SchemaManager.applySchema`) -- you get the
-`lock_timeout` pragma, the advisory-lock serialization, and the
-classification gate without any extra plumbing.
+**Apply strip.** When the diff is non-empty, a horizontal strip appears above the grid showing total counts (`+N ~M −K`) and an **Apply Migration** button. Clicking it sends a `POST` to `/admin/schema-apply` which runs the migration through the same engine the CLI uses (`SchemaManager.applySchema`) -- you get the `lock_timeout` pragma, the advisory-lock serialization, and the classification gate without any extra plumbing.
 
-**Force toggle.** The classification gate refuses unsafe operations
-(drops, type recreations) and ambiguous operations (type narrowing
-without an explicit cast, optional → required without a default,
-single ↔ multi cardinality changes) by default. Tick the **Force
-(allow unsafe / ambiguous)** checkbox to opt in -- the request goes
-out with `?force=true` and the engine proceeds. This matches the
-CLI's `disc migrate --unsafe` semantics.
+**Force toggle.** The classification gate refuses unsafe operations (drops, type recreations) and ambiguous operations (type narrowing without an explicit cast, optional → required without a default, single ↔ multi cardinality changes) by default. Tick the **Force (allow unsafe / ambiguous)** checkbox to opt in -- the request goes out with `?force=true` and the engine proceeds. This matches the CLI’s `disc migrate --unsafe` semantics.
 
-**Parse errors.** If the on-disk SDL fails to parse mid-edit, the
-page surfaces every parse error with line numbers in a yellow
-banner instead of pretending the diff is "clean". The watcher
-keeps retrying so the page heals as soon as you save valid SDL.
+**Parse errors.** If the on-disk SDL fails to parse mid-edit, the page surfaces every parse error with line numbers in a yellow banner instead of pretending the diff is "clean". The watcher keeps retrying so the page heals as soon as you save valid SDL.
 
-**Lifecycle.** The watcher uses `Deno.watchFs` on the SDL file's
-parent directory and coalesces filesystem events through a 250ms
-debounce -- a single editor save typically fires 3-4 raw events,
-which would otherwise trigger four redundant SSE frames. When the
-client closes the EventSource (page navigation, browser tab close),
-the watcher tears down automatically.
+**Lifecycle.** The watcher uses `Deno.watchFs` on the SDL file’s parent directory and coalesces filesystem events through a 250ms debounce -- a single editor save typically fires 3-4 raw events, which would otherwise trigger four redundant SSE frames. When the client closes the EventSource (page navigation, browser tab close), the watcher tears down automatically.
 
-**Auth.** The `/admin/schema-watch` and `/admin/schema-apply`
-routes are gated by the same auth gate as `/query`. When
-`requireAuth` is on (recommended for production), only requests
-with a valid `Authorization: Bearer <JWT>` header reach the
-handler. In permissive (default-dev) mode the routes are reachable
-without authentication -- pair `requireAuth=true` with a deployed
-admin UI.
+**Auth.** The `/admin/schema-watch` and `/admin/schema-apply` routes are gated by the same auth gate as `/query`. When `requireAuth` is on (recommended for production), only requests with a valid `Authorization: Bearer <JWT>` header reach the handler. In permissive (default-dev) mode the routes are reachable without authentication -- pair `requireAuth=true` with a deployed admin UI.
 
 ## Config
 
-Navigate to **Config** in the header bar, or go to `/ui/config`. This page surfaces the running server's config registry — every `cfg::*` setting Disc knows about, with secret-aware masking so values marked with the built-in `@secret` annotation never leak into the page source.
+Navigate to **Config** in the header bar, or go to `/ui/config`. This page surfaces the running server’s config registry — every `cfg::*` setting Disc knows about, with secret-aware masking so values marked with the built-in `@secret` annotation never leak into the page source.
 
-Each row shows the config key, its current value (masked as `••••••` for secrets), the type, and a brief description from `cfg::describe_settings()`. Secret rows carry a small **Reveal** button — click it to fetch the raw value through an admin-gated endpoint. Non-secret values are shown directly.
+Each row shows the config key, its current value (masked as `••••••` for secrets), the type, and a brief description from `cfg::describe_settings()`. Secret rows carry a small **Reveal** button — click it to fetch the raw value through an admin-gated endpoint. Non-secret values are shown directly.
 
-The page is read-only — config changes go through `disc.toml` or environment variables, not the UI. The Config page exists so operators can verify what the running server is actually using without grepping logs or reading `disc.toml` from the host.
+The page is read-only — config changes go through `disc.toml` or environment variables, not the UI. The Config page exists so operators can verify what the running server is actually using without grepping logs or reading `disc.toml` from the host.
 
-The underlying API is `GET /config` — also useful from CLI/CI scripts. Secrets are masked there too unless an admin token is presented.
-
----
+The underlying API is `GET /config` — also useful from CLI/CI scripts. Secrets are masked there too unless an admin token is presented.
 
 ---
 
@@ -325,19 +277,3 @@ The API client (`DiscAPIClient`) connects to the server’s base URL and provide
 - `getMigrations()` -- list migration history.
 - `getConnectionInfo()` -- server version, database name, active connections.
 - `executeREPL(command)` -- run a REPL command.
-
----
-
-## Design
-
-The admin UI uses a TRON-inspired dark theme with luminous accent lines, consistent with the Disc project’s visual identity. Key visual elements:
-
-- **Dark background** with elevated surface panels in a slightly lighter shade.
-- **Luminous primary color** with neon glow effects on active elements and headings.
-- **Monospaced typography** for data, code, and status labels. A display font is used for headings and stat values.
-- **Grid-based layouts** with consistent spacing derived from a base grid unit.
-- **Color-coded badges** -- red for required fields, blue for multi cardinality, green for success states, amber for warnings.
-- **Smooth transitions** on hover and active states, with subtle glow effects on interactive borders.
-- **Connection status indicator** in the header with a pulsing dot that changes color based on server connectivity.
-
-The navigation bar runs horizontally across the top with icon-and-label entries for Dashboard, Schema, Diff, Data, Query, REPL, and Migrations.

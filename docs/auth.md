@@ -271,7 +271,7 @@ curl "http://localhost:8080/auth/verify?token=abc123..."
 
 Email verification is only active when `requireEmailVerification` is set to `true` in the auth config. When enabled, users cannot log in until their email is verified.
 
-**Cross-device verification works out of the box.** The verification token isn't bound to the session that requested it: a user can sign up on their phone, open the verification email on their laptop, and click the link in any browser without breaking the flow. Implementation note: `verifyEmail()` looks the user up purely by hashed token (`auth/provider.ts:verifyEmail`) — no IP, user-agent, or session-cookie check happens at redemption. This is intentional: tying verification to the originating device would silently break the common "click email link from a different machine" pattern that most users expect. Token security comes from its 32-byte entropy and single-use semantics, not from the client identity. (gh/geldata#7483)
+**Cross-device verification works out of the box.** The verification token isn’t bound to the session that requested it: a user can sign up on their phone, open the verification email on their laptop, and click the link in any browser without breaking the flow. Implementation note: `verifyEmail()` looks the user up purely by hashed token (`auth/provider.ts:verifyEmail`) — no IP, user-agent, or session-cookie check happens at redemption. This is intentional: tying verification to the originating device would silently break the common "click email link from a different machine" pattern that most users expect. Token security comes from its 32-byte entropy and single-use semantics, not from the client identity. (gh/geldata#7483)
 
 ---
 
@@ -519,7 +519,7 @@ HTTP routes (both public, both rate-limited):
 
 **Anti-enumeration:** `requestMagicLink` always returns a plaintext token, even when no user matches the email — the token isn't persisted, so it can't be redeemed. Same response shape, same timing, no account-state leak.
 
-**Single-use + TTL:** tokens are hashed in storage, expire in 15 minutes, and `consumed_at` is set on the first redeem (even when the redeem returns an MFA challenge instead of a session, so the link can't be replayed mid-MFA).
+**Single-use + TTL:** tokens are hashed in storage, expire in 15 minutes, and `consumed_at` is set on the first redeem (even when the redeem returns an MFA challenge instead of a session, so the link can’t be replayed mid-MFA).
 
 #### Implicit signup (gh/geldata#7311)
 
@@ -577,7 +577,7 @@ HTTP routes:
 | POST   | `/auth/mfa/recovery-codes/generate` | Yes                       |
 | POST   | `/auth/mfa/recovery-codes/login`    | No (uses challenge token) |
 
-Codes are SHA-256 hashed and keyed by `user_id` at lookup, so a leaked code can't be replayed against another user. Input is normalized (dashes/spaces stripped, uppercased), so users can type `xxxxx xxxxx`, `XXXXXXXXXX`, or `XXXXX-XXXXX`. Burning a code via `loginWithRecoveryCode` also burns the MFA challenge — single-use both ways. (`auth/provider.ts`, gh/geldata#8186)
+Codes are SHA-256 hashed and keyed by `user_id` at lookup, so a leaked code can’t be replayed against another user. Input is normalized (dashes/spaces stripped, uppercased), so users can type `xxxxx xxxxx`, `XXXXXXXXXX`, or `XXXXX-XXXXX`. Burning a code via `loginWithRecoveryCode` also burns the MFA challenge — single-use both ways. (`auth/provider.ts`, gh/geldata#8186)
 
 ### WebAuthn / Passkeys
 
@@ -596,7 +596,7 @@ const provider = new AuthProvider({
 }, db);
 ```
 
-Without the `webauthn` block, all WebAuthn methods throw `AuthError(INVALID_OPERATION)` — apps that don't want passkeys leave it off.
+Without the `webauthn` block, all WebAuthn methods throw `AuthError(INVALID_OPERATION)` — apps that don’t want passkeys leave it off.
 
 Registration ceremony:
 
@@ -638,7 +638,7 @@ HTTP routes:
 | GET    | `/auth/webauthn/credentials`        | Yes               |
 | POST   | `/auth/webauthn/credentials/delete` | Yes               |
 
-Counter monotonicity is enforced on every login — a counter that _decreased_ triggers `INVALID_TOKEN` and a `webauthn_counter_regression` audit event (WebAuthn's clone-detection signal). `clientData.origin` and `authenticatorData.rpIdHash` are checked against the configured `webauthn.{origin, rpId}` on every ceremony. (`auth/webauthn.ts`, gh/geldata#6725)
+Counter monotonicity is enforced on every login — a counter that _decreased_ triggers `INVALID_TOKEN` and a `webauthn_counter_regression` audit event (WebAuthn’s clone-detection signal). `clientData.origin` and `authenticatorData.rpIdHash` are checked against the configured `webauthn.{origin, rpId}` on every ceremony. (`auth/webauthn.ts`, gh/geldata#6725)
 
 #### Discoverable credentials / passkeys (gh/geldata#7196)
 
@@ -776,7 +776,7 @@ Events fire after the relevant DB write, via `queueMicrotask` + `fetch` — no r
 
 Event types: `UserCreated`, `EmailVerified`, `PasswordChanged`, `PasswordResetRequested`, `MagicLinkRequested`, `SessionCreated`, `SessionRefreshedFromNewIp`. The signing secret is per-subscription, so multiple receivers can each verify independently. (`auth/webhooks.ts`, gh/geldata#7484)
 
-> Webhooks differ from Gel's implementation — Gel uses `std::net::http::schedule_request` (a job queue with retry). Disc fires-and-forgets until a job queue lands.
+> Webhooks differ from Gel’s implementation — Gel uses `std::net::http::schedule_request` (a job queue with retry). Disc fires-and-forgets until a job queue lands.
 
 ### HTTP Auth Gate
 
@@ -809,15 +809,7 @@ require_auth = true
 
 ### `/auth/*` route lockdown
 
-Independent of `requireAuth`, the auth-route dispatcher classifies
-every `/auth/<route>` it knows about. Bootstrap routes (the ones that
-_give_ you a session) stay public; everything else requires a valid
-JWT at the router level — even when the global gate is permissive.
-That way `/auth/logout`, `/auth/password`, `/auth/profile`,
-`/auth/upgrade`, `/auth/mfa/totp/{enroll,confirm,disable}`,
-`/auth/mfa/recovery-codes/generate`, and `/auth/webauthn/{register,
-credentials}*` can't be hit anonymously regardless of server-wide
-configuration.
+Independent of `requireAuth`, the auth-route dispatcher classifies every `/auth/<route>` it knows about. Bootstrap routes (the ones that _give_ you a session) stay public; everything else requires a valid JWT at the router level — even when the global gate is permissive. That way `/auth/logout`, `/auth/password`, `/auth/profile`, `/auth/upgrade`, `/auth/mfa/totp/{enroll,confirm,disable}`, `/auth/mfa/recovery-codes/generate`, and `/auth/webauthn/{register, credentials}*` can’t be hit anonymously regardless of server-wide configuration.
 
 Public bootstrap routes:
 
@@ -828,10 +820,7 @@ Public bootstrap routes:
 - `/auth/mfa/totp/login`, `/auth/mfa/recovery-codes/login`
 - `/auth/webauthn/login/{begin,finish}`
 
-Everything else is implicitly authenticated. A new `/auth/*` handler
-added to the dispatcher without classifying it explicitly fails closed
-with `404`; this is the defense-in-depth safety net so a future
-addition can't quietly slip through as public.
+Everything else is implicitly authenticated. A new `/auth/*` handler added to the dispatcher without classifying it explicitly fails closed with `404`; this is the defense-in-depth safety net so a future addition can’t quietly slip through as public.
 
 (`auth/integration.ts:classifyAuthRoute`,
 `server/http.ts:handle_auth_route`, gh/geldata#7525)
@@ -858,13 +847,13 @@ await provider.deleteRole("viewer"); // cascades to user_roles
 CLI:
 
 ```bash
-disc admin create-superuser ada@example.com --password '...'
-disc admin set-password ada@example.com --password '...'
+disc admin create-superuser ada@example.com --password "..."
+disc admin set-password ada@example.com --password "..."
 disc admin assign-role ada@example.com admin
 disc admin list-roles
 ```
 
-Roles are snapshot into the JWT at issue time as `TokenPayload.roles`; access policies see them on `AuthContext.roles`. Snapshot semantics — roles assigned after the token issued won't take effect until re-login. For near-real-time revocation, combine with `revokeAllSessions(userId)`. (`auth/provider.ts`, gh/geldata#8177)
+Roles are snapshot into the JWT at issue time as `TokenPayload.roles`; access policies see them on `AuthContext.roles`. Snapshot semantics — roles assigned after the token issued won’t take effect until re-login. For near-real-time revocation, combine with `revokeAllSessions(userId)`. (`auth/provider.ts`, gh/geldata#8177)
 
 ### Captcha
 
@@ -904,12 +893,12 @@ Disc uses **bcrypt** for password hashing. There is no `DISC_SERVER_PASSWORD_HAS
 
 | Task                          | Command                                                 |
 | ----------------------------- | ------------------------------------------------------- |
-| Bootstrap the first superuser | `disc admin create-superuser <email> --password '<pw>'` |
-| Rotate a user's password      | `disc admin set-password <email\|id> --password '<pw>'` |
+| Bootstrap the first superuser | `disc admin create-superuser <email> --password "<pw>"` |
+| Rotate a user’s password      | `disc admin set-password <email\|id> --password "<pw>"` |
 | Promote an existing user      | `disc admin assign-role <email\|id> <role>`             |
 | List defined roles            | `disc admin list-roles`                                 |
 
-`set-password` does not require the old password (it's an admin override) and revokes all existing sessions for the affected user. CLI guards: empty `--password ''` is rejected before reaching the provider (gh/geldata#4209).
+`set-password` does not require the old password (it’s an admin override) and revokes all existing sessions for the affected user. CLI guards: empty `--password ""` is rejected before reaching the provider (gh/geldata#4209).
 
 The password algorithm is `bcrypt` with `bcryptRounds` (default 12, configurable via `AuthConfig.bcryptRounds`). To verify a hash externally:
 
@@ -919,13 +908,13 @@ node -e "console.log(require('bcrypt').compareSync('plaintext', '$2b$12$...'))"
 
 ### Why no `DISC_PASSWORD_HASH` env var?
 
-Disc deliberately doesn't accept a pre-hashed admin password via env (Gel offers `GEL_SERVER_PASSWORD_HASH`). The reasoning:
+Disc deliberately doesn’t accept a pre-hashed admin password via env (Gel offers `GEL_SERVER_PASSWORD_HASH`). The reasoning:
 
 1. The admin user is a _role_, not a server-side trusted process. Storing it as a row in `users` keeps it consistent with every other identity — same revocation, same role assignment, same audit trail.
 2. Bcrypt rounds are configurable per deployment. Pre-baking a hash into env locks the rounds at hash-creation time.
 3. Bootstrapping is a one-time `disc admin create-superuser` invocation; subsequent password changes go through the same admin tool.
 
-The CLI requires `DATABASE_URL` and `DISC_JWT_SECRET` (or `--database-url` / `--jwt-secret` flags) so the admin path runs the provider's validations rather than writing raw rows.
+The CLI requires `DATABASE_URL` and `DISC_JWT_SECRET` (or `--database-url` / `--jwt-secret` flags) so the admin path runs the provider’s validations rather than writing raw rows.
 
 ---
 

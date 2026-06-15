@@ -179,11 +179,11 @@ Custom globals are resolved at query time using PostgreSQL’s `current_setting(
 
 ## Deno-Permission-Aware Policies
 
-Access policies can gate on the running Disc process's `--allow-*` permission set as a defense-in-depth layer. Even an authorized application user gets an empty result when the runtime sandbox lacks the corresponding permission — useful for restricting whole categories of access (e.g. "this read endpoint must not run on a process without filesystem read") without re-engineering the auth layer.
+Access policies can gate on the running Disc process’s `--allow-*` permission set as a defense-in-depth layer. Even an authorized application user gets an empty result when the runtime sandbox lacks the corresponding permission — useful for restricting whole categories of access (e.g. "this read endpoint must not run on a process without filesystem read") without re-engineering the auth layer.
 
 ### `runtime::has_permission(<spec>)`
 
-A built-in policy function that pre-evaluates against `Deno.permissions.querySync(...)` at SQL emission time and inlines the result as `TRUE`/`FALSE` in the generated WHERE clause. Postgres can't call back into Deno; the permission set is fixed for the life of the process, so caching at SQL emission is correct.
+A built-in policy function that pre-evaluates against `Deno.permissions.querySync(...)` at SQL emission time and inlines the result as `TRUE`/`FALSE` in the generated WHERE clause. Postgres can’t call back into Deno; the permission set is fixed for the life of the process, so caching at SQL emission is correct.
 
 ### Spec grammar
 
@@ -198,7 +198,7 @@ A built-in policy function that pre-evaluates against `Deno.permissions.querySyn
 | `sys` / `sys:KIND`                   | `{name: "sys", kind?: "KIND"}`    | `sys:hostname`                    |
 | `ffi` / `ffi:/lib`                   | `{name: "ffi", path?: "..."}`     | `ffi:/usr/lib/libfoo.so`          |
 
-The spec parser is strict — unknown names (`"filesystem"`, `"admin"`) and empty scopes (`"read:"`) throw a `ValidationError` at policy-load time so SDL typos fail fast rather than silently always-denying.
+The spec parser is strict — unknown names (`"filesystem"`, `"admin"`) and empty scopes (`"read:"`) throw a `ValidationError` at policy-load time so SDL typos fail fast rather than silently always-denying.
 
 ### Example
 
@@ -218,15 +218,15 @@ module default {
 };
 ```
 
-A SELECT against `SecretDoc` returns rows only when (a) the request is authenticated **and** (b) the Disc process was started with `--allow-read=/etc/disc/secrets`. Drop the flag and the same query — same user, same JWT — returns an empty set.
+A SELECT against `SecretDoc` returns rows only when (a) the request is authenticated **and** (b) the Disc process was started with `--allow-read=/etc/disc/secrets`. Drop the flag and the same query — same user, same JWT — returns an empty set.
 
 ### Composition
 
-`runtime::has_permission(...)` composes with every other policy expression. The spec argument **must** be a string literal — non-literal arguments are rejected at policy parse time with a `ValidationError`, since arbitrary expression args have undefined semantics.
+`runtime::has_permission(...)` composes with every other policy expression. The spec argument **must** be a string literal — non-literal arguments are rejected at policy parse time with a `ValidationError`, since arbitrary expression args have undefined semantics.
 
 ### Test seam
 
-Production code calls `Deno.permissions.querySync(...)` via the `defaultPermissionChecker`. Tests inject a `PermissionChecker` mock through `AccessContext.permissionChecker` to assert deterministic `granted`/`denied`/`prompt` outcomes without depending on the test runner's `--allow-*` flags. See `access/runtime-permissions.test.ts` for the pattern.
+Production code calls `Deno.permissions.querySync(...)` via the `defaultPermissionChecker`. Tests inject a `PermissionChecker` mock through `AccessContext.permissionChecker` to assert deterministic `granted`/`denied`/`prompt` outcomes without depending on the test runner’s `--allow-*` flags. See `access/runtime-permissions.test.ts` for the pattern.
 
 ---
 
@@ -263,11 +263,7 @@ const evaluator = new AccessEvaluator({
 
 ## Per-request bypass (admin-only)
 
-Admin-role callers can opt out of policy injection on a single
-request via the `X-Disc-Apply-Access-Policies: false` header. This
-mirrors Gel's session-level `apply_access_policies := false` and is
-useful for support tooling that needs to read across tenants, or
-admin scripts that intentionally want unfiltered output.
+Admin-role callers can opt out of policy injection on a single request via the `X-Disc-Apply-Access-Policies: false` header. This mirrors Gel’s session-level `apply_access_policies := false` and is useful for support tooling that needs to read across tenants, or admin scripts that intentionally want unfiltered output.
 
 ```bash
 curl -X POST http://localhost:5656/query \
@@ -277,32 +273,17 @@ curl -X POST http://localhost:5656/query \
   -d '{"query":"SELECT User { name, email }"}'
 ```
 
-**Gating.** The HTTP layer reads the JWT's `roles` claim and only
-honors the header when `roles` includes `"admin"`. Non-admin callers
-who set the header have it silently dropped at the boundary — there
-is no way for a regular user to escalate by setting the header.
+**Gating.** The HTTP layer reads the JWT’s `roles` claim and only honors the header when `roles` includes `"admin"`. Non-admin callers who set the header have it silently dropped at the boundary — there is no way for a regular user to escalate by setting the header.
 
-**Cache safety.** The compilation cache key embeds the bypass flag so
-a bypassed result is never served to a non-bypassed call (and vice
-versa). Two requests with the same EdgeQL but different bypass state
-compile independently.
+**Cache safety.** The compilation cache key embeds the bypass flag so a bypassed result is never served to a non-bypassed call (and vice versa). Two requests with the same EdgeQL but different bypass state compile independently.
 
-**Truthy values.** The header value is normalized: `false`, `0`, and
-`no` (case-insensitive, trimmed) all opt out. Any other value
-(including absent, empty, `true`, `1`) keeps policies enforced.
+**Truthy values.** The header value is normalized: `false`, `0`, and `no` (case-insensitive, trimmed) all opt out. Any other value (including absent, empty, `true`, `1`) keeps policies enforced.
 
-The implementation lives in `server/http.ts:handle_query` (header
-parsing + role gate) and `compiler/compiler.ts:applyAccessControl`
-(short-circuit on `AccessContext.bypass`). (gh/geldata#6358)
+The implementation lives in `server/http.ts:handle_query` (header parsing + role gate) and `compiler/compiler.ts:applyAccessControl` (short-circuit on `AccessContext.bypass`). (gh/geldata#6358)
 
 ## Per-policy disable (admin-only) (gh/geldata#6432 slice 3)
 
-When you want to test how _one_ policy behaves without nuking the
-whole stack, the `X-Disc-Disable-Policies` header takes a
-comma-separated list of qualified policy names
-(`<TypeName>.<policy_name>`) and silently skips them in the
-evaluator. The evaluator behaves as if those policies weren't
-declared at all — same fall-back to `defaultAllow` semantics.
+When you want to test how _one_ policy behaves without nuking the whole stack, the `X-Disc-Disable-Policies` header takes a comma-separated list of qualified policy names (`<TypeName>.<policy_name>`) and silently skips them in the evaluator. The evaluator behaves as if those policies weren’t declared at all — same fall-back to `defaultAllow` semantics.
 
 ```bash
 # Disable a single policy, leave the rest in force
@@ -318,29 +299,15 @@ curl -X POST http://localhost:5656/edgeql \
   -d '{"query": "select Doc { id, title, author: { name } }"}'
 ```
 
-Same admin-only gate as the apply-bypass header: a non-admin caller
-setting the header has it dropped at the boundary, never reaching
-the compiler. The compilation cache key embeds the disabled set so a
-disabled-policies call can't share a cache slot with a regular call.
+Same admin-only gate as the apply-bypass header: a non-admin caller setting the header has it dropped at the boundary, never reaching the compiler. The compilation cache key embeds the disabled set so a disabled-policies call can’t share a cache slot with a regular call.
 
-This is the surgical alternative to the all-or-nothing
-`X-Disc-Apply-Access-Policies: false` bypass — useful when you're
-isolating one policy at a time during testing or debugging an
-authorization regression.
+This is the surgical alternative to the all-or-nothing `X-Disc-Apply-Access-Policies: false` bypass — useful when you’re isolating one policy at a time during testing or debugging an authorization regression.
 
-The implementation lives in `server/http.ts:handle_query` (header
-parsing + role gate), `server/edgeql-protocol.ts:handleRequest`
-(threading into AccessContext + cache-key embedding), and
-`access/evaluator.ts:evaluate` (qualified-name filter before policy
-evaluation).
+The implementation lives in `server/http.ts:handle_query` (header parsing + role gate), `server/edgeql-protocol.ts:handleRequest` (threading into AccessContext + cache-key embedding), and `access/evaluator.ts:evaluate` (qualified-name filter before policy evaluation).
 
 ## Run-in-isolation: `disc admin test-policy` (gh/geldata#6432 slice 4)
 
-When you want to debug _why_ a specific policy is denying a specific
-user — without spinning up the server or wiring an admin token —
-the `disc admin test-policy` CLI runs a single policy (or every
-policy on a type) against a synthetic `AccessContext` built from
-flags. Pure SDL + in-memory evaluator; no DB hookup.
+When you want to debug _why_ a specific policy is denying a specific user — without spinning up the server or wiring an admin token — the `disc admin test-policy` CLI runs a single policy (or every policy on a type) against a synthetic `AccessContext` built from flags. Pure SDL + in-memory evaluator; no DB hookup.
 
 ```bash
 # Evaluate one policy against a synthetic user
@@ -381,23 +348,14 @@ Flags:
 | `--global key=value` | Add to `AccessContext.globals` (repeatable)                             |
 | `--schema <file>`    | Override default `./dbschema/default.disc`                              |
 
-Each policy runs through a fresh `AccessEvaluator` so global
-mode/defaultAllow don't muddy the per-policy verdict. The output
-includes the verdict (ALLOW/DENY), the reason, the policy's
-errmessage if it carries one, the generated SQL condition, and the
-evaluation time in microseconds.
+Each policy runs through a fresh `AccessEvaluator` so global mode/defaultAllow don’t muddy the per-policy verdict. The output includes the verdict (ALLOW/DENY), the reason, the policy’s errmessage if it carries one, the generated SQL condition, and the evaluation time in microseconds.
 
 This complements the `X-Disc-Disable-Policies` header above:
 
-- **Disable header** — debug behavior of a live query with one
-  policy turned off.
-- **`test-policy`** — debug a single policy itself in isolation,
-  no live query needed.
+- **Disable header** — debug behavior of a live query with one policy turned off.
+- **`test-policy`** — debug a single policy itself in isolation, no live query needed.
 
-The implementation lives in `cli/admin.ts:testPolicyImpl` (pure
-function exported for testing) and `cli/main.ts` (CLI routing).
-The exported `collectAccessPolicyAst(sdl)` helper exposes the raw
-AST shape for tests that don't want to drive the evaluator path.
+The implementation lives in `cli/admin.ts:testPolicyImpl` (pure function exported for testing) and `cli/main.ts` (CLI routing). The exported `collectAccessPolicyAst(sdl)` helper exposes the raw AST shape for tests that don’t want to drive the evaluator path.
 
 ---
 

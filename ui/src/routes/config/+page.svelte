@@ -298,7 +298,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Configuration</title>
+  <title>Disc &bull; Configuration</title>
 </svelte:head>
 
 <div class="config">

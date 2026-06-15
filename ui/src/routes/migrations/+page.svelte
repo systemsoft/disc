@@ -163,7 +163,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Migration History</title>
+  <title>Disc &bull; Migration History</title>
 </svelte:head>
 
 <div class="migrations">

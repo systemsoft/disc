@@ -1,18 +1,18 @@
 # Disc-Original Features
 
-Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
+Things Disc would build that Gel doesn’t have and isn’t planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status: roadmap closed — all eight features shipped 2026-05-06.** #4 single-binary distribution (Bundle I), #2 schema-derived REST surface (Bundle J), #3a live schema diff in admin UI (Bundle K), #3c live data subscriptions in admin UI (Bundle L), #1 codegen-free TypeScript query builder (Bundle M), #3b visual query builder (Bundle N), #3d identity-disc visualization (Bundle O), #5 Deno-permission-aware access policies (Bundle P). Future Disc-original ideas should land in their own design docs rather than appending here.
+> **Status: roadmap closed — all eight features shipped 2026-05-06.** #4 single-binary distribution (Bundle I), #2 schema-derived REST surface (Bundle J), #3a live schema diff in admin UI (Bundle K), #3c live data subscriptions in admin UI (Bundle L), #1 codegen-free TypeScript query builder (Bundle M), #3b visual query builder (Bundle N), #3d identity-disc visualization (Bundle O), #5 Deno-permission-aware access policies (Bundle P). Future Disc-original ideas should land in their own design docs rather than appending here.
 
 ---
 
 ## 1. Codegen-free TypeScript query builder — **SHIPPED 2026-05-06**
 
-> **Status:** Shipped in Bundle M. Live behavior is documented in `sdk/README.md` and the source lives at `sdk/query-builder.ts` + `sdk/schema-types.ts`. The doc below is preserved as historical context; the shipped design diverges from the original sketch in two ways noted at the bottom.
+> **Status:** Shipped in Bundle M. Live behavior is documented in `sdk/README.md` and the source lives at `sdk/query-builder.ts` + `sdk/schema-types.ts`. The doc below is preserved as historical context; the shipped design diverges from the original sketch in two ways noted at the bottom.
 
-**The problem.** Gel's TypeScript client requires running `npx @gel/generate edgeql-js` after every schema change to produce a typed query builder. The generated module is a build artifact: it needs to be checked in, regenerated, kept in sync. In a Deno-native stack this is friction that doesn't need to exist.
+**The problem.** Gel’s TypeScript client requires running `npx @gel/generate edgeql-js` after every schema change to produce a typed query builder. The generated module is a build artifact: it needs to be checked in, regenerated, kept in sync. In a Deno-native stack this is friction that doesn’t need to exist.
 
-**The bet.** Because Disc is TypeScript end-to-end and runs on Deno (which compiles TS at import time), the query builder can be a runtime module that reads the live schema and returns a structurally-typed builder. No codegen-on-every-change. Schema changes flow through with no rebuild.
+**The bet.** Because Disc is TypeScript end-to-end and runs on Deno (which compiles TS at import time), the query builder can be a runtime module that reads the live schema and returns a structurally-typed builder. No codegen-on-every-change. Schema changes flow through with no rebuild.
 
 **How it shipped.**
 
@@ -51,14 +51,14 @@ const users = await qb
   .filter(u => u.email.eq("user@example.com"));
 ```
 
-The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `float32/64`, `bigint`, `datetime`, `bytes`, `uuid`, `json`), `t.optional(inner)` for nullable wrappers, and `t.single(target)` / `t.multi(target)` for links. The typed `createQueryBuilder<S>(client, schema)` overload narrows every chain method: `select<Sh>(shape)` returns a chain whose awaited row type is computed from the shape, and `filter`/`orderBy` predicates get typed FieldRefs so `u.email.eq(...)` only accepts `string`.
+The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `float32/64`, `bigint`, `datetime`, `bytes`, `uuid`, `json`), `t.optional(inner)` for nullable wrappers, and `t.single(target)` / `t.multi(target)` for links. The typed `createQueryBuilder<S>(client, schema)` overload narrows every chain method: `select<Sh>(shape)` returns a chain whose awaited row type is computed from the shape, and `filter`/`orderBy` predicates get typed FieldRefs so `u.email.eq(...)` only accepts `string`.
 
-**What Gel has instead.** A `@gel/generate` codegen package that emits a static `./dbschema/edgeql-js/` directory.
+**What Gel has instead.** A `@gel/generate` codegen package that emits a static `./dbschema/edgeql-js/` directory.
 
 **Two divergences from the original sketch.**
 
-1. **No `import "./schema.disc" with { type: "disc-schema" }` import.** That syntax depends on a Deno custom-MIME loader that doesn't exist in stable Deno. Schema-of-record stays in `.disc` (the SDL is what the server applies and what `disc migrate` diffs); the TS file is a thin re-declaration — either hand-written or generated once by `disc codegen` and committed. Either way, no codegen step on every change.
-2. **Phase 3 dropped — no template-literal SDL parsing.** The original "type the schema straight from the SDL string" idea hits TS recursion limits on real schemas, balloons compile times, and produces inscrutable error messages. The marker-based `defineSchema()` approach delivers full inference without the type-system fragility.
+1. **No `import "./schema.disc" with { type: "disc-schema" }` import.** That syntax depends on a Deno custom-MIME loader that doesn’t exist in stable Deno. Schema-of-record stays in `.disc` (the SDL is what the server applies and what `disc migrate` diffs); the TS file is a thin re-declaration — either hand-written or generated once by `disc codegen` and committed. Either way, no codegen step on every change.
+2. **Phase 3 dropped — no template-literal SDL parsing.** The original "type the schema straight from the SDL string" idea hits TS recursion limits on real schemas, balloons compile times, and produces inscrutable error messages. The marker-based `defineSchema()` approach delivers full inference without the type-system fragility.
 
 **Effort.** L (as predicted). The type-level work was the hard part — the runtime DSL is a Proxy + EdgeQL string emitter (~270 LOC); the type machinery is `defineSchema()` markers + recursive mapped types in `ResolveSelected` / `SelectShape` / `TypedSelectChain`.
 
@@ -66,11 +66,11 @@ The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `flo
 
 ## 2. Schema-derived REST surface (auto-generated) — **SHIPPED 2026-05-06**
 
-> **Status:** Shipped in Bundle J. Live behavior is documented in `docs/rest-api.md` (`server/rest/router.ts`, `server/rest/openapi.ts`). The doc below is preserved as historical context.
+> **Status:** Shipped in Bundle J. Live behavior is documented in `docs/rest-api.md` (`server/rest/router.ts`, `server/rest/openapi.ts`). The doc below is preserved as historical context.
 
-**The problem.** Gel exposes EdgeQL over HTTP and GraphQL via `ext::graphql`, but it doesn't generate a conventional REST surface. Many integrations (n8n, Zapier, mobile apps with locked-down clients, anything that wants OpenAPI) assume REST.
+**The problem.** Gel exposes EdgeQL over HTTP and GraphQL via `ext::graphql`, but it doesn’t generate a conventional REST surface. Many integrations (n8n, Zapier, mobile apps with locked-down clients, anything that wants OpenAPI) assume REST.
 
-**The bet.** Every object type in a Disc schema has obvious REST mappings:
+**The bet.** Every object type in a Disc schema has obvious REST mappings:
 
 - `GET /api/User` → list with filter/order/limit query params
 - `GET /api/User/:id` → single object
@@ -79,9 +79,9 @@ The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `flo
 - `DELETE /api/User/:id` → delete
 - `GET /api/User/:id/posts` → linked collection
 
-Disc auto-generates these from the schema, runs them through the same access-policy and auth pipeline as EdgeQL queries, and emits a matching OpenAPI spec at `/api/openapi.json`.
+Disc auto-generates these from the schema, runs them through the same access-policy and auth pipeline as EdgeQL queries, and emits a matching OpenAPI spec at `/api/openapi.json`.
 
-**Customization.** SDL annotations gate which types are exposed and which fields are returned in default shapes:
+**Customization.** SDL annotations gate which types are exposed and which fields are returned in default shapes:
 
 ```
 type User {
@@ -91,51 +91,51 @@ type User {
 }
 ```
 
-**What Gel has instead.** GraphQL via extension. EdgeQL over HTTP for raw queries. No OpenAPI emission, no REST conventions.
+**What Gel has instead.** GraphQL via extension. EdgeQL over HTTP for raw queries. No OpenAPI emission, no REST conventions.
 
-**Effort.** M. The compiler already generates SQL for arbitrary EdgeQL — REST handlers are a thin layer of `route → EdgeQL string → existing pipeline`. The hard part is the OpenAPI generator and the SDL annotation grammar.
+**Effort.** M. The compiler already generates SQL for arbitrary EdgeQL — REST handlers are a thin layer of `route → EdgeQL string → existing pipeline`. The hard part is the OpenAPI generator and the SDL annotation grammar.
 
 ---
 
-## 3. Visual differentiators in the admin UI (TRON-themed, Gel-UI doesn't have them)
+## 3. Visual differentiators in the admin UI (Gel-UI doesn’t have them)
 
-The existing admin UI plan in `docs/admin-ui.md` already covers schema browser, data viewer, query editor, and REPL. These match Gel-UI feature-for-feature. The bets here are features Gel-UI does **not** have:
+The existing admin UI plan in `docs/admin-ui.md` already covers schema browser, data viewer, query editor, and REPL. These match Gel-UI feature-for-feature. The bets here are features Gel-UI does **not** have:
 
 ### 3a. Live schema diff — **SHIPPED 2026-05-06**
 
 > **Status:** Shipped in Bundle K. Live behavior is documented in `docs/admin-ui.md` ("Live Schema Diff" section) and the source lives under `server/admin/schema-{diff,watch,apply}.ts` + `ui/src/routes/admin/schema/+page.svelte`.
 
-Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the current applied schema, with a visual diff (added types in green grid, removed in red, modified with side-by-side property lists). Click "apply" to generate and run the migration in-line.
+Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the current applied schema, with a visual diff (added types in green grid, removed in red, modified with side-by-side property lists). Click "apply" to generate and run the migration in-line.
 
-Gel-UI shows applied schema only; you switch to your editor and CLI to make changes. Disc routes the watcher's events through SSE at `/admin/schema-watch` and exposes `POST /admin/schema-apply` which runs through the standard `MigrationEngine` so the lock-timeout pragma, advisory-lock serialization, and unsafe/ambiguous-op gate compose for free.
+Gel-UI shows applied schema only; you switch to your editor and CLI to make changes. Disc routes the watcher’s events through SSE at `/admin/schema-watch` and exposes `POST /admin/schema-apply` which runs through the standard `MigrationEngine` so the lock-timeout pragma, advisory-lock serialization, and unsafe/ambiguous-op gate compose for free.
 
 ### 3b. Visual query builder — **SHIPPED 2026-05-06**
 
 > **Status:** Shipped in Bundle N. Live behavior is documented in `docs/admin-ui.md` ("Visual Query Builder" section); source lives at `ui/src/lib/query-builder-synth.ts` (pure EdgeQL synthesizer) + `ui/src/routes/query-builder/+page.svelte`.
 
-Pick a root type, check fields and links to include, add filter rows (field + operator + value, auto-typed by the field's SDL scalar), set order/limit/offset. The synthesized EdgeQL renders live in a side pane; hitting Run sends it through the same `/query` endpoint as the text editor.
+Pick a root type, check fields and links to include, add filter rows (field + operator + value, auto-typed by the field’s SDL scalar), set order/limit/offset. The synthesized EdgeQL renders live in a side pane; hitting Run sends it through the same `/query` endpoint as the text editor.
 
-The original sketch called for a literal drag-and-drop canvas; we shipped a form-based UX instead. Rationale: the educational value (visual choices map visibly to EdgeQL) is delivered by either layout, but the form is ~10× faster to build and easier to use. The canvas pitch was aesthetic, not functional. The pure `synthesize()` core is decoupled from the form layout, so a canvas overlay can wrap it later without changes to EdgeQL emission if the form proves limiting.
+The original sketch called for a literal drag-and-drop canvas; we shipped a form-based UX instead. Rationale: the educational value (visual choices map visibly to EdgeQL) is delivered by either layout, but the form is ~10× faster to build and easier to use. The canvas pitch was aesthetic, not functional. The pure `synthesize()` core is decoupled from the form layout, so a canvas overlay can wrap it later without changes to EdgeQL emission if the form proves limiting.
 
-Gel-UI has a text editor with autocomplete. No visual builder.
+Gel-UI has a text editor with autocomplete. No visual builder.
 
 ### 3c. Live data subscriptions in the browser — **SHIPPED 2026-05-06**
 
 > **Status:** Shipped in Bundle L. Live behavior is documented in `docs/admin-ui.md` ("Live Data Subscriptions" section); source lives under `server/admin/data-watch{,-ddl,-registry}.ts` + `ui/src/lib/stores/live-query.ts` + `ui/src/routes/data/+page.svelte`.
 
-Query results update in real time when underlying rows change. The data viewer's "Live" toggle subscribes to `/admin/data-watch?tables=…`; the SSE endpoint emits an `invalidate` event for the affected tables and the client refetches via the standard `/query` pipeline. The pattern is **invalidate-then-refetch** (à la SWR / React Query) — server says _what_ changed, client re-runs the query so access policies + read-only mode + auth gate compose for free.
+Query results update in real time when underlying rows change. The data viewer’s "Live" toggle subscribes to `/admin/data-watch?tables=…`; the SSE endpoint emits an `invalidate` event for the affected tables and the client refetches via the standard `/query` pipeline. The pattern is **invalidate-then-refetch** (à la SWR / React Query) — server says _what_ changed, client re-runs the query so access policies + read-only mode + auth gate compose for free.
 
 Server-side: an idempotent `bootstrapDataWatch()` writes a `disc_change_log` table + `disc_log_change()` PL/pgSQL function and attaches `AFTER INSERT/UPDATE/DELETE … FOR EACH STATEMENT` triggers to every Disc-managed table. A polling `DataWatchRegistry` reads the log on a 250 ms cadence and fans invalidations to subscribers whose interested-tables set intersects the affected set, with a per-subscriber 250 ms debounce that coalesces bursts.
 
-Client-side: the data viewer pulses a green border around the rows pane on each invalidate (TRON aesthetic) and re-runs `loadRows()`. The reusable `liveQuery({ edgeql, tables })` Svelte store wraps the same pattern for ad-hoc query subscriptions in custom routes.
+Client-side: the data viewer pulses a green border around the rows pane on each invalidate and re-runs `loadRows()`. The reusable `liveQuery({ edgeql, tables })` Svelte store wraps the same pattern for ad-hoc query subscriptions in custom routes.
 
-Gel has subscriptions in the SDK but Gel-UI doesn't surface them.
+Gel has subscriptions in the SDK but Gel-UI doesn’t surface them.
 
 ### 3d. Identity-disc visualization — **SHIPPED 2026-05-06**
 
 > **Status:** Shipped in Bundle O. Live behavior is documented in `docs/admin-ui.md` ("Identity Disc" section); source lives at `ui/src/lib/identity-disc-layout.ts` (pure SVG geometry) + `ui/src/routes/disc/+page.svelte`.
 
-The TRON metaphor taken seriously: a row's outgoing links and incoming references rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click an orbital to recenter on that object; a breadcrumb tracks recent centers. Outgoing data comes from one query expanding every link's `id` + display field; incoming data comes from a schema-walk for every type that links to the centered type, then a parallel forward-filter query per (sourceType, linkName) pair.
+The identity-disc metaphor taken seriously: a row’s outgoing links and incoming references rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click an orbital to recenter on that object; a breadcrumb tracks recent centers. Outgoing data comes from one query expanding every link’s `id` + display field; incoming data comes from a schema-walk for every type that links to the centered type, then a parallel forward-filter query per (sourceType, linkName) pair.
 
 Layout splits the disc into two arcs: outgoing fills 30°–150° on the right semicircle, incoming fills 210°–330° on the left, so the visual half-plane unambiguously reads "things I link to" vs "things that link to me". Multi-link clusters (e.g. 12 posts) collapse to a single orbital with a `+11` count badge — fancier expansion is V2.
 
@@ -155,7 +155,7 @@ Layout splits the disc into two arcs: outgoing fills 30°–150° on the right s
 - The compiled SvelteKit UI as embedded assets
 - The PostgreSQL binary for the target platform
 
-Running `./disc` on a fresh machine gives you a fully working database server with admin UI on `:3000`, no installation steps. Like Caddy. Like SQLite. Like Tailscale's `tailscaled`.
+Running `./disc` on a fresh machine gives you a fully working database server with admin UI on `:3000`, no installation steps. Like Caddy. Like SQLite. Like Tailscale’s `tailscaled`.
 
 **How it shipped.** `deno compile --include` embeds both the SvelteKit `ui/build/` directory and the cached PostgreSQL distribution under `<DISC_HOME>/postgres/<version>/`. At runtime:
 
@@ -165,12 +165,12 @@ Running `./disc` on a fresh machine gives you a fully working database server wi
 **Trade-offs documented as decisions.**
 
 - **Extract-on-first-run** rather than running PG from a virtual fs — PG is a native binary that needs a real `fd → on-disk` to fork from.
-- **Manifest auto-regenerated at build time** (`cli/build.ts:refreshEmbeddedPgManifest`) — the repo ships an empty default; running `disc build` rewrites the manifest in place from the build machine's local PG cache. Don't commit a regenerated manifest; the `file://` URLs are abs paths from the build machine.
+- **Manifest auto-regenerated at build time** (`cli/build.ts:refreshEmbeddedPgManifest`) — the repo ships an empty default; running `disc build` rewrites the manifest in place from the build machine’s local PG cache. Don’t commit a regenerated manifest; the `file://` URLs are abs paths from the build machine.
 - **Opt-out via `DISC_BUILD_NO_BUNDLE_PG=1`** for size-conscious headless builds — falls back to the network downloader at runtime.
 
 **Binary size (darwin-arm64):** ~83 MB (UI only) → ~217 MB (UI + PG distribution).
 
-**Open follow-ups.** Reproducible cross-platform builds (the build machine's PG cache only has its own platform); a `dist/embedded-pg/<platform>/` staging step would let CI build all four platforms from one runner. Tracked in the ledger.
+**Open follow-ups.** Reproducible cross-platform builds (the build machine’s PG cache only has its own platform); a `dist/embedded-pg/<platform>/` staging step would let CI build all four platforms from one runner. Tracked in the ledger.
 
 ---
 
@@ -178,7 +178,7 @@ Running `./disc` on a fresh machine gives you a fully working database server wi
 
 > **Status:** Shipped in Bundle P. Live behavior is documented in `access/README.md` ("`runtime::has_permission(...)` — Deno-permission-aware policies" section); source lives at `access/runtime-permissions.ts` (pure spec parser + checker) + the `runtime::has_permission` cases in `access/evaluator.ts`.
 
-**The problem.** Database access policies (Gel's `access policy`, Postgres's RLS) gate row visibility based on application-defined identity. They can't see runtime trust: an extension running with full filesystem access has the same access-policy treatment as one running sandboxed.
+**The problem.** Database access policies (Gel’s `access policy`, Postgres’s RLS) gate row visibility based on application-defined identity. They can’t see runtime trust: an extension running with full filesystem access has the same access-policy treatment as one running sandboxed.
 
 **The bet.** Because Disc runs on Deno, every running piece of code already has a runtime permission set (`--allow-net`, `--allow-read=...`, etc.). Access policies can reference these permissions:
 
@@ -194,13 +194,13 @@ type SecretConfig {
 
 The `runtime::has_permission(...)` builtin is true only if the calling Deno worker was launched with the corresponding `--allow-*` flag. An extension that accidentally tries to read `SecretConfig` without the right permissions gets an empty result — even if the application-level user is an admin.
 
-This composes with existing access policies. It's a defense-in-depth layer for the case where application code is compromised but the runtime sandbox is not.
+This composes with existing access policies. It’s a defense-in-depth layer for the case where application code is compromised but the runtime sandbox is not.
 
-**What Gel has instead.** Application-level identity only. No runtime-permission check, because the Python/Rust runtime doesn't have a structured permission model.
+**What Gel has instead.** Application-level identity only. No runtime-permission check, because the Python/Rust runtime doesn’t have a structured permission model.
 
-**How it shipped.** `runtime::has_permission(<spec>)` is a builtin in the access-policy evaluator. The spec string is parsed at policy-load time into a `Deno.PermissionDescriptor`-shaped object (so SDL typos like `runtime::has_permission("filesystem")` fail loudly rather than silently denying). At SQL emission time the function is **pre-evaluated** against `Deno.permissions.querySync(...)` and inlined as `TRUE`/`FALSE` in the generated WHERE clause — Postgres can't call back into Deno, and the permission set is fixed for the life of the process anyway. The composability holds: `current_user.is_admin and runtime::has_permission("read:/secrets")` just works through the existing AND combinator.
+**How it shipped.** `runtime::has_permission(<spec>)` is a builtin in the access-policy evaluator. The spec string is parsed at policy-load time into a `Deno.PermissionDescriptor`-shaped object (so SDL typos like `runtime::has_permission("filesystem")` fail loudly rather than silently denying). At SQL emission time the function is **pre-evaluated** against `Deno.permissions.querySync(...)` and inlined as `TRUE`/`FALSE` in the generated WHERE clause — Postgres can’t call back into Deno, and the permission set is fixed for the life of the process anyway. The composability holds: `current_user.is_admin and runtime::has_permission("read:/secrets")` just works through the existing AND combinator.
 
-**One divergence from the original sketch.** The "calling worker's permission set" model assumed Disc had a worker-based extension architecture; Disc's extensions are TS modules sharing the server's permission set, so the check is effectively a deployment-time gate. If Disc later grows worker-based extensions, the per-worker permission set can be threaded through `AccessContext.permissionChecker` without touching the SDL grammar.
+**One divergence from the original sketch.** The "calling worker’s permission set" model assumed Disc had a worker-based extension architecture; Disc’s extensions are TS modules sharing the server’s permission set, so the check is effectively a deployment-time gate. If Disc later grows worker-based extensions, the per-worker permission set can be threaded through `AccessContext.permissionChecker` without touching the SDL grammar.
 
 ---
 
@@ -214,4 +214,4 @@ Each item is independently scopeable. The natural ordering by **how much it just
 4. ~~**#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.~~ **All four shipped 2026-05-06** (3a Bundle K, 3c Bundle L, 3b Bundle N, 3d Bundle O).
 5. ~~**#5 Deno-perm policies** — most novel, narrowest applicability.~~ **Shipped 2026-05-06.**
 
-When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
+When `future-triage.md`’s BUILD column runs out (or sooner if one of these is more compelling than what’s left upstream), pick from here.

@@ -590,7 +590,7 @@
 </style>
 
 <svelte:head>
-  <title>Disc Viewer &bull; Query Builder</title>
+  <title>Disc &bull; Query Builder</title>
 </svelte:head>
 
 <div class="dash-wrapper">

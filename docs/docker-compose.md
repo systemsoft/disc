@@ -1,6 +1,6 @@
 # Docker Compose
 
-Run Disc and PostgreSQL together with one command. This guide covers the production stack (`docker-compose.yml`), the all-in-one bundled image (`Dockerfile.bundled`), and the optional monitoring overlay.
+Run Disc and PostgreSQL together with one command. This guide covers the production stack (`docker-compose.yml`), the all-in-one bundled image (`Dockerfile.bundled`), and the optional monitoring overlay.
 
 Related documentation: [Production Deployment](production-deployment.md) | [Bundled PostgreSQL](bundled-postgres.md) | [Server Configuration](server.md)
 
@@ -16,7 +16,7 @@ docker compose logs -f disc
 docker compose down
 ```
 
-That spins up Disc (port `5656`) and PostgreSQL 16 (internal-only) with persistent volumes, a healthcheck on `/health/ready`, and `restart: unless-stopped` so the stack survives reboots.
+That spins up Disc (port `5656`) and PostgreSQL 16 (internal-only) with persistent volumes, a healthcheck on `/health/ready`, and `restart: unless-stopped` so the stack survives reboots.
 
 ---
 
@@ -60,15 +60,15 @@ volumes:
 
 ### What it does
 
-- **Disc service** is built from the repo's production `Dockerfile` (multi-stage Deno build, non-root user, `HEALTHCHECK` on `/health/ready`). Connects to PostgreSQL via the compose-network DNS name `postgres`.
+- **Disc service** is built from the repo’s production `Dockerfile` (multi-stage Deno build, non-root user, `HEALTHCHECK` on `/health/ready`). Connects to PostgreSQL via the compose-network DNS name `postgres`.
 - **PostgreSQL service** uses the official `postgres:16-alpine` image. `pg_isready` healthcheck blocks Disc from starting until PG accepts connections (`depends_on: condition: service_healthy`).
-- **Named volume** `pgdata` holds the PostgreSQL data directory across `docker compose down` / `up` cycles. Use `docker compose down -v` to wipe it.
+- **Named volume** `pgdata` holds the PostgreSQL data directory across `docker compose down` / `up` cycles. Use `docker compose down -v` to wipe it.
 
 ### Hardening for production
 
-Before deploying this compose file to a production host, edit it to:
+Before deploying this compose file to a production host, edit it to:
 
-1. **Replace the default password** (`POSTGRES_PASSWORD: disc`). Use a Docker secret or `.env` file:
+1. **Replace the default password** (`POSTGRES_PASSWORD: disc`). Use a Docker secret or `.env` file:
 
    ```yaml
    environment:
@@ -121,20 +121,20 @@ DISC_LOG_LEVEL=WARN
 DISC_RATE_LIMIT_RPM=600
 ```
 
-`docker compose` automatically loads `.env` from the working directory; reference values via `${VAR}` substitution in `docker-compose.yml`.
+`docker compose` automatically loads `.env` from the working directory; reference values via `${VAR}` substitution in `docker-compose.yml`.
 
 ---
 
 ## Single-Container (Bundled) Image
 
-For demos, CI fixtures, or single-tenant deployments where running PostgreSQL as a separate service is overkill, use the bundled image:
+For demos, CI fixtures, or single-tenant deployments where running PostgreSQL as a separate service is overkill, use the bundled image:
 
 ```bash
 docker build -f Dockerfile.bundled -t disc-bundled .
 docker run -p 5656:5656 disc-bundled
 ```
 
-The bundled image installs PostgreSQL 16 inside the container; an entrypoint script initializes the data directory on first boot, starts PostgreSQL, then execs Disc. No external `DATABASE_URL` required.
+The bundled image installs PostgreSQL 16 inside the container; an entrypoint script initializes the data directory on first boot, starts PostgreSQL, then execs Disc. No external `DATABASE_URL` required.
 
 To persist data across restarts, mount the PostgreSQL data directory:
 
@@ -148,7 +148,7 @@ docker run -p 5656:5656 \
 
 ## Bundled PostgreSQL Mode (No External PG)
 
-Disc's CLI also manages a PostgreSQL instance under `~/.disc/instances/<project>/`. To use this mode inside Docker (instead of running PG as a sibling service), mount the Disc home directory:
+Disc’s CLI also manages a PostgreSQL instance under `~/.disc/instances/<project>/`. To use this mode inside Docker (instead of running PG as a sibling service), mount the Disc home directory:
 
 ```yaml
 services:
@@ -166,7 +166,7 @@ volumes:
   disc-instances:
 ```
 
-The container runs `disc serve`, which auto-starts the bundled PostgreSQL on first boot (creates an instance, downloads the PG binary if not cached, runs `initdb`). Subsequent restarts reuse the persisted instance.
+The container runs `disc serve`, which auto-starts the bundled PostgreSQL on first boot (creates an instance, downloads the PG binary if not cached, runs `initdb`). Subsequent restarts reuse the persisted instance.
 
 For full lifecycle details — directory layout, version upgrades, socket configuration — see [Bundled PostgreSQL](bundled-postgres.md).
 
@@ -174,7 +174,7 @@ For full lifecycle details — directory layout, version upgrades, socket config
 
 ## Monitoring Overlay
 
-The repository also ships `docker-compose.monitoring.yml` which adds Prometheus and Grafana. Use it as an overlay:
+The repository also ships `docker-compose.monitoring.yml` which adds Prometheus and Grafana. Use it as an overlay:
 
 ```bash
 docker compose \
@@ -183,7 +183,7 @@ docker compose \
   up -d
 ```
 
-The overlay automatically sets `DISC_ENABLE_METRICS=true` on the Disc service and expects a Prometheus config at `deploy/prometheus.yml`. Generate a starter config with:
+The overlay automatically sets `DISC_ENABLE_METRICS=true` on the Disc service and expects a Prometheus config at `deploy/prometheus.yml`. Generate a starter config with:
 
 ```bash
 disc deploy --format compose --output deploy
@@ -193,7 +193,7 @@ disc deploy --format compose --output deploy
 
 ## Healthcheck
 
-The Disc image ships with a built-in healthcheck (`docker inspect <container>` shows `Healthcheck.Status`). It hits `/health/ready` every 30 seconds and reports `unhealthy` on three consecutive failures.
+The Disc image ships with a built-in healthcheck (`docker inspect <container>` shows `Healthcheck.Status`). It hits `/health/ready` every 30 seconds and reports `unhealthy` on three consecutive failures.
 
 Compose-level healthcheck override:
 
@@ -209,7 +209,7 @@ services:
       start_period: 20s
 ```
 
-`/health/live` returns 200 as long as the process is up; `/health/ready` returns 503 when PostgreSQL is unreachable. See [Server → Health Check](server.md#get-health) for the full schema.
+`/health/live` returns 200 as long as the process is up; `/health/ready` returns 503 when PostgreSQL is unreachable. See [Server → Health Check](server.md#get-health) for the full schema.
 
 ---
 
@@ -222,7 +222,7 @@ disc deploy --format compose
 # → ./deploy/docker-compose.yml
 ```
 
-That output is a starting point — copy it into the project root and tweak ports, passwords, volumes, and TLS mounts to match your infrastructure.
+That output is a starting point — copy it into the project root and tweak ports, passwords, volumes, and TLS mounts to match your infrastructure.
 
 ---
 
