@@ -27,7 +27,7 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 | Tune queries, indexes, and caches    | [Performance](performance.md)                     |
 | Run Disc via Docker Compose          | [Docker Compose](docker-compose.md)               |
 | Run and write tests                  | [Testing](testing.md)                             |
-| See what's new in this release       | [CHANGELOG](../CHANGELOG.md)                      |
+| Cut and publish a release            | [Releasing](releasing.md)                         |
 
 ---
 
@@ -77,4 +77,4 @@ If a future Disc release ships a docs website (e.g., via mdBook, Docusaurus, or 
 - [Performance](performance.md) -- Indexing strategy, EXPLAIN diagnostics, parse/compile/EXPLAIN caches, pool tuning, key Prometheus gauges.
 - [Docker Compose](docker-compose.md) -- Self-hosted Disc + bundled PostgreSQL via `docker compose up`.
 - [Testing](testing.md) -- Running the suite, test categories, authoring new tests, env isolation, PG-backed tests.
-- [CHANGELOG](../CHANGELOG.md) -- Release notes in [Keep a Changelog](https://keepachangelog.com) format. New entries land under `[Unreleased]`; tagging promotes them into a dated block.
+- [Releasing](releasing.md) -- How releases are cut and published; the current version is tracked in `version.txt`.

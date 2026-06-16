@@ -1,12 +1,12 @@
 # Client SDK
 
-The Disc TypeScript SDK provides a typed HTTP client for querying a Disc server, managing authentication, executing transactions, and subscribing to real-time updates over WebSocket.
+The Disc TypeScript SDK provides a typed HTTP client for querying a Disc server, managing authentication, executing transactions, and subscribing to real-time updates over WebSocket.
 
 ---
 
 ## Installation
 
-Import from the SDK module directly:
+Import from the SDK module directly:
 
 ```typescript
 import {
@@ -17,18 +17,20 @@ import {
 } from "disc/sdk/mod.ts";
 ```
 
-If you have generated a typed client with `disc codegen`, you can import the generated types alongside the SDK:
+If you have generated a typed client with `disc codegen`, you can import the generated types alongside the SDK:
 
 ```typescript
 import { createClient } from "disc/sdk/mod.ts";
 import type { Post, User } from "./dbschema/disc-client/interfaces.ts";
 ```
 
+> `interfaces.ts` is emitted only for multi-module schemas; a single-module schema emits `types.ts` instead, so import from `./dbschema/disc-client/types.ts` in that case.
+
 ---
 
 ## Creating a Client
 
-Use `createClient()` to construct a `DiscClient` instance. All options are optional and have sensible defaults.
+Use `createClient()` to construct a `DiscClient` instance. All options are optional and have sensible defaults.
 
 ```typescript
 import { createClient } from "disc/sdk/mod.ts";
@@ -52,7 +54,7 @@ const client = createClient({
 | `retryDelay` | `number`                 | `1000`                    | Base delay between retries in milliseconds (linear backoff) |
 | `timeout`    | `number`                 | `30000`                   | Request timeout in milliseconds                             |
 
-The `DiscClient` class can also be instantiated directly if you prefer:
+The `DiscClient` class can also be instantiated directly if you prefer:
 
 ```typescript
 import { DiscClient } from "disc/sdk/mod.ts";
@@ -64,9 +66,11 @@ const client = new DiscClient({ baseUrl: "https://disc.example.com" });
 
 ## Basic Queries
 
-### `client.query<T>(query, variables?)`
+### `client.query<T>(query, variables?, options?)`
 
-Executes an EdgeQL query and returns the result data directly. Throws `DiscQueryError` if the server returns any errors.
+Executes an EdgeQL query and returns the result data directly. Throws `DiscQueryError` if the server returns any errors.
+
+The optional `options` argument accepts `{ revive, validate }`: `revive` auto-converts wire-encoded scalars (e.g. ISO date strings into `Date`), and `validate` runs a validator against the result, throwing `DiscValidationError` if it rejects.
 
 ```typescript
 // Select all users
@@ -105,7 +109,7 @@ await client.query(
 
 ### `client.queryRaw<T>(query, variables?)`
 
-Returns the full response envelope including data, errors, and timing extensions. Does not throw on query errors -- you must check `response.errors` yourself.
+Returns the full response envelope including data, errors, and timing extensions. Does not throw on query errors -- you must check `response.errors` yourself.
 
 ```typescript
 const response = await client.queryRaw<User[]>("select User { email, name }");
@@ -156,11 +160,11 @@ interface QueryExtensions {
 
 ## Health Checks
 
-The SDK provides three methods for checking server health, suitable for orchestration systems and monitoring.
+The SDK provides three methods for checking server health, suitable for orchestration systems and monitoring.
 
 ### `client.health()`
 
-Returns the full health status including database connectivity, connection pool stats, uptime, and extension health.
+Returns the full health status including database connectivity, connection pool stats, uptime, and extension health.
 
 ```typescript
 const health = await client.health();
@@ -174,7 +178,7 @@ const health = await client.health();
 
 ### `client.isAlive()`
 
-Liveness probe. Returns `true` if the server process is running. Never throws -- returns `false` on any error.
+Liveness probe. Returns `true` if the server process is running. Never throws -- returns `false` on any error.
 
 ```typescript
 const alive = await client.isAlive();
@@ -182,7 +186,7 @@ const alive = await client.isAlive();
 
 ### `client.isReady()`
 
-Readiness probe. Returns `true` when the database is connected and the server can accept queries. Returns `false` if the database is unreachable.
+Readiness probe. Returns `true` when the database is connected and the server can accept queries. Returns `false` if the database is unreachable.
 
 ```typescript
 const ready = await client.isReady();
@@ -194,7 +198,7 @@ const ready = await client.isReady();
 
 ### `client.stats()`
 
-Returns detailed server statistics including connection counts, query metrics, transaction counts, memory usage, cache stats, and rate limiter info.
+Returns detailed server statistics including connection counts, query metrics, transaction counts, memory usage, cache stats, and rate limiter info.
 
 ```typescript
 const stats = await client.stats();
@@ -226,7 +230,7 @@ if (stats.queryMetrics) {
 
 ## Authentication
 
-The `AuthManager` class handles the full authentication lifecycle: registration, login, logout, token refresh, and profile management. It wraps a `DiscClient` and automatically sets the JWT token on the client after successful authentication.
+The `AuthManager` class handles the full authentication lifecycle: registration, login, logout, token refresh, and profile management. It wraps a `DiscClient` and automatically sets the JWT token on the client after successful authentication.
 
 ### Setup
 
@@ -258,7 +262,7 @@ const response = await auth.register({
 // - response.user: AuthUser object
 ```
 
-After registration, the client is automatically authenticated. All subsequent queries include the JWT token.
+After registration, the client is automatically authenticated. All subsequent queries include the JWT token.
 
 ### Login
 
@@ -283,7 +287,7 @@ auth.isAuthenticated(); // true if a token is set on the client
 auth.getUser(); // cached AuthUser from the last login/register call
 ```
 
-`getUser()` returns the user from the most recent successful `login()` or `register()` call without making a server request. Returns `null` if no session is active.
+`getUser()` returns the user from the most recent successful `login()` or `register()` call without making a server request. Returns `null` if no session is active.
 
 ### Fetching the Profile
 
@@ -295,7 +299,7 @@ const profile = await auth.getProfile();
 // profile.metadata
 ```
 
-`getProfile()` makes a `GET /auth/profile` request and updates the cached user.
+`getProfile()` makes a `GET /auth/profile` request and updates the cached user.
 
 ### Updating the Password
 
@@ -307,7 +311,7 @@ Throws `DiscAuthError` if not authenticated.
 
 ### Token Refresh
 
-When `autoRefresh` is enabled (the default), the `AuthManager` parses the JWT `exp` claim and schedules a background refresh `refreshBuffer` seconds before the token expires. This happens automatically -- you do not need to call `refreshTokens()` manually.
+When `autoRefresh` is enabled (the default), the `AuthManager` parses the JWT `exp` claim and schedules a background refresh `refreshBuffer` seconds before the token expires. This happens automatically -- you do not need to call `refreshTokens()` manually.
 
 To refresh manually:
 
@@ -317,7 +321,7 @@ const tokens = await auth.refreshTokens();
 // tokens.token: new JWT access token
 ```
 
-Throws `DiscAuthError` if no refresh token is available.
+Throws `DiscAuthError` if no refresh token is available.
 
 ### Logout
 
@@ -325,23 +329,23 @@ Throws `DiscAuthError` if no refresh token is available.
 await auth.logout();
 ```
 
-This sends a `POST /auth/logout` request, then clears all local state: tokens, cached user, and the auth header on the client.
+This sends a `POST /auth/logout` request, then clears all local state: tokens, cached user, and the auth header on the client.
 
 ### Cleanup
 
-When you are done with the `AuthManager`, call `dispose()` to cancel any pending auto-refresh timer:
+When you are done with the `AuthManager`, call `dispose()` to cancel any pending auto-refresh timer:
 
 ```typescript
 auth.dispose();
 ```
 
-This is important in environments where timers would prevent garbage collection or process exit.
+This is important in environments where timers would prevent garbage collection or process exit.
 
 ---
 
 ## Transactions
 
-Transactions execute multiple queries atomically. The SDK uses a callback pattern: the transaction auto-commits on success and auto-rolls back on error.
+Transactions execute multiple queries atomically. The SDK uses a callback pattern: the transaction auto-commits on success and auto-rolls back on error.
 
 ### Basic Usage
 
@@ -365,7 +369,7 @@ const result = await client.transaction(async tx => {
 });
 ```
 
-If the callback throws, the transaction is automatically rolled back and the error is re-thrown.
+If the callback throws, the transaction is automatically rolled back and the error is re-thrown.
 
 ### Transaction Methods
 
@@ -379,11 +383,11 @@ Inside the callback, the `tx` object provides:
 | `tx.getState()`                  | Returns `"active"`, `"committed"`, or `"rolled_back"` |
 | `tx.getId()`                     | Returns the transaction ID string                     |
 
-You do not need to call `tx.commit()` explicitly. The `client.transaction()` wrapper commits automatically when the callback returns without throwing. Explicit commit and rollback are available for advanced control flows.
+You do not need to call `tx.commit()` explicitly. The `client.transaction()` wrapper commits automatically when the callback returns without throwing. Explicit commit and rollback are available for advanced control flows.
 
 ### Transaction State Machine
 
-A `Transaction` transitions through these states:
+A `Transaction` transitions through these states:
 
 ```
 active  -->  committed
@@ -391,22 +395,22 @@ active  -->  committed
    +---->  rolled_back
 ```
 
-Calling `query()`, `commit()`, or `rollback()` on a non-active transaction throws `DiscTransactionError`.
+Calling `query()`, `commit()`, or `rollback()` on a non-active transaction throws `DiscTransactionError`.
 
 ### How It Works
 
-Under the hood, `client.transaction()` performs these steps:
+Under the hood, `client.transaction()` performs these steps:
 
-1. `POST /transaction/begin` -- server allocates a transaction and returns a `transactionId`.
-2. Each `tx.query()` sends a `POST /query` with an `X-Transaction-ID` header linking the query to the transaction.
+1. `POST /transaction/begin` -- server allocates a transaction and returns a `transactionId`.
+2. Each `tx.query()` sends a `POST /query` with an `X-Transaction-ID` header linking the query to the transaction.
 3. On callback success: `POST /transaction/{id}/commit`.
-4. On callback error: `POST /transaction/{id}/rollback`, then re-throws.
+4. On callback error: `POST /transaction/{id}/rollback`, then re-throws.
 
 ---
 
 ## WebSocket Subscriptions
 
-The `SubscriptionClient` provides real-time data streaming over WebSocket. It supports automatic reconnection with exponential backoff and re-subscribes to all active subscriptions after reconnection.
+The `SubscriptionClient` provides real-time data streaming over WebSocket. It supports automatic reconnection with exponential backoff and re-subscribes to all active subscriptions after reconnection.
 
 ### Setup and Connection
 
@@ -425,7 +429,7 @@ const sub = createSubscriptionClient(
 await sub.connect();
 ```
 
-The `SubscriptionClient` automatically converts `http://` to `ws://` and `https://` to `wss://` when connecting.
+The `SubscriptionClient` automatically converts `http://` to `ws://` and `https://` to `wss://` when connecting.
 
 ### Subscribing to Queries
 
@@ -447,7 +451,7 @@ const handle = sub.subscribe<User[]>(
 );
 ```
 
-The `subscribe()` method returns a `SubscriptionHandle`:
+The `subscribe()` method returns a `SubscriptionHandle`:
 
 ```typescript
 interface SubscriptionHandle {
@@ -473,17 +477,17 @@ sub.isConnected(); // true when WebSocket is in OPEN state
 sub.close(); // close the connection and clean up all subscriptions
 ```
 
-Calling `close()` prevents any further reconnection attempts.
+Calling `close()` prevents any further reconnection attempts.
 
 ### Auto-Reconnection
 
-When the WebSocket connection drops and `autoReconnect` is `true`, the client automatically:
+When the WebSocket connection drops and `autoReconnect` is `true`, the client automatically:
 
-1. Waits with exponential backoff: `reconnectDelay * 2^attempt` milliseconds.
+1. Waits with exponential backoff: `reconnectDelay * 2^attempt` milliseconds.
 2. Reconnects to the server.
-3. Re-subscribes to all active subscriptions.
+3. Re-subscribes to all active subscriptions.
 
-If reconnection fails after `maxReconnectAttempts`, all active subscriptions receive an error via their `onError` callback.
+If reconnection fails after `maxReconnectAttempts`, all active subscriptions receive an error via their `onError` callback.
 
 ### Subscription Client Config
 
@@ -497,7 +501,7 @@ If reconnection fails after `maxReconnectAttempts`, all active subscriptions rec
 
 ## Error Handling
 
-All SDK errors extend `DiscClientError`, which carries a `code` property from the `DiscErrorCode` enum.
+All SDK errors extend `DiscClientError`, which carries a `code` property from the `DiscErrorCode` enum.
 
 ### Error Hierarchy
 
@@ -512,6 +516,7 @@ All SDK errors extend `DiscClientError`, which carries a `code` property from th
 | `DiscServerError`      | `SERVER_ERROR`      | Server returned a 5xx status code                   |
 | `DiscTimeoutError`     | `TIMEOUT`           | Request exceeds the configured timeout              |
 | `DiscTransactionError` | `TRANSACTION_ERROR` | Operation on a non-active transaction               |
+| `DiscValidationError`  | `VALIDATION_ERROR`  | A `query()` `options.validate` validator rejects    |
 
 ### Catching Specific Errors
 
@@ -553,7 +558,7 @@ try {
 
 ### Using Error Codes
 
-Every SDK error has a `code` property from the `DiscErrorCode` enum:
+Every SDK error has a `code` property from the `DiscErrorCode` enum:
 
 ```typescript
 import { DiscClientError, DiscErrorCode } from "disc/sdk/mod.ts";
@@ -602,6 +607,11 @@ try {
         // handle transaction error
         break;
       }
+
+      case DiscErrorCode.VALIDATION_ERROR: {
+        // handle validation failure
+        break;
+      }
     }
   }
 }
@@ -625,7 +635,7 @@ The client retries requests based on the error type:
 
 ## Multi-Database
 
-When the server has multi-database support enabled, you can target a specific database by passing a custom header or by including a query parameter.
+When the server has multi-database support enabled, you can target a specific database by passing a custom header or by including a query parameter.
 
 ### Via Custom Headers
 
@@ -640,7 +650,7 @@ const data = await client.query("select Event { name, timestamp }");
 
 ### Per-Request Override
 
-If you need to query different databases from the same client, set the header on individual requests by using `queryRaw` with the underlying fetch:
+If you need to query different databases from the same client, set the header on individual requests by using `queryRaw` with the underlying fetch:
 
 ```typescript
 // Default database
@@ -655,7 +665,7 @@ const analyticsClient = createClient({
 const events = await analyticsClient.query("select Event { name }");
 ```
 
-The server resolves the database name in this order:
+The server resolves the database name in this order:
 
 1. `X-Database` header
 2. `?database=` query parameter
@@ -723,7 +733,7 @@ The query builder compiles to the same EdgeQL strings the raw `client.query("sel
 
 ## TypeScript Types
 
-When using generated types from `disc codegen`, you can pass them as type parameters to `query()` for full type safety:
+When using generated types from `disc codegen`, you can pass them as type parameters to `query()` for full type safety:
 
 ```typescript
 import { createClient } from "disc/sdk/mod.ts";
@@ -765,7 +775,7 @@ sub.subscribe<User[]>(
 
 ## SDK Exports
 
-The complete list of exports from `disc/sdk/mod.ts`:
+The complete list of exports from `disc/sdk/mod.ts`:
 
 ### Classes
 
@@ -797,6 +807,7 @@ The complete list of exports from `disc/sdk/mod.ts`:
 | `DiscServerError`      | Server 5xx error                     |
 | `DiscTimeoutError`     | Request timeout                      |
 | `DiscTransactionError` | Invalid transaction state            |
+| `DiscValidationError`  | Runtime validation failure           |
 
 ### Types
 
@@ -813,10 +824,16 @@ The complete list of exports from `disc/sdk/mod.ts`:
 | `LoginCredentials`         | Email/username and password                               |
 | `QueryError`               | Single query error from the server                        |
 | `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)               |
+| `QueryOptions`             | Per-query options (e.g. validator for runtime checks)     |
 | `QueryRequest`             | Query payload (query, variables, operationName)           |
 | `QueryResponse<T>`         | Response envelope (data, errors, extensions)              |
+| `QueryValidator`           | Standard Schema validator applied to query results        |
 | `RegisterData`             | Email, password, optional username/metadata               |
+| `ReviveOptions`            | Options for `reviveResponse` wire-format revival          |
 | `ServerStats`              | Connections, queries, transactions, memory, cache         |
+| `StandardSchemaIssue`      | Single validation issue (Standard Schema spec)            |
+| `StandardSchemaResult`     | Validation result (value or issues; Standard Schema spec) |
+| `StandardSchemaV1`         | Standard Schema v1 validator interface                    |
 | `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                      |
 | `SubscriptionClientConfig` | Subscription client options                               |
 | `SubscriptionHandle`       | Subscription id and unsubscribe function                  |
@@ -824,12 +841,55 @@ The complete list of exports from `disc/sdk/mod.ts`:
 | `SubscriptionRequest`      | Subscription request (id, query, variables)               |
 | `TransactionState`         | `"active"`, `"committed"`, `"rolled_back"`                |
 
+### Query Builder & Schema
+
+Codegen-free query-builder DSL and schema declaration exports.
+
+| Export               | Kind     | Description                                       |
+| -------------------- | -------- | ------------------------------------------------- |
+| `and`                | function | Combine predicates with logical AND               |
+| `compileFilter`      | function | Compile a codegen filter object to EdgeQL         |
+| `createQueryBuilder` | function | Construct a runtime query builder                 |
+| `defineSchema`       | function | Declare a schema for typed builder inference      |
+| `from`               | function | Start a select chain from an object type          |
+| `not`                | function | Negate a predicate                                |
+| `or`                 | function | Combine predicates with logical OR                |
+| `t`                  | object   | Field-type helpers used by `defineSchema`         |
+| `SelectChain`        | class    | Fluent select-chain builder                       |
+| `CompiledFilter`     | type     | Result of `compileFilter` (EdgeQL + params)       |
+| `CompiledQuery`      | type     | Compiled query (EdgeQL string + variables)        |
+| `DiscSchema`         | type     | Schema declared via `defineSchema`                |
+| `Expr`               | type     | Query-builder expression node                     |
+| `FilterArg`          | type     | Accepted filter argument (Expr or codegen filter) |
+| `QueryBuilder`       | type     | Runtime query-builder interface                   |
+| `QueryRunner`        | type     | Executor passed to the builder                    |
+| `Shape`              | type     | Selected-shape descriptor                         |
+| `TypeInfo`           | type     | Type metadata consumed by the filter compiler     |
+| `TypedFieldRef`      | type     | Typed field reference in filter predicates        |
+| `TypedQueryBuilder`  | type     | Type-inferred query builder                       |
+| `TypedRef`           | type     | Typed object reference                            |
+| `TypedSelectChain`   | type     | Type-inferred select chain                        |
+
+Schema-declaration type exports: `FieldMarker`, `FieldType`, `IsLink`, `Link`, `LinkCardinality`, `LinkStub`, `LinkTarget`, `Optional`, `ResolveSelected`, `ResolveType`, `Scalar`, `SchemaSpec`, `SelectShape`.
+
+### Codecs
+
+Wire-format encode/decode helpers.
+
+| Export           | Kind     | Description                                   |
+| ---------------- | -------- | --------------------------------------------- |
+| `encodeBytes`    | function | Encode a byte string for the wire format      |
+| `parseBytes`     | function | Decode a wire-format byte string              |
+| `parseDateTime`  | function | Parse a wire-format datetime value            |
+| `parseInt64`     | function | Parse a wire-format 64-bit integer            |
+| `reviveResponse` | function | Revive typed values in a raw response payload |
+
 ---
 
 ## See Also
 
-- [Getting Started](getting-started.md) -- Quick introduction to Disc
+- [Getting Started](getting-started.md) -- Quick introduction to Disc
 - [EdgeQL](edgeql.md) -- Query language reference
-- [Server Configuration](server.md) -- Server setup, HTTP API, and environment variables
+- [Server Configuration](server.md) -- Server setup, HTTP API, and environment variables
 - [Auth](auth.md) -- Authentication system details
-- [Codegen](codegen.md) -- Generating typed clients from your schema
+- [Codegen](codegen.md) -- Generating typed clients from your schema

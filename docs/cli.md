@@ -1,14 +1,14 @@
 # CLI Reference
 
-The `disc` command-line interface provides tools for project initialization, schema management, code generation, database administration, and server operation.
+The `disc` command-line interface provides tools for project initialization, schema management, code generation, database administration, and server operation.
 
-**See also:** [Getting Started](getting-started.md) | [Migrations](migrations.md) | [Codegen](codegen.md) | [Server](server.md) | [Bundled PostgreSQL](bundled-postgres.md)
+**See also:** [Getting Started](getting-started.md) | [Migrations](migrations.md) | [Codegen](codegen.md) | [Server](server.md) | [Bundled PostgreSQL](bundled-postgres.md)
 
 ---
 
 ## Global Options
 
-These options apply to most commands:
+These options apply to most commands:
 
 ```
 -h, --help           Show help message
@@ -24,7 +24,7 @@ These options apply to most commands:
 
 ## disc init
 
-Initialize a new Disc project. Creates the project directory, scaffolds schema files, generates configuration, and optionally sets up a bundled PostgreSQL instance.
+Initialize a new Disc project. Creates the project directory, scaffolds schema files, generates configuration, and optionally sets up a bundled PostgreSQL instance.
 
 **Usage:**
 
@@ -51,9 +51,9 @@ disc init [name] [options]
 
 **Templates:**
 
-- **minimal** -- An empty `module default {}` schema. Start from scratch.
-- **basic** -- A `User` type with `name`, `email` (exclusive constraint), and `createdAt`. Good starting point for most projects.
-- **full** -- A `User` type and a `Post` type with a link between them. Demonstrates relationships, constraints, and defaults.
+- **minimal** -- An empty `module default {}` schema. Start from scratch.
+- **basic** -- A `User` type with `name`, `email` (exclusive constraint), and `createdAt`. Good starting point for most projects.
+- **full** -- A `User` type and a `Post` type with a link between them. Demonstrates relationships, constraints, and defaults.
 
 **Examples:**
 
@@ -85,13 +85,13 @@ my-project/
   disc.toml     # Disc instance configuration (when using bundled PG)
 ```
 
-**Project name rules:** Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen.
+**Project name rules:** Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen.
 
 ---
 
 ## disc migrate
 
-Generate and apply schema migrations. Compares the current schema definition against the stored migration history to detect changes, then generates and executes the necessary DDL statements.
+Generate and apply schema migrations. Compares the current schema definition against the stored migration history to detect changes, then generates and executes the necessary DDL statements.
 
 **Usage:**
 
@@ -180,13 +180,13 @@ The "Schema status" line is a drift check: `disc migrate --status` parses the SD
 
 The migration still proceeds — this is an advisory, not a refusal. After applying, trigger a schema reload via the admin UI’s Diff page (Apply Migration), or restart the server. Best-effort: silently no-ops if `pg_stat_activity` is restricted on the deployment. (gh/geldata#9034)
 
-**Rollback safety:** Rollback is a destructive operation. Rolling back a `DROP TABLE` migration cannot restore lost data. The `--force` flag is required to acknowledge this risk.
+**Rollback safety:** Rollback is a destructive operation. Rolling back a `DROP TABLE` migration cannot restore lost data. The `--force` flag is required to acknowledge this risk.
 
 ---
 
 ## disc serve
 
-Start the Disc server. Starts the bundled PostgreSQL instance, loads the project schema, and serves the HTTP API and optional binary wire protocol.
+Start the Disc server. Starts the bundled PostgreSQL instance, loads the project schema, and serves the HTTP API and optional binary wire protocol.
 
 **Usage:**
 
@@ -238,20 +238,20 @@ disc serve --host 0.0.0.0
 
 **Lifecycle:**
 
-1. Starts (or creates) the bundled PostgreSQL instance for the project
-2. Loads the schema from `./dbschema/default.disc`
+1. Starts (or creates) the bundled PostgreSQL instance for the project
+2. Loads the schema from `./dbschema/default.disc`
 3. Starts the HTTP server
-4. Optionally starts the binary protocol server
-5. On SIGINT or SIGTERM, stops the server and PostgreSQL gracefully
+4. Optionally starts the binary protocol server
+5. On SIGINT or SIGTERM, stops the server and PostgreSQL gracefully
 
-**Environment variables:** The following environment variables are also recognized and can be used instead of CLI flags:
+**Environment variables:** The following environment variables are also recognized and can be used instead of CLI flags:
 
-- `DISC_JWT_SECRET` -- JWT signing secret
-- `DISC_ENABLE_AUTH` -- Set to `"true"` to enable auth
-- `DISC_ENABLE_ACCESS_POLICIES` -- Set to `"true"` to enable access policies
-- `DISC_TLS_CERT` -- Path to TLS certificate
-- `DISC_TLS_KEY` -- Path to TLS private key
-- `DATABASE_URL` -- PostgreSQL connection URL
+- `DISC_JWT_SECRET` -- JWT signing secret
+- `DISC_ENABLE_AUTH` -- Set to `"true"` to enable auth
+- `DISC_ENABLE_ACCESS_POLICIES` -- Set to `"true"` to enable access policies
+- `DISC_TLS_CERT` -- Path to TLS certificate
+- `DISC_TLS_KEY` -- Path to TLS private key
+- `DATABASE_URL` -- PostgreSQL connection URL
 - `DISC_TLS_CERT_ENV` -- Name of an env var holding PEM cert contents (for K8s/Fly.io/Render env-only secret injection); materializes to a 0600 temp file
 - `DISC_TLS_KEY_ENV` -- Name of an env var holding PEM key contents
 - `DISC_REQUIRE_AUTH` -- Set to `"true"` / `"1"` / `"yes"` to require auth on protected routes (mirrors `--require-auth`)
@@ -265,7 +265,7 @@ disc serve --host 0.0.0.0
 
 ## disc shell
 
-Open an interactive EdgeQL REPL. Connects to a running Disc instance (or starts one) and provides a prompt for executing queries.
+Open an interactive EdgeQL REPL. Connects to a running Disc instance (or starts one) and provides a prompt for executing queries.
 
 **Usage:**
 
@@ -318,7 +318,7 @@ disc shell --schema ./dbschema/default.disc
 > Keep them in sync — column widths included — so a `git diff`
 > instantly flags drift.
 
-**Multiline queries:** Queries that do not end with a semicolon are treated as multiline input. The prompt changes to `...` until a semicolon terminates the query.
+**Multiline queries:** Queries that do not end with a semicolon are treated as multiline input. The prompt changes to `...` until a semicolon terminates the query.
 
 ```
 disc> select User {
@@ -331,7 +331,7 @@ disc> select User {
 
 ## disc codegen
 
-Generate TypeScript types, query builders, and client code from your schema. Supports both single-file and multi-file schema discovery.
+Generate TypeScript types, query builders, and client code from your schema. Supports both single-file and multi-file schema discovery.
 
 **Usage:**
 
@@ -375,7 +375,7 @@ disc codegen --target server
 disc codegen --no-queries --no-mutations
 ```
 
-**Multi-file discovery:** When using `--schema-dir`, Disc discovers all `.disc` files in the directory and merges them into a unified schema before generating code.
+**Multi-file discovery:** When using `--schema-dir`, Disc discovers all `.disc` files in the directory and merges them into a unified schema before generating code.
 
 **Generated output:**
 
@@ -400,7 +400,7 @@ const users = await client.user.select();
 
 ## disc watch
 
-Watch schema files for changes and automatically run migrations (dry-run) and regenerate TypeScript types. Designed for development workflows.
+Watch schema files for changes and automatically run migrations (dry-run) and regenerate TypeScript types. Designed for development workflows.
 
 **Usage:**
 
@@ -430,19 +430,19 @@ disc watch --schema ./schema.disc --output ./src/generated
 
 **Behavior:**
 
-1. Performs an initial build on startup
-2. Watches the directory containing the schema file for `.disc` file changes
-3. Debounces changes (1 second) to avoid rapid rebuilds
-4. On each change, creates a dry-run migration plan and regenerates TypeScript types
-5. Stops on SIGINT (Ctrl+C) or SIGTERM
+1. Performs an initial build on startup
+2. Watches the directory containing the schema file for `.disc` file changes
+3. Debounces changes (1 second) to avoid rapid rebuilds
+4. On each change, creates a dry-run migration plan and regenerates TypeScript types
+5. Stops on SIGINT (Ctrl+C) or SIGTERM
 
-If the schema file does not exist, the watcher creates a default schema with a basic `User` type.
+If the schema file does not exist, the watcher creates a default schema with a basic `User` type.
 
 ---
 
 ## disc start
 
-Start the bundled PostgreSQL instance for the current project. Creates the instance if it does not exist.
+Start the bundled PostgreSQL instance for the current project. Creates the instance if it does not exist.
 
 **Usage:**
 
@@ -484,7 +484,7 @@ PostgreSQL started successfully
 
 ## disc stop
 
-Stop the bundled PostgreSQL instance for the current project.
+Stop the bundled PostgreSQL instance for the current project.
 
 **Usage:**
 
@@ -502,7 +502,7 @@ disc stop
 
 ## disc restart
 
-Restart the bundled PostgreSQL instance for the current project. Stops the running instance and starts it again.
+Restart the bundled PostgreSQL instance for the current project. Stops the running instance and starts it again.
 
 **Usage:**
 
@@ -520,7 +520,7 @@ disc restart
 
 ## disc status
 
-Show the status of the bundled PostgreSQL instance for the current project, including health check information when available.
+Show the status of the bundled PostgreSQL instance for the current project, including health check information when available.
 
 **Usage:**
 
@@ -565,7 +565,7 @@ PostgreSQL Status for project: my-project
 
 ## disc ui
 
-Open the Disc admin UI in the default browser. Requires the UI to be built first.
+Open the Disc admin UI in the default browser. Requires the UI to be built first.
 
 **Usage:**
 
@@ -589,7 +589,7 @@ disc ui
 disc ui --port 8080
 ```
 
-The UI must be built before use. If it is not built, the command outputs instructions:
+The UI must be built before use. If it is not built, the command outputs instructions:
 
 ```
 cd ui && npm install && npm run build
@@ -599,7 +599,7 @@ cd ui && npm install && npm run build
 
 ## disc build
 
-Compile Disc into a self-contained binary using `deno compile`. Supports cross-compilation to multiple platforms.
+Compile Disc into a self-contained binary using `deno compile`. Supports cross-compilation to multiple platforms.
 
 **Usage:**
 
@@ -662,7 +662,7 @@ Build complete!
 
 ## disc deploy
 
-Generate deployment artifacts for production environments. Scaffolds Dockerfiles, docker-compose configurations, systemd service units, or environment variable templates.
+Generate deployment artifacts for production environments. Scaffolds Dockerfiles, docker-compose configurations, systemd service units, or environment variable templates.
 
 **Usage:**
 
@@ -681,7 +681,7 @@ disc deploy --format <format> [options]
 
 ### docker
 
-Generates a `Dockerfile` based on the official Deno image. Exposes port 5656 and expects `DATABASE_URL` to be set at runtime.
+Generates a `Dockerfile` based on the official Deno image. Exposes port 5656 and expects `DATABASE_URL` to be set at runtime.
 
 ```bash
 disc deploy --format docker
@@ -691,7 +691,7 @@ Generated file: `./deploy/Dockerfile`
 
 ### compose
 
-Generates a `docker-compose.yml` with a Disc service and a PostgreSQL 16 service. Includes health checks and volume persistence.
+Generates a `docker-compose.yml` with a Disc service and a PostgreSQL 16 service. Includes health checks and volume persistence.
 
 ```bash
 disc deploy --format compose
@@ -701,7 +701,7 @@ Generated file: `./deploy/docker-compose.yml`
 
 ### systemd
 
-Generates a `disc.service` unit file for running Disc as a systemd service. Includes security hardening directives.
+Generates a `disc.service` unit file for running Disc as a systemd service. Includes security hardening directives.
 
 ```bash
 disc deploy --format systemd
@@ -720,7 +720,7 @@ sudo systemctl start disc
 
 ### env
 
-Generates a `.env.production` template with all documented environment variables, organized by category: database, server, authentication, logging, rate limiting, cache, TLS, and metrics.
+Generates a `.env.production` template with all documented environment variables, organized by category: database, server, authentication, logging, rate limiting, cache, TLS, and metrics.
 
 ```bash
 disc deploy --format env
@@ -751,7 +751,7 @@ disc deploy --format docker --output ./infra
 
 ## disc db create
 
-Create a new Disc-managed database. Creates a PostgreSQL database with the `disc_` prefix.
+Create a new Disc-managed database. Creates a PostgreSQL database with the `disc_` prefix.
 
 **Usage:**
 
@@ -781,13 +781,13 @@ disc db create my_app
 disc db create staging --database-url "postgres://admin:pass@db:5432/disc"
 ```
 
-**Naming rules:** Database names must start with a lowercase letter and contain only lowercase letters, digits, and underscores. The actual PostgreSQL database is created with a `disc_` prefix to avoid collisions with system databases.
+**Naming rules:** Database names must start with a lowercase letter and contain only lowercase letters, digits, and underscores. The actual PostgreSQL database is created with a `disc_` prefix to avoid collisions with system databases.
 
 ---
 
 ## disc db list
 
-List all Disc-managed databases (those with the `disc_` prefix).
+List all Disc-managed databases (those with the `disc_` prefix).
 
 **Usage:**
 
@@ -825,7 +825,7 @@ Disc-managed databases:
 
 ## disc db drop
 
-Drop a Disc-managed database. This operation is irreversible and requires the `--force` flag.
+Drop a Disc-managed database. This operation is irreversible and requires the `--force` flag.
 
 **Usage:**
 
@@ -853,13 +853,13 @@ disc db drop <name> --force [options]
 disc db drop test --force
 ```
 
-**Restrictions:** The default `disc` database cannot be dropped.
+**Restrictions:** The default `disc` database cannot be dropped.
 
 ---
 
 ## disc pg log
 
-View PostgreSQL logs for the current project’s bundled instance.
+View PostgreSQL logs for the current project’s bundled instance.
 
 **Usage:**
 
@@ -895,15 +895,15 @@ disc pg log --level ERROR
 disc pg log --level ERROR -f
 ```
 
-**Log location:** Logs are stored at `~/.disc/instances/<project>/logs/postgresql.log`. If no log file exists, the command reports an error suggesting that PostgreSQL may not be running.
+**Log location:** Logs are stored at `~/.disc/instances/<project>/logs/postgresql.log`. If no log file exists, the command reports an error suggesting that PostgreSQL may not be running.
 
-**Follow mode:** Press Ctrl+C to stop following. The command polls for new content every 500 milliseconds.
+**Follow mode:** Press Ctrl+C to stop following. The command polls for new content every 500 milliseconds.
 
 ---
 
 ## disc pg upgrade
 
-Upgrade the bundled PostgreSQL instance to a newer version. Uses a pg_dumpall/pg_restore strategy with automatic backup and rollback on failure.
+Upgrade the bundled PostgreSQL instance to a newer version. Uses a pg_dumpall/pg_restore strategy with automatic backup and rollback on failure.
 
 **Usage:**
 
@@ -946,24 +946,24 @@ Dry run complete. No changes were made.
 
 **Upgrade process:**
 
-1. **Download** the target version binary
-2. **Backup** the current instance (automatic)
-3. **Dump** the database using `pg_dumpall`
-4. **Stop** the current instance
-5. **Rename** the data directory (preserved as backup)
-6. **Initialize** a new data directory with the target version
-7. **Start** the new instance
-8. **Restore** the database from the dump
-9. **Verify** the new instance is running and healthy
-10. **Record** the upgrade in `version.json`
+1. **Download** the target version binary
+2. **Backup** the current instance (automatic)
+3. **Dump** the database using `pg_dumpall`
+4. **Stop** the current instance
+5. **Rename** the data directory (preserved as backup)
+6. **Initialize** a new data directory with the target version
+7. **Start** the new instance
+8. **Restore** the database from the dump
+9. **Verify** the new instance is running and healthy
+10. **Record** the upgrade in `version.json`
 
-**Automatic rollback:** If any step after the dump fails, the upgrade process automatically attempts to:
+**Automatic rollback:** If any step after the dump fails, the upgrade process automatically attempts to:
 
 - Stop the new instance (if running)
-- Restore the original data directory from backup
+- Restore the original data directory from backup
 - Restart the old instance
 
-**Restrictions:** The target version must be newer than the current version. Downgrading is not supported.
+**Restrictions:** The target version must be newer than the current version. Downgrading is not supported.
 
 ---
 
@@ -1077,23 +1077,31 @@ When no `disc.toml` is found, commands fall back to the current directory name a
 
 ## Command Quick Reference
 
-| Command                                | Description                                 |
-| -------------------------------------- | ------------------------------------------- |
-| `disc init [name]`                     | Initialize a new project                    |
-| `disc start`                           | Start bundled PostgreSQL                    |
-| `disc stop`                            | Stop bundled PostgreSQL                     |
-| `disc restart`                         | Restart bundled PostgreSQL                  |
-| `disc status`                          | Show PostgreSQL status and health           |
-| `disc migrate`                         | Generate and apply schema migrations        |
-| `disc serve`                           | Start the Disc server (includes PostgreSQL) |
-| `disc shell`                           | Open interactive EdgeQL REPL                |
-| `disc codegen`                         | Generate TypeScript types from schema       |
-| `disc watch`                           | Watch schema files and auto-rebuild         |
-| `disc ui`                              | Open admin UI in browser                    |
-| `disc build`                           | Compile to self-contained binary            |
-| `disc deploy --format <fmt>`           | Generate deployment artifacts               |
-| `disc db create <name>`                | Create a Disc-managed database              |
-| `disc db list`                         | List Disc-managed databases                 |
-| `disc db drop <name> --force`          | Drop a Disc-managed database                |
-| `disc pg log`                          | View PostgreSQL logs                        |
-| `disc pg upgrade --target-version <v>` | Upgrade PostgreSQL version                  |
+| Command                                | Description                                       |
+| -------------------------------------- | ------------------------------------------------- |
+| `disc init [name]`                     | Initialize a new project                          |
+| `disc start`                           | Start bundled PostgreSQL                          |
+| `disc stop`                            | Stop bundled PostgreSQL                           |
+| `disc restart`                         | Restart bundled PostgreSQL                        |
+| `disc status`                          | Show PostgreSQL status and health                 |
+| `disc migrate`                         | Generate and apply schema migrations              |
+| `disc serve`                           | Start the Disc server (includes PostgreSQL)       |
+| `disc shell`                           | Open interactive EdgeQL REPL                      |
+| `disc codegen`                         | Generate TypeScript types from schema             |
+| `disc watch`                           | Watch schema files and auto-rebuild               |
+| `disc ui`                              | Open admin UI in browser                          |
+| `disc build`                           | Compile to self-contained binary                  |
+| `disc deploy --format <fmt>`           | Generate deployment artifacts                     |
+| `disc db create <name>`                | Create a Disc-managed database                    |
+| `disc db list`                         | List Disc-managed databases                       |
+| `disc db drop <name> --force`          | Drop a Disc-managed database                      |
+| `disc db wipe <name> --force`          | Drop and recreate a database (wipe to empty)      |
+| `disc db dump <name>`                  | Dump a database to stdout or a file               |
+| `disc db restore <name>`               | Restore a database from stdin or a file           |
+| `disc db push --force`                 | Push schema directly (no migration history)       |
+| `disc schema export`                   | Export the current schema as a single SDL file    |
+| `disc schema introspect`               | Generate SDL from an existing PostgreSQL database |
+| `disc admin <subcommand>`              | Manage users, roles, and access policies          |
+| `disc lsp`                             | Run the Disc language server (stdio JSON-RPC)     |
+| `disc pg log`                          | View PostgreSQL logs                              |
+| `disc pg upgrade --target-version <v>` | Upgrade PostgreSQL version                        |

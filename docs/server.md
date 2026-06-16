@@ -1,6 +1,6 @@
 # Server Configuration
 
-The Disc server provides an HTTP/JSON API for executing EdgeQL queries, WebSocket subscriptions, authentication, schema introspection, extension routing, health checks, and Prometheus metrics. It runs on Deno and connects to PostgreSQL (bundled or external) as its storage backend.
+The Disc server provides an HTTP/JSON API for executing EdgeQL queries, WebSocket subscriptions, authentication, schema introspection, extension routing, health checks, and Prometheus metrics. It runs on Deno and connects to PostgreSQL (bundled or external) as its storage backend.
 
 ---
 
@@ -51,7 +51,7 @@ const server = new DiscServer({
 await server.start();
 ```
 
-The `createServerFromEnv()` function reads all configuration from environment variables and optionally accepts a `PostgresInstance` (for bundled mode), a parsed `Schema`, and a list of extensions:
+The `createServerFromEnv()` function reads all configuration from environment variables and optionally accepts a `PostgresInstance` (for bundled mode), a parsed `Schema`, and a list of extensions:
 
 ```typescript
 import { PostgresInstance } from "disc/postgres/instance.ts";
@@ -70,7 +70,7 @@ await server.start();
 
 ### Environment Variables
 
-All server configuration can be set via environment variables. The `createServerFromEnv()` function reads these at startup.
+All server configuration can be set via environment variables. The `createServerFromEnv()` function reads these at startup.
 
 #### Core
 
@@ -180,7 +180,7 @@ All server configuration can be set via environment variables. The `createServer
 
 ### ServerConfig Reference
 
-When constructing a `DiscServer` programmatically, you pass a `DiscServerOptions` object. All fields are optional.
+When constructing a `DiscServer` programmatically, you pass a `DiscServerOptions` object. All fields are optional.
 
 ```typescript
 interface DiscServerOptions {
@@ -273,7 +273,7 @@ CLI flags always win over env vars, which always win over `disc.toml`. Secrets (
 
 ### `GET /`
 
-Returns server information and a listing of all available endpoints. Useful for service discovery.
+Returns server information and a listing of all available endpoints. Useful for service discovery.
 
 **Response (200):**
 
@@ -306,15 +306,15 @@ Returns server information and a listing of all available endpoints. Useful for 
   },
   "name": "Disc Database",
   "protocol": "HTTP/JSON",
-  "version": "0.1.0"
+  "version": "yyyy.mm.dd"
 }
 ```
 
-The `auth`, `schema`, `metrics`, and `extensions` sections only appear when those features are enabled.
+The `auth`, `schema`, `metrics`, and `extensions` sections only appear when those features are enabled.
 
 ### `POST /query`
 
-Execute an EdgeQL query. This is the primary endpoint for all data operations.
+Execute an EdgeQL query. This is the primary endpoint for all data operations.
 
 **Request body:**
 
@@ -394,18 +394,18 @@ Execute an EdgeQL query. This is the primary endpoint for all data operations.
 }
 ```
 
-The query endpoint validates requests before execution. Validation checks include:
+The query endpoint validates requests before execution. Validation checks include:
 
-- Query must be a non-empty string.
-- Query must not exceed 100KB.
-- Variables, if provided, must be an object.
-- Basic EdgeQL syntax validation (balanced braces, valid start keyword).
+- Query must be a non-empty string.
+- Query must not exceed 100KB.
+- Variables, if provided, must be an object.
+- Basic EdgeQL syntax validation (balanced braces, valid start keyword).
 
 ### `GET /health`
 
-Full health status including database connectivity, connection pool stats, server uptime, and extension health.
+Full health status including database connectivity, connection pool stats, server uptime, and extension health.
 
-**Response (200 when healthy, 503 when unhealthy):**
+**Response (200 when healthy, 503 when unhealthy):**
 
 ```json
 {
@@ -431,33 +431,33 @@ Full health status including database connectivity, connection pool stats, serve
 
 The `status` field is one of:
 
-- `"healthy"` -- database connected, pool has capacity.
-- `"degraded"` -- database connected but pool has waiters queued.
-- `"unhealthy"` -- database unreachable or pool closed.
+- `"healthy"` -- database connected, pool has capacity.
+- `"degraded"` -- database connected but pool has waiters queued.
+- `"unhealthy"` -- database unreachable or pool closed.
 
 ### `GET /health/live`
 
-Lightweight liveness probe. Returns 200 if the server process is running.
+Lightweight liveness probe. Returns 200 if the server process is running.
 
 ```json
 { "status": "alive" }
 ```
 
-Use this for Kubernetes liveness probes or load balancer health checks where you only need to know the process is alive.
+Use this for Kubernetes liveness probes or load balancer health checks where you only need to know the process is alive.
 
 ### `GET /health/ready`
 
-Readiness probe. Returns 200 when the database is connected and the server can accept queries. Returns 503 when the database is unreachable.
+Readiness probe. Returns 200 when the database is connected and the server can accept queries. Returns 503 when the database is unreachable.
 
 ```json
 { "status": "healthy" }
 ```
 
-Use this for Kubernetes readiness probes to control whether traffic is routed to this instance.
+Use this for Kubernetes readiness probes to control whether traffic is routed to this instance.
 
 ### `GET /stats`
 
-Detailed server statistics for monitoring and debugging.
+Detailed server statistics for monitoring and debugging.
 
 **Response (200):**
 
@@ -518,7 +518,7 @@ Detailed server statistics for monitoring and debugging.
 
 ### `GET /metrics`
 
-Prometheus-compatible metrics endpoint. Only available when `DISC_ENABLE_METRICS=true` (or `enableMetrics: true` in config). Returns `text/plain; version=0.0.4` format.
+Prometheus-compatible metrics endpoint. Only available when `DISC_ENABLE_METRICS=true` (or `enableMetrics: true` in config). Returns `text/plain; version=0.0.4` format.
 
 **Response (200):**
 
@@ -579,11 +579,11 @@ Available metric families:
 | GET    | `/schema/types`       | List all object types           |
 | GET    | `/schema/types/:name` | Get details for a specific type |
 
-These endpoints are available when a schema is loaded into the server.
+These endpoints are available when a schema is loaded into the server.
 
 ### Auth Endpoints
 
-Available when `jwtSecret` is configured and `enableAuth` is not `false`. For full details, see the [Auth documentation](auth.md).
+Available when `jwtSecret` is configured and `enableAuth` is not `false`. For full details, see the [Auth documentation](auth.md).
 
 | Method | Path                  | Description                       |
 | ------ | --------------------- | --------------------------------- |
@@ -599,17 +599,17 @@ Available when `jwtSecret` is configured and `enableAuth` is not `false`. For fu
 
 ### Extension Endpoints
 
-Extensions register routes under `/ext/<extension-name>/<path>`. For details, see the [Extensions documentation](extensions.md).
+Extensions register routes under `/ext/<extension-name>/<path>`. For details, see the [Extensions documentation](extensions.md).
 
 ### Admin UI
 
-The admin UI is served at `/ui` when enabled. For details, see the [Admin UI documentation](admin-ui.md).
+The admin UI is served at `/ui` when enabled. For details, see the [Admin UI documentation](admin-ui.md).
 
 ---
 
 ## WebSocket Protocol
 
-The Disc server supports WebSocket connections for real-time queries and subscriptions. Connect by sending a WebSocket upgrade request to the server URL.
+The Disc server supports WebSocket connections for real-time queries and subscriptions. Connect by sending a WebSocket upgrade request to the server URL.
 
 ### Connecting
 
@@ -617,15 +617,15 @@ The Disc server supports WebSocket connections for real-time queries and subscri
 const ws = new WebSocket("ws://localhost:5656");
 ```
 
-WebSocket support must be enabled on the server (`enableWebsockets: true`, the default).
+WebSocket support must be enabled on the server (`enableWebsockets: true`, the default).
 
 ### Client-to-Server Messages
 
-All messages are JSON objects with a `type` field.
+All messages are JSON objects with a `type` field.
 
 **Query:**
 
-Execute a one-off query and receive the result.
+Execute a one-off query and receive the result.
 
 ```json
 {
@@ -639,7 +639,7 @@ Execute a one-off query and receive the result.
 
 **Subscribe:**
 
-Start a subscription. The server sends `data` messages whenever results change.
+Start a subscription. The server sends `data` messages whenever results change.
 
 ```json
 {
@@ -654,7 +654,7 @@ Start a subscription. The server sends `data` messages whenever results change.
 
 **Unsubscribe:**
 
-Stop receiving updates for a subscription.
+Stop receiving updates for a subscription.
 
 ```json
 {
@@ -712,17 +712,17 @@ Stop receiving updates for a subscription.
 }
 ```
 
-For a high-level client, use the SDK’s `SubscriptionClient` (see [Client SDK](client-sdk.md)).
+For a high-level client, use the SDK’s `SubscriptionClient` (see [Client SDK](client-sdk.md)).
 
 ---
 
 ## Binary Protocol
 
-Disc supports a Gel-compatible binary wire protocol for interoperability with existing Gel/EdgeDB client libraries. This runs on a separate port from the HTTP server.
+Disc supports a Gel-compatible binary wire protocol for interoperability with existing Gel/EdgeDB client libraries. This runs on a separate port from the HTTP server.
 
 ### Enabling
 
-Set the binary port via config or environment variable:
+Set the binary port via config or environment variable:
 
 ```bash
 DISC_BINARY_PORT=5657
@@ -739,17 +739,17 @@ const server = new DiscServer({
 
 ### Authentication
 
-The binary protocol uses SCRAM-SHA-256 authentication. Set a password via `binaryPassword` in the server options. If no password is set, authentication is not required.
+The binary protocol uses SCRAM-SHA-256 authentication. Set a password via `binaryPassword` in the server options. If no password is set, authentication is not required.
 
 ### Protocol Details
 
-The binary protocol shares the same schema as the HTTP handler. Queries submitted via binary protocol go through the same EdgeQL parser, compiler, and execution pipeline. This means existing Gel client libraries (Python, JavaScript, Go, etc.) can connect to a Disc server.
+The binary protocol shares the same schema as the HTTP handler. Queries submitted via binary protocol go through the same EdgeQL parser, compiler, and execution pipeline. This means existing Gel client libraries (Python, JavaScript, Go, etc.) can connect to a Disc server.
 
 ---
 
 ## Multi-Database
 
-Disc can route queries to different PostgreSQL databases within the same cluster. Each named database gets its own connection pool and can have its own schema and migrations.
+Disc can route queries to different PostgreSQL databases within the same cluster. Each named database gets its own connection pool and can have its own schema and migrations.
 
 ### Enabling
 
@@ -767,11 +767,11 @@ const server = new DiscServer({
 
 ### Targeting a Database
 
-Clients specify the target database using one of these methods (in order of precedence):
+Clients specify the target database using one of these methods (in order of precedence):
 
-1. **`X-Database` header** -- set on the HTTP request.
-2. **`?database=` query parameter** -- appended to the request URL.
-3. **Default** -- falls back to `"disc"`.
+1. **`X-Database` header** -- set on the HTTP request.
+2. **`?database=` query parameter** -- appended to the request URL.
+3. **Default** -- falls back to `"disc"`.
 
 ```bash
 # Via header
@@ -786,13 +786,13 @@ curl -d '{"query": "select Event { name }"}' \
 
 ### Database Names
 
-Database names must start with a lowercase letter and contain only lowercase letters, digits, and underscores. Disc prefixes all managed PostgreSQL databases with `disc_` to avoid collisions with system databases.
+Database names must start with a lowercase letter and contain only lowercase letters, digits, and underscores. Disc prefixes all managed PostgreSQL databases with `disc_` to avoid collisions with system databases.
 
 ---
 
 ## Rate Limiting
 
-The server uses a token-bucket rate limiter keyed by client IP address.
+The server uses a token-bucket rate limiter keyed by client IP address.
 
 ### Configuration
 
@@ -812,12 +812,12 @@ const server = new DiscServer({
 
 ### Behavior
 
-- Each client IP gets a token bucket that refills at `rateLimitRpm / 60` tokens per second.
-- The bucket holds at most `rateLimitBurst` tokens. This allows short bursts above the average rate.
-- When a client exhausts its tokens, the server responds with `429 Too Many Requests` and a `Retry-After: 60` header.
-- Idle client buckets are cleaned up after 2 minutes of inactivity.
+- Each client IP gets a token bucket that refills at `rateLimitRpm / 60` tokens per second.
+- The bucket holds at most `rateLimitBurst` tokens. This allows short bursts above the average rate.
+- When a client exhausts its tokens, the server responds with `429 Too Many Requests` and a `Retry-After: 60` header.
+- Idle client buckets are cleaned up after 2 minutes of inactivity.
 
-Rate limiting is applied before any request processing, including before incrementing request counters or creating connection/session objects.
+Rate limiting is applied before any request processing, including before incrementing request counters or creating connection/session objects.
 
 ---
 
@@ -825,7 +825,7 @@ Rate limiting is applied before any request processing, including before increme
 
 ### Configuration
 
-Provide certificate and key file paths to enable HTTPS:
+Provide certificate and key file paths to enable HTTPS:
 
 ```bash
 DISC_TLS_CERT=/path/to/cert.pem
@@ -867,25 +867,25 @@ const server = new DiscServer({
 });
 ```
 
-When redirect is enabled, the server starts a second HTTP listener on `redirectPort` that responds to all requests with a `301 Moved Permanently` redirect to the HTTPS equivalent.
+When redirect is enabled, the server starts a second HTTP listener on `redirectPort` that responds to all requests with a `301 Moved Permanently` redirect to the HTTPS equivalent.
 
 ---
 
 ## Graceful Shutdown
 
-The server handles `SIGTERM` and `SIGINT` signals for graceful shutdown.
+The server handles `SIGTERM` and `SIGINT` signals for graceful shutdown.
 
 ### Shutdown Sequence
 
-1. **Signal received** -- the server sets a shutting-down flag.
-2. **Reject new requests** -- all new incoming requests receive `503 Service Unavailable` with `{"error": "Server is shutting down"}`.
-3. **Drain in-flight requests** -- the server waits for all currently processing requests to complete, up to `shutdownDrainTimeout` milliseconds (default: 30000).
-4. **Stop binary protocol server** -- if running, the binary protocol server is shut down.
-5. **Stop HTTP server** -- the Deno HTTP server is shut down.
-6. **Shut down extensions** -- all registered extensions are shut down.
-7. **Close database registry** -- if multi-database is enabled, all database pools are drained.
-8. **Close protocol handler** -- the main connection pool is drained.
-9. **Close auth database** -- if authentication is enabled, the auth database connection is closed.
+1. **Signal received** -- the server sets a shutting-down flag.
+2. **Reject new requests** -- all new incoming requests receive `503 Service Unavailable` with `{"error": "Server is shutting down"}`.
+3. **Drain in-flight requests** -- the server waits for all currently processing requests to complete, up to `shutdownDrainTimeout` milliseconds (default: 30000).
+4. **Stop binary protocol server** -- if running, the binary protocol server is shut down.
+5. **Stop HTTP server** -- the Deno HTTP server is shut down.
+6. **Shut down extensions** -- all registered extensions are shut down.
+7. **Close database registry** -- if multi-database is enabled, all database pools are drained.
+8. **Close protocol handler** -- the main connection pool is drained.
+9. **Close auth database** -- if authentication is enabled, the auth database connection is closed.
 
 ### Configuration
 
@@ -901,7 +901,7 @@ const server = new DiscServer({
 });
 ```
 
-The `stop()` method is idempotent -- calling it multiple times is safe and only the first call initiates shutdown.
+The `stop()` method is idempotent -- calling it multiple times is safe and only the first call initiates shutdown.
 
 ---
 
@@ -909,23 +909,23 @@ The `stop()` method is idempotent -- calling it multiple times is safe and only 
 
 ### Startup Sequence
 
-When `server.start()` is called, the following steps execute in order:
+When `server.start()` is called, the following steps execute in order:
 
-1. **Initialize protocol handler** -- creates and warms up the PostgreSQL connection pool.
-2. **Initialize database registry** -- if multi-database is enabled, creates the default database pool.
-3. **Initialize authentication** -- if `jwtSecret` is set, creates the auth database, provider, middleware, and route handlers.
-4. **Initialize extensions** -- registered extensions are initialized with access to the schema and config. Extension functions and types are merged into the protocol handler’s schema.
-5. **Start binary protocol server** -- if `binaryPort` is configured, starts the binary protocol listener.
-6. **Start HTTP server** -- begins accepting HTTP and WebSocket connections.
-7. **Register signal handlers** -- `SIGINT` and `SIGTERM` are registered for graceful shutdown.
-8. **Start cleanup intervals** -- background tasks begin:
-   - Idle connection cleanup every 5 minutes.
-   - Expired session cleanup every 10 minutes.
-   - Abandoned transaction cleanup every 2 minutes.
+1. **Initialize protocol handler** -- creates and warms up the PostgreSQL connection pool.
+2. **Initialize database registry** -- if multi-database is enabled, creates the default database pool.
+3. **Initialize authentication** -- if `jwtSecret` is set, creates the auth database, provider, middleware, and route handlers.
+4. **Initialize extensions** -- registered extensions are initialized with access to the schema and config. Extension functions and types are merged into the protocol handler’s schema.
+5. **Start binary protocol server** -- if `binaryPort` is configured, starts the binary protocol listener.
+6. **Start HTTP server** -- begins accepting HTTP and WebSocket connections.
+7. **Register signal handlers** -- `SIGINT` and `SIGTERM` are registered for graceful shutdown.
+8. **Start cleanup intervals** -- background tasks begin:
+   - Idle connection cleanup every 5 minutes.
+   - Expired session cleanup every 10 minutes.
+   - Abandoned transaction cleanup every 2 minutes.
 
 ### Protocol Handlers
 
-The server supports two protocol handler implementations:
+The server supports two protocol handler implementations:
 
 | Handler                       | Flag       | Description                                       |
 | ----------------------------- | ---------- | ------------------------------------------------- |
@@ -934,12 +934,12 @@ The server supports two protocol handler implementations:
 
 The `full` handler provides:
 
-- Real EdgeQL parsing and compilation with error reporting.
-- Parse and compilation caches (configurable size via `cacheMaxSize`).
-- EXPLAIN plan caching (when `enableExplain` is true).
-- Slow query logging (configurable threshold via `slowQueryThresholdMs`).
-- Query timeout enforcement (via `requestTimeout`).
-- Access policy enforcement (when `enableAccessPolicies` is true).
+- Real EdgeQL parsing and compilation with error reporting.
+- Parse and compilation caches (configurable size via `cacheMaxSize`).
+- EXPLAIN plan caching (when `enableExplain` is true).
+- Slow query logging (configurable threshold via `slowQueryThresholdMs`).
+- Query timeout enforcement (via `requestTimeout`).
+- Access policy enforcement (when `enableAccessPolicies` is true).
 
 Set the handler via:
 
@@ -955,15 +955,15 @@ const server = new DiscServer({ protocol: "full" });
 
 ### CORS
 
-CORS is enabled by default. To restrict allowed origins:
+CORS is enabled by default. To restrict allowed origins:
 
 ```bash
 DISC_CORS_ORIGINS="https://app.example.com,https://admin.example.com"
 ```
 
-When CORS is enabled, the server responds to `OPTIONS` preflight requests with appropriate `Access-Control-Allow-*` headers and a `204 No Content` status. The `Access-Control-Max-Age` header is set to 86400 seconds (24 hours).
+When CORS is enabled, the server responds to `OPTIONS` preflight requests with appropriate `Access-Control-Allow-*` headers and a `204 No Content` status. The `Access-Control-Max-Age` header is set to 86400 seconds (24 hours).
 
-To disable CORS entirely:
+To disable CORS entirely:
 
 ```bash
 DISC_ENABLE_CORS=false
@@ -1011,10 +1011,10 @@ From `disc/server/types.ts`:
 
 ## See Also
 
-- [Getting Started](getting-started.md) -- Quick introduction to Disc
-- [Client SDK](client-sdk.md) -- TypeScript SDK for consuming the HTTP API
-- [Auth](auth.md) -- Authentication system details
-- [Access Policies](access-policies.md) -- Object-level access policies
-- [Extensions](extensions.md) -- Extension system architecture
-- [Bundled PostgreSQL](bundled-postgres.md) -- How Disc manages PostgreSQL
-- [Production Deployment](production-deployment.md) -- TLS, monitoring, Docker, and systemd
+- [Getting Started](getting-started.md) -- Quick introduction to Disc
+- [Client SDK](client-sdk.md) -- TypeScript SDK for consuming the HTTP API
+- [Auth](auth.md) -- Authentication system details
+- [Access Policies](access-policies.md) -- Object-level access policies
+- [Extensions](extensions.md) -- Extension system architecture
+- [Bundled PostgreSQL](bundled-postgres.md) -- How Disc manages PostgreSQL
+- [Production Deployment](production-deployment.md) -- TLS, monitoring, Docker, and systemd

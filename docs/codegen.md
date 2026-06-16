@@ -1,10 +1,10 @@
 # Code Generation
 
-Disc generates fully-typed TypeScript code from your EdgeQL schema. Running `disc codegen` reads your `.disc` (or `.gel` / `.esdl`) schema files and produces TypeScript interfaces, insert/update types, enum types, query builder classes, and a typed client -- giving you end-to-end type safety from schema to application code.
+Disc generates fully-typed TypeScript code from your EdgeQL schema. Running `disc codegen` reads your `.disc` (or `.gel` / `.esdl`) schema files and produces TypeScript interfaces, insert/update types, enum types, query builder classes, and a typed client -- giving you end-to-end type safety from schema to application code.
 
 > **Codegen is one of two type-safety paths.** For projects that prefer to skip the build step entirely, the SDK ships a runtime query builder (`createQueryBuilder(client, schema)`) where `defineSchema()` declares types in TypeScript and the same end-to-end inference applies — no generated files, no codegen step in CI. See [Client SDK → Codegen-free query builder](client-sdk.md#codegen-free-query-builder) for the alternative pattern. Both paths use the same underlying `client.query()` runtime; pick whichever fits your build pipeline.
 
-Related documentation: [Schema](schema.md) | [Client SDK](client-sdk.md) | [EdgeQL](edgeql.md)
+Related documentation: [Schema](schema.md) | [Client SDK](client-sdk.md) | [EdgeQL](edgeql.md)
 
 ## Running Codegen
 
@@ -14,7 +14,7 @@ Related documentation: [Schema](schema.md) | [Client SDK](client-sdk.md) | [Edg
 disc codegen
 ```
 
-Reads schema files from `dbschema/` (looks for `.disc` files first, then `.gel`, then `.esdl`), generates TypeScript files, and writes them to `./dbschema/disc-client/` by default. Pass `--output <dir>` to write elsewhere.
+Reads schema files from `dbschema/` (looks for `.disc` files first, then `.gel`, then `.esdl`), generates TypeScript files, and writes them to `./dbschema/disc-client/` by default. Pass `--output <dir>` to write elsewhere.
 
 ### Custom Output Directory
 
@@ -22,7 +22,7 @@ Reads schema files from `dbschema/` (looks for `.disc` files first, then `.gel`,
 disc codegen --output ./src/generated/
 ```
 
-Writes generated files to the specified directory. The directory is created if it does not exist.
+Writes generated files to the specified directory. The directory is created if it does not exist.
 
 ### Programmatic Usage
 
@@ -49,7 +49,7 @@ if (result.errors.length > 0) {
 
 ## Generated File Structure
 
-Codegen produces four files:
+Codegen produces four files plus an embedded SDK directory:
 
 ```
 dbschema/disc-client/
@@ -57,11 +57,13 @@ dbschema/disc-client/
   index.ts     # Barrel file re-exporting everything
   queries.ts   # Query builder classes (one per object type)
   types.ts     # Type interfaces, enums, insert/update/filter types, utility types
+  sdk/         # Materialized SDK copy; client.ts and queries.ts import compileFilter,
+               # FilterArg, and TypeInfo from ./sdk/mod.ts
 ```
 
-In multi-module schemas (schemas with more than one `module`), the types file is named `interfaces.ts` instead of `types.ts` and uses TypeScript namespaces to separate modules.
+In multi-module schemas (schemas with more than one `module`), the types file is named `interfaces.ts` instead of `types.ts` and uses TypeScript namespaces to separate modules.
 
-All generated files include a header comment:
+All generated files include a header comment:
 
 ```typescript
 /**
@@ -75,7 +77,7 @@ All generated files include a header comment:
 
 ## Type Interfaces
 
-Each object type in your schema becomes a TypeScript interface. Each property and link is mapped to the appropriate TypeScript type.
+Each object type in your schema becomes a TypeScript interface. Each property and link is mapped to the appropriate TypeScript type.
 
 ### Schema Example
 
@@ -145,14 +147,14 @@ export interface User {
 
 Key rules:
 
-- The `id` property is always present (auto-generated UUID).
-- Required properties have no `?` suffix. Optional properties have `?` and include `| null`.
-- Links use the target type’s interface name directly. Multi-links use an array type.
-- Inherited types use `extends` in the interface declaration.
+- The `id` property is always present (auto-generated UUID).
+- Required properties have no `?` suffix. Optional properties have `?` and include `| null`.
+- Links use the target type’s interface name directly. Multi-links use an array type.
+- Inherited types use `extends` in the interface declaration.
 
 ## Property Type Mappings
 
-EdgeQL types are mapped to TypeScript types as follows:
+EdgeQL types are mapped to TypeScript types as follows:
 
 | EdgeQL Type              | TypeScript Type | Nullable Type        | Array Type     |
 | ------------------------ | --------------- | -------------------- | -------------- |
@@ -175,13 +177,13 @@ EdgeQL types are mapped to TypeScript types as follows:
 | `str`                    | `string`        | `string \| null`     | `string[]`     |
 | `uuid`                   | `string`        | `string \| null`     | `string[]`     |
 
-SQL type names (`text`, `integer`, `boolean`, `timestamptz`, etc.) are also recognized for backward compatibility and mapped through to their EdgeQL equivalents.
+SQL type names (`text`, `integer`, `boolean`, `timestamptz`, etc.) are also recognized for backward compatibility and mapped through to their EdgeQL equivalents.
 
-Object types that do not match any built-in mapping are used as-is (e.g., a link to `User` produces the TypeScript type `User`).
+Object types that do not match any built-in mapping are used as-is (e.g., a link to `User` produces the TypeScript type `User`).
 
 ## Insert Types
 
-Insert types are smart subsets of the full interface, designed for creating new objects. They exclude properties that should not or cannot be set during insertion.
+Insert types are smart subsets of the full interface, designed for creating new objects. They exclude properties that should not or cannot be set during insertion.
 
 ### Exclusion Rules
 
@@ -191,7 +193,7 @@ Insert types are smart subsets of the full interface, designed for creating new 
 | Property is computed                       | Virtual property evaluated at query time, not stored.     |
 | Property is `readonly` AND has a `default` | Server sets the value automatically (e.g., `created_at`). |
 
-Properties with defaults are optional in the insert type even if they are `required` in the schema, because the server will fill in the default.
+Properties with defaults are optional in the insert type even if they are `required` in the schema, because the server will fill in the default.
 
 ### Example
 
@@ -207,11 +209,11 @@ export interface UserInsert {
 }
 ```
 
-Note that `id` is excluded (auto-generated), `created_at` is excluded (readonly + has default), and `posts` is a link (not a property).
+Note that `id` is excluded (auto-generated), `created_at` is excluded (readonly + has default), and `posts` is a link (not a property).
 
 ## Update Types
 
-Update types exclude properties that cannot be modified after creation. All remaining properties are optional since you typically update only a subset of fields.
+Update types exclude properties that cannot be modified after creation. All remaining properties are optional since you typically update only a subset of fields.
 
 ### Exclusion Rules
 
@@ -233,11 +235,11 @@ export interface UserUpdate {
 }
 ```
 
-Note that `created_at` is excluded because it is `readonly`, regardless of whether it has a default.
+Note that `created_at` is excluded because it is `readonly`, regardless of whether it has a default.
 
 ## Enum Types
 
-SDL scalar enum types are generated as TypeScript union types:
+SDL scalar enum types are generated as TypeScript union types:
 
 ### Schema
 
@@ -256,11 +258,11 @@ module default {
 export type Status = "Active" | "Inactive" | "Pending";
 ```
 
-Enum types do not generate Insert, Update, or FilterVars interfaces, and they do not produce query builders.
+Enum types do not generate Insert, Update, or FilterVars interfaces, and they do not produce query builders.
 
 ## Query Builders
 
-For each object type, codegen generates a query builder class with typed methods for common operations. Query builders are written to `queries.ts`.
+For each object type, codegen generates a query builder class with typed methods for common operations. Query builders are written to `queries.ts`.
 
 ### Generated Class
 
@@ -296,15 +298,22 @@ export class UserQueryBuilder {
   }
 
   /** Filter User objects */
-  async filter(
-    condition: string,
-    variables?: Types.UserFilterVars,
-    shape?: string
-  ): Promise<Types.User[]> {
-    const query = shape ?
-      `select User ${shape} filter ${condition}` :
-      `select User { * } filter ${condition}`;
-    return await this.client.query<Types.User[]>(query, variables);
+  async filter(filter: FilterArg<Types.UserFilter>): Promise<Types.User[]> {
+    const compiled = compileFilter("User", filter, UserQueryBuilder._typeInfo);
+    const shape = compiled.selectShape ?? "{ * }";
+    const parts: string[] = [`select User ${shape}`];
+    if (compiled.clause)
+      parts.push(`filter ${compiled.clause}`);
+    if (compiled.orderBy)
+      parts.push(compiled.orderBy);
+    if (compiled.limit !== null)
+      parts.push(`limit ${compiled.limit}`);
+    if (compiled.offset !== null)
+      parts.push(`offset ${compiled.offset}`);
+    return await this.client.query<Types.User[]>(
+      parts.join(" "),
+      compiled.variables
+    );
   }
 
   /** Insert new User */
@@ -352,7 +361,7 @@ export class UserQueryBuilder {
 
 ### Custom Shapes
 
-The `select`, `selectById`, and `filter` methods accept an optional `shape` parameter to control which fields are returned:
+The `select` and `selectById` methods accept an optional `shape` parameter to control which fields are returned (`filter` instead takes a `select` key in its filter object — see the [Filter API](filter-api.md)):
 
 ```typescript
 // Select only email and name
@@ -369,11 +378,11 @@ const user = await client.user.selectById(
 );
 ```
 
-When no shape is provided, `{ * }` is used to select all scalar properties.
+When no shape is provided, `{ * }` is used to select all scalar properties.
 
 ## Filter Variable Types
 
-FilterVars interfaces provide typed parameters for filter and count operations. All fields are optional, and an index signature allows additional arbitrary parameters.
+FilterVars interfaces provide typed parameters for `count` operations. All fields are optional, and an index signature allows additional arbitrary parameters.
 
 ```typescript
 export interface UserFilterVars {
@@ -391,10 +400,10 @@ export interface UserFilterVars {
 Usage:
 
 ```typescript
-const activeUsers = await client.user.filter(
-  ".active = <bool>$active AND .age > <int32>$minAge",
-  { active: true, minAge: 18 }
-);
+const activeUsers = await client.user.filter({
+  active: true,
+  age: { gt: 18 }
+});
 
 const count = await client.user.count(
   ".email LIKE <str>$pattern",
@@ -404,7 +413,7 @@ const count = await client.user.count(
 
 ## JSDoc Annotations
 
-The generator produces JSDoc comments on properties that carry constraints, readonly flags, or defaults from the schema. These appear in IDE tooltips and documentation tools.
+The generator produces JSDoc comments on properties that carry constraints, readonly flags, or defaults from the schema. These appear in IDE tooltips and documentation tools.
 
 ### Tags
 
@@ -431,7 +440,7 @@ email: string;
 
 ## Type Cast Support
 
-Query builders include a static `_typeCasts` map that maps property names to their EdgeQL type cast syntax. This ensures that insert and update operations use the correct EdgeQL type for each parameter.
+Query builders include a static `_typeCasts` map that maps property names to their EdgeQL type cast syntax. This ensures that insert and update operations use the correct EdgeQL type for each parameter.
 
 ```typescript
 private static _typeCasts: Record<string, string> = {
@@ -443,7 +452,7 @@ private static _typeCasts: Record<string, string> = {
 };
 ```
 
-The cast map is built from the `edgeqlType` field on each property definition. If `edgeqlType` is not available (older schemas), the raw `type` field is used. The full cast mapping covers all EdgeQL scalar types:
+The cast map is built from the `edgeqlType` field on each property definition. If `edgeqlType` is not available (older schemas), the raw `type` field is used. The full cast mapping covers all EdgeQL scalar types:
 
 | EdgeQL Type           | Cast Syntax             |
 | --------------------- | ----------------------- |
@@ -462,14 +471,14 @@ The cast map is built from the `edgeqlType` field on each property definition. I
 | `str`                 | `<str>`                 |
 | `uuid`                | `<uuid>`                |
 
-Unknown types fall back to `<typeName>` (wrapping the type name in angle brackets).
+Unknown types fall back to `<typeName>` (wrapping the type name in angle brackets).
 
 ## Typed Client
 
-The generated `client.ts` extends the SDK’s `DiscClient` base class and attaches query builder instances as properties:
+The generated `client.ts` extends the SDK’s `DiscClient` base class and attaches query builder instances as properties:
 
 ```typescript
-import { DiscClient as BaseClient, type DiscClientConfig } from "../sdk/mod.ts";
+import { DiscClient as BaseClient, type DiscClientConfig } from "./sdk/mod.ts";
 import * as Queries from "./queries.ts";
 
 /**
@@ -506,7 +515,7 @@ await client.user.delete(newUser.id);
 
 ## Multi-Module Schemas
 
-When your schema uses multiple modules, codegen generates TypeScript namespaces to preserve module boundaries.
+When your schema uses multiple modules, codegen generates TypeScript namespaces to preserve module boundaries.
 
 ### Schema
 
@@ -591,11 +600,11 @@ export namespace payment {
 }
 ```
 
-Cross-module links resolve to their namespaced type (e.g., `api.ApiKey`, `$default.Merchant`). The `default` module uses the namespace name `$default` because `default` is a reserved word in TypeScript.
+Cross-module links resolve to their namespaced type (e.g., `api.ApiKey`, `$default.Merchant`). The `default` module uses the namespace name `$default` because `default` is a reserved word in TypeScript.
 
 ### Multi-Module Query Builders
 
-Query builders for non-default modules use qualified EdgeQL type names:
+Query builders for non-default modules use qualified EdgeQL type names:
 
 ```typescript
 // For payment::Payment
@@ -647,21 +656,21 @@ const bothConfig = DEFAULT_CONFIGS.both();
 | `server` | Yes      | No         | No        | Yes      |
 | `both`   | Yes      | Yes        | Yes       | Yes      |
 
-The `server` target generates only type definitions, which is useful when you need the types for validation or serialization but do not need query builders.
+The `server` target generates only type definitions, which is useful when you need the types for validation or serialization but do not need query builders.
 
 ## Schema File Discovery
 
-When running `disc codegen`, the generator searches for schema files in this order:
+When running `disc codegen`, the generator searches for schema files in this order:
 
 1. `.disc` files -- Disc-native schema format.
 2. `.gel` files -- Gel-compatible schema format (if no `.disc` files found).
 3. `.esdl` files -- Legacy EdgeDB/Gel format (if no `.gel` files found).
 
-Files are sorted alphabetically within each format. Only one format is used per project (the first one found).
+Files are sorted alphabetically within each format. Only one format is used per project (the first one found).
 
 ## Utility Types
 
-In addition to per-type interfaces, codegen produces utility types used by the query builders:
+In addition to per-type interfaces, codegen produces utility types used by the query builders:
 
 ```typescript
 /** Query result wrapper */
@@ -685,13 +694,13 @@ export interface QueryError {
 
 ## Regenerating After Schema Changes
 
-Run `disc codegen` any time your schema changes. The generated files are fully overwritten on each run. Do not edit them manually -- your changes will be lost.
+Run `disc codegen` any time your schema changes. The generated files are fully overwritten on each run. Do not edit them manually -- your changes will be lost.
 
 A typical workflow:
 
-1. Edit your `.disc` schema file.
-2. Run `disc migrate` to apply the schema change.
-3. Run `disc codegen` to regenerate TypeScript types.
-4. Commit all three: the schema file, migration state, and generated types.
+1. Edit your `.disc` schema file.
+2. Run `disc migrate` to apply the schema change.
+3. Run `disc codegen` to regenerate TypeScript types.
+4. Commit all three: the schema file, migration state, and generated types.
 
-If you use `disc watch` during development, both migrations and codegen can run automatically when schema files change.
+If you use `disc watch` during development, both migrations and codegen can run automatically when schema files change.

@@ -1,6 +1,6 @@
 # Bundled PostgreSQL
 
-Disc downloads and manages PostgreSQL automatically. Users never install, configure, or manage PostgreSQL directly. Running `disc init` triggers the download of a platform-specific PostgreSQL binary, initializes a data directory, and creates a fully managed instance. The bundled PostgreSQL is ready to use immediately with no external dependencies.
+Disc downloads and manages PostgreSQL automatically. Users never install, configure, or manage PostgreSQL directly. Running `disc init` triggers the download of a platform-specific PostgreSQL binary, initializes a data directory, and creates a fully managed instance. The bundled PostgreSQL is ready to use immediately with no external dependencies.
 
 ---
 
@@ -8,14 +8,14 @@ Disc downloads and manages PostgreSQL automatically. Users never install, config
 
 When you run `disc init`, the following happens:
 
-1. **Platform detection.** Disc detects your operating system and CPU architecture (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`).
-2. **Binary download.** A pre-built PostgreSQL binary is downloaded from a trusted source and cached at `~/.disc/postgres/<version>/`. If the binary is already cached, the download is skipped.
-3. **Checksum verification.** The downloaded archive is verified against a SHA-256 checksum before extraction. If the checksum does not match, the download is rejected.
-4. **Archive extraction.** The binary archive is extracted and the directory structure is normalized so that `bin/`, `lib/`, and `share/` are directly under the version directory.
-5. **Instance initialization.** `initdb` creates a new PostgreSQL data directory with UTF-8 encoding, the `disc` superuser, and trust-based local authentication.
-6. **Configuration generation.** A `postgresql.conf` is written with settings tuned for Disc: Unix socket only, no TCP listener, logging collector enabled, and conservative memory defaults.
+1. **Platform detection.** Disc detects your operating system and CPU architecture (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`).
+2. **Binary download.** A pre-built PostgreSQL binary is downloaded from a trusted source and cached at `~/.disc/postgres/<version>/`. If the binary is already cached, the download is skipped.
+3. **Checksum verification.** The downloaded archive is verified against a SHA-256 checksum before extraction. If the checksum does not match, the download is rejected.
+4. **Archive extraction.** The binary archive is extracted and the directory structure is normalized so that `bin/`, `lib/`, and `share/` are directly under the version directory.
+5. **Instance initialization.** `initdb` creates a new PostgreSQL data directory with UTF-8 encoding, the `disc` superuser, and trust-based local authentication.
+6. **Configuration generation.** A `postgresql.conf` is written with settings tuned for Disc: Unix socket only, no TCP listener, logging collector enabled, and conservative memory defaults.
 
-Subsequent runs of `disc start` reuse the cached binary and existing data directory without repeating the download or initialization steps.
+Subsequent runs of `disc start` reuse the cached binary and existing data directory without repeating the download or initialization steps.
 
 ---
 
@@ -42,23 +42,25 @@ All Disc-managed PostgreSQL data lives under `~/.disc/`:
       share/
 ```
 
-Each project gets its own instance directory under `~/.disc/instances/`. Data directories, logs, and Unix sockets are isolated per project. PostgreSQL binaries are shared across all instances of the same version.
+Each project gets its own instance directory under `~/.disc/instances/`. Data directories, logs, and Unix sockets are isolated per project. PostgreSQL binaries are shared across all instances of the same version.
 
 ---
 
 ## Platform Support
 
-| Platform | Architecture | Source                                |
-| -------- | ------------ | ------------------------------------- |
-| macOS    | arm64        | EDB official binaries                 |
-| macOS    | x64          | EDB official binaries                 |
-| Linux    | x64          | Zonky embedded-postgres-binaries      |
-| Linux    | arm64        | Zonky embedded-postgres-binaries      |
-| Windows  | x64          | Docker fallback (not yet implemented) |
+| Platform | Architecture | Source                           |
+| -------- | ------------ | -------------------------------- |
+| macOS    | arm64        | Zonky embedded-postgres-binaries |
+| macOS    | x64          | Zonky embedded-postgres-binaries |
+| Linux    | x64          | Zonky embedded-postgres-binaries |
+| Linux    | arm64        | Zonky embedded-postgres-binaries |
+| Windows  | x64          | Zonky embedded-postgres-binaries |
+
+All platforms are sourced from [Zonky](https://github.com/zonkyio/embedded-postgres-binaries)'s `embedded-postgres-binaries` artifacts on Maven Central — one JAR per platform, each wrapping a `postgres-<platform>.txz`. On Windows, the download source is the same, but the bundled-PostgreSQL runtime lifecycle is not yet validated; `--backend-dsn` (external PostgreSQL) is the supported path on Windows for now.
 
 Supported PostgreSQL versions: **16.4**, **17.0**, **18.4** (default).
 
-The platform is detected automatically from `Deno.build.os` and `Deno.build.arch`. If Disc does not recognize your platform, it will report an error with the detected OS and architecture.
+The platform is detected automatically from `Deno.build.os` and `Deno.build.arch`. If Disc does not recognize your platform, it will report an error with the detected OS and architecture.
 
 ---
 
@@ -66,7 +68,7 @@ The platform is detected automatically from `Deno.build.os` and `Deno.build.arch
 
 ### Starting
 
-Start the bundled PostgreSQL and the Disc server together:
+Start the bundled PostgreSQL and the Disc server together:
 
 ```bash
 disc start
@@ -78,33 +80,33 @@ Most commands (`serve`, `migrate`, `shell`, `start`) auto-start PostgreSQL when 
 
 ### Stopping
 
-Stop the Disc server and PostgreSQL:
+Stop the Disc server and PostgreSQL:
 
 ```bash
 disc stop
 ```
 
-PostgreSQL is stopped with `pg_ctl stop -m fast`, which rolls back any in-progress transactions and shuts down cleanly. If a clean shutdown fails, Disc sends `SIGTERM` and waits 5 seconds. If the process is still alive, `SIGKILL` is used as a last resort.
+PostgreSQL is stopped with `pg_ctl stop -m fast`, which rolls back any in-progress transactions and shuts down cleanly. If a clean shutdown fails, Disc sends `SIGTERM` and waits 5 seconds. If the process is still alive, `SIGKILL` is used as a last resort.
 
 ### Status
 
-Check whether the server and PostgreSQL are running:
+Check whether the server and PostgreSQL are running:
 
 ```bash
 disc status
 ```
 
-This reports the running state, PID, data directory, socket path, port, PostgreSQL version, and health monitor status.
+This reports the running state, PID, data directory, socket path, port, PostgreSQL version, and health monitor status.
 
 ### Restarting
 
-Restart PostgreSQL without restarting the full Disc server:
+Restart PostgreSQL without restarting the full Disc server:
 
 ```bash
 disc stop && disc start
 ```
 
-The `PostgresInstance.restart()` method performs a stop followed by a start internally.
+The `PostgresInstance.restart()` method performs a stop followed by a start internally.
 
 ---
 
@@ -116,7 +118,7 @@ View PostgreSQL logs:
 disc pg log
 ```
 
-Follow log output in real time:
+Follow log output in real time:
 
 ```bash
 disc pg log --follow
@@ -134,27 +136,27 @@ Filter by log level:
 disc pg log --level error
 ```
 
-Logs are stored at `~/.disc/instances/<name>/logs/postgresql.log`. The logging collector is enabled by default with daily rotation and a 100 MB size limit. Log files follow the naming pattern `postgresql-YYYY-MM-DD_HHMMSS.log`.
+Logs are stored at `~/.disc/instances/<name>/logs/postgresql.log`. The logging collector is enabled by default with daily rotation and a 100 MB size limit. Log files follow the naming pattern `postgresql-YYYY-MM-DD_HHMMSS.log`.
 
-The log line prefix includes the timestamp, process ID, user, and database:
+The log line prefix includes the timestamp, process ID, user, and database:
 
 ```
 2026-03-20 14:30:15 UTC [12345] disc@my-project LOG:  statement: SELECT 1
 ```
 
-Slow queries exceeding 100 ms are logged automatically via `log_min_duration_statement`.
+Slow queries exceeding 100 ms are logged automatically via `log_min_duration_statement`.
 
 ---
 
 ## Upgrading PostgreSQL
 
-Upgrade the bundled PostgreSQL to a newer version:
+Upgrade the bundled PostgreSQL to a newer version:
 
 ```bash
 disc pg upgrade --target-version 17
 ```
 
-Preview what would happen without making changes:
+Preview what would happen without making changes:
 
 ```bash
 disc pg upgrade --target-version 17 --dry-run
@@ -162,14 +164,14 @@ disc pg upgrade --target-version 17 --dry-run
 
 The upgrade process:
 
-1. Downloads the target PostgreSQL version if not already cached.
+1. Downloads the target PostgreSQL version if not already cached.
 2. Stops the running instance.
-3. Creates a backup of the current data directory.
-4. Runs the migration from the old version to the new version.
+3. Creates a backup of the current data directory.
+4. Runs the migration from the old version to the new version.
 5. Starts the instance with the new binary.
-6. If any step fails, rolls back to the previous version and restarts.
+6. If any step fails, rolls back to the previous version and restarts.
 
-The old PostgreSQL binary remains cached at `~/.disc/postgres/<old-version>/` and is not deleted, so rollback is always possible.
+The old PostgreSQL binary remains cached at `~/.disc/postgres/<old-version>/` and is not deleted, so rollback is always possible.
 
 > **Status:** the full `pg_dump`/`pg_restore` upgrade pipeline isn’t implemented yet — `upgradeInstance` currently throws an error indicating the feature is in development. The CLI surface and the flow described above are the intended behavior. The command is gated until the pipeline ships, so running it on a real instance is safe (it errors out before touching anything).
 
@@ -179,7 +181,7 @@ The old PostgreSQL binary remains cached at `~/.disc/postgres/<old-version>/` an
 
 ### postgresql.conf
 
-Disc generates a `postgresql.conf` tuned for local development. The configuration is written to the data directory during `disc init` and can be edited manually afterward.
+Disc generates a `postgresql.conf` tuned for local development. The configuration is written to the data directory during `disc init` and can be edited manually afterward.
 
 Default settings:
 
@@ -220,7 +222,7 @@ timezone = "UTC"
 
 ### Memory Tuning
 
-Disc can auto-tune memory settings based on available system memory:
+Disc can auto-tune memory settings based on available system memory:
 
 ```typescript
 import { PostgresConfig } from "disc/postgres/mod.ts";
@@ -234,33 +236,33 @@ const tuned = config.tuneForMemory(4096); // 4 GB of RAM
 // }
 ```
 
-For systems with less than 1 GB of RAM, `maxConnections` is automatically reduced to 50.
+For systems with less than 1 GB of RAM, `maxConnections` is automatically reduced to 50.
 
 ### Connection Limits
 
-Adjust the connection limit in `disc.toml` or by editing `postgresql.conf` directly:
+Adjust the connection limit in `disc.toml` or by editing `postgresql.conf` directly:
 
 ```
 max_connections = 200
 ```
 
-Three connections are always reserved for superuser access (`superuser_reserved_connections = 3`).
+Three connections are always reserved for superuser access (`superuser_reserved_connections = 3`).
 
 ### Socket Configuration
 
-By default, PostgreSQL listens only on a Unix domain socket. The socket file is created at:
+By default, PostgreSQL listens only on a Unix domain socket. The socket file is created at:
 
 ```
 ~/.disc/instances/<name>/socket/.s.PGSQL.5432
 ```
 
-The connection DSN for socket-based connections:
+The connection DSN for socket-based connections:
 
 ```
 postgresql://disc@/<instance-name>?host=/path/to/socket
 ```
 
-No TCP port is exposed unless you explicitly set a port:
+No TCP port is exposed unless you explicitly set a port:
 
 ```typescript
 const instance = new PostgresInstance({
@@ -270,13 +272,13 @@ const instance = new PostgresInstance({
 });
 ```
 
-When a non-zero port is set, PostgreSQL listens on both the TCP port and the Unix socket.
+When a non-zero port is set, PostgreSQL listens on both the TCP port and the Unix socket.
 
 ---
 
 ## External PostgreSQL
 
-For production deployments or environments where you manage your own PostgreSQL, use the `--backend-dsn` escape hatch:
+For production deployments or environments where you manage your own PostgreSQL, use the `--backend-dsn` escape hatch:
 
 ```bash
 disc init my-app --backend-dsn "postgres://user:pass@host:5432/disc"
@@ -284,13 +286,13 @@ disc init my-app --backend-dsn "postgres://user:pass@host:5432/disc"
 
 When `--backend-dsn` is provided:
 
-- Disc skips the PostgreSQL binary download entirely.
-- No local data directory or socket is created.
-- Disc connects to the external PostgreSQL using the provided DSN.
-- The user is responsible for managing that PostgreSQL server (backups, upgrades, monitoring).
-- Disc still manages its own internal schema tables (`disc_migrations`, `disc_schema`, etc.) within the target database.
+- Disc skips the PostgreSQL binary download entirely.
+- No local data directory or socket is created.
+- Disc connects to the external PostgreSQL using the provided DSN.
+- The user is responsible for managing that PostgreSQL server (backups, upgrades, monitoring).
+- Disc still manages its own internal schema tables (`disc_migrations`, `disc_schema`, etc.) within the target database.
 
-You can also point to an existing PostgreSQL binary directory instead of downloading:
+You can also point to an existing PostgreSQL binary directory instead of downloading:
 
 ```typescript
 const instance = new PostgresInstance({
@@ -300,7 +302,7 @@ const instance = new PostgresInstance({
 });
 ```
 
-When `pgBinDir` is set, the download step is skipped and Disc uses the binaries at the specified path.
+When `pgBinDir` is set, the download step is skipped and Disc uses the binaries at the specified path.
 
 ### TLS to PostgreSQL (`?sslmode=...`)
 
@@ -324,23 +326,23 @@ Unix-socket DSNs ignore `sslmode` — sockets don’t carry TLS. Unknown values 
 
 ## Health Monitoring
 
-The `PostgresMonitor` runs periodic health checks against the PostgreSQL instance.
+The `PostgresMonitor` runs periodic health checks against the PostgreSQL instance.
 
 ### Default Behavior
 
 - Health checks run every **30 seconds**.
-- Each check connects to PostgreSQL, runs a lightweight query to measure latency, and reports the number of active connections, uptime, and version string.
-- On a successful check, the restart attempt counter resets to zero.
+- Each check connects to PostgreSQL, runs a lightweight query to measure latency, and reports the number of active connections, uptime, and version string.
+- On a successful check, the restart attempt counter resets to zero.
 
 ### Auto-Restart
 
-When a health check fails (connection refused, query timeout, or process not running):
+When a health check fails (connection refused, query timeout, or process not running):
 
-1. Disc waits **5 seconds** before attempting a restart.
-2. The instance is restarted via `pg_ctl stop` followed by `pg_ctl start`.
-3. If the restart succeeds, monitoring continues normally.
-4. If the restart fails, the attempt counter increments.
-5. After **3 consecutive failures**, monitoring stops and an error is logged:
+1. Disc waits **5 seconds** before attempting a restart.
+2. The instance is restarted via `pg_ctl stop` followed by `pg_ctl start`.
+3. If the restart succeeds, monitoring continues normally.
+4. If the restart fails, the attempt counter increments.
+5. After **3 consecutive failures**, monitoring stops and an error is logged:
    ```
    PostgreSQL failed after 3 restart attempts. Manual intervention required.
    ```
@@ -380,7 +382,7 @@ monitor.isHealthy(); // true
 
 ### Detailed Metrics
 
-The monitor can also collect detailed database metrics:
+The monitor can also collect detailed database metrics:
 
 ```typescript
 const metrics = await monitor.getMetrics();
@@ -393,26 +395,26 @@ const metrics = await monitor.getMetrics();
 
 ### Maintenance
 
-Run ANALYZE and VACUUM on all tables:
+Run ANALYZE and VACUUM on all tables:
 
 ```typescript
 await monitor.performMaintenance();
 ```
 
-This updates table statistics and reclaims storage from dead rows. It is safe to run during normal operation but may cause a brief increase in I/O.
+This updates table statistics and reclaims storage from dead rows. It is safe to run during normal operation but may cause a brief increase in I/O.
 
 ---
 
 ## Multiple Instances
 
-Disc supports multiple project instances running simultaneously. Each instance has its own data directory, log directory, and Unix socket:
+Disc supports multiple project instances running simultaneously. Each instance has its own data directory, log directory, and Unix socket:
 
 ```bash
 disc init project-a
 disc init project-b
 ```
 
-The `PostgresManager` tracks all known instances:
+The `PostgresManager` tracks all known instances:
 
 ```typescript
 import { PostgresManager } from "disc/postgres/mod.ts";
@@ -432,17 +434,17 @@ await manager.startInstance("project-a");
 const status = await manager.getInstanceStatus("project-a");
 ```
 
-Instances are independent. Starting, stopping, or destroying one instance does not affect others.
+Instances are independent. Starting, stopping, or destroying one instance does not affect others.
 
 ### Backup and Restore
 
-Back up an instance to a `tar.gz` archive:
+Back up an instance to a `tar.gz` archive:
 
 ```typescript
 await manager.backupInstance("my-project", "/backups/my-project.tar.gz");
 ```
 
-The backup process stops PostgreSQL for a consistent snapshot, creates the archive, and restarts PostgreSQL. If the instance was not running before the backup, it remains stopped afterward.
+The backup process stops PostgreSQL for a consistent snapshot, creates the archive, and restarts PostgreSQL. If the instance was not running before the backup, it remains stopped afterward.
 
 Restore from a backup:
 
@@ -450,17 +452,17 @@ Restore from a backup:
 await manager.restoreInstance("restored-project", "/backups/my-project.tar.gz");
 ```
 
-This creates a new instance with the restored data. The instance name must not already exist.
+This creates a new instance with the restored data. The instance name must not already exist.
 
 ### Destroying Instances
 
-Remove an instance from the manager without deleting data:
+Remove an instance from the manager without deleting data:
 
 ```typescript
 await manager.destroyInstance("my-project");
 ```
 
-Remove an instance and delete all data:
+Remove an instance and delete all data:
 
 ```typescript
 await manager.destroyInstance("my-project", true);
@@ -472,29 +474,29 @@ await manager.destroyInstance("my-project", true);
 
 ### Socket-Only by Default
 
-PostgreSQL listens exclusively on a Unix domain socket. No TCP port is exposed unless explicitly configured. This means:
+PostgreSQL listens exclusively on a Unix domain socket. No TCP port is exposed unless explicitly configured. This means:
 
-- No remote network access to PostgreSQL is possible by default.
-- No firewall rules are needed for the database port.
-- Connections are limited to processes on the local machine with filesystem access to the socket directory.
+- No remote network access to PostgreSQL is possible by default.
+- No firewall rules are needed for the database port.
+- Connections are limited to processes on the local machine with filesystem access to the socket directory.
 
 ### Authentication
 
-Local connections use `trust` authentication by default, which is appropriate for development. The `pg_hba.conf` generated by Disc allows:
+Local connections use `trust` authentication by default, which is appropriate for development. The `pg_hba.conf` generated by Disc allows:
 
-- Local Unix socket connections from all users.
-- IPv4 connections from `127.0.0.1/32` (localhost only).
-- IPv6 connections from `::1/128` (localhost only).
+- Local Unix socket connections from all users.
+- IPv4 connections from `127.0.0.1/32` (localhost only).
+- IPv6 connections from `::1/128` (localhost only).
 
-For production use with an external PostgreSQL, configure your server’s `pg_hba.conf` with appropriate authentication methods (e.g., `scram-sha-256`).
+For production use with an external PostgreSQL, configure your server’s `pg_hba.conf` with appropriate authentication methods (e.g., `scram-sha-256`).
 
 ### Checksummed Downloads
 
-All PostgreSQL binary downloads are verified against SHA-256 checksums before extraction. If a checksum does not match, the download is rejected and the archive is deleted. This prevents tampered binaries from being installed.
+All PostgreSQL binary downloads are verified against SHA-256 checksums before extraction. If a checksum does not match, the download is rejected and the archive is deleted. This prevents tampered binaries from being installed.
 
 ### File Permissions
 
-Extracted PostgreSQL binaries are set to mode `0755` (owner read/write/execute, group and others read/execute). The data directory is owned by the current user and is not world-readable by default.
+Extracted PostgreSQL binaries are set to mode `0755` (owner read/write/execute, group and others read/execute). The data directory is owned by the current user and is not world-readable by default.
 
 ---
 
@@ -527,19 +529,19 @@ disc pg log --lines 20
 
 Common causes:
 
-- **Stale PID file.** If PostgreSQL was killed without a clean shutdown, a stale `postmaster.pid` file may remain. Disc detects and cleans up stale PID files automatically.
-- **Port conflict.** If using TCP mode, ensure the port is not already in use.
-- **Corrupted data directory.** If the data directory is corrupted, restore from a backup or reinitialize with `disc init`.
+- **Stale PID file.** If PostgreSQL was killed without a clean shutdown, a stale `postmaster.pid` file may remain. Disc detects and cleans up stale PID files automatically.
+- **Port conflict.** If using TCP mode, ensure the port is not already in use.
+- **Corrupted data directory.** If the data directory is corrupted, restore from a backup or reinitialize with `disc init`.
 
 ### Health monitor stops
 
-After 3 consecutive failed restart attempts, the monitor stops and logs:
+After 3 consecutive failed restart attempts, the monitor stops and logs:
 
 ```
 PostgreSQL failed after 3 restart attempts. Manual intervention required.
 ```
 
-Investigate the cause in the PostgreSQL logs, fix the issue, and restart manually:
+Investigate the cause in the PostgreSQL logs, fix the issue, and restart manually:
 
 ```bash
 disc stop && disc start
@@ -547,7 +549,7 @@ disc stop && disc start
 
 ### Binary download fails
 
-If the download URL is unreachable or the checksum does not match, Disc reports the error and exits. Check your network connection and try again. The cached binary at `~/.disc/postgres/<version>/` can be deleted to force a fresh download:
+If the download URL is unreachable or the checksum does not match, Disc reports the error and exits. Check your network connection and try again. The cached binary at `~/.disc/postgres/<version>/` can be deleted to force a fresh download:
 
 ```bash
 rm -rf ~/.disc/postgres/18.4

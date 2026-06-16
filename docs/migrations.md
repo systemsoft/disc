@@ -1,24 +1,24 @@
 # Migrations
 
-Disc uses a declarative, schema-first migration system. You write your schema in SDL (`.disc`, `.gel`, or `.esdl` files), and Disc automatically generates the DDL statements needed to bring your PostgreSQL database in sync. Every migration is tracked in a `disc_migrations` table, and rollback SQL is stored alongside each migration for safe reversal.
+Disc uses a declarative, schema-first migration system. You write your schema in SDL (`.disc`, `.gel`, or `.esdl` files), and Disc automatically generates the DDL statements needed to bring your PostgreSQL database in sync. Every migration is tracked in a `disc_migrations` table, and rollback SQL is stored alongside each migration for safe reversal.
 
-Related documentation: [Schema](schema.md) | [CLI](cli.md) | [Bundled PostgreSQL](bundled-postgres.md)
+Related documentation: [Schema](schema.md) | [CLI](cli.md) | [Bundled PostgreSQL](bundled-postgres.md)
 
 ## How Migrations Work
 
-The migration pipeline has four stages:
+The migration pipeline has four stages:
 
 ```
 SDL Source  -->  Parse  -->  Diff  -->  DDL  -->  Execute
 (.disc)        (AST)     (Operations)  (SQL)   (PostgreSQL)
 ```
 
-1. **Parse** -- The SDL parser reads your schema files and produces an AST (`Module[]`).
-2. **Diff** -- The `SchemaDiffer` compares the new AST against the previously applied schema and produces a list of `MigrationOperation` objects describing what changed.
-3. **Generate DDL** -- The `DDLGenerator` converts each operation into PostgreSQL DDL statements (`CREATE TABLE`, `ALTER TABLE`, etc.).
-4. **Execute** -- The `MigrationEngine` runs the DDL inside a PostgreSQL transaction. If any statement fails, the entire migration is rolled back. On success, the migration is recorded in the `disc_migrations` table with its rollback SQL.
+1. **Parse** -- The SDL parser reads your schema files and produces an AST (`Module[]`).
+2. **Diff** -- The `SchemaDiffer` compares the new AST against the previously applied schema and produces a list of `MigrationOperation` objects describing what changed.
+3. **Generate DDL** -- The `DDLGenerator` converts each operation into PostgreSQL DDL statements (`CREATE TABLE`, `ALTER TABLE`, etc.).
+4. **Execute** -- The `MigrationEngine` runs the DDL inside a PostgreSQL transaction. If any statement fails, the entire migration is rolled back. On success, the migration is recorded in the `disc_migrations` table with its rollback SQL.
 
-Each migration gets an auto-generated ID following the format `m<timestamp>_<random>`, for example `m20240115T103000_abc123`. The timestamp comes from `new Date().toISOString()` with separators stripped, and the random suffix is a 6-character base-36 string.
+Each migration gets an auto-generated ID following the format `m<timestamp>_<random>`, for example `m20240115T103000_abc123`. The timestamp comes from `new Date().toISOString()` with separators stripped, and the random suffix is a 6-character base-36 string.
 
 ## Basic Workflow
 
@@ -35,16 +35,16 @@ Each migration gets an auto-generated ID following the format `m<timestamp>_<ran
 > any file. Use it like `--dry-run` to see the impact of your changes
 > before applying.
 
-The typical development cycle is:
+The typical development cycle is:
 
-1. Edit your `.disc` schema file.
-2. Run `disc migrate` to generate and apply the migration.
-3. Review the output to confirm what was created, altered, or dropped.
-4. Commit both the schema file and the migration history to version control.
+1. Edit your `.disc` schema file.
+2. Run `disc migrate` to generate and apply the migration.
+3. Review the output to confirm what was created, altered, or dropped.
+4. Commit both the schema file and the migration history to version control.
 
 ### Example
 
-Start with a schema file at `dbschema/default.disc`:
+Start with a schema file at `dbschema/default.disc`:
 
 ```
 module default {
@@ -115,7 +115,7 @@ module default {
 };
 ```
 
-Run `disc migrate` again. Disc detects the diff and generates the DDL for the new `Post` table, the `author` foreign key, and the `user_posts` junction table.
+Run `disc migrate` again. Disc detects the diff and generates the DDL for the new `Post` table, the `author` foreign key, and the `user_posts` junction table.
 
 ## Creating Migrations
 
@@ -125,7 +125,7 @@ Run `disc migrate` again. Disc detects the diff and generates the DDL for the ne
 disc migrate
 ```
 
-Parses the schema, diffs against the current state, generates DDL, and executes it. This is the default behavior.
+Parses the schema, diffs against the current state, generates DDL, and executes it. This is the default behavior.
 
 ### Generate Without Applying
 
@@ -133,7 +133,7 @@ Parses the schema, diffs against the current state, generates DDL, and executes 
 disc migrate --create
 ```
 
-Generates the migration plan and shows the DDL that would be executed, but does not apply it to the database. Use this to review changes before committing.
+Generates the migration plan and shows the DDL that would be executed, but does not apply it to the database. Use this to review changes before committing.
 
 ### Preview (Dry Run)
 
@@ -141,7 +141,7 @@ Generates the migration plan and shows the DDL that would be executed, but does 
 disc migrate --dry-run
 ```
 
-Runs the full pipeline including execution logging, but no DDL is actually sent to PostgreSQL. The schema state is updated internally so you can see what the next migration would look like, but the database is untouched.
+Runs the full pipeline including execution logging, but no DDL is actually sent to PostgreSQL. The schema state is updated internally so you can see what the next migration would look like, but the database is untouched.
 
 ### Auto-Approve
 
@@ -149,11 +149,11 @@ Runs the full pipeline including execution logging, but no DDL is actually sent 
 disc migrate --auto-approve
 ```
 
-Skips the confirmation prompt and applies the migration immediately. Useful in CI/CD pipelines.
+Skips the confirmation prompt and applies the migration immediately. Useful in CI/CD pipelines.
 
 ## Migration Status
 
-Check the state of your migrations:
+Check the state of your migrations:
 
 ```bash
 disc migrate --status
@@ -170,13 +170,13 @@ Migration Status
 
 This queries the `disc_migrations` table and shows:
 
-- **Applied** -- Total number of migrations that have been applied.
-- **Latest** -- The ID and name of the most recently applied migration.
-- **Schema** -- The schema hash of the current state.
+- **Applied** -- Total number of migrations that have been applied.
+- **Latest** -- The ID and name of the most recently applied migration.
+- **Schema** -- The schema hash of the current state.
 
 ## Rollback
 
-Disc stores rollback SQL for each migration at apply time. You can use this to undo migrations.
+Disc stores rollback SQL for each migration at apply time. You can use this to undo migrations.
 
 ### Rollback the Last Migration
 
@@ -184,7 +184,7 @@ Disc stores rollback SQL for each migration at apply time. You can use this to u
 disc migrate --rollback --force
 ```
 
-Loads the most recently applied migration from the `disc_migrations` table, executes its stored rollback SQL in a transaction, and removes the migration record. The `--force` flag is required because rollbacks are destructive operations.
+Loads the most recently applied migration from the `disc_migrations` table, executes its stored rollback SQL in a transaction, and removes the migration record. The `--force` flag is required because rollbacks are destructive operations.
 
 ### Rollback to a Specific Migration
 
@@ -192,19 +192,19 @@ Loads the most recently applied migration from the `disc_migrations` table, exec
 disc migrate --rollback-to m20240115T103000_abc123 --force
 ```
 
-Rolls back all migrations applied after the specified migration ID, in reverse chronological order (most recent first). The target migration itself is preserved.
+Rolls back all migrations applied after the specified migration ID, in reverse chronological order (most recent first). The target migration itself is preserved.
 
-For example, if you have migrations `m001`, `m002`, `m003` applied and you run `--rollback-to m001`, then `m003` is rolled back first, followed by `m002`. Migration `m001` remains applied.
+For example, if you have migrations `m001`, `m002`, `m003` applied and you run `--rollback-to m001`, then `m003` is rolled back first, followed by `m002`. Migration `m001` remains applied.
 
 ### Rollback Safety
 
-Not all operations can be cleanly rolled back. The migration engine validates rollback safety and warns about operations that may require manual intervention:
+Not all operations can be cleanly rolled back. The migration engine validates rollback safety and warns about operations that may require manual intervention:
 
-- **DropType** -- Rolling back a `DROP TABLE` cannot restore the original data. The table structure is gone.
-- **DropProperty** -- Rolling back a dropped column loses any data that was in that column.
-- **AlterProperty (ChangeType)** -- Type changes may not be reversible if the conversion is lossy.
+- **DropType** -- Rolling back a `DROP TABLE` cannot restore the original data. The table structure is gone.
+- **DropProperty** -- Rolling back a dropped column loses any data that was in that column.
+- **AlterProperty (ChangeType)** -- Type changes may not be reversible if the conversion is lossy.
 
-When the engine cannot generate automatic rollback SQL for an operation, it emits a comment in the rollback SQL:
+When the engine cannot generate automatic rollback SQL for an operation, it emits a comment in the rollback SQL:
 
 ```sql
 -- MANUAL ROLLBACK REQUIRED: Recreate table 'user'
@@ -214,7 +214,7 @@ When the engine cannot generate automatic rollback SQL for an operation, it emit
 
 ### Rollback on Error
 
-When `rollbackOnError` is enabled in the migration configuration (the default), the engine automatically rolls back a failed migration. If the migration DDL fails partway through, the pre-generated rollback SQL is executed to restore the database to its prior state.
+When `rollbackOnError` is enabled in the migration configuration (the default), the engine automatically rolls back a failed migration. If the migration DDL fails partway through, the pre-generated rollback SQL is executed to restore the database to its prior state.
 
 ```typescript
 const engine = new MigrationEngine({
@@ -419,21 +419,21 @@ The full flag set (e.g., `--rollback-to`, `--squash-from`/`--squash-to`, `--unsa
 
 ## Data Migrations
 
-Schema (DDL) migrations handle structural changes -- creating tables, adding columns, changing types. Data migrations handle the content transformations that accompany those structural changes -- backfilling new columns, converting data formats, or splitting tables.
+Schema (DDL) migrations handle structural changes -- creating tables, adding columns, changing types. Data migrations handle the content transformations that accompany those structural changes -- backfilling new columns, converting data formats, or splitting tables.
 
 ### Creating a Data Migration
 
-Data migration files live alongside schema migrations in `dbschema/migrations/` and follow the naming pattern:
+Data migration files live alongside schema migrations in `dbschema/migrations/` and follow the naming pattern:
 
 ```
 m<timestamp>_<name>.data.ts
 ```
 
-The timestamp must match the schema migration it pairs with. When the engine applies a schema migration, it automatically discovers and runs any data migration file with a matching timestamp.
+The timestamp must match the schema migration it pairs with. When the engine applies a schema migration, it automatically discovers and runs any data migration file with a matching timestamp.
 
 ### Data Migration Structure
 
-Each data migration file exports a default object implementing the `DataMigration` interface:
+Each data migration file exports a default object implementing the `DataMigration` interface:
 
 ```typescript
 // dbschema/migrations/m20240601T120000_backfill_roles.data.ts
@@ -461,7 +461,7 @@ export default {
 
 ### DataMigrationContext
 
-The context object passed to `up()` and `down()` provides:
+The context object passed to `up()` and `down()` provides:
 
 | Method                    | Description                                                                |
 | ------------------------- | -------------------------------------------------------------------------- |
@@ -469,18 +469,18 @@ The context object passed to `up()` and `down()` provides:
 | `ctx.log(message)`        | Log a message to the migration output.                                     |
 | `ctx.pool`                | Direct access to the connection pool (for advanced use cases).             |
 
-The `ctx.edgeql()` method is reserved for future use. Currently, data migrations must use raw SQL via `ctx.sql()`.
+The `ctx.edgeql()` method is reserved for future use. Currently, data migrations must use raw SQL via `ctx.sql()`.
 
 ### Data Migration Rules
 
-- Data migration `up()` runs inside the same transaction as the schema migration.
-- If `up()` throws, the entire migration (schema + data) is rolled back.
-- The `down()` function is optional but recommended. Without it, the data migration cannot be rolled back.
-- Data migrations cannot be squashed (see below).
+- Data migration `up()` runs inside the same transaction as the schema migration.
+- If `up()` throws, the entire migration (schema + data) is rolled back.
+- The `down()` function is optional but recommended. Without it, the data migration cannot be rolled back.
+- Data migrations cannot be squashed (see below).
 
 ## Squashing
 
-Over time, a project accumulates many small migrations. Squashing combines multiple sequential migrations into a single consolidated migration.
+Over time, a project accumulates many small migrations. Squashing combines multiple sequential migrations into a single consolidated migration.
 
 ### Squash All Migrations
 
@@ -488,7 +488,7 @@ Over time, a project accumulates many small migrations. Squashing combines multi
 disc migrate --squash
 ```
 
-Combines all applied migrations into one. The resulting migration contains all DDL statements in order, and all rollback statements in reverse order.
+Combines all applied migrations into one. The resulting migration contains all DDL statements in order, and all rollback statements in reverse order.
 
 ### Squash a Range
 
@@ -496,17 +496,17 @@ Combines all applied migrations into one. The resulting migration contains all D
 disc migrate --squash-from m20240101_aaa --squash-to m20240601_zzz
 ```
 
-Combines only the migrations in the specified range (inclusive on both ends). The `--squash-from` migration must precede `--squash-to` in chronological order.
+Combines only the migrations in the specified range (inclusive on both ends). The `--squash-from` migration must precede `--squash-to` in chronological order.
 
 ### Squash Restrictions
 
-- **Data migrations cannot be squashed.** If any migration in the range has an associated data migration, the squash fails with an error listing the affected migration IDs.
-- The squash produces a new migration named `squashed_<first_id>_to_<last_id>`.
-- Forward DDL statements are concatenated in order; rollback statements are concatenated in reverse order.
+- **Data migrations cannot be squashed.** If any migration in the range has an associated data migration, the squash fails with an error listing the affected migration IDs.
+- The squash produces a new migration named `squashed_<first_id>_to_<last_id>`.
+- Forward DDL statements are concatenated in order; rollback statements are concatenated in reverse order.
 
 ## Supported Operations
 
-The schema differ detects the following changes between the old and new schema:
+The schema differ detects the following changes between the old and new schema:
 
 ### Type-Level Operations
 
@@ -550,7 +550,7 @@ The schema differ detects the following changes between the old and new schema:
 | `AddTrigger`  | A new trigger was added. Generates `CREATE FUNCTION` and `CREATE TRIGGER`. |
 | `DropTrigger` | A trigger was removed. Generates `DROP TRIGGER` and `DROP FUNCTION`.       |
 
-Trigger modifications are handled as drop + add (triggers cannot be altered in place in PostgreSQL).
+Trigger modifications are handled as drop + add (triggers cannot be altered in place in PostgreSQL).
 
 ### Rewrite Operations (within AlterType)
 
@@ -559,7 +559,7 @@ Trigger modifications are handled as drop + add (triggers cannot be altered in p
 | `AddRewrite`  | A new rewrite rule was added to a property. Generates a `BEFORE INSERT/UPDATE` trigger that sets the column value. |
 | `DropRewrite` | A rewrite rule was removed. Drops the trigger and function.                                                        |
 
-Rewrite modifications are handled as drop + add.
+Rewrite modifications are handled as drop + add.
 
 ### Alias Operations
 
@@ -568,7 +568,7 @@ Rewrite modifications are handled as drop + add.
 | `CreateAlias` | A new alias (expression alias) was added. Aliases are compile-time only and produce no DDL. |
 | `DropAlias`   | An alias was removed. No DDL produced.                                                      |
 
-Alias modifications are handled as drop + add (aliases are compile-time constructs).
+Alias modifications are handled as drop + add (aliases are compile-time constructs).
 
 ### Global Operations
 
@@ -577,33 +577,44 @@ Alias modifications are handled as drop + add (aliases are compile-time constru
 | `CreateGlobal` | A new global variable was added. Globals are compile-time constructs backed by PostgreSQL session variables. |
 | `DropGlobal`   | A global variable was removed.                                                                               |
 
-Global modifications are handled as drop + add.
+Global modifications are handled as drop + add.
 
 ### Index Operations
+
+The differ compares the index sets on a surviving type and emits standalone index operations:
 
 | Operation     | Description                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `CreateIndex` | A new index was added. Supports btree, hash, gist, gin, and brin methods, plus partial indexes with `WHERE` clauses. |
 | `DropIndex`   | An index was removed.                                                                                                |
 
+- **Added** index → `CreateIndex`, emitting `CREATE INDEX idx_<table>_<col> ON <table> (col);` (with `UNIQUE`, `USING <method>`, and a partial `WHERE` clause added when the index declares them).
+- **Removed** index → `DropIndex`, emitting `DROP INDEX IF EXISTS idx_<table>_<col>;`.
+- **Changed** index (same name, different columns or uniqueness) → a `DropIndex` followed by a `CreateIndex` — the old definition is dropped first so the re-create can't collide with the stale one.
+- **Unchanged** index → no operation.
+
+Indexes are keyed by name plus their ordered column list (and uniqueness), so reordering columns or toggling `unique` counts as a change. All four index operations are classified `safe`.
+
 ## Migration Tracking
 
-Disc persists migration state in two PostgreSQL tables, created automatically when the migration engine initializes.
+Disc persists migration state in two PostgreSQL tables, created automatically when the migration engine initializes.
 
 ### disc_migrations
 
-| Column           | Type                   | Description                                                         |
-| ---------------- | ---------------------- | ------------------------------------------------------------------- |
-| `id`             | `TEXT PRIMARY KEY`     | Migration ID (e.g., `m20240115T103000_abc123`)                      |
-| `name`           | `TEXT NOT NULL`        | Auto-generated name (e.g., `create_user`, `schema_changes_3_types`) |
-| `description`    | `TEXT`                 | Human-readable description of the operations                        |
-| `schema_hash`    | `TEXT NOT NULL`        | Hash of the target schema after this migration                      |
-| `applied_at`     | `TIMESTAMPTZ NOT NULL` | When the migration was applied                                      |
-| `duration_ms`    | `INTEGER NOT NULL`     | Execution time in milliseconds                                      |
-| `rollback_sql`   | `TEXT[]`               | Array of DDL statements to undo this migration                      |
-| `checksum`       | `TEXT NOT NULL`        | Content checksum for integrity verification                         |
-| `created_at`     | `TIMESTAMPTZ NOT NULL` | When the migration was generated                                    |
-| `data_migration` | `BOOLEAN NOT NULL`     | Whether this migration has an associated data migration             |
+| Column           | Type                   | Description                                                                  |
+| ---------------- | ---------------------- | ---------------------------------------------------------------------------- |
+| `id`             | `TEXT PRIMARY KEY`     | Migration ID (e.g., `m20240115T103000_abc123`)                               |
+| `name`           | `TEXT NOT NULL`        | Auto-generated name (e.g., `create_user`, `schema_changes_3_types`)          |
+| `description`    | `TEXT`                 | Human-readable description of the operations                                 |
+| `schema_hash`    | `TEXT NOT NULL`        | Hash of the target schema after this migration                               |
+| `applied_at`     | `TIMESTAMPTZ NOT NULL` | When the migration was applied                                               |
+| `duration_ms`    | `INTEGER NOT NULL`     | Execution time in milliseconds                                               |
+| `rollback_sql`   | `TEXT[]`               | Array of DDL statements to undo this migration                               |
+| `checksum`       | `TEXT NOT NULL`        | Content checksum for integrity verification                                  |
+| `created_at`     | `TIMESTAMPTZ NOT NULL` | When the migration was generated                                             |
+| `data_migration` | `BOOLEAN NOT NULL`     | Whether this migration has an associated data migration                      |
+| `applied_order`  | `INTEGER NOT NULL`     | Monotonic apply order (backfilled from `applied_at` for older instances)     |
+| `schema_modules` | `JSONB`                | Serialized schema modules, used to reconstruct the baseline on the next diff |
 
 ### disc_migration_checkpoints
 
@@ -693,7 +704,7 @@ if (ddl.ok) {
 ```
 
 The `classification` field carries the same `safe | unsafe | ambiguous`
-labels the CLI's gate uses (see [Migration Classification](#migration-classification-safe-unsafe-ambiguous)).
+labels the CLI's gate uses (see [Operation Classification](#operation-classification-safe--unsafe--ambiguous)).
 A programmatic caller can branch on it to either auto-apply, prompt
 the human, or refuse — whatever the surrounding tool needs.
 
@@ -734,7 +745,7 @@ back into `MigrationEngine` to apply.
 import { DDLGenerator } from "disc/migration/ddl.ts";
 
 const ddl = new DDLGenerator();
-const statements = ddl.generate(operations);
+const statements = ddl.generateDDL(operations);
 // string[] — each entry is one DDL statement, ready for `pool.query(stmt)`
 ```
 
@@ -802,7 +813,7 @@ diff was empty, DB rejected a statement) — those all flow through
 
 ### SchemaManager
 
-The primary entry point. Bridges SDL parsing, the query compiler schema, and migration planning/execution.
+The primary entry point. Bridges SDL parsing, the query compiler schema, and migration planning/execution.
 
 ```typescript
 import { ConnectionPool } from "disc/lib/connection-pool.ts";
@@ -900,7 +911,7 @@ if (history.ok) {
 
 ### MigrationEngine
 
-Lower-level API for direct control over planning, execution, and rollback.
+Lower-level API for direct control over planning, execution, and rollback.
 
 ```typescript
 import { MigrationEngine } from "disc/migration/engine.ts";
@@ -1109,29 +1120,29 @@ disc migrate                       # re-applies main's full chain
 
 ### Always Preview in Production
 
-Before applying migrations to a production database, use `--dry-run` to see exactly what DDL will be executed:
+Before applying migrations to a production database, use `--dry-run` to see exactly what DDL will be executed:
 
 ```bash
 disc migrate --dry-run
 ```
 
-Review the output carefully. Look for `DROP` statements, type changes, and new `NOT NULL` columns without defaults.
+Review the output carefully. Look for `DROP` statements, type changes, and new `NOT NULL` columns without defaults.
 
 ### Commit Migrations to Version Control
 
-Migration history is tracked in the database, but your schema files should be committed alongside your application code. This ensures reproducibility and allows team members to see schema changes in pull request reviews.
+Migration history is tracked in the database, but your schema files should be committed alongside your application code. This ensures reproducibility and allows team members to see schema changes in pull request reviews.
 
 ### Test Migrations in Staging
 
-Apply migrations to a staging environment that mirrors production before deploying. This catches issues like:
+Apply migrations to a staging environment that mirrors production before deploying. This catches issues like:
 
-- Missing default values on required columns with existing data.
-- Foreign key violations when dropping types that are referenced elsewhere.
-- Index creation on large tables that may lock the table for an extended period.
+- Missing default values on required columns with existing data.
+- Foreign key violations when dropping types that are referenced elsewhere.
+- Index creation on large tables that may lock the table for an extended period.
 
 ### Use Data Migrations for Complex Transformations
 
-When a schema change requires data transformation (e.g., splitting a `full_name` column into `first_name` and `last_name`), write a data migration instead of trying to encode the transformation in the DDL.
+When a schema change requires data transformation (e.g., splitting a `full_name` column into `first_name` and `last_name`), write a data migration instead of trying to encode the transformation in the DDL.
 
 ```typescript
 // dbschema/migrations/m20240601T120000_split_name.data.ts
@@ -1160,7 +1171,7 @@ export default {
 
 ### Handle Required Columns Carefully
 
-Adding a `required` property to an existing type with data will fail unless you provide a default value. The engine generates data migration hints for this:
+Adding a `required` property to an existing type with data will fail unless you provide a default value. The engine generates data migration hints for this:
 
 ```
 Data migration hint: New required property User.role has no default value
@@ -1168,10 +1179,10 @@ Data migration hint: New required property User.role has no default value
 
 Options:
 
-1. Add a `default` clause to the property in your schema.
-2. Write a data migration to backfill the column before making it required.
-3. Split the change into two migrations: first add the column as optional, backfill it, then make it required.
+1. Add a `default` clause to the property in your schema.
+2. Write a data migration to backfill the column before making it required.
+3. Split the change into two migrations: first add the column as optional, backfill it, then make it required.
 
 ### Keep Migrations Small
 
-Prefer frequent, small schema changes over large, infrequent ones. Small migrations are easier to review, test, and rollback. If a migration touches more than 3-4 types, consider splitting it.
+Prefer frequent, small schema changes over large, infrequent ones. Small migrations are easier to review, test, and rollback. If a migration touches more than 3-4 types, consider splitting it.

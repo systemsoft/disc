@@ -36,9 +36,11 @@ export enum AuthErrorCode {
  *    `localhost`/`127.0.0.1` in development). `data:`, `javascript:`,
  *    and other schemes are rejected outright (XSS via inline-rendered
  *    HTML emails). 1–2048 chars.
- *  - `brandColor`: 3- or 6-digit hex (`#0af` or `#00aaff`). Anything
- *    else (named colors, `rgb(...)`, etc.) is rejected so the value
- *    is safe to splat into inline CSS without an escape pass.
+ *  - `brandColor`: 3- or 6-digit hex (`#0af` or `#00aaff`) or a CSS-L4
+ *    `oklch(L C H[/ A])` expression (e.g. `oklch(70% 0.15 200)`, with
+ *    L/C/H/alpha range-checked). Anything else (named colors, `rgb(...)`,
+ *    etc.) is rejected so the value is safe to splat into inline CSS
+ *    without an escape pass.
  *
  * Validation errors are thrown at `AuthProvider` construction —
  * deployment refuses to boot with bad branding rather than emitting

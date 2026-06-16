@@ -2,7 +2,7 @@
 
 > Looking for a quick reference? See the [EdgeQL Cheat Sheet](edgeql-cheatsheet.md) for one-page copy-pasteable examples.
 
-EdgeQL is the query language for Disc. It compiles to PostgreSQL SQL under the hood, but provides a cleaner syntax for expressing queries against your schema. EdgeQL is set-oriented: every expression produces a set of values, and operations compose naturally over sets.
+EdgeQL is the query language for Disc. It compiles to PostgreSQL SQL under the hood, but provides a cleaner syntax for expressing queries against your schema. EdgeQL is set-oriented: every expression produces a set of values, and operations compose naturally over sets.
 
 ---
 
@@ -35,7 +35,7 @@ EdgeQL is the query language for Disc. It compiles to PostgreSQL SQL under the h
 
 ## SELECT
 
-The `select` statement retrieves data from the database. It is the most commonly used query type.
+The `select` statement retrieves data from the database. It is the most commonly used query type.
 
 ### Basic Select
 
@@ -45,11 +45,11 @@ Select all objects of a type:
 select User;
 ```
 
-This returns the set of all `User` objects. Without a shape, you get the default representation (typically just `id`).
+This returns the set of all `User` objects. Without a shape, you get the default representation (typically just `id`).
 
 ### Select with Shape
 
-Shapes specify which properties and links to include in the result:
+Shapes specify which properties and links to include in the result:
 
 ```edgeql
 select User {
@@ -58,11 +58,11 @@ select User {
 };
 ```
 
-Each field in the shape corresponds to a property or link on the type.
+Each field in the shape corresponds to a property or link on the type.
 
 ### Nested Shapes
 
-Shapes can be nested to traverse links:
+Shapes can be nested to traverse links:
 
 ```edgeql
 select User {
@@ -75,7 +75,7 @@ select User {
 };
 ```
 
-This fetches each user along with their posts, including each post’s title and creation time. The result is a nested JSON structure.
+This fetches each user along with their posts, including each post’s title and creation time. The result is a nested JSON structure.
 
 ### Deeply Nested Shapes
 
@@ -98,7 +98,7 @@ select User {
 
 ### Computed Fields
 
-Shapes can include computed fields that do not exist as stored properties:
+Shapes can include computed fields that do not exist as stored properties:
 
 ```edgeql
 select User {
@@ -109,11 +109,11 @@ select User {
 };
 ```
 
-Computed fields use the `:=` assignment syntax. The `.property` notation refers to the current object being selected.
+Computed fields use the `:=` assignment syntax. The `.property` notation refers to the current object being selected.
 
 ### FILTER
 
-Filter results based on a boolean expression:
+Filter results based on a boolean expression:
 
 ```edgeql
 select User {
@@ -122,7 +122,7 @@ select User {
 } filter .email = "ada@example.com";
 ```
 
-Filter with multiple conditions:
+Filter with multiple conditions:
 
 ```edgeql
 select User {
@@ -131,7 +131,7 @@ select User {
 } filter .active = true and .age >= 18;
 ```
 
-Filter with string matching:
+Filter with string matching:
 
 ```edgeql
 select User {
@@ -140,7 +140,7 @@ select User {
 } filter .name like "A%";
 ```
 
-Filter with link traversal:
+Filter with link traversal:
 
 ```edgeql
 select Post {
@@ -187,7 +187,7 @@ select User {
 } order by .age asc empty last;
 ```
 
-The `empty first` and `empty last` modifiers control where NULL/empty values sort.
+The `empty first` and `empty last` modifiers control where NULL/empty values sort.
 
 ### LIMIT and OFFSET
 
@@ -214,7 +214,7 @@ select User {
 
 ### SELECT DISTINCT
 
-Remove duplicate values from the result set:
+Remove duplicate values from the result set:
 
 ```edgeql
 select distinct User.name;
@@ -222,7 +222,7 @@ select distinct User.name;
 
 ### Combining Clauses
 
-All clauses can be combined:
+All clauses can be combined:
 
 ```edgeql
 select User {
@@ -239,7 +239,7 @@ select User {
 
 ## INSERT
 
-The `insert` statement creates new objects.
+The `insert` statement creates new objects.
 
 ### Basic Insert
 
@@ -250,7 +250,7 @@ insert User {
 };
 ```
 
-The shape uses `:=` assignment for each property value.
+The shape uses `:=` assignment for each property value.
 
 ### Insert with Links
 
@@ -262,11 +262,11 @@ insert Post {
 };
 ```
 
-Link values are set using a subquery that resolves to the target object.
+Link values are set using a subquery that resolves to the target object.
 
 ### Insert with Nested Insert
 
-You can insert linked objects in the same statement:
+You can insert linked objects in the same statement:
 
 ```edgeql
 insert User {
@@ -281,7 +281,7 @@ insert User {
 
 ### UNLESS CONFLICT (Upsert)
 
-Handle conflicts on unique constraints:
+Handle conflicts on unique constraints:
 
 ```edgeql
 insert User {
@@ -295,11 +295,11 @@ insert User {
   );
 ```
 
-When a conflict on `.email` is detected, the `else` clause runs instead. This implements an upsert pattern: insert if the email does not exist, otherwise update the existing row.
+When a conflict on `.email` is detected, the `else` clause runs instead. This implements an upsert pattern: insert if the email does not exist, otherwise update the existing row.
 
 ### UNLESS CONFLICT without ELSE
 
-Silently skip the insert if a conflict occurs:
+Silently skip the insert if a conflict occurs:
 
 ```edgeql
 insert User {
@@ -308,13 +308,13 @@ insert User {
 } unless conflict on .email;
 ```
 
-Without an `else` clause, a conflicting insert is simply ignored.
+Without an `else` clause, a conflicting insert is simply ignored.
 
 ---
 
 ## UPDATE
 
-The `update` statement modifies existing objects.
+The `update` statement modifies existing objects.
 
 ### Basic Update
 
@@ -360,7 +360,7 @@ set {
 
 ### Update All Matching Objects
 
-Without a filter, the update applies to all objects of the type:
+Without a filter, the update applies to all objects of the type:
 
 ```edgeql
 update User
@@ -373,7 +373,7 @@ set {
 
 ## DELETE
 
-The `delete` statement removes objects.
+The `delete` statement removes objects.
 
 ### Basic Delete
 
@@ -384,7 +384,7 @@ filter .email = "ada@example.com";
 
 ### Delete with ORDER BY and LIMIT
 
-Delete a limited number of objects:
+Delete a limited number of objects:
 
 ```edgeql
 delete User
@@ -393,11 +393,11 @@ order by .created_at asc
 limit 100;
 ```
 
-This is useful for batch cleanup operations.
+This is useful for batch cleanup operations.
 
 ### Delete All
 
-Delete all objects of a type (use with caution):
+Delete all objects of a type (use with caution):
 
 ```edgeql
 delete User;
@@ -407,11 +407,11 @@ delete User;
 
 ## Parameters
 
-Parameters allow you to pass values into queries at execution time, preventing SQL injection and enabling prepared statements.
+Parameters allow you to pass values into queries at execution time, preventing SQL injection and enabling prepared statements.
 
 ### Typed Parameters
 
-Parameters are prefixed with `$` and require a type annotation using angle brackets:
+Parameters are prefixed with `$` and require a type annotation using angle brackets:
 
 ```edgeql
 select User {
@@ -477,7 +477,7 @@ Any scalar type can be used as a parameter type:
 
 ## Type Casts
 
-Type casts convert values from one type to another. They use angle bracket syntax.
+Type casts convert values from one type to another. They use angle bracket syntax.
 
 ### Basic Casts
 
@@ -566,7 +566,7 @@ select -.price;
 | `?=`     | Equal (treating empty as equal)     | `.value ?= {}`        |
 | `?!=`    | Not equal (treating empty as equal) | `.value ?!= {}`       |
 
-The `?=` and `?!=` operators handle empty sets gracefully. `a ?= b` returns `true` when both `a` and `b` are empty, while `a = b` returns an empty set.
+The `?=` and `?!=` operators handle empty sets gracefully. `a ?= b` returns `true` when both `a` and `b` are empty, while `a = b` returns an empty set.
 
 ### Logical Operators
 
@@ -584,7 +584,7 @@ select User filter .active = true and (
 
 ### String Concatenation
 
-The `++` operator concatenates strings:
+The `++` operator concatenates strings:
 
 ```edgeql
 select "Hello, " ++ "world!";
@@ -709,13 +709,13 @@ select Event filter .time_range @> <datetime>"2024-06-15T12:00:00Z";
 9. Logical OR: `or`
 10. Coalesce: `??`
 
-Use parentheses to override precedence when needed.
+Use parentheses to override precedence when needed.
 
 ---
 
 ## IF/ELSE Expressions
 
-EdgeQL uses a ternary-style if/else expression. The syntax places the "then" value first:
+EdgeQL uses a ternary-style if/else expression. The syntax places the "then" value first:
 
 ```
 <value_if_true> if <condition> else <value_if_false>
@@ -765,7 +765,7 @@ select Product {
 
 ## FOR Loops
 
-The `for` statement iterates over a set and produces a result for each element.
+The `for` statement iterates over a set and produces a result for each element.
 
 ### Basic FOR Loop
 
@@ -807,13 +807,13 @@ union (
 );
 ```
 
-The `for` variable (`user`) binds to each element of the iterator set. The body query is evaluated once per element, and the results are unioned together.
+The `for` variable (`user`) binds to each element of the iterator set. The body query is evaluated once per element, and the results are unioned together.
 
 ---
 
 ## WITH Blocks
 
-`with` blocks define named subexpressions (Common Table Expressions) that can be referenced in the main query.
+`with` blocks define named subexpressions (Common Table Expressions) that can be referenced in the main query.
 
 ### Named Subqueries
 
@@ -840,7 +840,7 @@ select ada_posts {
 
 ### WITH MODULE
 
-Set the default module for unqualified type names within the query:
+Set the default module for unqualified type names within the query:
 
 ```edgeql
 with module payment
@@ -850,7 +850,7 @@ select Payment {
 };
 ```
 
-This is equivalent to `select payment::Payment { ... }` but avoids repeating the module prefix.
+This is equivalent to `select payment::Payment { ... }` but avoids repeating the module prefix.
 
 ### WITH MODULE and Bindings
 
@@ -866,7 +866,7 @@ select recent {
 
 ### Recursive CTEs (WITH RECURSIVE)
 
-For hierarchical or graph data, use recursive `WITH` bindings:
+For hierarchical or graph data, use recursive `WITH` bindings:
 
 ```edgeql
 with
@@ -881,13 +881,13 @@ select categories {
 };
 ```
 
-The `recursive` modifier tells Disc to generate a `WITH RECURSIVE` CTE in the compiled SQL.
+The `recursive` modifier tells Disc to generate a `WITH RECURSIVE` CTE in the compiled SQL.
 
 ---
 
 ## GROUP BY
 
-The `group` statement groups objects and computes aggregate values.
+The `group` statement groups objects and computes aggregate values.
 
 ### Basic Grouping
 
@@ -941,7 +941,7 @@ filter count(User) > 10;
 
 ## Window Functions
 
-Window functions perform calculations across a set of rows related to the current row, without collapsing them into groups.
+Window functions perform calculations across a set of rows related to the current row, without collapsing them into groups.
 
 ### Basic Window Function
 
@@ -955,7 +955,7 @@ select User {
 
 ### PARTITION BY
 
-Partition the window into groups:
+Partition the window into groups:
 
 ```edgeql
 select User {
@@ -993,7 +993,7 @@ Aggregate functions can also be used as window functions when combined with `ove
 
 ### Frame Clauses
 
-Control which rows are included in the window frame:
+Control which rows are included in the window frame:
 
 ```edgeql
 select Sale {
@@ -1051,7 +1051,7 @@ select Sale {
 
 ### Lag and Lead
 
-Access values from neighboring rows:
+Access values from neighboring rows:
 
 ```edgeql
 select Sale {
@@ -1065,7 +1065,7 @@ select Sale {
 
 ### Practical Example
 
-Running totals and moving averages:
+Running totals and moving averages:
 
 ```edgeql
 select MonthlyRevenue {
@@ -1087,7 +1087,7 @@ select MonthlyRevenue {
 
 ## Set Operations
 
-EdgeQL supports standard set operations that combine the results of multiple queries.
+EdgeQL supports standard set operations that combine the results of multiple queries.
 
 ### UNION
 
@@ -1101,7 +1101,7 @@ select User filter .role = "moderator";
 
 ### INTERSECT
 
-Return only elements present in both sets:
+Return only elements present in both sets:
 
 ```edgeql
 select User filter .active = true
@@ -1111,7 +1111,7 @@ select User filter .role = "admin";
 
 ### EXCEPT
 
-Return elements in the first set that are not in the second:
+Return elements in the first set that are not in the second:
 
 ```edgeql
 select User filter .active = true
@@ -1133,7 +1133,7 @@ select User filter .active = false;
 
 ## Subqueries
 
-Any query can be used as an expression inside another query.
+Any query can be used as an expression inside another query.
 
 ### Subquery in FILTER
 
@@ -1158,7 +1158,7 @@ select User {
 
 ### Scalar Subquery
 
-A subquery that returns a single scalar value:
+A subquery that returns a single scalar value:
 
 ```edgeql
 select User {
@@ -1180,7 +1180,7 @@ insert Notification {
 
 ## DETACHED
 
-The `detached` keyword removes an expression from the current scope, allowing you to reference a type independently of the query’s implicit scope.
+The `detached` keyword removes an expression from the current scope, allowing you to reference a type independently of the query’s implicit scope.
 
 ### Basic Usage
 
@@ -1191,7 +1191,7 @@ select User {
 };
 ```
 
-Without `detached`, `count(User)` would be scoped to the current `User` being selected (always 1). With `detached`, it counts all users in the database.
+Without `detached`, `count(User)` would be scoped to the current `User` being selected (always 1). With `detached`, it counts all users in the database.
 
 ### Self-Referencing Queries
 
@@ -1228,7 +1228,7 @@ select ["red", "green", "blue"];
 
 ### Array Indexing
 
-Access individual elements using zero-based indexing:
+Access individual elements using zero-based indexing:
 
 ```edgeql
 select [10, 20, 30, 40][0];    # Returns 10
@@ -1274,7 +1274,7 @@ select (3.14, 42);
 
 ### Tuple Element Access
 
-Access tuple elements by zero-based index:
+Access tuple elements by zero-based index:
 
 ```edgeql
 select (10, "hello", true).0;    # Returns 10
@@ -1310,7 +1310,7 @@ select User {
 
 ## Polymorphic Queries
 
-Polymorphic queries let you work with type hierarchies and select properties specific to subtypes.
+Polymorphic queries let you work with type hierarchies and select properties specific to subtypes.
 
 ### Type Filtering with `[is Type]`
 
@@ -1323,7 +1323,7 @@ select Shape {
 };
 ```
 
-This selects all `Shape` objects. For objects that are `Circle`, the `radius` field is populated. For `Rectangle` objects, `width` and `height` are populated. For other shapes, those fields are empty.
+This selects all `Shape` objects. For objects that are `Circle`, the `radius` field is populated. For `Rectangle` objects, `width` and `height` are populated. For other shapes, those fields are empty.
 
 ### Filtering by Type
 
@@ -1361,9 +1361,9 @@ select Shape filter Shape is not Circle;
 
 ### How polymorphic SELECT compiles
 
-Disc’s migration engine creates one PG table per concrete subtype — there’s no physical table for the abstract parent. `SELECT <Abstract>` lowers to a `UNION ALL` across the subtype tables; each branch projects the abstract type’s properties (`id`, plus shared columns like `color`) so the outer SELECT can reference the abstract’s alias as if it were a regular table.
+Disc’s migration engine creates one PG table per concrete subtype — there’s no physical table for the abstract parent. `SELECT <Abstract>` lowers to a `UNION ALL` across the subtype tables; each branch projects the abstract type’s properties (`id`, plus shared columns like `color`) so the outer SELECT can reference the abstract’s alias as if it were a regular table.
 
-When the SELECT shape uses `[is Subtype].property` to access a subtype-specific column, each UNION branch projects either the actual column (when its subtype owns it) or `NULL::<pg-type> AS <colName>` (when it doesn’t), so PG’s UNION column-resolution unifies. The outer compiler emits `CASE WHEN __type__ = '<Subtype>' THEN <alias>.<col> ELSE NULL END` to gate the value on the actual row type.
+When the SELECT shape uses `[is Subtype].property` to access a subtype-specific column, each UNION branch projects either the actual column (when its subtype owns it) or `NULL::<pg-type> AS <colName>` (when it doesn’t), so PG’s UNION column-resolution unifies. The outer compiler emits `CASE WHEN __type__ = '<Subtype>' THEN <alias>.<col> ELSE NULL END` to gate the value on the actual row type.
 
 ```sql
 -- Compiled shape of `select Shape { color, [is Circle].radius }`:
@@ -1379,39 +1379,39 @@ FROM (
 ) AS shape_1;
 ```
 
-The `__type__` column is emitted automatically on every type that participates in a hierarchy (DDL detail in `migration/ddl.ts:398-412`), defaulting to the type’s own name. The `IS Type` filter (`filter .id IS Circle` or `Shape[IS Circle]`) reduces to `__type__ = '<Type>'` over the same UNION, with `__type__ IN (...)` when the named type has its own subtypes.
+The `__type__` column is emitted automatically on every type that participates in a hierarchy (DDL detail in `migration/ddl.ts:398-412`), defaulting to the type’s own name. The `IS Type` filter (`filter .id IS Circle` or `Shape[IS Circle]`) reduces to `__type__ = '<Type>'` over the same UNION, with `__type__ IN (...)` when the named type has its own subtypes.
 
 ---
 
 ## DESCRIBE
 
-Introspect schema information at query time.
+Introspect schema information at query time.
 
 ### DESCRIBE TYPE
 
-Get information about a specific type:
+Get information about a specific type:
 
 ```edgeql
 describe type User;
 ```
 
-Returns a JSON representation of the type’s properties, links, constraints, indexes, and other metadata.
+Returns a JSON representation of the type’s properties, links, constraints, indexes, and other metadata.
 
 ### DESCRIBE SCHEMA
 
-Get information about the entire schema:
+Get information about the entire schema:
 
 ```edgeql
 describe schema;
 ```
 
-Returns a JSON representation of all types, functions, globals, and other schema objects.
+Returns a JSON representation of all types, functions, globals, and other schema objects.
 
 ---
 
 ## EXPLAIN
 
-Analyze query execution plans.
+Analyze query execution plans.
 
 ### Basic EXPLAIN
 
@@ -1419,11 +1419,11 @@ Analyze query execution plans.
 explain select User { email, name } filter .active = true;
 ```
 
-Returns the PostgreSQL query execution plan for the compiled SQL.
+Returns the PostgreSQL query execution plan for the compiled SQL.
 
 ### EXPLAIN ANALYZE
 
-Execute the query and include actual timing information:
+Execute the query and include actual timing information:
 
 ```edgeql
 explain analyze select User { email, name } filter .active = true;
@@ -1446,11 +1446,11 @@ explain (format yaml) select User { email, name };
 
 ## CONFIGURE
 
-Set configuration parameters at various scopes.
+Set configuration parameters at various scopes.
 
 ### Session Configuration
 
-Settings that apply to the current connection:
+Settings that apply to the current connection:
 
 ```edgeql
 configure session set query_execution_timeout := "30s";
@@ -1458,7 +1458,7 @@ configure session set query_execution_timeout := "30s";
 
 ### Database Configuration
 
-Settings that apply to the entire database:
+Settings that apply to the entire database:
 
 ```edgeql
 configure database set work_mem := "256MB";
@@ -1466,7 +1466,7 @@ configure database set work_mem := "256MB";
 
 ### System/Instance Configuration
 
-Settings that apply to the entire Disc instance:
+Settings that apply to the entire Disc instance:
 
 ```edgeql
 configure system set max_connections := 200;
@@ -1475,7 +1475,7 @@ configure instance set shared_buffers := "1GB";
 
 ### Reset Configuration
 
-Reset a setting to its default value:
+Reset a setting to its default value:
 
 ```edgeql
 configure session reset query_execution_timeout;
@@ -1495,13 +1495,13 @@ configure session reset query_execution_timeout;
 | `shared_buffers`                      | Shared memory for caching             |
 | `work_mem`                            | Memory for sort and hash operations   |
 
-These map to PostgreSQL GUC parameters under the hood.
+These map to PostgreSQL GUC parameters under the hood.
 
 ---
 
 ## SET GLOBAL
 
-Set global session variables. These are used by access policies and can be referenced in queries.
+Set global session variables. These are used by access policies and can be referenced in queries.
 
 ### Setting a Global
 
@@ -1522,13 +1522,13 @@ set global auth::session_token := "abc123";
 select User filter .id = global current_user_id;
 ```
 
-Globals are stored as PostgreSQL session settings using the naming convention `disc.global_<module>__<name>`.
+Globals are stored as PostgreSQL session settings using the naming convention `disc.global_<module>__<name>`.
 
 ---
 
 ## Functions
 
-EdgeQL includes a standard library of built-in functions. This section provides a brief overview. See the [Functions Reference](functions.md) for complete documentation.
+EdgeQL includes a standard library of built-in functions. This section provides a brief overview. See the [Functions Reference](functions.md) for complete documentation.
 
 ### Aggregate Functions
 
@@ -1667,7 +1667,7 @@ select schema::get_type("User");
 select schema::functions();
 ```
 
-For the complete function reference with all parameters and return types, see [Functions Reference](functions.md).
+For the complete function reference with all parameters and return types, see [Functions Reference](functions.md).
 
 ---
 
@@ -1776,7 +1776,7 @@ filter .created_at >= start and .created_at < end;
 
 ## See Also
 
-- [Schema Reference](schema.md) -- defining your data model
-- [Functions Reference](functions.md) -- complete function documentation
+- [Schema Reference](schema.md) -- defining your data model
+- [Functions Reference](functions.md) -- complete function documentation
 - [Migrations](migrations.md) -- schema change management
-- [Client SDK](client-sdk.md) -- using EdgeQL from TypeScript
+- [Client SDK](client-sdk.md) -- using EdgeQL from TypeScript

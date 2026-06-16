@@ -1,8 +1,8 @@
 # Schema Definition Language (SDL) Reference
 
-Disc uses a declarative Schema Definition Language to define your data model. Schema files use the `.disc` extension and describe object types, their properties, links between types, constraints, indexes, access policies, and more.
+Disc uses a declarative Schema Definition Language to define your data model. Schema files use the `.disc` extension and describe object types, their properties, links between types, constraints, indexes, access policies, and more.
 
-Disc parses SDL into an abstract syntax tree, validates it, and generates the corresponding PostgreSQL DDL. You write your schema once; Disc handles table creation, foreign keys, constraints, and migrations.
+Disc parses SDL into an abstract syntax tree, validates it, and generates the corresponding PostgreSQL DDL. You write your schema once; Disc handles table creation, foreign keys, constraints, and migrations.
 
 ---
 
@@ -30,11 +30,11 @@ Disc parses SDL into an abstract syntax tree, validates it, and generates the co
 
 ## Modules
 
-Every declaration lives inside a module. Modules provide namespacing for types, functions, globals, and aliases.
+Every declaration lives inside a module. Modules provide namespacing for types, functions, globals, and aliases.
 
 ### The `default` Module
 
-Most schemas use the `default` module. Types in the default module can be referenced without qualification:
+Most schemas use the `default` module. Types in the default module can be referenced without qualification:
 
 ```sdl
 module default {
@@ -47,7 +47,7 @@ module default {
 
 ### Custom Modules
 
-You can define multiple modules to organize your schema. Types in custom modules are referenced with the `module::TypeName` syntax:
+You can define multiple modules to organize your schema. Types in custom modules are referenced with the `module::TypeName` syntax:
 
 ```sdl
 module default {
@@ -75,21 +75,21 @@ module api {
 };
 ```
 
-Within a module, you reference types in the same module without qualification. Cross-module references require the `module::TypeName` form.
+Within a module, you reference types in the same module without qualification. Cross-module references require the `module::TypeName` form.
 
 ### Module Resolution Order
 
-When Disc resolves an unqualified type name, it checks in this order:
+When Disc resolves an unqualified type name, it checks in this order:
 
-1. Exact match (already qualified or known at top level)
-2. Current module scope (if set via `WITH MODULE`)
+1. Exact match (already qualified or known at top level)
+2. Current module scope (if set via `WITH MODULE`)
 3. `default` module
 
 ---
 
 ## Scalar Types
 
-Disc supports all standard scalar types. These map directly to PostgreSQL column types.
+Disc supports all standard scalar types. These map directly to PostgreSQL column types.
 
 ### String and Boolean
 
@@ -143,13 +143,13 @@ Disc supports all standard scalar types. These map directly to PostgreSQL column
 
 ### Custom Scalar Types
 
-You can define custom scalar types that extend built-in types and add constraints:
+You can define custom scalar types that extend built-in types and add constraints:
 
 ```sdl
 module default {
   scalar type Username extending str {
-    constraint max_length(50);
-    constraint min_length(3);
+    constraint max_len_value(50);
+    constraint min_len_value(3);
   };
 
   scalar type PositiveInt extending int64 {
@@ -160,7 +160,7 @@ module default {
 
 ### Enum Types
 
-Enums are scalar types that extend `enum` with a fixed set of values:
+Enums are scalar types that extend `enum` with a fixed set of values:
 
 ```sdl
 module default {
@@ -170,13 +170,13 @@ module default {
 };
 ```
 
-Enum values are stored as text in PostgreSQL and validated by Disc.
+Enum values are stored as text in PostgreSQL and validated by Disc.
 
 ---
 
 ## Object Types
 
-Object types are the primary building blocks of a Disc schema. Each object type maps to a PostgreSQL table.
+Object types are the primary building blocks of a Disc schema. Each object type maps to a PostgreSQL table.
 
 ### Basic Definition
 
@@ -191,11 +191,11 @@ module default {
 };
 ```
 
-Every object type automatically gets an `id` property of type `uuid` with a default value. You never need to declare it.
+Every object type automatically gets an `id` property of type `uuid` with a default value. You never need to declare it.
 
 ### Required vs Optional
 
-Properties and links are optional by default. Use `required` to make them mandatory:
+Properties and links are optional by default. Use `required` to make them mandatory:
 
 ```sdl
 module default {
@@ -214,7 +214,7 @@ module default {
 
 ### Multi vs Single
 
-By default, properties and links hold a single value (or an empty set if optional). Use `multi` for set-valued properties:
+By default, properties and links hold a single value (or an empty set if optional). Use `multi` for set-valued properties:
 
 ```sdl
 module default {
@@ -226,11 +226,11 @@ module default {
 };
 ```
 
-A `multi` property can hold zero or more values. A `required multi` property must hold at least one value.
+A `multi` property can hold zero or more values. A `required multi` property must hold at least one value.
 
 ### Empty Type Bodies
 
-Types can extend other types without adding new members:
+Types can extend other types without adding new members:
 
 ```sdl
 module default {
@@ -247,7 +247,7 @@ module default {
 
 ## Properties
 
-Properties define the scalar data stored on an object type.
+Properties define the scalar data stored on an object type.
 
 ### Basic Properties
 
@@ -266,7 +266,7 @@ module default {
 
 ### Default Values
 
-Properties can have default values using the `default` keyword:
+Properties can have default values using the `default` keyword:
 
 ```sdl
 module default {
@@ -286,11 +286,11 @@ module default {
 };
 ```
 
-Default values are expressions evaluated at insert time. You can use function calls like `datetime_current()` or `uuid_generate_v4()`.
+Default values are expressions evaluated at insert time. You can use function calls like `datetime_current()` or `uuid_generate_v4()`.
 
 ### Readonly Properties
 
-Readonly properties cannot be modified after the object is created:
+Readonly properties cannot be modified after the object is created:
 
 ```sdl
 module default {
@@ -307,7 +307,7 @@ module default {
 
 ### Computed Properties
 
-Computed properties derive their value from an expression rather than storing data directly:
+Computed properties derive their value from an expression rather than storing data directly:
 
 ```sdl
 module default {
@@ -321,7 +321,7 @@ module default {
 };
 ```
 
-Computed properties use the `:=` assignment syntax and reference other properties using the dot prefix (`.property_name`).
+Computed properties use the `:=` assignment syntax and reference other properties using the dot prefix (`.property_name`).
 
 ### Property Qualifiers Summary
 
@@ -336,11 +336,11 @@ Computed properties use the `:=` assignment syntax and reference other propertie
 
 ## Constraints
 
-Constraints enforce data integrity rules on properties and types.
+Constraints enforce data integrity rules on properties and types. The supported constraint names are `exclusive`, `expression`, `max_ex_value`, `max_len_value`, `max_value`, `min_ex_value`, `min_len_value`, `min_value`, `one_of`, and `regexp`; any other name (including non-canonical spellings like `max_length` or `regex`) is rejected at validation time with a hint toward the canonical name.
 
 ### `exclusive`
 
-Ensures uniqueness across all instances of a type. This is the most common constraint:
+Ensures uniqueness across all instances of a type. This is the most common constraint:
 
 ```sdl
 module default {
@@ -355,18 +355,18 @@ module default {
 };
 ```
 
-### `max_length`
+### `max_len_value`
 
-Limits the maximum length of a string:
+Limits the maximum length of a string:
 
 ```sdl
 module default {
   type User {
     bio: str {
-      constraint max_length(1000);
+      constraint max_len_value(1000);
     };
     required name: str {
-      constraint max_length(255);
+      constraint max_len_value(255);
     };
   };
 };
@@ -374,7 +374,7 @@ module default {
 
 ### `min_value` and `max_value`
 
-Set bounds on numeric values (inclusive):
+Set bounds on numeric values (inclusive):
 
 ```sdl
 module default {
@@ -392,7 +392,7 @@ module default {
 
 ### `min_ex_value` and `max_ex_value`
 
-Exclusive bounds (the bound value itself is not allowed):
+Exclusive bounds (the bound value itself is not allowed):
 
 ```sdl
 module default {
@@ -411,7 +411,7 @@ module default {
 
 ### `one_of`
 
-Restricts a value to a specific set of allowed values:
+Restricts a value to a specific set of allowed values:
 
 ```sdl
 module default {
@@ -428,7 +428,7 @@ module default {
 
 ### `expression on`
 
-Custom constraint expressions using EdgeQL:
+Custom constraint expressions using EdgeQL:
 
 ```sdl
 module default {
@@ -442,19 +442,19 @@ module default {
 };
 ```
 
-### `regex`
+### `regexp`
 
-Validates that a string matches a regular expression pattern:
+Validates that a string matches a regular expression pattern:
 
 ```sdl
 module default {
   type User {
     required email: str {
       constraint exclusive;
-      constraint regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+      constraint regexp("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     };
     phone: str {
-      constraint regex("^\\+?[1-9]\\d{1,14}$");
+      constraint regexp("^\\+?[1-9]\\d{1,14}$");
     };
   };
 };
@@ -462,7 +462,7 @@ module default {
 
 ### Custom Error Messages
 
-Constraints can include custom error messages using `errmessage`:
+Constraints can include custom error messages using `errmessage`:
 
 ```sdl
 module default {
@@ -481,7 +481,7 @@ module default {
 
 ### Delegated Constraints
 
-Delegated constraints apply through type hierarchies:
+Delegated constraints apply through type hierarchies:
 
 ```sdl
 module default {
@@ -497,20 +497,20 @@ module default {
 };
 ```
 
-With `delegated`, the `exclusive` constraint is enforced per-subtype rather than across the entire abstract type.
+With `delegated`, the `exclusive` constraint is enforced per-subtype rather than across the entire abstract type.
 
 ### Multiple Constraints
 
-Properties can have multiple constraints:
+Properties can have multiple constraints:
 
 ```sdl
 module default {
   type User {
     required username: str {
       constraint exclusive;
-      constraint min_length(3);
-      constraint max_length(30);
-      constraint regex("^[a-zA-Z0-9_]+$");
+      constraint min_len_value(3);
+      constraint max_len_value(30);
+      constraint regexp("^[a-zA-Z0-9_]+$");
     };
   };
 };
@@ -520,11 +520,11 @@ module default {
 
 ## Links
 
-Links define relationships between object types. Unlike foreign keys in SQL, links are first-class citizens in Disc schemas.
+Links define relationships between object types. Unlike foreign keys in SQL, links are first-class citizens in Disc schemas.
 
 ### Single Links
 
-A single link references one object of the target type. It maps to a foreign key column in PostgreSQL:
+A single link references one object of the target type. It maps to a foreign key column in PostgreSQL:
 
 ```sdl
 module default {
@@ -541,11 +541,11 @@ module default {
 };
 ```
 
-The `author` link creates an `author_id` foreign key column on the `posts` table.
+The `author` link creates an `author_id` foreign key column on the `posts` table.
 
 ### Multi Links
 
-A multi link references multiple objects. Disc resolves these as backlinks or many-to-many junction tables:
+A multi link references multiple objects. Disc resolves these as backlinks or many-to-many junction tables:
 
 ```sdl
 module default {
@@ -561,11 +561,11 @@ module default {
 };
 ```
 
-When a target type has a single link pointing back (like `Post.author -> User`), Disc detects the backlink automatically. The `multi posts` link does not create its own column; it is resolved via `Post.author_id`.
+When a target type has a single link pointing back (like `Post.author -> User`), Disc detects the backlink automatically. The `multi posts` link does not create its own column; it is resolved via `Post.author_id`.
 
 ### Backlinks
 
-Backlinks allow traversing relationships in reverse using the `.<linkname` syntax in queries. They are defined implicitly by the forward link:
+Backlinks allow traversing relationships in reverse using the `.<linkname` syntax in queries. They are defined implicitly by the forward link:
 
 ```sdl
 module default {
@@ -592,7 +592,7 @@ select User {
 
 ### Many-to-Many Links
 
-When both sides of a relationship have `multi` links, Disc creates a junction table:
+When both sides of a relationship have `multi` links, Disc creates a junction table:
 
 ```sdl
 module default {
@@ -608,11 +608,11 @@ module default {
 };
 ```
 
-Disc creates a junction table (e.g., `student_courses`) with `source_id` and `target_id` columns. The canonical ordering ensures only one junction table is created per pair.
+Disc creates a junction table (e.g., `student_courses`) with `source_id` and `target_id` columns. The canonical ordering ensures only one junction table is created per pair.
 
 ### Link Shorthand
 
-Links can be declared without the `link` keyword using arrow syntax:
+Links can be declared without the `link` keyword using arrow syntax:
 
 ```sdl
 module default {
@@ -626,15 +626,15 @@ module default {
 };
 ```
 
-Both forms produce identical AST nodes. The shorthand form uses `->` to indicate a link target.
+Both forms produce identical AST nodes. The shorthand form uses `->` to indicate a link target.
 
 ### Deletion Policies
 
-Control what happens when the target or source of a link is deleted.
+Control what happens when the target or source of a link is deleted.
 
 #### `on target delete`
 
-Specifies behavior when the linked target object is deleted:
+Specifies behavior when the linked target object is deleted:
 
 ```sdl
 module default {
@@ -667,7 +667,7 @@ module default {
 
 #### `on source delete`
 
-Specifies behavior when the source object (the one holding the link) is deleted:
+Specifies behavior when the source object (the one holding the link) is deleted:
 
 ```sdl
 module default {
@@ -692,7 +692,7 @@ module default {
 
 ### Link Properties
 
-Links can carry their own properties to store metadata about the relationship:
+Links can carry their own properties to store metadata about the relationship:
 
 ```sdl
 module default {
@@ -708,7 +708,7 @@ module default {
 };
 ```
 
-Link properties are accessed in queries using the `@` prefix:
+Link properties are accessed in queries using the `@` prefix:
 
 ```edgeql
 select User {
@@ -723,7 +723,7 @@ select User {
 
 ### Abstract Links
 
-Abstract links define reusable link templates with shared properties and constraints:
+Abstract links define reusable link templates with shared properties and constraints:
 
 ```sdl
 module default {
@@ -741,13 +741,13 @@ module default {
 };
 ```
 
-Concrete links that extend an abstract link inherit its properties and constraints. Properties defined on the concrete link override inherited ones with the same name.
+Concrete links that extend an abstract link inherit its properties and constraints. Properties defined on the concrete link override inherited ones with the same name.
 
 ---
 
 ## Indexes
 
-Indexes improve query performance on frequently filtered or sorted properties.
+Indexes improve query performance on frequently filtered or sorted properties.
 
 ### Property Indexes
 
@@ -767,7 +767,7 @@ module default {
 
 ### Expression Indexes
 
-Indexes can be defined on expressions, not just individual properties:
+Indexes can be defined on expressions, not just individual properties:
 
 ```sdl
 module default {
@@ -786,7 +786,7 @@ module default {
 
 ### Named Indexes
 
-Indexes can be given explicit names:
+Indexes can be given explicit names:
 
 ```sdl
 module default {
@@ -803,7 +803,7 @@ module default {
 
 ### Annotated Indexes
 
-Indexes support annotations for documentation:
+Indexes support annotations for documentation:
 
 ```sdl
 module default {
@@ -822,11 +822,11 @@ module default {
 
 ## Annotations
 
-Annotations attach metadata to schema elements. They do not affect runtime behavior.
+Annotations attach metadata to schema elements. They do not affect runtime behavior.
 
 ### Built-in Annotations
 
-Disc supports three built-in annotations:
+Disc supports three built-in annotations:
 
 ```sdl
 module default {
@@ -851,7 +851,7 @@ module default {
 
 ### Abstract Annotation Declarations
 
-You can define custom annotations for domain-specific metadata:
+You can define custom annotations for domain-specific metadata:
 
 ```sdl
 module default {
@@ -871,7 +871,7 @@ module default {
 };
 ```
 
-Abstract annotations are declared at the module level and can then be used on any type, property, link, index, or constraint.
+Abstract annotations are declared at the module level and can then be used on any type, property, link, index, or constraint.
 
 ### Annotations on Properties, Links, and Constraints
 
@@ -897,11 +897,11 @@ module default {
 
 ## Inheritance
 
-Disc supports type inheritance, allowing you to share structure across types.
+Disc supports type inheritance, allowing you to share structure across types.
 
 ### Abstract Types
 
-Abstract types cannot be instantiated directly. They serve as templates:
+Abstract types cannot be instantiated directly. They serve as templates:
 
 ```sdl
 module default {
@@ -927,13 +927,13 @@ module default {
 };
 ```
 
-Both `User` and `Post` inherit `created_at` and `updated_at` from `Timestamped`.
+Both `User` and `Post` inherit `created_at` and `updated_at` from `Timestamped`.
 
 > **Production semantics — per-subtype tables.** Disc's migration engine emits one PG table per concrete subtype; abstract types have no physical table. `SELECT <Abstract>` lowers to `UNION ALL` across the subtype tables (each branch projects the abstract's columns), and `IS Type` filters reduce to `__type__ = '<Type>'` over the union. The `__type__` discriminator column is added automatically to every type that participates in a hierarchy. See [EdgeQL → Polymorphic Queries](edgeql.md#polymorphic-queries) for how this affects compiled SQL and what polymorphic shape fields look like at runtime.
 
 ### Concrete Inheritance
 
-Non-abstract types can also be extended:
+Non-abstract types can also be extended:
 
 ```sdl
 module default {
@@ -949,11 +949,11 @@ module default {
 };
 ```
 
-`AdminUser` has all of `User`’s properties plus its own.
+`AdminUser` has all of `User`’s properties plus its own.
 
 ### Multiple Inheritance
 
-A type can extend multiple parent types:
+A type can extend multiple parent types:
 
 ```sdl
 module default {
@@ -980,11 +980,11 @@ module default {
 };
 ```
 
-When a type extends multiple parents, it inherits properties and links from all of them. If two parents define a property with the same name, the child’s own definition takes precedence.
+When a type extends multiple parents, it inherits properties and links from all of them. If two parents define a property with the same name, the child’s own definition takes precedence.
 
 ### Polymorphic Types and Discrimination
 
-When a parent type has subtypes, Disc adds a `__type__` discriminator column to distinguish instances:
+When a parent type has subtypes, Disc adds a `__type__` discriminator column to distinguish instances:
 
 ```sdl
 module default {
@@ -1003,7 +1003,7 @@ module default {
 };
 ```
 
-You can query polymorphically:
+You can query polymorphically:
 
 ```edgeql
 # Get all shapes
@@ -1020,7 +1020,7 @@ select Shape {
 
 ### Overloaded Properties
 
-Use `overloaded` when redefining an inherited property to add constraints or change the default:
+Use `overloaded` when redefining an inherited property to add constraints or change the default:
 
 ```sdl
 module default {
@@ -1030,7 +1030,7 @@ module default {
 
   type User extending Named {
     overloaded required name: str {
-      constraint max_length(100);
+      constraint max_len_value(100);
     };
   };
 };
@@ -1040,7 +1040,7 @@ module default {
 
 ## Access Policies
 
-Access policies control which operations are allowed on objects based on runtime conditions. They provide row-level security.
+Access policies control which operations are allowed on objects based on runtime conditions. They provide row-level security.
 
 ### Basic Allow/Deny
 
@@ -1066,8 +1066,8 @@ module default {
 An access policy has:
 
 - A **name** for identification
-- One or more **actions** (`allow` or `deny`) specifying which operations are affected
-- A `using` **condition** expression evaluated at query time
+- One or more **actions** (`allow` or `deny`) specifying which operations are affected
+- A `using` **condition** expression evaluated at query time
 
 ### Supported Operations
 
@@ -1111,7 +1111,7 @@ module default {
 
 ### Using Globals in Policies
 
-Access policies commonly reference global variables to check the identity of the current user:
+Access policies commonly reference global variables to check the identity of the current user:
 
 ```sdl
 module default {
@@ -1129,7 +1129,7 @@ module default {
 };
 ```
 
-Set the global at the session level before issuing queries:
+Set the global at the session level before issuing queries:
 
 ```edgeql
 set global current_user_id := <uuid>"a1b2c3d4-...";
@@ -1137,11 +1137,11 @@ set global current_user_id := <uuid>"a1b2c3d4-...";
 
 ### Multiple Policies
 
-When multiple policies exist on a type, they interact as follows:
+When multiple policies exist on a type, they interact as follows:
 
-- If any `deny` policy matches, the operation is denied regardless of `allow` policies
-- If no `deny` policy matches and at least one `allow` policy matches, the operation is allowed
-- If no policies match at all, behavior depends on the system default
+- If any `deny` policy matches, the operation is denied regardless of `allow` policies
+- If no `deny` policy matches and at least one `allow` policy matches, the operation is allowed
+- If no policies match at all, behavior depends on the system default
 
 ### Annotated Policies
 
@@ -1163,7 +1163,7 @@ module default {
 
 ## Triggers
 
-Triggers execute logic automatically in response to data changes.
+Triggers execute logic automatically in response to data changes.
 
 ### Trigger Syntax
 
@@ -1223,7 +1223,7 @@ module default {
 
 ### Multiple Events
 
-A single trigger can respond to multiple events:
+A single trigger can respond to multiple events:
 
 ```sdl
 module default {
@@ -1271,7 +1271,7 @@ module default {
 
 ## Rewrite Rules
 
-Rewrite rules automatically transform property values during insert or update operations.
+Rewrite rules automatically transform property values during insert or update operations.
 
 ### Insert Rewrite
 
@@ -1304,7 +1304,7 @@ module default {
 
 ### Combined Insert and Update
 
-A single rewrite can apply to both operations:
+A single rewrite can apply to both operations:
 
 ```sdl
 module default {
@@ -1318,13 +1318,13 @@ module default {
 };
 ```
 
-Rewrite rules differ from default values in that they always apply, even if the user explicitly provides a value. They enforce invariants like "updated_at is always the current time on any modification."
+Rewrite rules differ from default values in that they always apply, even if the user explicitly provides a value. They enforce invariants like "updated_at is always the current time on any modification."
 
 ---
 
 ## Globals
 
-Globals are session-scoped variables available to all queries within a session. They are commonly used with access policies.
+Globals are session-scoped variables available to all queries within a session. They are commonly used with access policies.
 
 ### Declaring Globals
 
@@ -1349,7 +1349,7 @@ module default {
 
 ### Required Globals
 
-A required global must be set before queries that reference it will succeed:
+A required global must be set before queries that reference it will succeed:
 
 ```sdl
 module default {
@@ -1370,7 +1370,7 @@ module default {
 
 ### Setting Globals
 
-Globals are set per-session using EdgeQL:
+Globals are set per-session using EdgeQL:
 
 ```edgeql
 set global current_user_id := <uuid>"550e8400-e29b-41d4-a716-446655440000";
@@ -1401,13 +1401,13 @@ module default {
 };
 ```
 
-Disc stores each global as a PostgreSQL session setting using the naming convention `disc.global_<module>__<name>` (e.g., `disc.global_default__current_user_id`).
+Disc stores each global as a PostgreSQL session setting using the naming convention `disc.global_<module>__<name>` (e.g., `disc.global_default__current_user_id`).
 
 ---
 
 ## Aliases
 
-Aliases define named computed expressions that can be reused across queries. They act as virtual types or views.
+Aliases define named computed expressions that can be reused across queries. They act as virtual types or views.
 
 ### Basic Aliases
 
@@ -1438,7 +1438,7 @@ module default {
 };
 ```
 
-Aliases are resolved at query time. They do not create tables or store data.
+Aliases are resolved at query time. They do not create tables or store data.
 
 ---
 
@@ -1446,7 +1446,7 @@ Aliases are resolved at query time. They do not create tables or store data.
 
 ### Arrays
 
-Arrays hold ordered sequences of values of a single type:
+Arrays hold ordered sequences of values of a single type:
 
 ```sdl
 module default {
@@ -1486,7 +1486,7 @@ Supported array element types and their PostgreSQL mappings:
 
 ### Tuples
 
-Tuples hold fixed-size sequences of mixed types. They are stored as `jsonb` in PostgreSQL:
+Tuples hold fixed-size sequences of mixed types. They are stored as `jsonb` in PostgreSQL:
 
 ```sdl
 module default {
@@ -1498,7 +1498,7 @@ module default {
 
 ### Named Tuples
 
-Named tuples have labeled fields:
+Named tuples have labeled fields:
 
 ```sdl
 module default {
@@ -1509,13 +1509,13 @@ module default {
 };
 ```
 
-Named tuples are also stored as `jsonb` in PostgreSQL, preserving the field names as JSON keys.
+Named tuples are also stored as `jsonb` in PostgreSQL, preserving the field names as JSON keys.
 
 ---
 
 ## Range Types
 
-Range types represent a continuous span of values. They map directly to PostgreSQL range types.
+Range types represent a continuous span of values. They map directly to PostgreSQL range types.
 
 ### Supported Range Types
 
@@ -1548,7 +1548,7 @@ module default {
 
 ### Multirange Types
 
-Multiranges hold multiple non-overlapping ranges:
+Multiranges hold multiple non-overlapping ranges:
 
 | SDL Multirange Type               | PostgreSQL Type  |
 | --------------------------------- | ---------------- |
@@ -1573,7 +1573,7 @@ module default {
 
 ## Complete Example
 
-Here is a realistic schema for a project management application that demonstrates many features together:
+Here is a realistic schema for a project management application that demonstrates many features together:
 
 ```sdl
 module default {
@@ -1587,7 +1587,7 @@ module default {
   scalar type Priority extending enum<low, medium, high, critical>;
 
   scalar type EmailAddress extending str {
-    constraint regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    constraint regexp("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
   };
 
   # -- Abstract types --
@@ -1615,7 +1615,7 @@ module default {
       default := false;
     };
     required name: str {
-      constraint max_length(255);
+      constraint max_len_value(255);
     };
 
     # Reverse links (queried via .<author or .<assignee)
@@ -1655,7 +1655,7 @@ module default {
       };
     };
     required name: str {
-      constraint max_length(100);
+      constraint max_len_value(100);
     };
     required owner: User;
 
@@ -1686,7 +1686,7 @@ module default {
     };
     multi tags: str;
     required title: str {
-      constraint max_length(500);
+      constraint max_len_value(500);
     };
     multi depends_on: Task;
 
@@ -1736,26 +1736,26 @@ module default {
 
 This schema demonstrates:
 
-- **Modules**: All types in the `default` module
-- **Globals**: `current_user_id` for access policies
-- **Custom scalar types**: `Priority` enum and `EmailAddress` with regex constraint
-- **Abstract types**: `Timestamped` and `Authored` for shared structure
-- **Multiple inheritance**: `Task` extends both `Timestamped` and `Authored`
-- **Properties**: Required, optional, computed, readonly, with defaults and rewrites
-- **Constraints**: `exclusive`, `max_length`, `min_value`, `one_of`, `regex`, expression-on
-- **Links**: Single (`author`), multi (`members` with link properties, `depends_on`), deletion policies
-- **Indexes**: On individual properties and multiple properties
-- **Annotations**: Built-in and custom abstract annotations
-- **Access policies**: Global-based row-level security
-- **Triggers**: After insert and after update
-- **Rewrite rules**: Auto-updating `updated_at` on insert and update
-- **Aliases**: Computed views for common queries
+- **Modules**: All types in the `default` module
+- **Globals**: `current_user_id` for access policies
+- **Custom scalar types**: `Priority` enum and `EmailAddress` with regex constraint
+- **Abstract types**: `Timestamped` and `Authored` for shared structure
+- **Multiple inheritance**: `Task` extends both `Timestamped` and `Authored`
+- **Properties**: Required, optional, computed, readonly, with defaults and rewrites
+- **Constraints**: `exclusive`, `max_len_value`, `min_value`, `one_of`, `regexp`, expression-on
+- **Links**: Single (`author`), multi (`members` with link properties, `depends_on`), deletion policies
+- **Indexes**: On individual properties and multiple properties
+- **Annotations**: Built-in and custom abstract annotations
+- **Access policies**: Global-based row-level security
+- **Triggers**: After insert and after update
+- **Rewrite rules**: Auto-updating `updated_at` on insert and update
+- **Aliases**: Computed views for common queries
 
 ---
 
 ## See Also
 
-- [EdgeQL Reference](edgeql.md) -- query language for reading and writing data
-- [Functions Reference](functions.md) -- built-in functions available in expressions
-- [Migrations](migrations.md) -- generating and applying schema changes
-- [Codegen](codegen.md) -- generating TypeScript types from your schema
+- [EdgeQL Reference](edgeql.md) -- query language for reading and writing data
+- [Functions Reference](functions.md) -- built-in functions available in expressions
+- [Migrations](migrations.md) -- generating and applying schema changes
+- [Codegen](codegen.md) -- generating TypeScript types from your schema

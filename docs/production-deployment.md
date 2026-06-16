@@ -1,16 +1,16 @@
 # Disc Production Deployment Guide
 
-This guide covers deploying the Disc database server in production environments.
+This guide covers deploying the Disc database server in production environments.
 
-All configuration is driven by environment variables, which makes Disc compatible with container orchestration, PaaS platforms, and traditional VM deployments.
+All configuration is driven by environment variables, which makes Disc compatible with container orchestration, PaaS platforms, and traditional VM deployments.
 
 ---
 
 ## Environment Configuration Reference
 
-All Disc server settings are read at startup via `create_server_from_env()`.
+All Disc server settings are read at startup via `create_server_from_env()`.
 
-No restart is required for most infrastructure changes — redeploy the container or process with updated environment variables.
+No restart is required for most infrastructure changes — redeploy the container or process with updated environment variables.
 
 | Variable                      | Default                            | Description                                                                                                                                    |
 | ----------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -46,11 +46,11 @@ No restart is required for most infrastructure changes — redeploy the containe
 
 ## TLS Setup
 
-Disc reads TLS certificate files directly from disk at startup. The server uses Deno's native TLS support, so no external TLS library is required.
+Disc reads TLS certificate files directly from disk at startup. The server uses Deno's native TLS support, so no external TLS library is required.
 
 ### Self-Signed Certificate (Development)
 
-Generate a self-signed certificate for local testing:
+Generate a self-signed certificate for local testing:
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -nodes \
@@ -72,7 +72,7 @@ disc serve
 
 ### Let's Encrypt (Production)
 
-Use `certbot` to obtain a certificate for a public domain:
+Use `certbot` to obtain a certificate for a public domain:
 
 ```bash
 certbot certonly --standalone \
@@ -81,7 +81,7 @@ certbot certonly --standalone \
   --agree-tos
 ```
 
-Certificates are written to `/etc/letsencrypt/live/disc.example.com/`.
+Certificates are written to `/etc/letsencrypt/live/disc.example.com/`.
 
 ```bash
 DISC_TLS_CERT=/etc/letsencrypt/live/disc.example.com/fullchain.pem \
@@ -159,11 +159,11 @@ The gauges refresh on initial bind and after every successful TLS hot-reload, so
 
 ### Reverse Proxy TLS Termination (Recommended for Production)
 
-Terminate TLS at the load balancer or reverse proxy and forward plain HTTP to Disc.
+Terminate TLS at the load balancer or reverse proxy and forward plain HTTP to Disc.
 
-This is the most common pattern for production deployments.
+This is the most common pattern for production deployments.
 
-Nginx example (TLS termination in front of Disc):
+Nginx example (TLS termination in front of Disc):
 
 ```nginx
 upstream disc {
@@ -205,7 +205,7 @@ server {
 }
 ```
 
-When using a reverse proxy, bind Disc to localhost only:
+When using a reverse proxy, bind Disc to localhost only:
 
 ```bash
 DISC_HOST=127.0.0.1
@@ -216,7 +216,7 @@ DISC_ENABLE_CORS=false
 
 ## Connection Pool Tuning
 
-Disc maintains a pool of PostgreSQL connections. The total connections across all Disc instances must stay below PostgreSQL's `max_connections` limit, with headroom reserved for administrative connections.
+Disc maintains a pool of PostgreSQL connections. The total connections across all Disc instances must stay below PostgreSQL's `max_connections` limit, with headroom reserved for administrative connections.
 
 **Formula:**
 
@@ -232,9 +232,9 @@ DISC_MAX_CONNECTIONS * disc_instance_count <= pg_max_connections - 5
 | Large (< 2000 req/s) | 100                    | 500                          | 3-5            |
 | High-availability    | 50                     | 500                          | 8+             |
 
-**PostgreSQL connection overhead:** Each connection consumes approximately 5-10 MB of shared memory on the PostgreSQL side. Do not set `max_connections` higher than needed on the database server.
+**PostgreSQL connection overhead:** Each connection consumes approximately 5-10 MB of shared memory on the PostgreSQL side. Do not set `max_connections` higher than needed on the database server.
 
-**PgBouncer:** For high-concurrency deployments, place PgBouncer in transaction mode between Disc and PostgreSQL. Set `DISC_MAX_CONNECTIONS` to the PgBouncer pool size and configure PgBouncer's `max_client_conn` to match your PostgreSQL limit.
+**PgBouncer:** For high-concurrency deployments, place PgBouncer in transaction mode between Disc and PostgreSQL. Set `DISC_MAX_CONNECTIONS` to the PgBouncer pool size and configure PgBouncer's `max_client_conn` to match your PostgreSQL limit.
 
 ---
 
@@ -304,7 +304,7 @@ healthcheck:
 
 ## Rate Limiting
 
-Disc applies per-IP rate limiting using a token bucket algorithm. Burst allows short spikes above the per-minute rate.
+Disc applies per-IP rate limiting using a token bucket algorithm. Burst allows short spikes above the per-minute rate.
 
 | Use Case                           | `DISC_RATE_LIMIT_RPM` | `DISC_RATE_LIMIT_BURST` |
 | ---------------------------------- | --------------------- | ----------------------- |
@@ -321,9 +321,9 @@ Retry-After: 60
 {"error": "Rate limit exceeded"}
 ```
 
-**Important:** If Disc is behind a reverse proxy, the rate limiter sees the proxy's IP rather than the real client IP. Ensure the proxy forwards `X-Real-IP` or `X-Forwarded-For`, and configure your infrastructure so Disc can trust these headers.
+**Important:** If Disc is behind a reverse proxy, the rate limiter sees the proxy's IP rather than the real client IP. Ensure the proxy forwards `X-Real-IP` or `X-Forwarded-For`, and configure your infrastructure so Disc can trust these headers.
 
-Consider applying rate limiting at the proxy layer instead for proxy deployments.
+Consider applying rate limiting at the proxy layer instead for proxy deployments.
 
 ---
 
@@ -331,7 +331,7 @@ Consider applying rate limiting at the proxy layer instead for proxy deployment
 
 ### Format
 
-`DISC_LOG_FORMAT=json` (recommended for production):
+`DISC_LOG_FORMAT=json` (recommended for production):
 
 ```json
 {
@@ -343,7 +343,7 @@ Consider applying rate limiting at the proxy layer instead for proxy deployment
 }
 ```
 
-`DISC_LOG_FORMAT=text` (useful for local development):
+`DISC_LOG_FORMAT=text` (useful for local development):
 
 ```
 INFO  2026-03-17T10:00:00.000Z Query executed duration_ms=12
@@ -418,9 +418,9 @@ scrape_configs:
 
 ## Prometheus Metrics
 
-Enable the `/metrics` endpoint by setting `DISC_ENABLE_METRICS=true`. The endpoint returns metrics in Prometheus text exposition format (content type `text/plain; version=0.0.4`).
+Enable the `/metrics` endpoint by setting `DISC_ENABLE_METRICS=true`. The endpoint returns metrics in Prometheus text exposition format (content type `text/plain; version=0.0.4`).
 
-**Important:** Do not expose `/metrics` publicly. Restrict access via firewall rules, a network policy, or a separate internal port at the proxy layer.
+**Important:** Do not expose `/metrics` publicly. Restrict access via firewall rules, a network policy, or a separate internal port at the proxy layer.
 
 ### Prometheus Scrape Configuration
 
@@ -452,61 +452,61 @@ scrape_configs:
 
 Create panels for:
 
-1. Request throughput (requests/s) split by success/error
+1. Request throughput (requests/s) split by success/error
 2. P50/P95/P99 request latency
-3. Connection pool utilization (active / max)
+3. Connection pool utilization (active / max)
 4. Cache hit rate over time
 5. Rate limit rejections per minute
-6. Memory usage trend (heap used vs heap total)
+6. Memory usage trend (heap used vs heap total)
 7. Slow query count per minute
 
 ---
 
 ## Docker Deployment
 
-Disc ships with production-ready Docker files in the repository root.
+Disc ships with production-ready Docker files in the repository root.
 
 ### Production Image (External PostgreSQL)
 
-Use the multi-stage `Dockerfile` for production deployments with an external PostgreSQL.
+Use the multi-stage `Dockerfile` for production deployments with an external PostgreSQL.
 
-This image caches dependencies in a separate stage, removes test and documentation files, runs as a non-root user, and includes a built-in health check.
+This image caches dependencies in a separate stage, removes test and documentation files, runs as a non-root user, and includes a built-in health check.
 
 ```bash
 docker build -t disc .
 docker run -e DATABASE_URL="postgres://user:pass@host:5432/disc" -p 5656:5656 disc
 ```
 
-The entrypoint supports running any CLI subcommand:
+The entrypoint supports running any CLI subcommand:
 
 ```bash
 docker run disc migrate    # Run migrations
 docker run disc shell      # Open EdgeQL shell
 ```
 
-See `Dockerfile` for the full multi-stage build definition.
+See `Dockerfile` for the full multi-stage build definition.
 
 ### All-in-One Image (Bundled PostgreSQL)
 
-Use `Dockerfile.bundled` for development, demos, or single-container deployments.
+Use `Dockerfile.bundled` for development, demos, or single-container deployments.
 
-This image installs PostgreSQL 16 inside the container and manages its lifecycle automatically via an entrypoint script.
+This image installs PostgreSQL 16 inside the container and manages its lifecycle automatically via an entrypoint script.
 
 ```bash
 docker build -f Dockerfile.bundled -t disc-bundled .
 docker run -p 5656:5656 disc-bundled
 ```
 
-No `DATABASE_URL` is required -- the entrypoint initializes PostgreSQL, creates the database, and connects Disc automatically.
+No `DATABASE_URL` is required -- the entrypoint initializes PostgreSQL, creates the database, and connects Disc automatically.
 
-See `Dockerfile.bundled` for the full build definition and entrypoint script.
+See `Dockerfile.bundled` for the full build definition and entrypoint script.
 
 ### Docker Compose
 
-The repository includes two compose files:
+The repository includes two compose files:
 
-- `docker-compose.yml` -- production stack with Disc and PostgreSQL
-- `docker-compose.monitoring.yml` -- overlay that adds Prometheus and Grafana
+- `docker-compose.yml` -- production stack with Disc and PostgreSQL
+- `docker-compose.monitoring.yml` -- overlay that adds Prometheus and Grafana
 
 ```bash
 # Production stack (Disc + PostgreSQL)
@@ -522,9 +522,9 @@ docker compose logs -f disc
 docker compose down
 ```
 
-The monitoring overlay expects a Prometheus config at `deploy/prometheus.yml` and automatically sets `DISC_ENABLE_METRICS=true` on the Disc service.
+The monitoring overlay expects a Prometheus config at `deploy/prometheus.yml` and automatically sets `DISC_ENABLE_METRICS=true` on the Disc service.
 
-Convenience tasks are available in `deno.json`:
+Convenience tasks are available in `deno.json`:
 
 ```bash
 deno task docker:build   # Build the production image
@@ -536,9 +536,9 @@ deno task docker:down    # Stop the compose stack
 
 ## Native Binary
 
-Disc can be compiled to a self-contained native binary using Deno's `deno compile`.
+Disc can be compiled to a self-contained native binary using Deno's `deno compile`.
 
-The resulting binary requires no runtime installation -- it embeds Deno and all dependencies.
+The resulting binary requires no runtime installation -- it embeds Deno and all dependencies.
 
 ### Building
 
@@ -550,11 +550,11 @@ disc build
 deno task build
 ```
 
-The binary is written to `./disc` by default.
+The binary is written to `./disc` by default.
 
 ### Cross-Compilation
 
-Target a specific platform with the `--platform` flag:
+Target a specific platform with the `--platform` flag:
 
 ```bash
 disc build --platform linux-x64
@@ -564,7 +564,7 @@ disc build --platform darwin-arm64
 disc build --platform windows-x64
 ```
 
-Platform-specific Deno tasks are also available:
+Platform-specific Deno tasks are also available:
 
 ```bash
 deno task build:linux-x64
@@ -574,7 +574,7 @@ deno task build:darwin-arm64
 deno task build:windows-x64
 ```
 
-When cross-compiling, the output binary is named `./disc-{platform}` (e.g., `./disc-linux-x64`); the `windows-x64` target adds a `.exe` extension (`./disc-windows-x64.exe`). You can override the output path with `--output`:
+When cross-compiling, the output binary is named `./disc-{platform}` (e.g., `./disc-linux-x64`); the `windows-x64` target adds a `.exe` extension (`./disc-windows-x64.exe`). You can override the output path with `--output`:
 
 ```bash
 disc build --platform linux-x64 --output ./dist/disc-server
@@ -592,16 +592,16 @@ disc build --platform linux-x64 --output ./dist/disc-server
 
 ### Cross-Compilation Limitations
 
-Deno's cross-compilation downloads a platform-specific runtime snapshot. This works reliably for most cases, but note:
+Deno's cross-compilation downloads a platform-specific runtime snapshot. This works reliably for most cases, but note:
 
-- The binary size may differ across platforms
-- Native plugins or FFI bindings (if any) are not cross-compiled
-- The resulting binary cannot be executed on the build host when targeting a different OS or architecture
+- The binary size may differ across platforms
+- Native plugins or FFI bindings (if any) are not cross-compiled
+- The resulting binary cannot be executed on the build host when targeting a different OS or architecture
 - The `windows-x64` target is produced and shipped by the build/release pipeline (with PostgreSQL embedded from Zonky's `windows-amd64` distribution), but the bundled-PostgreSQL runtime lifecycle on Windows is not yet validated — use the `--backend-dsn` external-PostgreSQL escape hatch on Windows for now
 
 ### Deployment with Native Binary
 
-The compiled binary can be deployed directly to a VM or bare-metal server:
+The compiled binary can be deployed directly to a VM or bare-metal server:
 
 ```bash
 # Build for Linux
@@ -614,13 +614,58 @@ scp ./disc-linux-x64 server:/usr/local/bin/disc
 ssh server "DATABASE_URL=postgres://... /usr/local/bin/disc serve"
 ```
 
-This pairs well with the systemd service unit generated by `disc deploy --format systemd`.
+This pairs well with the systemd service unit generated by `disc deploy --format systemd`.
+
+### Non-Root VPS Install (systemd)
+
+Disc never runs PostgreSQL as `root` -- PostgreSQL's `initdb` and `postgres` binaries refuse to start under uid 0, so the bundled-PostgreSQL path requires a dedicated non-root OS user. (External PostgreSQL via `DATABASE_URL` has no such constraint, but running the server itself as a non-root user is still recommended.) The generated `disc.service` already declares `User=${DISC_USER:-disc}`; this walkthrough sets up the matching user and directories on a fresh Linux VPS.
+
+```bash
+# 1. Create a dedicated, login-less system user.
+sudo useradd --system --create-home --shell /usr/sbin/nologin disc
+
+# 2. Lay out the working and data directories owned by that user.
+sudo mkdir -p /opt/disc /var/lib/disc /etc/disc
+sudo chown -R disc:disc /opt/disc /var/lib/disc
+
+# 3. Install the compiled binary (built with `disc build --platform linux-x64`).
+sudo install -o disc -g disc -m 0755 ./disc-linux-x64 /opt/disc/disc
+
+# 4. Write the environment file the unit reads (EnvironmentFile=/etc/disc/disc.env).
+sudo tee /etc/disc/disc.env >/dev/null <<'ENV'
+# Data root. Must live inside the unit's ReadWritePaths; the unit sets
+# ProtectHome=true, so the disc user's real $HOME is unreadable -- point
+# DISC_HOME at /opt/disc instead of relying on ~/.disc.
+DISC_HOME=/opt/disc
+DISC_HOST=127.0.0.1
+DISC_PORT=5656
+# Bundled PostgreSQL needs no DATABASE_URL -- the embedded distribution is
+# extracted under $DISC_HOME and managed automatically, all as the disc user.
+# To use external PostgreSQL instead, set DATABASE_URL with a dedicated,
+# non-superuser role and remove the bundled data dir:
+# DATABASE_URL=postgres://disc_app:CHANGE_ME@127.0.0.1:5432/disc
+ENV
+sudo chown disc:disc /etc/disc/disc.env
+sudo chmod 0640 /etc/disc/disc.env
+
+# 5. Install and start the unit generated by `disc deploy --format systemd`.
+disc deploy --format systemd --output /tmp/disc-deploy
+sudo cp /tmp/disc-deploy/disc.service /etc/systemd/system/disc.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now disc
+
+# 6. Verify it came up as the disc user, not root.
+systemctl status disc
+ps -o user,cmd -C postgres   # the postgres backends run as `disc`
+```
+
+The unit's hardening (`NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, `ReadWritePaths=/opt/disc /var/lib/disc`) assumes exactly this layout. If you relocate the data root, update both `DISC_HOME` in the env file and `ReadWritePaths`/`WorkingDirectory` in the unit so the `disc` user can still write to it. To bind a privileged port (`80`/`443`) without root, front Disc with a reverse proxy (see the Reverse Proxy TLS Termination section) rather than granting the process extra capabilities.
 
 ---
 
 ## Deploy Scaffold Generator
 
-The `disc deploy` command generates project-specific deployment artifacts. Instead of writing Dockerfiles, compose files, or service units from scratch, use the scaffold generator to produce a starting point tailored to your project.
+The `disc deploy` command generates project-specific deployment artifacts. Instead of writing Dockerfiles, compose files, or service units from scratch, use the scaffold generator to produce a starting point tailored to your project.
 
 ### Usage
 
@@ -628,7 +673,7 @@ The `disc deploy` command generates project-specific deployment artifacts. Inste
 disc deploy --format <format> [--output <directory>]
 ```
 
-The `--output` flag controls where generated files are written. Defaults to `./deploy`.
+The `--output` flag controls where generated files are written. Defaults to `./deploy`.
 
 ### Formats
 
@@ -641,14 +686,14 @@ The `--output` flag controls where generated files are written. Defaults to `./
 
 ### Examples
 
-Generate an environment variable template:
+Generate an environment variable template:
 
 ```bash
 disc deploy --format env
 # Writes ./deploy/.env.production
 ```
 
-Generate a systemd service unit to a custom directory:
+Generate a systemd service unit to a custom directory:
 
 ```bash
 disc deploy --format systemd --output ./infra
@@ -662,7 +707,7 @@ disc deploy --format compose
 # Writes ./deploy/docker-compose.yml
 ```
 
-The generated files include comments indicating they were scaffolded by `disc deploy` and are meant to be customized for your specific infrastructure.
+The generated files include comments indicating they were scaffolded by `disc deploy` and are meant to be customized for your specific infrastructure.
 
 ---
 
@@ -670,44 +715,44 @@ The generated files include comments indicating they were scaffolded by `disc de
 
 Before going live, verify each item:
 
-- [ ] TLS enabled directly or behind a TLS-terminating proxy
-- [ ] `DISC_JWT_SECRET` is set to a randomly generated string of 32 or more characters
-- [ ] `DISC_RATE_LIMIT_RPM` is set to a value appropriate for your traffic pattern
-- [ ] `DISC_CORS_ORIGINS` is restricted to your application's domains; not left as wildcard in production
-- [ ] `DISC_ENABLE_ACCESS_POLICIES=true` if serving multiple tenants or users with different data access rights
-- [ ] `DISC_ENABLE_METRICS=false` (default) or the `/metrics` endpoint is firewalled from public access
-- [ ] `DISC_LOG_LEVEL=WARN` in production to avoid logging sensitive query content
-- [ ] `DATABASE_URL` credentials use a dedicated database user with only the required privileges; not the PostgreSQL superuser
-- [ ] The Disc process runs as a non-root OS user
-- [ ] `DISC_HOST=127.0.0.1` when behind a reverse proxy (do not bind to `0.0.0.0` unless required)
-- [ ] Database credentials are stored in a secrets manager, not in environment files committed to version control
-- [ ] PostgreSQL is not exposed on a public network interface
+- [ ] TLS enabled directly or behind a TLS-terminating proxy
+- [ ] `DISC_JWT_SECRET` is set to a randomly generated string of 32 or more characters
+- [ ] `DISC_RATE_LIMIT_RPM` is set to a value appropriate for your traffic pattern
+- [ ] `DISC_CORS_ORIGINS` is restricted to your application's domains; not left as wildcard in production
+- [ ] `DISC_ENABLE_ACCESS_POLICIES=true` if serving multiple tenants or users with different data access rights
+- [ ] `DISC_ENABLE_METRICS=false` (default) or the `/metrics` endpoint is firewalled from public access
+- [ ] `DISC_LOG_LEVEL=WARN` in production to avoid logging sensitive query content
+- [ ] `DATABASE_URL` credentials use a dedicated database user with only the required privileges; not the PostgreSQL superuser
+- [ ] The Disc process runs as a non-root OS user
+- [ ] `DISC_HOST=127.0.0.1` when behind a reverse proxy (do not bind to `0.0.0.0` unless required)
+- [ ] Database credentials are stored in a secrets manager, not in environment files committed to version control
+- [ ] PostgreSQL is not exposed on a public network interface
 
 ---
 
 ## Graceful Shutdown
 
-Disc handles `SIGINT` and `SIGTERM` signals with an ordered shutdown sequence.
+Disc handles `SIGINT` and `SIGTERM` signals with an ordered shutdown sequence.
 
-This ensures in-flight requests complete and connections are cleanly released.
+This ensures in-flight requests complete and connections are cleanly released.
 
 Shutdown sequence:
 
 1. Signal received (`SIGINT` or `SIGTERM`)
-2. Server enters shutting-down state — new requests receive HTTP 503 immediately
-3. Wait up to `DISC_SHUTDOWN_DRAIN_TIMEOUT` milliseconds for in-flight requests to finish (polls every 100 ms)
-4. HTTP server and redirect server (if running) are shut down
-5. Protocol handler closes the PostgreSQL connection pool (drains remaining connections)
-6. Auth database connection is closed
+2. Server enters shutting-down state — new requests receive HTTP 503 immediately
+3. Wait up to `DISC_SHUTDOWN_DRAIN_TIMEOUT` milliseconds for in-flight requests to finish (polls every 100 ms)
+4. HTTP server and redirect server (if running) are shut down
+5. Protocol handler closes the PostgreSQL connection pool (drains remaining connections)
+6. Auth database connection is closed
 7. Process exits
 
-The default drain timeout is 30 seconds. For long-running query workloads, increase this value to match your expected maximum query duration:
+The default drain timeout is 30 seconds. For long-running query workloads, increase this value to match your expected maximum query duration:
 
 ```bash
 DISC_SHUTDOWN_DRAIN_TIMEOUT=60000  # 60 seconds
 ```
 
-In Kubernetes, set `terminationGracePeriodSeconds` to at least `DISC_SHUTDOWN_DRAIN_TIMEOUT / 1000 + 5` to give Disc enough time to drain before the kubelet force-kills the pod.
+In Kubernetes, set `terminationGracePeriodSeconds` to at least `DISC_SHUTDOWN_DRAIN_TIMEOUT / 1000 + 5` to give Disc enough time to drain before the kubelet force-kills the pod.
 
 ```yaml
 spec:
@@ -722,10 +767,10 @@ spec:
 
 **Symptoms:**
 
-- `DISC_MAX_CONNECTIONS` gauge in `/metrics` is at maximum
-- `disc_pool_waiters` metric is consistently above 0
-- Queries begin timing out or returning 408
-- `/health/ready` returns HTTP 503 with `{"status":"unhealthy"}`
+- `DISC_MAX_CONNECTIONS` gauge in `/metrics` is at maximum
+- `disc_pool_waiters` metric is consistently above 0
+- Queries begin timing out or returning 408
+- `/health/ready` returns HTTP 503 with `{"status":"unhealthy"}`
 
 **Diagnosis:**
 
@@ -737,16 +782,16 @@ curl -s http://localhost:5656/health | jq ".pool"
 
 **Fix:**
 
-- Increase `DISC_MAX_CONNECTIONS` if PostgreSQL `max_connections` allows headroom
-- Add more Disc instances (horizontal scaling)
-- Identify slow queries holding connections open (see Slow Queries below)
-- Consider adding PgBouncer in transaction mode
+- Increase `DISC_MAX_CONNECTIONS` if PostgreSQL `max_connections` allows headroom
+- Add more Disc instances (horizontal scaling)
+- Identify slow queries holding connections open (see Slow Queries below)
+- Consider adding PgBouncer in transaction mode
 
 ### High Memory Usage
 
 **Symptoms:**
 
-- `disc_memory_heap_used_bytes` grows over time without leveling off
+- `disc_memory_heap_used_bytes` grows over time without leveling off
 - Deno process OOM-killed
 
 **Diagnosis:**
@@ -757,28 +802,28 @@ curl -s http://localhost:5656/stats | jq ".memory_usage, .cache"
 
 **Fix:**
 
-- Reduce `DISC_CACHE_MAX_SIZE`. The query cache holds compiled query plans in memory.
-  A value of 500 is sufficient for most schemas.
-- Reduce `DISC_EXPLAIN_CACHE_TTL` to evict cached EXPLAIN results more frequently
-- Add memory limits to the container and monitor the heap-used-to-heap-total ratio
+- Reduce `DISC_CACHE_MAX_SIZE`. The query cache holds compiled query plans in memory.
+  A value of 500 is sufficient for most schemas.
+- Reduce `DISC_EXPLAIN_CACHE_TTL` to evict cached EXPLAIN results more frequently
+- Add memory limits to the container and monitor the heap-used-to-heap-total ratio
 
 ### Slow Queries
 
 **Symptoms:**
 
-- High average query duration in `/stats`
-- Log entries with `slow_query=true` when `DISC_SLOW_QUERY_MS` is set
+- High average query duration in `/stats`
+- Log entries with `slow_query=true` when `DISC_SLOW_QUERY_MS` is set
 
 **Diagnosis:**
 
-Enable slow query logging at an appropriate threshold:
+Enable slow query logging at an appropriate threshold:
 
 ```bash
 DISC_SLOW_QUERY_MS=200  # Log queries taking more than 200ms
 DISC_LOG_LEVEL=INFO
 ```
 
-Then check logs for the query text and use PostgreSQL `EXPLAIN ANALYZE` directly:
+Then check logs for the query text and use PostgreSQL `EXPLAIN ANALYZE` directly:
 
 ```sql
 EXPLAIN ANALYZE SELECT ...;
@@ -786,16 +831,16 @@ EXPLAIN ANALYZE SELECT ...;
 
 **Fix:**
 
-- Add indexes on frequently filtered columns
-- Break complex queries into simpler shapes
-- Check for N+1 patterns in nested link traversal
+- Add indexes on frequently filtered columns
+- Break complex queries into simpler shapes
+- Check for N+1 patterns in nested link traversal
 
 ### Rate Limit False Positives
 
 **Symptoms:**
 
-- Legitimate clients receiving HTTP 429 unexpectedly
-- `disc_rate_limit_rejected_total` metric increasing during normal traffic
+- Legitimate clients receiving HTTP 429 unexpectedly
+- `disc_rate_limit_rejected_total` metric increasing during normal traffic
 
 **Diagnosis:**
 
@@ -805,16 +850,16 @@ curl -s http://localhost:5656/stats | jq ".rate_limit"
 
 **Fix:**
 
-- Increase `DISC_RATE_LIMIT_RPM` for the traffic pattern
-- Increase `DISC_RATE_LIMIT_BURST` to absorb bursty but legitimate clients
-- If behind a proxy, verify that rate limiting at the proxy layer is preferred over per-IP limiting at Disc (since Disc will see the proxy IP, not the real client)
+- Increase `DISC_RATE_LIMIT_RPM` for the traffic pattern
+- Increase `DISC_RATE_LIMIT_BURST` to absorb bursty but legitimate clients
+- If behind a proxy, verify that rate limiting at the proxy layer is preferred over per-IP limiting at Disc (since Disc will see the proxy IP, not the real client)
 
 ### TLS Certificate Errors
 
 **Symptoms:**
 
-- Server fails to start with a TLS-related error
-- Clients report certificate verification failures
+- Server fails to start with a TLS-related error
+- Clients report certificate verification failures
 
 **Common causes and fixes:**
 
@@ -825,7 +870,7 @@ curl -s http://localhost:5656/stats | jq ".rate_limit"
 | `certificate expired`        | Let's Encrypt renewal failed                 | Run `certbot renew` manually; verify cron job                              |
 | `ERR_CERT_AUTHORITY_INVALID` | Self-signed cert not trusted by client       | Use a CA-signed cert or add the self-signed cert to the client trust store |
 
-Verify the certificate before starting Disc:
+Verify the certificate before starting Disc:
 
 ```bash
 openssl x509 -in "$DISC_TLS_CERT" -noout -text | grep -E "Not After|Subject:"

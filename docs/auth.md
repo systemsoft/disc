@@ -1,6 +1,6 @@
 # Authentication
 
-Disc includes a built-in authentication system with user registration, JWT-based sessions, password management, and email verification. Auth is disabled by default and must be explicitly enabled.
+Disc includes a built-in authentication system with user registration, JWT-based sessions, password management, and email verification. Auth is disabled by default and must be explicitly enabled.
 
 ---
 
@@ -8,7 +8,7 @@ Disc includes a built-in authentication system with user registration, JWT-based
 
 ### CLI Flags
 
-Start the server with authentication enabled:
+Start the server with authentication enabled:
 
 ```bash
 disc serve --jwt-secret "your-secret-key-at-least-32-chars" --enable-auth
@@ -16,7 +16,7 @@ disc serve --jwt-secret "your-secret-key-at-least-32-chars" --enable-auth
 
 ### Environment Variables
 
-Alternatively, configure auth via environment variables:
+Alternatively, configure auth via environment variables:
 
 ```bash
 export DISC_ENABLE_AUTH=1
@@ -24,17 +24,17 @@ export DISC_JWT_SECRET="your-secret-key-at-least-32-chars"
 disc serve
 ```
 
-Both the JWT secret and the enable flag are required. Without `--enable-auth` (or `DISC_ENABLE_AUTH=1`), the `/auth/*` routes are not registered even if a JWT secret is provided.
+Both the JWT secret and the enable flag are required. Without `--enable-auth` (or `DISC_ENABLE_AUTH=1`), the `/auth/*` routes are not registered even if a JWT secret is provided.
 
 ---
 
 ## API Endpoints
 
-All auth endpoints are served under the `/auth/` path prefix. Requests and responses use JSON.
+All auth endpoints are served under the `/auth/` path prefix. Requests and responses use JSON.
 
 ### POST /auth/register
 
-Create a new user account. Returns the user object, a JWT access token, and a refresh token.
+Create a new user account. Returns the user object, a JWT access token, and a refresh token.
 
 **Request:**
 
@@ -51,7 +51,7 @@ curl -X POST http://localhost:8080/auth/register \
 
 **Required fields:** `email`, `password`
 
-**Optional fields:** `username`, `metadata` (arbitrary JSON object)
+**Optional fields:** `username`, `metadata` (arbitrary JSON object)
 
 **Response (201 Created):**
 
@@ -80,13 +80,13 @@ curl -X POST http://localhost:8080/auth/register \
 }
 ```
 
-Registration can be disabled with the `allowRegistration: false` config option. When disabled, POST /auth/register returns `403 REGISTRATION_DISABLED`.
+Registration can be disabled with the `allowRegistration: false` config option. When disabled, POST /auth/register returns `403 REGISTRATION_DISABLED`.
 
 ---
 
 ### POST /auth/login
 
-Authenticate with email (or username) and password.
+Authenticate with email (or username) and password.
 
 **Request (by email):**
 
@@ -108,15 +108,15 @@ curl -X POST http://localhost:8080/auth/login \
 }
 ```
 
-**Response (200 OK):** Same shape as the registration response.
+**Response (200 OK):** Same shape as the registration response.
 
-The login endpoint checks that the user account is active and, if email verification is required, that the email has been verified. Failed checks return the appropriate error code (see [Error Codes](#error-codes)).
+The login endpoint checks that the user account is active and, if email verification is required, that the email has been verified. Failed checks return the appropriate error code (see [Error Codes](#error-codes)).
 
 ---
 
 ### POST /auth/refresh
 
-Exchange a refresh token for a new access token and refresh token pair. The old session is revoked and a new session is created.
+Exchange a refresh token for a new access token and refresh token pair. The old session is revoked and a new session is created.
 
 **Request:**
 
@@ -128,15 +128,15 @@ curl -X POST http://localhost:8080/auth/refresh \
   }'
 ```
 
-**Response (200 OK):** Same shape as the registration response, with new `token` and `refreshToken` values.
+**Response (200 OK):** Same shape as the registration response, with new `token` and `refreshToken` values.
 
-This implements token rotation -- every refresh invalidates the previous refresh token. If a refresh token is reused after rotation, the request fails with `401 INVALID_REFRESH_TOKEN`.
+This implements token rotation -- every refresh invalidates the previous refresh token. If a refresh token is reused after rotation, the request fails with `401 INVALID_REFRESH_TOKEN`.
 
 ---
 
 ### POST /auth/logout
 
-Revoke the current session. Requires authentication.
+Revoke the current session. Requires authentication.
 
 ```bash
 curl -X POST http://localhost:8080/auth/logout \
@@ -153,7 +153,7 @@ curl -X POST http://localhost:8080/auth/logout \
 
 ### GET /auth/profile
 
-Retrieve the authenticated user’s profile. Requires authentication.
+Retrieve the authenticated user’s profile. Requires authentication.
 
 ```bash
 curl http://localhost:8080/auth/profile \
@@ -175,13 +175,13 @@ curl http://localhost:8080/auth/profile \
 }
 ```
 
-The password hash is never included in profile responses.
+The password hash is never included in profile responses.
 
 ---
 
 ### PUT /auth/password
 
-Update the authenticated user’s password. Requires authentication. All existing sessions are revoked after a successful password change.
+Update the authenticated user’s password. Requires authentication. All existing sessions are revoked after a successful password change.
 
 **Request:**
 
@@ -201,13 +201,13 @@ curl -X PUT http://localhost:8080/auth/password \
 { "success": true }
 ```
 
-The new password must satisfy the configured password policy. If it does not, the response is `400 PASSWORD_TOO_WEAK` with a message describing the requirements.
+The new password must satisfy the configured password policy. If it does not, the response is `400 PASSWORD_TOO_WEAK` with a message describing the requirements.
 
 ---
 
 ### POST /auth/reset
 
-Request a password reset. This generates a reset token that expires after 1 hour.
+Request a password reset. This generates a reset token that expires after 1 hour.
 
 **Request:**
 
@@ -226,13 +226,13 @@ curl -X POST http://localhost:8080/auth/reset \
 }
 ```
 
-In a production deployment, you would integrate an email service to deliver the reset token to the user. The server generates the token but does not send email by default.
+In a production deployment, you would integrate an email service to deliver the reset token to the user. The server generates the token but does not send email by default.
 
 ---
 
 ### POST /auth/reset/confirm
 
-Complete a password reset using the token from the reset request.
+Complete a password reset using the token from the reset request.
 
 **Request:**
 
@@ -251,13 +251,13 @@ curl -X POST http://localhost:8080/auth/reset/confirm \
 { "success": true }
 ```
 
-All existing sessions are revoked after the password is reset.
+All existing sessions are revoked after the password is reset.
 
 ---
 
 ### GET /auth/verify
 
-Verify a user’s email address using the verification token issued during registration.
+Verify a user’s email address using the verification token issued during registration.
 
 ```bash
 curl "http://localhost:8080/auth/verify?token=abc123..."
@@ -269,7 +269,7 @@ curl "http://localhost:8080/auth/verify?token=abc123..."
 { "success": true }
 ```
 
-Email verification is only active when `requireEmailVerification` is set to `true` in the auth config. When enabled, users cannot log in until their email is verified.
+Email verification is only active when `requireEmailVerification` is set to `true` in the auth config. When enabled, users cannot log in until their email is verified.
 
 **Cross-device verification works out of the box.** The verification token isn’t bound to the session that requested it: a user can sign up on their phone, open the verification email on their laptop, and click the link in any browser without breaking the flow. Implementation note: `verifyEmail()` looks the user up purely by hashed token (`auth/provider.ts:verifyEmail`) — no IP, user-agent, or session-cookie check happens at redemption. This is intentional: tying verification to the originating device would silently break the common "click email link from a different machine" pattern that most users expect. Token security comes from its 32-byte entropy and single-use semantics, not from the client identity. (gh/geldata#7483)
 
@@ -277,7 +277,7 @@ Email verification is only active when `requireEmailVerification` is set to `tru
 
 ## Token Format
 
-Disc uses HS256-signed JWTs. The access token payload contains:
+Disc uses HS256-signed JWTs. The access token payload contains:
 
 ```json
 {
@@ -303,7 +303,7 @@ Disc uses HS256-signed JWTs. The access token payload contains:
 | `sub`      | User ID (UUID)                      |
 | `username` | Username (if set)                   |
 
-Tokens are extracted from requests in this order of precedence:
+Tokens are extracted from requests in this order of precedence:
 
 1. `Authorization: Bearer <token>` header
 2. `auth_token` cookie
@@ -313,9 +313,9 @@ Tokens are extracted from requests in this order of precedence:
 
 ## Auth Context in Queries
 
-When auth is enabled, the JWT claims from an authenticated request flow into the query context. This is how [access policies](access-policies.md) know who is making a request.
+When auth is enabled, the JWT claims from an authenticated request flow into the query context. This is how [access policies](access-policies.md) know who is making a request.
 
-The server builds an `AuthContext` from the verified JWT:
+The server builds an `AuthContext` from the verified JWT:
 
 ```typescript
 interface AuthContext {
@@ -332,13 +332,13 @@ interface AuthContext {
 }
 ```
 
-This context is passed to the query handler on every request. When access policies are enabled, the `AuthContext` is bridged to an `AccessContext` that the policy evaluator uses for row-level filtering. See [Access Policies](access-policies.md) for details.
+This context is passed to the query handler on every request. When access policies are enabled, the `AuthContext` is bridged to an `AccessContext` that the policy evaluator uses for row-level filtering. See [Access Policies](access-policies.md) for details.
 
 ---
 
 ## Configuration Options
 
-All configuration options with their defaults:
+All configuration options with their defaults:
 
 ```typescript
 interface AuthConfig {
@@ -367,7 +367,7 @@ interface AuthConfig {
 }
 ```
 
-When using the server config in `disc.toml` or via `ServerConfig`, auth-specific options are nested under `authConfig`:
+When using the server config in `disc.toml` or via `ServerConfig`, auth-specific options are nested under `authConfig`:
 
 ```typescript
 const serverConfig: ServerConfig = {
@@ -389,7 +389,7 @@ const serverConfig: ServerConfig = {
 
 ## Error Codes
 
-Auth errors are returned as JSON with an HTTP status code, error message, and machine-readable error code:
+Auth errors are returned as JSON with an HTTP status code, error message, and machine-readable error code:
 
 ```json
 {
@@ -416,24 +416,25 @@ Auth errors are returned as JSON with an HTTP status code, error message, and ma
 
 ## Database Schema
 
-The auth module creates and manages two tables automatically when initialized:
+The auth module creates and manages two tables automatically when initialized:
 
 ### `users` table
 
-| Column                | Type                 | Description                       |
-| --------------------- | -------------------- | --------------------------------- |
-| `active`              | BOOLEAN              | Whether account is active         |
-| `created_at`          | TIMESTAMP            | Account creation time             |
-| `email`               | TEXT UNIQUE NOT NULL | Login identifier                  |
-| `email_verified`      | BOOLEAN              | Whether email has been verified   |
-| `id`                  | TEXT PRIMARY KEY     | UUID                              |
-| `metadata`            | TEXT                 | JSON string of arbitrary metadata |
-| `password_hash`       | TEXT NOT NULL        | bcrypt hash                       |
-| `reset_token`         | TEXT                 | Token for password reset          |
-| `reset_token_expires` | TIMESTAMP            | Reset token expiration            |
-| `updated_at`          | TIMESTAMP            | Last modification time            |
-| `username`            | TEXT UNIQUE          | Optional login identifier         |
-| `verification_token`  | TEXT                 | Token for email verification      |
+| Column                | Type                 | Description                                          |
+| --------------------- | -------------------- | ---------------------------------------------------- |
+| `active`              | BOOLEAN              | Whether account is active                            |
+| `created_at`          | TIMESTAMP            | Account creation time                                |
+| `email`               | TEXT UNIQUE NOT NULL | Login identifier                                     |
+| `email_verified`      | BOOLEAN              | Whether email has been verified                      |
+| `id`                  | TEXT PRIMARY KEY     | UUID                                                 |
+| `is_anonymous`        | BOOLEAN              | True for guest sessions created via `loginAnonymous` |
+| `metadata`            | TEXT                 | JSON string of arbitrary metadata                    |
+| `password_hash`       | TEXT NOT NULL        | bcrypt hash                                          |
+| `reset_token`         | TEXT                 | Token for password reset                             |
+| `reset_token_expires` | TIMESTAMP            | Reset token expiration                               |
+| `updated_at`          | TIMESTAMP            | Last modification time                               |
+| `username`            | TEXT UNIQUE          | Optional login identifier                            |
+| `verification_token`  | TEXT                 | Token for email verification                         |
 
 ### `sessions` table
 
@@ -690,7 +691,7 @@ Disc shipped this ahead of upstream Gel ([gh/geldata#8750](https://github.com/ge
 
 ### OAuth Providers
 
-The `ext-oauth` extension provides OAuth 2.0 + OIDC support for major providers (Google, GitHub, Apple, Microsoft, LinkedIn, Facebook, Twitter/X, Keycloak, Discord, Slack) plus a generic OIDC factory.
+The `ext-oauth` extension ships dedicated provider factories for Google, GitHub, Apple, Twitter/X, Facebook, LinkedIn, and Keycloak, plus a generic OIDC factory (`genericOidcProvider` / `createOidcProvider`). Any other OIDC-compliant issuer (Microsoft, Discord, Slack, Zitadel, etc.) is reachable through the generic OIDC provider.
 
 ```typescript
 import { createOAuthExtension, googleProvider } from "disc/ext-oauth/mod.ts";
@@ -719,10 +720,11 @@ PKCE parameters are handled per RFC 7636 — the trailing-`=` padding from S256 
 For a generic OIDC issuer, use `createOidcProvider`:
 
 ```typescript
-import { createOidcProvider } from "disc/ext-oauth/discovery.ts";
+import { createOidcProvider } from "disc/ext-oauth/providers.ts";
 
 const zitadel = await createOidcProvider({
-  issuer: "https://example.zitadel.cloud",
+  name: "zitadel",
+  issuerUrl: "https://example.zitadel.cloud",
   clientId: "...",
   clientSecret: "...",
   redirectUri: "https://app.example.com/auth/oauth/callback"
@@ -765,7 +767,11 @@ const config: AuthConfig = {
   webhooks: [
     {
       url: "https://example.com/hooks/auth",
-      events: ["UserCreated", "PasswordResetRequested", "MagicLinkRequested"],
+      events: [
+        "IdentityCreated",
+        "PasswordResetRequested",
+        "MagicLinkRequested"
+      ],
       secret: "shared-hmac-secret" // HMAC-SHA256 of the body
     }
   ]
@@ -774,7 +780,7 @@ const config: AuthConfig = {
 
 Events fire after the relevant DB write, via `queueMicrotask` + `fetch` — no retry, no back-pressure. When Disc grows a job queue, webhook delivery will be the natural first user (open question in the ledger).
 
-Event types: `UserCreated`, `EmailVerified`, `PasswordChanged`, `PasswordResetRequested`, `MagicLinkRequested`, `SessionCreated`, `SessionRefreshedFromNewIp`. The signing secret is per-subscription, so multiple receivers can each verify independently. (`auth/webhooks.ts`, gh/geldata#7484)
+Event types: `EmailVerificationRequested`, `EmailVerified`, `IdentityAuthenticated`, `IdentityCreated`, `MagicCodeRequested`, `MagicLinkRequested`, `MagicLinkSignupRequested`, `PasswordResetRequested`. The signing secret is per-subscription, so multiple receivers can each verify independently. (`auth/webhooks.ts`, gh/geldata#7484)
 
 > Webhooks differ from Gel’s implementation — Gel uses `std::net::http::schedule_request` (a job queue with retry). Disc fires-and-forgets until a job queue lands.
 
@@ -865,7 +871,7 @@ const config: AuthConfig = {
   captcha: {
     provider: "turnstile",
     secret: Deno.env.get("TURNSTILE_SECRET")!,
-    requireOn: ["register", "magic-link"]
+    gate: ["register", "magicLink"]
   }
 };
 ```
@@ -920,25 +926,25 @@ The CLI requires `DATABASE_URL` and `DISC_JWT_SECRET` (or `--database-url` / `--
 
 ## Security Best Practices
 
-**Use a strong JWT secret.** The secret must be at least 32 characters of high entropy. Generate one with:
+**Use a strong JWT secret.** The secret must be at least 32 characters of high entropy. Generate one with:
 
 ```bash
 openssl rand -base64 48
 ```
 
-**Always use HTTPS in production.** JWTs are bearer tokens -- anyone who intercepts one can impersonate the user. Disc supports TLS directly:
+**Always use HTTPS in production.** JWTs are bearer tokens -- anyone who intercepts one can impersonate the user. Disc supports TLS directly:
 
 ```bash
 disc serve --tls-cert cert.pem --tls-key key.pem
 ```
 
-See [Production Deployment](production-deployment.md) for full TLS configuration.
+See [Production Deployment](production-deployment.md) for full TLS configuration.
 
-**Rotate refresh tokens.** Disc implements automatic rotation -- each call to `/auth/refresh` invalidates the old refresh token and issues a new one. If a stolen refresh token is reused, the request fails immediately.
+**Rotate refresh tokens.** Disc implements automatic rotation -- each call to `/auth/refresh` invalidates the old refresh token and issues a new one. If a stolen refresh token is reused, the request fails immediately.
 
-**Set appropriate token expiry.** Short-lived access tokens (15-60 minutes) limit the window of exposure. Refresh tokens can be longer-lived (hours to days) since they are single-use.
+**Set appropriate token expiry.** Short-lived access tokens (15-60 minutes) limit the window of exposure. Refresh tokens can be longer-lived (hours to days) since they are single-use.
 
-**Enable password requirements.** For production systems, enable uppercase, number, and special character requirements:
+**Enable password requirements.** For production systems, enable uppercase, number, and special character requirements:
 
 ```typescript
 {
@@ -949,14 +955,14 @@ See [Production Deployment](production-deployment.md) for full TLS configuratio
 }
 ```
 
-**Disable open registration when appropriate.** If your application manages user creation through an admin flow, set `allowRegistration: false` to prevent unauthorized account creation.
+**Disable open registration when appropriate.** If your application manages user creation through an admin flow, set `allowRegistration: false` to prevent unauthorized account creation.
 
-**Do not expose reset tokens in responses.** In production, the reset token should be delivered via email, not returned in the HTTP response. The current implementation returns success without exposing the token.
+**Do not expose reset tokens in responses.** In production, the reset token should be delivered via email, not returned in the HTTP response. The current implementation returns success without exposing the token.
 
 ---
 
 ## Related
 
-- [Access Policies](access-policies.md) -- row-level security powered by auth context
-- [Server Configuration](server.md) -- full server config reference
-- [Production Deployment](production-deployment.md) -- TLS, rate limiting, and hardening
+- [Access Policies](access-policies.md) -- row-level security powered by auth context
+- [Server Configuration](server.md) -- full server config reference
+- [Production Deployment](production-deployment.md) -- TLS, rate limiting, and hardening

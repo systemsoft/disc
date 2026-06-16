@@ -11,9 +11,11 @@ Related documentation: [Codegen](codegen.md) | [Client SDK](client-sdk.md) | [Ed
 ## The shape
 
 ```ts
-import { CLIENT } from "./dbschema/disc-client";
+import DiscClient from "./dbschema/disc-client";
 
-const merchants = await CLIENT.merchant.filter({
+const client = new DiscClient(/* config */);
+
+const merchants = await client.merchant.filter({
   email: "user@example.com",
   active: true
 });
@@ -38,7 +40,7 @@ Per-field operators are nested objects. The supported set covers the common case
 | `in`, `not_in`           | `.f in array_unpack(<array<T>>$p)` | Array of values, lowers to `UNNEST`                          |
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   amount: { gte: 100, lt: 1000 }, // range
   status: { in: ["paid", "refunded"] }, // membership
   email: { ilike: "%@example.com" } // pattern
@@ -54,17 +56,19 @@ Range queries on one field stay grouped (`{ amount: { gte, lt } }`) instead of b
 Top-level keys are AND. For everything else, three combinators import from your generated client:
 
 ```ts
-import { and, CLIENT, not, or } from "./dbschema/disc-client";
+import DiscClient, { and, not, or } from "./dbschema/disc-client";
 
-await CLIENT.payment.filter(
+const client = new DiscClient(/* config */);
+
+await client.payment.filter(
   or({ status: "paid" }, { status: "refunded" })
 );
 
-await CLIENT.user.filter(
+await client.user.filter(
   and({ active: true }, or({ tier: "gold" }, { spend: { gte: 1000 } }))
 );
 
-await CLIENT.user.filter(not({ active: false }));
+await client.user.filter(not({ active: false }));
 ```
 
 The combinators accept either Filter objects or other combinators, so they nest freely. A bare Filter object never needs `and(...)` since its keys already AND together.
@@ -76,7 +80,7 @@ The combinators accept either Filter objects or other combinators, so they nest 
 By default `filter()` returns every scalar field of the type (the EdgeQL `{ * }` splat). Pass `select` to narrow:
 
 ```ts
-await CLIENT.merchant.filter({
+await client.merchant.filter({
   active: true,
   select: {
     id: true,
@@ -89,7 +93,7 @@ await CLIENT.merchant.filter({
 `select` follows the schema shape: `field: true` includes a scalar, `link: true` pulls all of the linked object's fields, `link: { ... }` narrows the linked object too.
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   select: {
     id: true,
     amount: true,
@@ -107,7 +111,7 @@ Linked objects are nested filter objects. The link's name in your schema is the 
 ### Single link, terminal `id` — no subquery
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   merchant: { id: merchantId }
 });
 // → ... filter .merchant_id = $1
@@ -118,7 +122,7 @@ When the path ends at `.id`, the foreign-key column on the source table _is_ the
 ### Single link, terminal property — correlated subquery
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   merchant: { email: "x@y.com" }
 });
 // → ... filter (SELECT email FROM merchants WHERE id = p.merchant_id) = $1
@@ -127,7 +131,7 @@ await CLIENT.payment.filter({
 ### N-hop chain — nested correlated subqueries
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   merchant: { owner: { email: "owner@y.com" } }
 });
 // → ... filter (SELECT email FROM owners WHERE id =
@@ -141,7 +145,7 @@ Any number of single-link hops compose by recursive subquery wrapping. When the 
 For `multi` links with a backlink (e.g., `User` has `multi posts: Post` linked back via `Post.author`):
 
 ```ts
-await CLIENT.user.filter({
+await client.user.filter({
   posts: { title: "hello world" }
 });
 // → ... filter EXISTS (SELECT 1 FROM posts p WHERE p.author_id = u.id AND p.title = $1)
@@ -154,7 +158,7 @@ EdgeQL set-comparison semantics say `set OP scalar` is true if any element match
 For `multi tags: Tag` linked through `user_tags(user_id, tag_id)`:
 
 ```ts
-await CLIENT.user.filter({
+await client.user.filter({
   tags: { name: "important" }
 });
 // → ... filter EXISTS (
@@ -166,7 +170,7 @@ await CLIENT.user.filter({
 When the terminal step is `id`, the JOIN is elided since the junction's target column already holds the target's id:
 
 ```ts
-await CLIENT.user.filter({ tags: { id: tagId } });
+await client.user.filter({ tags: { id: tagId } });
 // → ... filter EXISTS (SELECT 1 FROM user_tags j WHERE j.user_id = u.id AND j.tag_id = $1)
 ```
 
@@ -177,7 +181,7 @@ await CLIENT.user.filter({ tags: { id: tagId } });
 Reserved keys `order_by`, `limit`, `offset` sit alongside your predicates at the top level.
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   status: "paid",
   order_by: "-created", // `-` prefix means desc
   limit: 10,
@@ -188,7 +192,7 @@ await CLIENT.payment.filter({
 `order_by` accepts either a string or an array of strings for multi-key sort. The `-` prefix on any field flips that key to descending; otherwise it ascends.
 
 ```ts
-await CLIENT.payment.filter({
+await client.payment.filter({
   order_by: ["-created", "amount"] // newest first, then amount asc
 });
 // → ... order by .created desc then .amount
@@ -203,7 +207,7 @@ await CLIENT.payment.filter({
 `filter()` always returns an array. For single-row lookups, set `limit: 1` and destructure:
 
 ```ts
-const [merchant] = await CLIENT.merchant.filter({
+const [merchant] = await client.merchant.filter({
   email: this.query.email,
   limit: 1
 });
@@ -218,9 +222,11 @@ This intentionally avoids a separate `findOne()` method on every type — one me
 Every feature in one query:
 
 ```ts
-import { CLIENT, or } from "./dbschema/disc-client";
+import DiscClient, { or } from "./dbschema/disc-client";
 
-const [PAYMENT] = await CLIENT.payment.filter({
+const client = new DiscClient(/* config */);
+
+const [PAYMENT] = await client.payment.filter({
   // Predicate fields
   merchant: { id: this.query.merchantId },
   status: { in: ["pending", "active"] },
@@ -252,7 +258,7 @@ That object lowers to one EdgeQL query, one round-trip to PostgreSQL, with param
 
 When the object form doesn't fit (deeply custom EdgeQL, schema features the filter compiler doesn't yet cover):
 
-- **Raw EdgeQL:** `await CLIENT.query<T>("select X { ... } filter ...", { params })` is always available. The codegen is a layer on top, never in the way.
+- **Raw EdgeQL:** `await client.query<T>("select X { ... } filter ...", { params })` is always available. The codegen is a layer on top, never in the way.
 - **Codegen-free runtime DSL:** `from("X").select({...}).filter(u => u.email.eq("x")).toEdgeQL()` is the Phase 1 builder for ad-hoc queries. See [Client SDK → Codegen-free query builder](client-sdk.md#codegen-free-query-builder).
 
 ---

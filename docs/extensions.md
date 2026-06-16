@@ -1,14 +1,14 @@
 # Extensions
 
-Disc has a modular extension system that lets you add capabilities to the database server. Extensions can register custom EdgeQL functions, add HTTP routes, inject SQL setup, hook into the query compiler, and report health status.
+Disc has a modular extension system that lets you add capabilities to the database server. Extensions can register custom EdgeQL functions, add HTTP routes, inject SQL setup, hook into the query compiler, and report health status.
 
-Disc ships with five built-in extensions:
+Disc ships with five built-in extensions:
 
-- **ext::fts** -- Full-text search using PostgreSQL tsvector/tsquery
-- **ext::vector** -- Vector similarity search using pgvector
-- **ext::graphql** -- Auto-generated GraphQL API from your SDL schema
-- **ext::custom-functions** -- User-defined PL/pgSQL functions callable from EdgeQL
-- **ext::oauth** -- OAuth 2.0 provider integration (Google, GitHub, Apple)
+- **ext::fts** -- Full-text search using PostgreSQL tsvector/tsquery
+- **ext::vector** -- Vector similarity search using pgvector
+- **ext::graphql** -- Auto-generated GraphQL API from your SDL schema
+- **ext::custom-functions** -- User-defined PL/pgSQL functions callable from EdgeQL
+- **ext::oauth** -- OAuth 2.0 provider integration (Google, GitHub, Apple)
 
 ---
 
@@ -16,7 +16,7 @@ Disc ships with five built-in extensions:
 
 ### Lifecycle
 
-Every extension goes through a defined lifecycle:
+Every extension goes through a defined lifecycle:
 
 ```
 uninitialized -> initializing -> ready -> shutdown
@@ -25,15 +25,15 @@ uninitialized -> initializing -> ready -> shutdown
                                 error
 ```
 
-1. **Registration** -- The extension is registered with the `ExtensionRegistry`.
-2. **Database setup** -- Any SQL setup statements (e.g., `CREATE EXTENSION IF NOT EXISTS vector`) are executed.
-3. **Initialization** -- The extension’s `initialize()` method is called with access to the connection pool, schema, server config, and logger.
-4. **Ready** -- The extension is active. Its functions, routes, and middleware are available.
-5. **Shutdown** -- On server stop, `shutdown()` is called in reverse initialization order.
+1. **Registration** -- The extension is registered with the `ExtensionRegistry`.
+2. **Database setup** -- Any SQL setup statements (e.g., `CREATE EXTENSION IF NOT EXISTS vector`) are executed.
+3. **Initialization** -- The extension’s `initialize()` method is called with access to the connection pool, schema, server config, and logger.
+4. **Ready** -- The extension is active. Its functions, routes, and middleware are available.
+5. **Shutdown** -- On server stop, `shutdown()` is called in reverse initialization order.
 
 ### Dependency Resolution
 
-Extensions can declare dependencies on other extensions. The registry performs a topological sort to ensure correct initialization order. Circular dependencies are detected and rejected.
+Extensions can declare dependencies on other extensions. The registry performs a topological sort to ensure correct initialization order. Circular dependencies are detected and rejected.
 
 ```typescript
 const extension: ExtensionMetadata = {
@@ -45,7 +45,7 @@ const extension: ExtensionMetadata = {
 
 ### Health Checks
 
-Each extension implements a `healthCheck()` method. The server aggregates extension health into the `/health` endpoint:
+Each extension implements a `healthCheck()` method. The server aggregates extension health into the `/health` endpoint:
 
 ```bash
 curl http://localhost:8080/health
@@ -75,7 +75,7 @@ curl http://localhost:8080/health
 
 ## Enabling Extensions
 
-Extensions are registered with the `DiscServer` at startup. In code:
+Extensions are registered with the `DiscServer` at startup. In code:
 
 ```typescript
 import { CustomFunctionsExtension } from "./ext-custom-functions/extension.ts";
@@ -97,17 +97,17 @@ const server = new DiscServer({
 await server.start();
 ```
 
-Extension HTTP routes are served under `/ext/<extension-name>/`. For example, the GraphQL extension’s query endpoint is at `/ext/graphql/graphql`.
+Extension HTTP routes are served under `/ext/<extension-name>/`. For example, the GraphQL extension’s query endpoint is at `/ext/graphql/graphql`.
 
 ---
 
 ## Full-Text Search (ext::fts)
 
-Full-text search uses PostgreSQL’s built-in tsvector and tsquery infrastructure. No additional PostgreSQL extension is needed.
+Full-text search uses PostgreSQL’s built-in tsvector and tsquery infrastructure. No additional PostgreSQL extension is needed.
 
 ### Schema Setup
 
-Add an FTS index to your type’s properties using the index builder:
+Add an FTS index to your type’s properties using the index builder:
 
 ```typescript
 import {
@@ -139,11 +139,11 @@ const columnDDL = generateFtsColumn(config);
 const indexDDL = generateFtsIndex(config);
 ```
 
-The generated `fts_vector` column is a `GENERATED ALWAYS AS ... STORED` column that automatically updates when the source columns change.
+The generated `fts_vector` column is a `GENERATED ALWAYS AS ... STORED` column that automatically updates when the source columns change.
 
 ### Weights
 
-FTS weights control the relative importance of matches in different columns during ranking:
+FTS weights control the relative importance of matches in different columns during ranking:
 
 | Weight | Priority         |
 | ------ | ---------------- |
@@ -152,15 +152,15 @@ FTS weights control the relative importance of matches in different columns duri
 | C      | Medium           |
 | D      | Lowest (default) |
 
-Columns without an explicit weight get the default (D) treatment.
+Columns without an explicit weight get the default (D) treatment.
 
 ### EdgeQL Functions
 
-The FTS extension registers two EdgeQL functions:
+The FTS extension registers two EdgeQL functions:
 
-**`fts::search(query: str) -> bool`** -- Returns true if the row’s `fts_vector` matches the search query.
+**`fts::search(query: str) -> bool`** -- Returns true if the row’s `fts_vector` matches the search query.
 
-**`fts::rank(query: str) -> float64`** -- Returns a relevance score for ranking results.
+**`fts::rank(query: str) -> float64`** -- Returns a relevance score for ranking results.
 
 ```
 # Find posts matching "database TypeScript"
@@ -173,7 +173,7 @@ filter fts::search("database TypeScript")
 order by fts::rank("database TypeScript") desc;
 ```
 
-These compile to PostgreSQL’s `@@` (match) and `ts_rank()` operators:
+These compile to PostgreSQL’s `@@` (match) and `ts_rank()` operators:
 
 ```sql
 SELECT jsonb_build_object(
@@ -188,7 +188,7 @@ ORDER BY ts_rank(bp.fts_vector, plainto_tsquery('english', 'database TypeScript'
 
 ### Language Configuration
 
-The FTS extension defaults to the `english` text search configuration. Change it at construction:
+The FTS extension defaults to the `english` text search configuration. Change it at construction:
 
 ```typescript
 new FtsExtension("spanish");
@@ -196,17 +196,17 @@ new FtsExtension("simple"); // language-agnostic, no stemming
 new FtsExtension("german");
 ```
 
-PostgreSQL ships with configurations for many languages. Run `SELECT cfgname FROM pg_ts_config;` to list available configurations.
+PostgreSQL ships with configurations for many languages. Run `SELECT cfgname FROM pg_ts_config;` to list available configurations.
 
 ---
 
 ## Vector Search (ext::vector)
 
-Vector search enables similarity queries on embedding vectors using the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension.
+Vector search enables similarity queries on embedding vectors using the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension.
 
 ### Prerequisites
 
-The pgvector extension must be available in your PostgreSQL installation. Disc’s database setup automatically runs `CREATE EXTENSION IF NOT EXISTS vector;` when the extension initializes.
+The pgvector extension must be available in your PostgreSQL installation. Disc’s database setup automatically runs `CREATE EXTENSION IF NOT EXISTS vector;` when the extension initializes.
 
 ### Configuration
 
@@ -219,7 +219,7 @@ new VectorExtension({
 
 ### Storing Vectors
 
-Add a vector column to your schema. The vector type is registered by the extension:
+Add a vector column to your schema. The vector type is registered by the extension:
 
 ```
 module default {
@@ -233,7 +233,7 @@ module default {
 
 ### Distance Operators
 
-The extension registers four EdgeQL functions that compile to pgvector operators:
+The extension registers four EdgeQL functions that compile to pgvector operators:
 
 | Function                  | Operator        | Description                                        |
 | ------------------------- | --------------- | -------------------------------------------------- |
@@ -256,7 +256,7 @@ limit 10;
 
 ### Index Types
 
-Create a vector index for fast approximate nearest neighbor search:
+Create a vector index for fast approximate nearest neighbor search:
 
 ```typescript
 import { generateVectorIndex } from "./ext-vector/index-builder.ts";
@@ -287,13 +287,13 @@ const ivfflatIndex = generateVectorIndex({
 //   WITH (lists = 100);
 ```
 
-**HNSW** is generally preferred for production workloads -- it provides better recall and does not require a separate training step. **IVFFlat** builds faster and uses less memory, but requires `lists` to be tuned based on dataset size.
+**HNSW** is generally preferred for production workloads -- it provides better recall and does not require a separate training step. **IVFFlat** builds faster and uses less memory, but requires `lists` to be tuned based on dataset size.
 
 ---
 
 ## GraphQL (ext::graphql)
 
-The GraphQL extension auto-generates a GraphQL schema from your SDL type definitions and translates incoming GraphQL queries to EdgeQL.
+The GraphQL extension auto-generates a GraphQL schema from your SDL type definitions and translates incoming GraphQL queries to EdgeQL.
 
 ### Configuration
 
@@ -316,15 +316,15 @@ The extension registers three HTTP routes:
 
 ### Rate limiting (gh/geldata#718)
 
-GraphQL endpoints inherit the server’s HTTP-level rate limiter — the same per-client-IP, per-minute gate that applies to `/query` and every other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the server config; the limiter runs _before_ extension routing in `server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
+GraphQL endpoints inherit the server’s HTTP-level rate limiter — the same per-client-IP, per-minute gate that applies to `/query` and every other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the server config; the limiter runs _before_ extension routing in `server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
 
-Disc does **not** currently apply per-query-complexity weighting (deep nested queries count the same as `{ __typename }`). The `maxDepth` config above caps recursion depth as a coarse safety net, but a proper cost-based limiter — counting nested fields, list multipliers, and aliased duplicates — is future work and would require introducing a query-cost analyzer in `query-translator.ts`. File an issue if you hit a real DoS pattern this misses.
+Disc does **not** currently apply per-query-complexity weighting (deep nested queries count the same as `{ __typename }`). The `maxDepth` config above caps recursion depth as a coarse safety net, but a proper cost-based limiter — counting nested fields, list multipliers, and aliased duplicates — is future work and would require introducing a query-cost analyzer in `query-translator.ts`. File an issue if you hit a real DoS pattern this misses.
 
 ### Schema Generation
 
-The extension automatically maps your SDL types to GraphQL types:
+The extension automatically maps your SDL types to GraphQL types:
 
-**EdgeQL to GraphQL type mapping:**
+**EdgeQL to GraphQL type mapping:**
 
 | EdgeQL Type          | GraphQL Type                         |
 | -------------------- | ------------------------------------ |
@@ -339,11 +339,11 @@ The extension automatically maps your SDL types to GraphQL types:
 | `decimal`            | `String`                             |
 | `bytes`              | `String`                             |
 
-Object types and enum types are mapped directly. Links become nested object references.
+Object types and enum types are mapped directly. Links become nested object references.
 
 **Generated query roots:**
 
-For each non-abstract object type `Foo`, the extension generates:
+For each non-abstract object type `Foo`, the extension generates:
 
 ```graphql
 type Query {
@@ -367,7 +367,7 @@ type Mutation {
 
 ### Query Translation
 
-GraphQL queries are parsed and translated to EdgeQL:
+GraphQL queries are parsed and translated to EdgeQL:
 
 ```graphql
 # GraphQL
@@ -408,28 +408,28 @@ select User {name, email} limit 10 offset 20
 
 ### Playground
 
-Navigate to `/ext/graphql/graphql` in a browser to open the built-in GraphQL playground. It provides a text editor for writing queries and displays results inline.
+Navigate to `/ext/graphql/graphql` in a browser to open the built-in GraphQL playground. It provides a text editor for writing queries and displays results inline.
 
 ### Query Depth Limiting
 
-To prevent abuse, the extension rejects queries deeper than `maxDepth` (default: 10 levels of nesting). This is measured by counting nested `{ }` braces in the query string.
+To prevent abuse, the extension rejects queries deeper than `maxDepth` (default: 10 levels of nesting). This is measured by counting nested `{ }` braces in the query string.
 
 ### Limitations
 
-- Fragment spreading (`...FragmentName`) is not yet supported
-- Directives (`@skip`, `@include`) are not yet supported
-- Subscriptions are not supported via GraphQL (use EdgeQL WebSocket subscriptions instead)
-- The query is translated to EdgeQL but currently returns the translation result rather than executing it end-to-end. Full execution through the EdgeQL compiler is planned.
+- Fragment spreading (`...FragmentName`) is not yet supported
+- Directives (`@skip`, `@include`) are not yet supported
+- Subscriptions are not supported via GraphQL (use EdgeQL WebSocket subscriptions instead)
+- The query is translated to EdgeQL but currently returns the translation result rather than executing it end-to-end. Full execution through the EdgeQL compiler is planned.
 
 ---
 
 ## Custom Functions
 
-The custom functions extension lets you define PL/pgSQL functions in PostgreSQL and call them from EdgeQL.
+The custom functions extension lets you define PL/pgSQL functions in PostgreSQL and call them from EdgeQL.
 
 ### Defining Functions
 
-Create a `CustomFunctionsExtension` with your function definitions:
+Create a `CustomFunctionsExtension` with your function definitions:
 
 ```typescript
 import { CustomFunctionsExtension } from "./ext-custom-functions/extension.ts";
@@ -460,9 +460,9 @@ END;
 
 ### Implementation Types
 
-Each function definition specifies how the function is implemented:
+Each function definition specifies how the function is implemented:
 
-**`plpgsql`** -- A PL/pgSQL function body. The extension generates `CREATE OR REPLACE FUNCTION` DDL and executes it during initialization:
+**`plpgsql`** -- A PL/pgSQL function body. The extension generates `CREATE OR REPLACE FUNCTION` DDL and executes it during initialization:
 
 ```typescript
 {
@@ -489,7 +489,7 @@ END;
 $func$;
 ```
 
-**`sql_name`** -- Maps to an existing PostgreSQL function by name:
+**`sql_name`** -- Maps to an existing PostgreSQL function by name:
 
 ```typescript
 {
@@ -498,7 +498,7 @@ $func$;
 }
 ```
 
-**`sql_expression`** -- An inline SQL expression with positional parameters:
+**`sql_expression`** -- An inline SQL expression with positional parameters:
 
 ```typescript
 {
@@ -509,7 +509,7 @@ $func$;
 
 ### Type Mapping
 
-EdgeQL types are mapped to PostgreSQL types:
+EdgeQL types are mapped to PostgreSQL types:
 
 | EdgeQL     | PostgreSQL         |
 | ---------- | ------------------ |
@@ -524,11 +524,12 @@ EdgeQL types are mapped to PostgreSQL types:
 | `uuid`     | `uuid`             |
 | `json`     | `jsonb`            |
 | `bytes`    | `bytea`            |
-| `decimal`  | `numeric`          |
+
+Only these scalar types are supported in custom-function signatures; passing any other type name (including `decimal`) throws an `ExtensionConfigError` at registration.
 
 ### Volatility
 
-PostgreSQL uses function volatility to optimize query plans:
+PostgreSQL uses function volatility to optimize query plans:
 
 | Volatility  | Meaning                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -538,7 +539,7 @@ PostgreSQL uses function volatility to optimize query plans:
 
 ### EdgeQL Usage
 
-Once registered, custom functions are callable from EdgeQL like built-in functions:
+Once registered, custom functions are callable from EdgeQL like built-in functions:
 
 ```
 select Invoice {
@@ -552,7 +553,7 @@ select Invoice {
 
 ## OAuth (ext::oauth)
 
-The OAuth extension adds OAuth 2.0 authorization code flow support with built-in provider configurations for Google, GitHub, and Apple.
+The OAuth extension adds OAuth 2.0 authorization code flow support with built-in provider configurations for Google, GitHub, and Apple.
 
 ### Configuration
 
@@ -585,7 +586,7 @@ const ext = new OAuthExtension({
 
 ### Provider Factories
 
-Disc includes factory functions that pre-configure OAuth endpoints:
+Disc includes factory functions that pre-configure OAuth endpoints:
 
 **`googleProvider(clientId, clientSecret, redirectUri?)`**
 
@@ -635,7 +636,7 @@ const customProvider: OAuthProviderConfig = {
 
 ### OAuth Flow
 
-1. **Start authorization:** Call `GET /ext/oauth/authorize/google`. The server generates a cryptographic state token, stores it with a 10-minute expiry, and returns the authorize URL:
+1. **Start authorization:** Call `GET /ext/oauth/authorize/google`. The server generates a cryptographic state token, stores it with a 10-minute expiry, and returns the authorize URL:
 
 ```json
 {
@@ -644,11 +645,11 @@ const customProvider: OAuthProviderConfig = {
 }
 ```
 
-2. **Redirect the user** to the returned URL. They authenticate with the provider.
+2. **Redirect the user** to the returned URL. They authenticate with the provider.
 
-3. **Handle the callback:** The provider redirects back to `/ext/oauth/callback/google?code=...&state=...`. The server validates the state token (one-time use, checked against expiry) and returns the authorization code.
+3. **Handle the callback:** The provider redirects back to `/ext/oauth/callback/google?code=...&state=...`. The server validates the state token (one-time use, checked against expiry) and returns the authorization code.
 
-4. **Exchange for tokens:** In a full implementation, the callback exchanges the authorization code for an access token and fetches user info. The token exchange and user info functions are available:
+4. **Exchange for tokens:** In a full implementation, the callback exchanges the authorization code for an access token and fetches user info. The token exchange and user info functions are available:
 
 ```typescript
 import {
@@ -665,18 +666,18 @@ const userInfo = await fetchUserInfo(provider, tokenResponse.accessToken);
 
 ### State Management
 
-OAuth state tokens are managed by `OAuthStateManager`:
+OAuth state tokens are managed by `OAuthStateManager`:
 
-- Each state is a UUID generated with `crypto.randomUUID()`
-- States expire after `stateExpiryMs` (default: 10 minutes)
-- States are single-use -- validated once, then deleted
-- Expired states are cleaned up when `cleanup()` is called
+- Each state is a UUID generated with `crypto.randomUUID()`
+- States expire after `stateExpiryMs` (default: 10 minutes)
+- States are single-use -- validated once, then deleted
+- Expired states are cleaned up when `cleanup()` is called
 
 ### Database Tables
 
-The extension creates two tables:
+The extension creates two tables:
 
-**`disc_oauth_states`** -- Stores pending OAuth authorization states
+**`disc_oauth_states`** -- Stores pending OAuth authorization states
 
 | Column         | Type             |
 | -------------- | ---------------- |
@@ -686,7 +687,7 @@ The extension creates two tables:
 | `redirect_uri` | TEXT NOT NULL    |
 | `state`        | TEXT PRIMARY KEY |
 
-**`disc_oauth_identities`** -- Links OAuth provider identities to local users
+**`disc_oauth_identities`** -- Links OAuth provider identities to local users
 
 | Column             | Type             |
 | ------------------ | ---------------- |
@@ -702,7 +703,7 @@ The extension creates two tables:
 | `updated_at`       | TIMESTAMPTZ      |
 | `user_id`          | UUID NOT NULL    |
 
-A unique constraint on `(provider, provider_user_id)` prevents duplicate identity links.
+A unique constraint on `(provider, provider_user_id)` prevents duplicate identity links.
 
 ---
 
@@ -710,7 +711,7 @@ A unique constraint on `(provider, provider_user_id)` prevents duplicate identit
 
 ### The Extension Interface
 
-Every extension implements the `Extension` interface:
+Every extension implements the `Extension` interface:
 
 ```typescript
 interface Extension {
@@ -732,7 +733,7 @@ interface Extension {
 
 ### Using BaseExtension
 
-Extend `BaseExtension` to get default implementations for all methods. Override only what you need:
+Extend `BaseExtension` to get default implementations for all methods. Override only what you need:
 
 ```typescript
 import { BaseExtension } from "./extensions/base-extension.ts";
@@ -767,7 +768,7 @@ export class MyExtension extends BaseExtension {
 
 ### Extension Context
 
-The `initialize()` method receives an `ExtensionContext` with access to:
+The `initialize()` method receives an `ExtensionContext` with access to:
 
 ```typescript
 interface ExtensionContext {
@@ -780,7 +781,7 @@ interface ExtensionContext {
 
 ### Adding EdgeQL Functions
 
-Return `FunctionDef` objects from `getFunctions()` to register custom EdgeQL functions:
+Return `FunctionDef` objects from `getFunctions()` to register custom EdgeQL functions:
 
 ```typescript
 override getFunctions(): FunctionDef[] {
@@ -797,7 +798,7 @@ override getFunctions(): FunctionDef[] {
 
 ### Adding HTTP Routes
 
-Return `ExtensionRoute` objects from `getRoutes()`. Routes are served at `/ext/<name>/<path>`:
+Return `ExtensionRoute` objects from `getRoutes()`. Routes are served at `/ext/<name>/<path>`:
 
 ```typescript
 override getRoutes(): ExtensionRoute[] {
@@ -826,14 +827,14 @@ override getRoutes(): ExtensionRoute[] {
 }
 ```
 
-These routes would be accessible at:
+These routes would be accessible at:
 
 - `GET /ext/my-extension/status`
 - `POST /ext/my-extension/process`
 
 ### Adding Middleware
 
-Return `ExtensionMiddleware` objects from `getMiddleware()` to intercept all requests:
+Return `ExtensionMiddleware` objects from `getMiddleware()` to intercept all requests:
 
 ```typescript
 override getMiddleware(): ExtensionMiddleware[] {
@@ -854,7 +855,7 @@ override getMiddleware(): ExtensionMiddleware[] {
 
 ### Database Setup
 
-Return SQL statements to run during initialization:
+Return SQL statements to run during initialization:
 
 ```typescript
 override getDatabaseSetup(): ExtensionDatabaseSetup {
@@ -875,11 +876,11 @@ override getDatabaseSetup(): ExtensionDatabaseSetup {
 }
 ```
 
-Setup SQL is executed before `initialize()` is called. Teardown SQL is available for cleanup but is not automatically executed.
+Setup SQL is executed before `initialize()` is called. Teardown SQL is available for cleanup but is not automatically executed.
 
 ### Compiler Hooks
 
-Return `CompilerHook` objects to transform function calls during EdgeQL-to-SQL compilation:
+Return `CompilerHook` objects to transform function calls during EdgeQL-to-SQL compilation:
 
 ```typescript
 override getCompilerHooks(): CompilerHook[] {
@@ -897,11 +898,11 @@ override getCompilerHooks(): CompilerHook[] {
 }
 ```
 
-When the compiler encounters a function call, it checks each hook’s `transformFunctionCall`. The first hook that returns a non-undefined string wins. If no hook handles the function, the default compilation behavior is used.
+When the compiler encounters a function call, it checks each hook’s `transformFunctionCall`. The first hook that returns a non-undefined string wins. If no hook handles the function, the default compilation behavior is used.
 
 ### Health Reporting
 
-Override `healthCheck()` to report extension health:
+Override `healthCheck()` to report extension health:
 
 ```typescript
 override async healthCheck(): Promise<{ details?: string; healthy: boolean; }> {
@@ -919,7 +920,7 @@ override async healthCheck(): Promise<{ details?: string; healthy: boolean; }> {
 
 ### Registration
 
-Register your extension with the server:
+Register your extension with the server:
 
 ```typescript
 import { MyExtension } from "./my-extension/extension.ts";
@@ -933,7 +934,7 @@ const server = new DiscServer({
 });
 ```
 
-Or register at runtime via the extension registry:
+Or register at runtime via the extension registry:
 
 ```typescript
 import { ExtensionRegistry } from "./extensions/registry.ts";
@@ -953,7 +954,7 @@ const routes = registry.getAllRoutes();
 
 ### Error Handling
 
-The extension system provides specific error classes:
+The extension system provides specific error classes:
 
 ```typescript
 import {
@@ -979,13 +980,13 @@ throw new ExtensionDependencyError("my-extension", ["vector", "fts"]);
 throw new ExtensionConfigError("my-extension", "apiKey is required");
 ```
 
-All extension errors include the extension name for clear error reporting.
+All extension errors include the extension name for clear error reporting.
 
 ---
 
 ## Related
 
-- [Authentication](auth.md) -- built-in auth system (also available as an extension adapter)
-- [Access Policies](access-policies.md) -- row-level security (also available as an extension adapter)
-- [EdgeQL Functions](functions.md) -- built-in function reference
-- [Server Configuration](server.md) -- server startup and extension loading
+- [Authentication](auth.md) -- built-in auth system (also available as an extension adapter)
+- [Access Policies](access-policies.md) -- row-level security (also available as an extension adapter)
+- [EdgeQL Functions](functions.md) -- built-in function reference
+- [Server Configuration](server.md) -- server startup and extension loading

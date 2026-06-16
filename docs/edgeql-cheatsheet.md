@@ -1,6 +1,6 @@
 # EdgeQL Cheat Sheet
 
-One-page reference of the EdgeQL forms you reach for daily. For full prose and edge cases, see [EdgeQL](edgeql.md).
+One-page reference of the EdgeQL forms you reach for daily. For full prose and edge cases, see [EdgeQL](edgeql.md).
 
 ---
 
@@ -284,7 +284,7 @@ select Post { age_days := <int64>(datetime_current() - .created_at) / 86400 };
 ## EXPLAIN
 
 ```edgeql
-analyze select User filter .email = "ada@example.com";
+explain analyze select User filter .email = "ada@example.com";
 ```
 
 Returns the underlying PostgreSQL plan. Use it to verify an index is used. See [Performance → EXPLAIN](performance.md#explain).
@@ -305,4 +305,4 @@ In `disc shell`:
 
 ---
 
-For longer prose, edge cases, and topics not covered here (window functions, polymorphic shapes, GROUP BY, set operations, DESCRIBE, CONFIGURE, globals), see [EdgeQL](edgeql.md).
+For longer prose, edge cases, and topics not covered here (window functions, polymorphic shapes, GROUP BY, set operations, DESCRIBE, CONFIGURE, globals), see [EdgeQL](edgeql.md).

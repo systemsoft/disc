@@ -1,10 +1,10 @@
 # Built-in Functions Reference
 
-Disc provides a comprehensive standard library of built-in functions available in EdgeQL queries. Each function compiles to its PostgreSQL equivalent at query time.
+Disc provides a comprehensive standard library of built-in functions available in EdgeQL queries. Each function compiles to its PostgreSQL equivalent at query time.
 
-This reference documents every function registered in the Disc compiler. Functions are organized by category.
+This reference documents every function registered in the Disc compiler. Functions are organized by category.
 
-**See also:** [EdgeQL](edgeql.md) | [Schema](schema.md) | [CLI](cli.md)
+**See also:** [EdgeQL](edgeql.md) | [Schema](schema.md) | [CLI](cli.md)
 
 ---
 
@@ -12,7 +12,7 @@ This reference documents every function registered in the Disc compiler. Functio
 
 ### `len`
 
-Returns the length of a string.
+Returns the length of a string.
 
 ```
 len(val: str) -> int64
@@ -30,7 +30,7 @@ select len('hello');
 
 ### `str_lower`
 
-Converts a string to lowercase.
+Converts a string to lowercase.
 
 ```
 str_lower(val: str) -> str
@@ -49,7 +49,7 @@ select str_lower('HELLO WORLD');
 
 ### `str_upper`
 
-Converts a string to uppercase.
+Converts a string to uppercase.
 
 ```
 str_upper(val: str) -> str
@@ -68,7 +68,7 @@ select str_upper('hello world');
 
 ### `str_title`
 
-Converts a string to title case (capitalizes the first letter of each word).
+Converts a string to title case (capitalizes the first letter of each word).
 
 ```
 str_title(val: str) -> str
@@ -87,7 +87,7 @@ select str_title('hello world');
 
 ### `str_trim`
 
-Removes leading and trailing whitespace from a string.
+Removes leading and trailing whitespace from a string.
 
 ```
 str_trim(val: str) -> str
@@ -106,7 +106,7 @@ select str_trim('  hello  ');
 
 ### `str_ltrim`
 
-Removes leading whitespace from a string.
+Removes leading whitespace from a string.
 
 ```
 str_ltrim(val: str) -> str
@@ -1715,7 +1715,7 @@ select Sale {
 
 ### `lead`
 
-Returns the value of an expression evaluated at the row that is a given offset after the current row within the partition. Returns default (or null) if no such row exists.
+Returns the value of an expression evaluated at the row that is a given offset after the current row within the partition. Returns default (or null) if no such row exists.
 
 ```
 lead(expr: any, offset?: int64, default?: any) -> any
@@ -1737,7 +1737,7 @@ select Sale {
 
 ### `first_value`
 
-Returns the value of an expression evaluated at the first row of the window frame.
+Returns the value of an expression evaluated at the first row of the window frame.
 
 ```
 first_value(expr: any) -> any
@@ -1759,7 +1759,7 @@ select Sale {
 
 ### `last_value`
 
-Returns the value of an expression evaluated at the last row of the window frame.
+Returns the value of an expression evaluated at the last row of the window frame.
 
 ```
 last_value(expr: any) -> any
@@ -1783,7 +1783,7 @@ select Sale {
 
 ### `bytes_get_bit`
 
-Returns the value of a specific bit (0 or 1) at the given index in a byte string.
+Returns the value of a specific bit (0 or 1) at the given index in a byte string.
 
 ```
 bytes_get_bit(val: bytes, index: int64) -> int64
@@ -1802,7 +1802,7 @@ select bytes_get_bit(b'\xff', 0);
 
 ### `bytes_to_str`
 
-Converts a byte string to a text string using the specified encoding.
+Converts a byte string to a text string using the specified encoding.
 
 ```
 bytes_to_str(val: bytes, encoding: str) -> str
@@ -1821,7 +1821,7 @@ select bytes_to_str(b'hello', 'UTF8');
 
 ## Range Functions
 
-Range functions operate on range types, which represent a span of values with optional inclusive/exclusive bounds.
+Range functions operate on range types, which represent a span of values with optional inclusive/exclusive bounds.
 
 ### `range`
 
@@ -1898,7 +1898,7 @@ select range_is_empty(range(1, 1));
 
 ### `range_unpack`
 
-Unpacks a range into a set of its individual values (for discrete ranges like integer ranges).
+Unpacks a range into a set of its individual values (for discrete ranges like integer ranges).
 
 ```
 range_unpack(r: range) -> set of any
@@ -1917,7 +1917,7 @@ select range_unpack(range(1, 5));
 
 ### `range_is_inclusive_lower`
 
-Returns true if the lower bound of the range is inclusive.
+Returns true if the lower bound of the range is inclusive.
 
 ```
 range_is_inclusive_lower(r: range) -> bool
@@ -1936,7 +1936,7 @@ select range_is_inclusive_lower(range(1, 10));
 
 ### `range_is_inclusive_upper`
 
-Returns true if the upper bound of the range is inclusive.
+Returns true if the upper bound of the range is inclusive.
 
 ```
 range_is_inclusive_upper(r: range) -> bool
@@ -1993,7 +1993,7 @@ select overlaps(range(1, 3), range(5, 8));
 
 ### `contains` (range overload)
 
-Returns true if a range contains an element. This is the range overload of the `contains` function.
+Returns true if a range contains an element. This is the range overload of the `contains` function.
 
 ```
 contains(r: range, elem: any) -> bool
@@ -2012,11 +2012,11 @@ select contains(range(1, 10), 5);
 
 ## Sequence Functions
 
-Sequence functions interact with PostgreSQL sequences for generating auto-incrementing values.
+Sequence functions interact with PostgreSQL sequences for generating auto-incrementing values.
 
 ### `sequence_next`
 
-Returns the next value from a named sequence.
+Returns the next value from a named sequence.
 
 ```
 sequence_next(name: str) -> int64
@@ -2035,7 +2035,7 @@ select sequence_next('my_seq');
 
 ### `sequence_reset`
 
-Resets a named sequence to a specified value.
+Resets a named sequence to a specified value.
 
 ```
 sequence_reset(name: str, val: int64) -> int64
@@ -2053,11 +2053,11 @@ select sequence_reset('my_seq', 1);
 
 ## Schema Introspection Functions
 
-Schema introspection functions provide runtime access to the database schema. They are resolved at compile time and return JSON representations of schema metadata.
+Schema introspection functions provide runtime access to the database schema. They are resolved at compile time and return JSON representations of schema metadata.
 
 ### `schema::types`
 
-Returns a JSON array describing all object types in the schema.
+Returns a JSON array describing all object types in the schema.
 
 ```
 schema::types() -> json
@@ -2073,7 +2073,7 @@ select schema::types();
 
 ### `schema::get_type`
 
-Returns a JSON object describing a specific type by name.
+Returns a JSON object describing a specific type by name.
 
 ```
 schema::get_type(name: str) -> json
@@ -2089,7 +2089,7 @@ select schema::get_type('User');
 
 ### `schema::functions`
 
-Returns a JSON array describing all registered functions.
+Returns a JSON array describing all registered functions.
 
 ```
 schema::functions() -> json
@@ -2105,11 +2105,11 @@ select schema::functions();
 
 ## Full-Text Search Functions
 
-Full-text search functions are part of the `fts` extension (`ext::fts`). They require an `fts::index` to be defined on the target type in your schema.
+Full-text search functions are part of the `fts` extension (`ext::fts`). They require an `fts::index` to be defined on the target type in your schema.
 
 ### `fts::search`
 
-Returns true if a row’s full-text search vector matches the given query string. Typically used in `filter` clauses.
+Returns true if a row’s full-text search vector matches the given query string. Typically used in `filter` clauses.
 
 ```
 fts::search(query: str) -> bool
@@ -2126,13 +2126,13 @@ select Article {
 
 **SQL equivalent:** `fts_vector @@ plainto_tsquery('english', 'database migration')`
 
-The query string is parsed using PostgreSQL’s `plainto_tsquery` with the English language configuration by default.
+The query string is parsed using PostgreSQL’s `plainto_tsquery` with the English language configuration by default.
 
 ---
 
 ### `fts::rank`
 
-Returns a relevance score for a full-text search query against a row’s search vector. Higher values indicate better matches. Useful for ordering search results.
+Returns a relevance score for a full-text search query against a row’s search vector. Higher values indicate better matches. Useful for ordering search results.
 
 ```
 fts::rank(query: str) -> float64
