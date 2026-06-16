@@ -5,6 +5,10 @@
  * Schema diff engine for generating migration operations
  */
 
+import {
+  propNameToColumnName,
+  typeNameToTableName
+} from "../lib/identifiers.ts";
 import * as AST from "../schema/ast.ts";
 import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
@@ -115,6 +119,12 @@ export class SchemaDiffer {
             operations: alterOps
           } as Types.AlterTypeOperation);
         }
+
+        // Diff indexes on the surviving type. Index changes are emitted
+        // as top-level CreateIndex/DropIndex ops (not TypeOperations) so
+        // they map straight onto PG's standalone CREATE INDEX/DROP INDEX
+        // statements. A changed definition surfaces as drop + create.
+        operations.push(...this.diffIndexes(oldTypeDef, newTypeDef));
       }
     }
 
@@ -972,6 +982,123 @@ export class SchemaDiffer {
             changes
           } as Types.AlterLinkOperation);
         }
+      }
+    }
+
+    return operations;
+  }
+
+  /**
+   * Extract index definitions from a type's own members. Indexes declared
+   * via SDL `index on (.foo)` / `index on ((.a, .b))` surface as
+   * `AST.Index` members. Each becomes a {@link Types.IndexDefinition}
+   * whose `columns` are the snake_cased property paths the `on`
+   * expression references.
+   *
+   * Disc's SDL `index` is always a non-unique btree index — uniqueness is
+   * expressed separately via `constraint exclusive`. So `unique` is always
+   * `false` here; the exclusive→UNIQUE-INDEX path lives in property diffing.
+   */
+  private extractIndexes(
+    typeDef: AST.TypeDeclaration
+  ): Types.IndexDefinition[] {
+    const tableName = typeNameToTableName(typeDef.name.value);
+    const indexes: Types.IndexDefinition[] = [];
+
+    for (const member of typeDef.members) {
+      if (member.kind === "Index") {
+        const columns = this.extractIndexColumns(member.on);
+        indexes.push({
+          name: member.name?.value ?? this.defaultIndexName(tableName, columns),
+          table: tableName,
+          columns,
+          unique: false
+        });
+      }
+    }
+
+    return indexes;
+  }
+
+  /**
+   * Resolve an index `on` expression to its snake_cased column list.
+   * A single path (`.email`) yields one column; a tuple (`(.a, .b)`)
+   * yields one per element, preserving order (PG composite-index column
+   * order is significant). Leading dots from EdgeQL path syntax are
+   * stripped before the camelCase→snake_case conversion.
+   */
+  private extractIndexColumns(expr: AST.Expression): string[] {
+    if (expr.kind === "TupleExpression") {
+      return expr.elements.flatMap(el => this.extractIndexColumns(el));
+    }
+    if (expr.kind === "PathExpression") {
+      // `.email` parses as path `[".email"]`; strip the EdgeQL leading dot
+      // and convert the bare property name to its snake_case column.
+      const leaf = expr.path.join(".").replace(/^\.+/, "");
+      return [propNameToColumnName(leaf)];
+    }
+    // Fallback: stringify any other expression shape so a functional/
+    // partial index still produces a stable, comparable key rather than
+    // silently collapsing to an empty column list.
+    return [propNameToColumnName(this.extractExpressionString(expr))];
+  }
+
+  /**
+   * Deterministic snake_case name for an unnamed SDL index, mirroring the
+   * inline FK-index convention (`idx_<table>_<col>` in `ddl.ts`). Composite
+   * indexes join their columns with `_` so two different column sets on the
+   * same table get distinct names.
+   */
+  private defaultIndexName(table: string, columns: string[]): string {
+    return `idx_${table}_${columns.join("_")}`;
+  }
+
+  /**
+   * Stable comparison key for an index. Two indexes are "the same" when
+   * their name, column list (ordered — composite order matters in PG), and
+   * uniqueness all match. Any difference makes them distinct, so a changed
+   * definition diffs as a drop of the old key plus a create of the new one.
+   */
+  private indexKey(index: Types.IndexDefinition): string {
+    return `${index.name}::${index.unique ? "u" : "n"}::${index.columns.join(",")}`;
+  }
+
+  /**
+   * Diff old vs new index sets on a surviving type. Added indexes emit
+   * `CreateIndex`; removed emit `DropIndex`. A redefined index (same name,
+   * different columns/uniqueness) appears under both buckets and so emits
+   * a drop followed by a create.
+   */
+  private diffIndexes(
+    oldType: AST.TypeDeclaration,
+    newType: AST.TypeDeclaration
+  ): Types.MigrationOperation[] {
+    const operations: Types.MigrationOperation[] = [];
+
+    const oldIndexes = this.extractIndexes(oldType);
+    const newIndexes = this.extractIndexes(newType);
+
+    const oldByKey = new Map(oldIndexes.map(i => [this.indexKey(i), i]));
+    const newByKey = new Map(newIndexes.map(i => [this.indexKey(i), i]));
+
+    // Removed (or redefined) indexes — drop first so a re-create of the
+    // same index name doesn't collide with the stale definition.
+    for (const [key, index] of oldByKey) {
+      if (!newByKey.has(key)) {
+        operations.push({
+          kind: "DropIndex",
+          indexName: index.name
+        } as Types.DropIndexOperation);
+      }
+    }
+
+    // Added (or redefined) indexes.
+    for (const [key, index] of newByKey) {
+      if (!oldByKey.has(key)) {
+        operations.push({
+          kind: "CreateIndex",
+          index
+        } as Types.CreateIndexOperation);
       }
     }
 
