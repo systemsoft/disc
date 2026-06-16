@@ -234,6 +234,93 @@ Deno.test("Validator - exclusive constraint with no args is valid", () => {
   assertEquals(result.ok, true);
 });
 
+// ============================================================
+// Unsupported constraint name rejection
+// ============================================================
+
+Deno.test("Validator - max_length is rejected with a max_len_value hint", () => {
+  const doc = makeDocument("str", [{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "max_length" },
+    args: [{ kind: "Literal", type: "integer", value: 50 } as AST.Literal]
+  }]);
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(doc);
+
+  assertEquals(result.ok, false);
+  const error = result.errors!.find(e =>
+    e.message.includes("max_length") &&
+    e.message.includes("is not supported")
+  );
+  assertEquals(error !== undefined, true);
+  assertEquals(error!.context?.hint?.includes("max_len_value"), true);
+});
+
+Deno.test("Validator - min_length is rejected with a min_len_value hint", () => {
+  const doc = makeDocument("str", [{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "min_length" },
+    args: [{ kind: "Literal", type: "integer", value: 1 } as AST.Literal]
+  }]);
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(doc);
+
+  assertEquals(result.ok, false);
+  const error = result.errors!.find(e => e.message.includes("min_length"));
+  assertEquals(error !== undefined, true);
+  assertEquals(error!.context?.hint?.includes("min_len_value"), true);
+});
+
+Deno.test("Validator - regex is rejected with a regexp hint", () => {
+  const doc = makeDocument("str", [{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "regex" },
+    args: [{ kind: "Literal", type: "string", value: "^a+$" } as AST.Literal]
+  }]);
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(doc);
+
+  assertEquals(result.ok, false);
+  const error = result.errors!.find(e => e.message.includes("regex"));
+  assertEquals(error !== undefined, true);
+  assertEquals(error!.context?.hint?.includes("regexp"), true);
+});
+
+Deno.test("Validator - unknown constraint name is rejected", () => {
+  const doc = makeDocument("str", [{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "totally_made_up" }
+  }]);
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(doc);
+
+  assertEquals(result.ok, false);
+  assertEquals(
+    result.errors!.some(e =>
+      e.message.includes("totally_made_up") &&
+      e.message.includes("is not supported")
+    ),
+    true
+  );
+});
+
+Deno.test("Validator - canonical max_len_value is still accepted", () => {
+  const doc = makeDocument("str", [{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "max_len_value" },
+    args: [{ kind: "Literal", type: "integer", value: 50 } as AST.Literal]
+  }]);
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(doc);
+
+  assertEquals(result.ok, true);
+});
+
 Deno.test("Validator - expression with on expression is valid", () => {
   const doc = makeDocument("int32", [{
     kind: "Constraint",

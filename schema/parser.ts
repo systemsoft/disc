@@ -760,8 +760,10 @@ export class SDLParser {
     }
 
     // Check if there's a named constraint
+    let nameToken: Token | undefined;
     if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
       const checkpoint = this.current;
+      const startToken = this.peek();
       const possibleName = this.parseIdentifier();
 
       if (
@@ -769,6 +771,7 @@ export class SDLParser {
         this.check(TokenType.SEMICOLON) || this.check(TokenType.LBRACE)
       ) {
         name = possibleName;
+        nameToken = startToken;
       } else {
         // It's not a name, restore position
         this.current = checkpoint;
@@ -795,6 +798,17 @@ export class SDLParser {
       on,
       args
     };
+
+    // Record the constraint name's source position so the validator can
+    // report line/column when rejecting an unsupported constraint name.
+    if (nameToken) {
+      const position = {
+        line: nameToken.line,
+        column: nameToken.column,
+        offset: nameToken.offset
+      };
+      constraint.span = { start: position, end: position };
+    }
 
     // Parse constraint body if present
     if (this.match(TokenType.LBRACE)) {

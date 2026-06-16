@@ -63,6 +63,32 @@ Deno.test("SDL Parser - Type with Constraints", () => {
   }
 });
 
+Deno.test("SDL Parser - unsupported constraint reports source location", () => {
+  const source = `
+    type User {
+      required name: str {
+        constraint max_length(50);
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+
+  const validator = new SchemaValidator();
+  const result = validator.validate(ast);
+
+  assertEquals(result.ok, false);
+  const error = result.errors!.find(e => e.message.includes("max_length"));
+  assertEquals(error !== undefined, true);
+  // The parser records the constraint name's position, so the validation
+  // error carries a precise line/column (not just a message).
+  assertEquals(typeof error!.context?.location?.line, "number");
+  assertEquals(error!.context!.location!.line > 0, true);
+  assertEquals(typeof error!.context?.location?.column, "number");
+  assertEquals(error!.context?.hint?.includes("max_len_value"), true);
+});
+
 Deno.test("SDL Parser - Links", () => {
   const source = `
     type Post {

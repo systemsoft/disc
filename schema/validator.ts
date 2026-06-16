@@ -30,6 +30,39 @@ const BUILTIN_ANNOTATIONS = new Set([
   "rest::expand"
 ]);
 
+/**
+ * Built-in constraint names supported by Disc. These are the canonical Gel
+ * constraint names; each maps to a CHECK (or UNIQUE) constraint at DDL
+ * generation time (see `migration/ddl.ts` `constraintToCheckExpression`).
+ *
+ * Any constraint name outside this set is rejected at validation time so a
+ * typo or a non-canonical name (e.g. `max_length`) is a loud error instead of
+ * silently dropping the constraint at DDL generation.
+ */
+const SUPPORTED_CONSTRAINTS = new Set([
+  "exclusive",
+  "expression",
+  "max_ex_value",
+  "max_len_value",
+  "max_value",
+  "min_ex_value",
+  "min_len_value",
+  "min_value",
+  "one_of",
+  "regexp"
+]);
+
+/**
+ * Common non-canonical constraint names (notably from Gel documentation
+ * examples) mapped to their canonical Disc/Gel equivalents, used to produce a
+ * helpful hint when a user writes the wrong name.
+ */
+const CONSTRAINT_NAME_HINTS = new Map<string, string>([
+  ["max_length", "max_len_value"],
+  ["min_length", "min_len_value"],
+  ["regex", "regexp"]
+]);
+
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;
   abstractLinks: Map<string, AST.LinkDeclaration>;
@@ -517,6 +550,23 @@ export class SchemaValidator {
       return;
     }
 
+    // Reject unsupported constraint names. Without this, an unknown name (a
+    // typo, or a non-canonical Gel-doc name like `max_length`) passes
+    // validation but silently emits no CHECK constraint at DDL generation.
+    if (!SUPPORTED_CONSTRAINTS.has(name)) {
+      const canonical = CONSTRAINT_NAME_HINTS.get(name);
+      const supported = [...SUPPORTED_CONSTRAINTS].sort().join(", ");
+      const hint = canonical ?
+        `Did you mean '${canonical}'? Supported constraints: ${supported}.` :
+        `Supported constraints: ${supported}.`;
+      this.addConstraintError(
+        `Constraint '${name}' is not supported`,
+        constraint,
+        hint
+      );
+      return;
+    }
+
     // Known constraints and their validation rules
     const STRING_TYPES = new Set(["str", "bytes"]);
     const NUMERIC_TYPES = new Set([
@@ -843,6 +893,25 @@ export class SchemaValidator {
 
   private addError(message: string): void {
     const error = new ValidationError(message);
+    this.context.errors.push(error);
+  }
+
+  /**
+   * Record a validation error for a constraint, including the constraint
+   * name's source location (when the parser recorded it) and an optional hint.
+   */
+  private addConstraintError(
+    message: string,
+    constraint: AST.Constraint,
+    hint?: string
+  ): void {
+    const start = constraint.span?.start;
+    const error = new ValidationError(message, {
+      hint,
+      location: start ?
+        { column: start.column, line: start.line, offset: start.offset } :
+        undefined
+    });
     this.context.errors.push(error);
   }
 }
