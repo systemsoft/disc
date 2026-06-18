@@ -50,6 +50,21 @@ Pushing the tag triggers `.github/workflows/release.yml`, which:
 > binary under Rosetta. Re-introducing the matrix entry would require fixing
 > the runner hang first.
 
+## Man pages
+
+`just release` runs a `man` step after the binary build that renders the
+guides in `docs/` to roff man pages via [pandoc](https://pandoc.org)
+(`docs/cli.md` → `disc(1)`, every other guide → `disc-<name>(7)`). It writes
+them to `build/man/{man1,man7}` and packages them as `build/disc-man.tar.gz`.
+
+> Generation is **local-only** — pandoc must be on your PATH (`brew install
+> pandoc`, `apt install pandoc`). The CI release workflow does not yet build
+> man pages, so to ship them attach `build/disc-man.tar.gz` to the GitHub
+> release manually. Once that asset is present, `install.sh` downloads and
+> installs it automatically (to `/usr/local/share/man` when writable, else
+> `~/.disc/share/man` with a MANPATH entry; `--system-man` forces the system
+> location with sudo, `--no-man` skips it).
+
 ## Verifying a release
 
 Users verify a downloaded binary:

@@ -10,6 +10,9 @@
 # Options (pass after `-s --` when piping into sh):
 #   -y, --yes          Accept defaults, skip prompts
 #   --no-modify-path   Don’t add Disc to the PATH environment variable
+#   --no-man           Don’t install man pages
+#   --system-man       Install man pages to /usr/local/share/man (sudo if needed)
+#   --man-dir=DIR      Install man pages under DIR (expects man1/ man7/ subdirs)
 #   -h, --help         Print help
 
 set -e
@@ -55,6 +58,12 @@ Options:
     Skip interactive prompts and accept defaults
   --no-modify-path
     Don’t add disc to the PATH environment variable
+  --no-man
+    Don’t install man pages
+  --system-man
+    Install man pages to /usr/local/share/man (uses sudo if needed)
+  --man-dir=DIR
+    Install man pages under DIR (expects man1/ and man7/ subdirectories)
   -h, --help
     Print help
 
@@ -68,6 +77,9 @@ the latest release is used otherwise.
 # Initialize variables
 modify_path=true
 disc_version=""
+install_man=true
+system_man=false
+man_dir=""
 
 # Simple arg parsing - look for the help flag, honor --no-modify-path,
 # and take the first non-flag positional arg as the version to install.
@@ -76,6 +88,9 @@ for arg in "$@"; do
     "-h" | "--help") print_help_and_exit ;;
     "-y" | "--yes") ;;
     "--no-modify-path") modify_path=false ;;
+    "--no-man") install_man=false ;;
+    "--system-man") system_man=true ;;
+    "--man-dir="*) man_dir="${arg#*=}" ;;
     "-"*) ;;
     *)
         if [ -z "$disc_version" ]; then
@@ -139,6 +154,101 @@ rm -f "$sum_file"
 chmod +x "$exe"
 
 echo "Disc was installed successfully to $exe"
+
+# Append a MANPATH entry for a user-local man root (idempotent), mirroring the
+# PATH handling below. Only needed when man pages land outside the default
+# manpath (e.g. ~/.disc/share/man).
+add_manpath_to_rc() {
+    _man_root="$1"
+    case "${SHELL##*/}" in
+    zsh) _rc="$HOME/.zshrc"; _line="export MANPATH=\"$_man_root:\$MANPATH\"" ;;
+    bash) _rc="$HOME/.bashrc"; _line="export MANPATH=\"$_man_root:\$MANPATH\"" ;;
+    fish) _rc="$HOME/.config/fish/config.fish"; _line="set -gx MANPATH \"$_man_root\" \$MANPATH" ;;
+    *) _rc="$HOME/.profile"; _line="export MANPATH=\"$_man_root:\$MANPATH\"" ;;
+    esac
+
+    if [ -f "$_rc" ] && grep -qF "$_man_root" "$_rc"; then
+        : # already configured in the rc file
+    else
+        mkdir -p "$(dirname "$_rc")"
+        printf '\n# Disc man pages\n%s\n' "$_line" >>"$_rc"
+        echo "Added Disc man pages to MANPATH in $_rc"
+    fi
+}
+
+# Best-effort man-page install. The archive (`disc-man.tar.gz`) sits next to
+# the binary on the release. A missing archive, a read-only target, or no sudo
+# all downgrade to a warning — the binary install above already succeeded, so
+# man pages are never allowed to fail the install.
+install_man_pages() {
+    [ "$install_man" = "true" ] || return 0
+
+    man_asset_url="${asset_url%/*}/disc-man.tar.gz"
+    man_tarball="$(mktemp)"
+    if ! curl --fail --location --silent --output "$man_tarball" "$man_asset_url"; then
+        echo "Note: man-page archive unavailable; skipping man install." 1>&2
+        rm -f "$man_tarball"
+        return 0
+    fi
+
+    man_stage="$(mktemp -d)"
+    if ! tar -xzf "$man_tarball" -C "$man_stage" 2>/dev/null; then
+        echo "Note: could not extract man-page archive; skipping man install." 1>&2
+        rm -rf "$man_tarball" "$man_stage"
+        return 0
+    fi
+    rm -f "$man_tarball"
+
+    # Decide the target man root:
+    #   --man-dir=DIR  → exactly DIR
+    #   --system-man   → /usr/local/share/man (escalate with sudo if needed)
+    #   (default)      → /usr/local/share/man if writable, else ~/.disc/share/man
+    man_sudo=""
+    user_local_man=false
+    if [ -n "$man_dir" ]; then
+        man_target="$man_dir"
+    elif [ "$system_man" = "true" ]; then
+        man_target="/usr/local/share/man"
+    elif mkdir -p "/usr/local/share/man/man1" 2>/dev/null; then
+        man_target="/usr/local/share/man"
+    else
+        man_target="$disc_install/share/man"
+        user_local_man=true
+    fi
+
+    # If the chosen target isn't writable, escalate with sudo when available.
+    if ! mkdir -p "$man_target/man1" 2>/dev/null; then
+        if command -v sudo >/dev/null; then
+            man_sudo="sudo"
+            echo "Installing man pages to $man_target (may prompt for sudo)…"
+        else
+            echo "Note: $man_target is not writable and sudo is unavailable; skipping man install." 1>&2
+            rm -rf "$man_stage"
+            return 0
+        fi
+    fi
+
+    $man_sudo mkdir -p "$man_target/man1" "$man_target/man7"
+    for sec in 1 7; do
+        if [ -d "$man_stage/man$sec" ]; then
+            for page in "$man_stage/man$sec"/*; do
+                [ -e "$page" ] || continue
+                $man_sudo cp "$page" "$man_target/man$sec/"
+            done
+        fi
+    done
+    rm -rf "$man_stage"
+
+    echo "Man pages installed to $man_target"
+
+    # A user-local man root isn't on the default manpath — wire it into the
+    # shell rc so `man disc` resolves, unless the caller opted out of rc edits.
+    if [ "$user_local_man" = "true" ] && [ "$modify_path" = "true" ]; then
+        add_manpath_to_rc "$man_target"
+    fi
+}
+
+install_man_pages
 
 # Add the bin dir to PATH for future shells, unless it is already there or
 # the caller opted out. Idempotent: skips if the rc file already mentions it.

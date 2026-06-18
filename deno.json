@@ -67,6 +67,7 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "lint": "deno lint",
+    "man": "deno run --allow-read=docs,version.txt,build --allow-write=build --allow-run=pandoc scripts/gen-man.ts",
     "prep": "deno run --allow-read --allow-write cli/prep.ts",
     "serve": "deno task prep && deno run --allow-net --allow-read --allow-env server/server.ts",
     "test": "deno task prep && deno test --allow-env --allow-net --allow-read --allow-write --allow-run --no-check",
@@ -78,5 +79,5 @@
     "exclude": ["reference-gel/**", "ui/**"],
     "include": ["**/*.test.ts", "tests/**/*.ts"]
   },
-  "version": "2026.06.16"
+  "version": "2026.06.18"
 }
