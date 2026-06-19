@@ -209,7 +209,11 @@ install_man_pages() {
         man_target="$man_dir"
     elif [ "$system_man" = "true" ]; then
         man_target="/usr/local/share/man"
-    elif mkdir -p "/usr/local/share/man/man1" 2>/dev/null; then
+    elif mkdir -p "/usr/local/share/man" 2>/dev/null && [ -w "/usr/local/share/man" ]; then
+        # `[ -w ]` tests whether we can create *new* entries in the dir. A bare
+        # `mkdir -p .../man1` would exit 0 against a pre-existing man1 (e.g. one
+        # Homebrew already created) even when the dir is root-owned, then fail
+        # later creating the missing man7 — so probe the dir itself, not man1.
         man_target="/usr/local/share/man"
     else
         man_target="$disc_install/share/man"
@@ -217,7 +221,10 @@ install_man_pages() {
     fi
 
     # If the chosen target isn't writable, escalate with sudo when available.
-    if ! mkdir -p "$man_target/man1" 2>/dev/null; then
+    # Same reasoning as the probe above: check the dir's write bit, not whether
+    # `mkdir -p man1` succeeds — otherwise a pre-existing, non-writable man1
+    # skips the sudo escalation and the man7 copy fails with Permission denied.
+    if ! { mkdir -p "$man_target" 2>/dev/null && [ -w "$man_target" ]; }; then
         if command -v sudo >/dev/null; then
             man_sudo="sudo"
             echo "Installing man pages to $man_target (may prompt for sudo)…"
