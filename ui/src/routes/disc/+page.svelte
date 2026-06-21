@@ -12,6 +12,7 @@
   } from "$lib/api/client";
 
   import { layoutDisc, type OrbitalPoint } from "$lib/identity-disc-layout";
+  import { quoteIdent } from "$lib/edgeql-ident";
 
   /*** The identity-disc metaphor taken seriously: a row’s outgoing links and incoming references rendered as
        a literal disc — the centered object at the middle, links radiating outward, linked objects
@@ -168,10 +169,13 @@
       const targetType = findType(l.target);
       const targetDisplay = pickDisplayField(targetType);
 
-      return targetDisplay ? `${l.name}: { id, ${targetDisplay} }` : `${l.name}: { id }`;
+      return targetDisplay ?
+        `${quoteIdent(l.name)}: { id, ${quoteIdent(targetDisplay)} }` :
+        `${quoteIdent(l.name)}: { id }`;
     });
 
-    const centerShape = ["id", ...(centerDisplay ? [centerDisplay] : []), ...linkShapes].join(", ");
+    const centerShape =
+      ["id", ...(centerDisplay ? [quoteIdent(centerDisplay)] : []), ...linkShapes].join(", ");
     const centerQuery = `select ${qualify(type)} { ${centerShape} } filter .id = <uuid>$id limit 1`;
     const centerResult = await discAPI.executeQuery(centerQuery, { id });
 
@@ -234,8 +238,8 @@
     await Promise.all(
       incomingPairs.map(async ({ source, link }) => {
         const sourceDisplay = pickDisplayField(source);
-        const shape = sourceDisplay ? `{ id, ${sourceDisplay} }` : `{ id }`;
-        const q = `select ${qualify(source)} ${shape} filter .${link.name}.id = <uuid>$id limit 6`;
+        const shape = sourceDisplay ? `{ id, ${quoteIdent(sourceDisplay)} }` : `{ id }`;
+        const q = `select ${qualify(source)} ${shape} filter .${quoteIdent(link.name)}.id = <uuid>$id limit 6`;
         const r = await discAPI.executeQuery(q, { id });
 
         if (r.error || !Array.isArray(r.data) || r.data.length === 0)
@@ -276,7 +280,7 @@
     }
 
     const display = pickDisplayField(type);
-    const shape = display ? `{ id, ${display} }` : `{ id }`;
+    const shape = display ? `{ id, ${quoteIdent(display)} }` : `{ id }`;
     const query = `select ${qualify(type)} ${shape} limit 25`;
     const result = await discAPI.executeQuery(query);
 

@@ -19,6 +19,8 @@
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { quoteIdent } from "./edgeql-ident.ts";
+
 const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 /*** EXPORT ------------------------------------------- ***/
@@ -142,7 +144,7 @@ export function synthesize(spec: QuerySpec): SynthResult {
       const param = `p${i}`;
       variables[param] = coerceValue(f.value, f.cast, f.field);
 
-      return `.${f.field} ${f.op} <${f.cast}>$${param}`;
+      return `.${quoteIdent(f.field)} ${f.op} <${f.cast}>$${param}`;
     });
 
     if (compiled.length === 1)
@@ -154,7 +156,7 @@ export function synthesize(spec: QuerySpec): SynthResult {
   if (spec.order) {
     assertIdent(spec.order.field, "order field");
     const dir = spec.order.direction === "desc" ? " desc" : "";
-    parts.push(`order by .${spec.order.field}${dir}`);
+    parts.push(`order by .${quoteIdent(spec.order.field)}${dir}`);
   }
 
   if (spec.limit !== undefined) {
@@ -186,7 +188,7 @@ function compileShape(shape: ShapeNode): string {
 
   for (const f of shape.fields) {
     assertIdent(f, "shape field");
-    parts.push(f);
+    parts.push(quoteIdent(f));
   }
 
   for (const [linkName, linkShape] of Object.entries(shape.links)) {
@@ -194,10 +196,10 @@ function compileShape(shape: ShapeNode): string {
 
     const inner = linkShape.fields.map(f => {
       assertIdent(f, "link field");
-      return f;
+      return quoteIdent(f);
     });
 
-    parts.push(`${linkName}: { ${inner.join(", ")} }`);
+    parts.push(`${quoteIdent(linkName)}: { ${inner.join(", ")} }`);
   }
 
   return parts.length === 0 ? "" : `{ ${parts.join(", ")} }`;

@@ -11,6 +11,7 @@
     type SchemaPropertyDescription,
     type SchemaLinkDescription,
   } from "$lib/api/client";
+  import { quoteIdent } from "$lib/edgeql-ident";
 
   type RangeOp = "=" | ">=" | "<=" | ">" | "<" | "..";
 
@@ -88,10 +89,14 @@
       if (!raw)
         continue;
 
+      /*** `col` is the emitted EdgeQL path segment (keyword-safe); `p.name`
+           stays the raw key for the `filters` lookup above. ***/
+      const col = quoteIdent(p.name);
+
       switch (p.type) {
         case "bool": {
           if (raw === "true" || raw === "false")
-            parts.push(`.${p.name} = ${raw}`);
+            parts.push(`.${col} = ${raw}`);
 
           break;
         }
@@ -113,12 +118,12 @@
             next.setUTCDate(next.getUTCDate() + 1);
 
             const tomorrow = next.toISOString().slice(0, 10);
-            parts.push(`(.${p.name} >= <datetime>"${day}" and .${p.name} < <datetime>"${tomorrow}")`);
+            parts.push(`(.${col} >= <datetime>"${day}" and .${col} < <datetime>"${tomorrow}")`);
 
             break;
           }
 
-          const clause = rangeClause(p.name, raw, (v) => `<datetime>"${escSql(v)}"`, (v) => v.length > 0);
+          const clause = rangeClause(col, raw, (v) => `<datetime>"${escSql(v)}"`, (v) => v.length > 0);
 
           if (clause)
             parts.push(clause);
@@ -133,7 +138,7 @@
         case "int32":
         case "int64": {
           /*** Numeric range: `>=10`, `<5`, `10..20`, or exact `42`. ***/
-          const clause = rangeClause(p.name, raw, (v) => v, (v) => !Number.isNaN(Number(v)));
+          const clause = rangeClause(col, raw, (v) => v, (v) => !Number.isNaN(Number(v)));
 
           if (clause)
             parts.push(clause);
@@ -142,7 +147,7 @@
         }
 
         case "str": {
-          parts.push(`.${p.name} ilike "%${escSql(raw)}%"`);
+          parts.push(`.${col} ilike "%${escSql(raw)}%"`);
           break;
         }
 
@@ -151,13 +156,13 @@
                currently support `<str>.id like ...` for prefix search, so partial uuids are
                rejected at filter time. ***/
           if (/^[0-9a-fA-F-]{36}$/.test(raw))
-            parts.push(`.${p.name} = <uuid>"${escSql(raw)}"`);
+            parts.push(`.${col} = <uuid>"${escSql(raw)}"`);
 
           break;
         }
 
         default: {
-          parts.push(`.${p.name} = "${escSql(raw)}"`);
+          parts.push(`.${col} = "${escSql(raw)}"`);
         }
       }
     }
@@ -169,7 +174,7 @@
     if (!sortBy)
       return "";
 
-    return ` order by .${sortBy.col} ${sortBy.dir}`;
+    return ` order by .${quoteIdent(sortBy.col)} ${sortBy.dir}`;
   }
 
   function buildSelect(type: SchemaTypeDescription): { cols: string[]; query: string; } {
@@ -185,7 +190,13 @@
       ["id", ...propNames.filter((n) => n !== "id")] :
       ["id", ...propNames];
 
-    const fields = [...orderedProps, ...linkNames.map((n) => `${n}: { id }`)];
+    /*** Emitted EdgeQL field names must be backtick-quoted when they collide
+         with a reserved keyword (e.g. a link named `for`); `cols` stays raw
+         because the JSON result keys use the unquoted name. ***/
+    const fields = [
+      ...orderedProps.map(quoteIdent),
+      ...linkNames.map((n) => `${quoteIdent(n)}: { id }`),
+    ];
 
     const query =
       `select ${type.module}::${type.name} { ${fields.join(", ")} }` +
@@ -374,7 +385,7 @@
            JSONB-returning SELECT that Postgres can’t assign to a uuid column ("expression is of
            type jsonb"), so skip the round-trip and assign the typed literal straight to
            the FK. ***/
-      return `${link.name} := <uuid>"${id}"`;
+      return `${quoteIdent(link.name)} := <uuid>"${id}"`;
     }
 
     /*** Multi-link assignments via inline EdgeQL aren’t currently round-trippable through the
@@ -675,7 +686,7 @@
       const assignments: string[] = [];
 
       for (const p of writableProps(selectedType)) {
-        assignments.push(`${p.name} := ${literalFor(p, editDraft[p.name] ?? '')}`);
+        assignments.push(`${quoteIdent(p.name)} := ${literalFor(p, editDraft[p.name] ?? '')}`);
       }
 
       const query =
@@ -716,7 +727,7 @@
         if (raw === "" && (!p.required || p.hasDefault))
           continue;
 
-        assignments.push(`${p.name} := ${literalFor(p, raw)}`);
+        assignments.push(`${quoteIdent(p.name)} := ${literalFor(p, raw)}`);
       }
 
       for (const l of selectedType.links) {
