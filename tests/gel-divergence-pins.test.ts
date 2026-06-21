@@ -1045,11 +1045,14 @@ Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (
 // (`v2026.05.07`) cut from trunk, not semver-major branches with
 // independent maintenance. There is therefore no surface for a
 // "backport" workflow to attach to. The pin asserts the structural
-// reality so a future "let's adopt release branches" change has to
-// land deliberately rather than as a side effect.
+// reality (version.txt is a ChronVer date, not a semver-major) so a
+// future "let's adopt release branches" change has to land
+// deliberately rather than as a side effect.
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches to backport between)", async () => {
   // version.txt must carry a ChronVer-shaped date, not a semver-major.
+  // (This repo has no CHANGELOG.md; version.txt is the authoritative
+  // release-shape anchor.)
   const versionRaw = await Deno.readTextFile(
     new URL("../version.txt", import.meta.url)
   );
@@ -1058,20 +1061,6 @@ Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches 
     /^\d{4}\.\d{2}\.\d{2}$/.test(version),
     `version.txt must be ChronVer (YYYY.MM.DD); got "${version}" (Gel #5190 pin).`
   );
-
-  // The CHANGELOG release headers should match the same shape — no
-  // `vX.0.0` or `vX.Y.Z` anchors that would suggest a semver-major
-  // model. Skip the [Unreleased] line.
-  const changelog = await Deno.readTextFile(
-    new URL("../CHANGELOG.md", import.meta.url)
-  );
-  const releaseHeaders = changelog.match(/^## v[\d.]+/gm) ?? [];
-  for (const header of releaseHeaders) {
-    assert(
-      /^## v\d{4}\.\d{2}\.\d{2}/.test(header),
-      `CHANGELOG release header "${header}" should be ChronVer-shaped (Gel #5190 pin).`
-    );
-  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1535,23 +1524,32 @@ Deno.test("Bundle ZZ: cross-compile build fails loud when PG staging produces 0 
 
 // ---------------------------------------------------------------------------
 // gh/geldata#9117 — "gel-py command on Windows 11" / cross-platform
-// CLI ask. Disc explicitly does not support Windows yet — Windows is
-// a documented gap, not silently-broken behavior. The downloader
-// throws a clear "Windows support not yet implemented" error rather
-// than attempting a fragile binary download.
+// CLI ask. Windows is now a first-class build target for Disc: the
+// downloader maps `os === "windows"` to the `windows-x64` Zonky
+// artifact (there is no windows-arm64 PG build, so Windows-on-ARM
+// runs x64 under emulation), and the release pipeline ships
+// `disc-windows-x64.exe` with PostgreSQL embedded.
 //
-// This pin asserts the explicit-throw stays in place. A future PR
-// that adds real Windows support has to delete the throw + update
-// the divergence record.
+// (The bundled-PG *runtime* lifecycle on Windows isn't validated yet —
+// `--backend-dsn` is the supported path there for now — but the
+// download/build target is real, so the old "Windows support not yet
+// implemented" fail-fast throw is gone.)
+//
+// This pin asserts Windows resolves to a real platform target and that
+// the not-supported throw stays gone. A future PR that removes Windows
+// support would have to update this divergence record.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #9117: postgres downloader fails fast on Windows with a clear message", async () => {
+Deno.test("Gel #9117: postgres downloader resolves Windows to the windows-x64 target", async () => {
   const src = await Deno.readTextFile(
     new URL("../postgres/downloader.ts", import.meta.url)
   );
   assert(
-    /os === "windows"/.test(src) &&
-      /Windows support not yet implemented/.test(src),
-    "downloader.ts must throw an explicit Windows-not-supported error (Gel #9117 pin)."
+    /os === "windows"/.test(src) && /"windows-x64"/.test(src),
+    "downloader.ts must map os === \"windows\" to the windows-x64 target (Gel #9117 pin)."
+  );
+  assert(
+    !/Windows support not yet implemented/.test(src),
+    "downloader.ts must not retain the old Windows-not-supported throw (Gel #9117 pin)."
   );
 });
 
