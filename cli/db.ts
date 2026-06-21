@@ -20,10 +20,34 @@ import { createDatabase, DatabaseConnection, dropDatabase } from "../lib/databas
 import { PostgresBinaryDownloader, PostgresManager } from "../postgres/mod.ts";
 import { resolveProjectContext } from "../lib/project-context.ts";
 
-/** Prefix applied to all Disc-managed PG database names. */
+/** Prefix applied to SECONDARY (`disc db create`-managed) PG database names. */
 const DATABASE_PREFIX = "disc_";
 /** The default database name that cannot be dropped. */
 const DEFAULT_DATABASE_NAME = "disc";
+
+/**
+ * Resolve the actual PostgreSQL database name for a Disc database `name`.
+ *
+ * The project's PRIMARY database is created by the runtime under the bare
+ * instance name (`postgres/instance.ts` `ensureDatabase`), and `resolveDsn`
+ * connects to it directly — so `serve`/`migrate`/`shell` all use the bare
+ * name. Secondary databases created via `disc db create` are namespaced with
+ * the `disc_` prefix to avoid collisions. A `name` equal to the current
+ * project's instance name therefore maps to the bare primary database; any
+ * other name is prefixed. `instanceName` is undefined outside a project.
+ *
+ * Without this, `disc db wipe <project>` silently targeted a phantom
+ * `disc_<project>` and never touched the database the app actually uses.
+ */
+export function resolvePgDatabaseName(
+  name: string,
+  instanceName: string | undefined
+): string {
+  if (instanceName && name === instanceName) {
+    return name;
+  }
+  return `${DATABASE_PREFIX}${name}`;
+}
 /** Regex for valid database names: starts with letter, lowercase alphanumeric + underscore. */
 const VALID_NAME_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -93,7 +117,7 @@ export class DbCommand {
     if (validationError)
       throw new Error(validationError);
 
-    const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
+    const pgDatabaseName = resolvePgDatabaseName(name, resolveProjectContext()?.instanceName);
     console.log(`Creating database "${name}" (PG: ${pgDatabaseName})…`);
 
     await createDatabase(databaseUrl, pgDatabaseName);
@@ -115,7 +139,7 @@ export class DbCommand {
     if (name === DEFAULT_DATABASE_NAME)
       throw new Error(`Cannot drop the default "disc" database.`);
 
-    const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
+    const pgDatabaseName = resolvePgDatabaseName(name, resolveProjectContext()?.instanceName);
     console.log(`Dropping database "${name}" (PG: ${pgDatabaseName})…`);
 
     await dropDatabase(databaseUrl, pgDatabaseName);
@@ -141,7 +165,7 @@ export class DbCommand {
       socketDir: options.socketDir
     });
 
-    const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
+    const pgDatabaseName = resolvePgDatabaseName(name, resolveProjectContext()?.instanceName);
     const fmt: "plain" | "custom" = format ?? "plain";
     const args = buildPgDumpArgs(resolved.socketDir, pgDatabaseName, fmt);
 
@@ -234,7 +258,7 @@ export class DbCommand {
     if (clean)
       await this.wipe({ databaseUrl, force: true, name });
 
-    const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
+    const pgDatabaseName = resolvePgDatabaseName(name, resolveProjectContext()?.instanceName);
 
     /*** Open input source (file or stdin) and peek the first 5 bytes to detect custom-format dumps.
          We then re-stitch the peeked bytes onto the front of the remaining stream when piping into
@@ -337,7 +361,7 @@ export class DbCommand {
     if (name === DEFAULT_DATABASE_NAME)
       throw new Error(`Cannot wipe the default "disc" database.`);
 
-    const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
+    const pgDatabaseName = resolvePgDatabaseName(name, resolveProjectContext()?.instanceName);
     console.log(`Wiping database "${name}" (PG: ${pgDatabaseName})…`);
 
     await dropDatabase(databaseUrl, pgDatabaseName);

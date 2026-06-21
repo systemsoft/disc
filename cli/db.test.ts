@@ -12,7 +12,8 @@ import {
   buildPgRestoreArgs,
   buildPsqlArgs,
   DbCommand,
-  isCustomFormatDump
+  isCustomFormatDump,
+  resolvePgDatabaseName
 } from "./db.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -279,4 +280,20 @@ Deno.test("isCustomFormatDump - returns false for almost-matching prefix", () =>
 
 Deno.test("isCustomFormatDump - returns false for empty buffer", () => {
   assertEquals(isCustomFormatDump(new Uint8Array()), false);
+});
+
+/*** --- Primary vs secondary database naming --- ***/
+
+Deno.test("resolvePgDatabaseName - project's own name maps to the bare primary database", () => {
+  // The runtime connects to the bare instance name; `disc db wipe nickel`
+  // inside the nickel project must target `nickel`, not phantom `disc_nickel`.
+  assertEquals(resolvePgDatabaseName("nickel", "nickel"), "nickel");
+});
+
+Deno.test("resolvePgDatabaseName - a secondary database name is disc_-prefixed", () => {
+  assertEquals(resolvePgDatabaseName("reports", "nickel"), "disc_reports");
+});
+
+Deno.test("resolvePgDatabaseName - outside a project, names are disc_-prefixed", () => {
+  assertEquals(resolvePgDatabaseName("nickel", undefined), "disc_nickel");
 });
