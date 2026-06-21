@@ -801,3 +801,50 @@ Deno.test("Migration Engine - colon-form and link-keyword links produce identica
   assertStringIncludes(joined, "REFERENCES");
   assertEquals(/\bauthor\b(?!_id)[^\n]*TEXT/i.test(joined), false);
 });
+
+Deno.test("MigrationEngine - initial migration creates tables for linked abstract types", async () => {
+  // Regression: `planMigration(null, …)` used to route through a separate
+  // initial-migration path that skipped abstract types while still emitting
+  // FKs to them — a concrete type linking to an abstract target (here
+  // `Reaction.target -> Content`) produced "relation content does not exist"
+  // on apply. Null must behave like an empty baseline (differ.diff([], …)).
+  const { SDLParser } = await import("../schema/parser.ts");
+  const { SDLConverter, normalizeModules } = await import("../schema/converter.ts");
+  const sdl = `module default {
+    abstract type Content { required body -> str; }
+    type Comment extending Content { note -> str; }
+    type Reaction { required target -> Content; }
+  }`;
+  const doc = new SDLParser(sdl).parse();
+  const modules = normalizeModules(new SDLConverter().convertToModules(doc));
+
+  const engine = new MigrationEngine(config);
+  const nullPlan = engine.planMigration(null, modules);
+  const emptyPlan = engine.planMigration([], modules);
+  assertEquals(nullPlan.ok, true);
+  assertEquals(emptyPlan.ok, true);
+  if (!nullPlan.ok || !emptyPlan.ok)
+    return;
+
+  // null baseline must produce the same op count as an empty baseline.
+  assertEquals(
+    nullPlan.value.migrations[0].operations.length,
+    emptyPlan.value.migrations[0].operations.length
+  );
+
+  const ddl = engine.generateDDL(nullPlan.value);
+  assertEquals(ddl.ok, true);
+  if (!ddl.ok)
+    return;
+  const flat = ddl.value.map(s => s.replace(/\s+/g, " "));
+  // The abstract type's table is created...
+  assertEquals(
+    flat.some(s => /CREATE TABLE content \(/i.test(s)),
+    true,
+    "abstract type 'Content' must get a CREATE TABLE"
+  );
+  // ...before any FK references it.
+  const createIdx = flat.findIndex(s => /CREATE TABLE content \(/i.test(s));
+  const refIdx = flat.findIndex(s => /\bcontent\b/i.test(s) && !/CREATE TABLE content \(/i.test(s));
+  assertEquals(refIdx === -1 || refIdx > createIdx, true, "content referenced before it is created");
+});

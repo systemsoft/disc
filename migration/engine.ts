@@ -169,9 +169,13 @@ export class MigrationEngine {
       // setting the registry from `newSchema` is safe even mid-batch.
       this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(newSchema));
 
-      const operations = oldSchema ?
-        this.differ.diff(oldSchema, newSchema) :
-        this.generateInitialMigration(newSchema);
+      // Route the no-baseline case through the differ with an empty old
+      // schema rather than a separate `generateInitialMigration` path. The
+      // differ creates tables for abstract types (so FKs to a polymorphic
+      // link target like `Reaction.target -> Content` resolve), whereas the
+      // initial-only path skipped abstract types while still emitting those
+      // FKs — producing "relation <abstract> does not exist" on apply.
+      const operations = this.differ.diff(oldSchema ?? [], newSchema);
 
       const migration: Types.Migration = {
         createdAt: new Date(),
@@ -1088,61 +1092,6 @@ export class MigrationEngine {
       }
       return null;
     }
-  }
-
-  private generateInitialMigration(
-    schema: Module[]
-  ): Types.MigrationOperation[] {
-    const operations: Types.MigrationOperation[] = [];
-
-    // Build a map of all types for inheritance resolution
-    const allTypes = new Map<
-      string,
-      import("../schema/ast.ts").TypeDeclaration
-    >();
-    for (const module of schema) {
-      for (const item of module.items) {
-        if (item.kind === "TypeDeclaration") {
-          allTypes.set(item.name.value, item);
-        }
-      }
-    }
-
-    // Emit scalar/enum CREATE TYPEs first so subsequent base tables can
-    // reference them. (gh/geldata#8517) The differ already extracts
-    // scalars; we just have to mirror that for the initial-only path
-    // where we have a single new schema and no old one to diff against.
-    for (const module of schema) {
-      for (const item of module.items) {
-        if (item.kind === "ScalarTypeDeclaration") {
-          const isEnum = (item.extending ?? []).some(ext => ext.name.parts[0] === "enum");
-          const enumValues = isEnum ?
-            ((item.extending ?? []).find(ext => ext.name.parts[0] === "enum")?.params ?? []).map(p => p.name.parts.join("::")) :
-            undefined;
-          const op: Types.CreateScalarOperation = {
-            kind: "CreateScalar",
-            scalarName: item.name.value,
-            module: module.name,
-            baseType: isEnum ? "enum" : ((item.extending ?? [])
-              .map(ext => ext.name.parts.join("::"))
-              .join(", ") || "anyscalar"),
-            ...(enumValues ? { enumValues } : {})
-          };
-          operations.push(op);
-        }
-      }
-    }
-
-    // Only create operations for non-abstract types
-    for (const module of schema) {
-      for (const item of module.items) {
-        if (item.kind === "TypeDeclaration" && !item.abstract) {
-          operations.push(this.differ.createTypeOperation(item, allTypes));
-        }
-      }
-    }
-
-    return operations;
   }
 
   private generateMigrationId(): string {
