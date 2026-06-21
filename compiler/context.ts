@@ -183,6 +183,12 @@ export interface LinkDef {
   junctionTargetColumn?: string; // Column referencing target type (default: "target_id")
   /** Whether this link is computed (no physical column / not stored). */
   computed?: boolean;
+  /**
+   * For a computed reverse-link, the original EdgeQL expression
+   * (`.<fwd[is Target]`) so it round-trips through serialization. The
+   * junction/`backlink` fields above carry the resolved traversal.
+   */
+  computedExpr?: string;
   /** Annotations (e.g., description) from SDL */
   annotations?: Record<string, string>;
 }

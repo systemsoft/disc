@@ -197,6 +197,12 @@ function serializeConstraint(c: PropertyConstraint): string {
 }
 
 function serializeLink(link: LinkDef): string {
+  // Computed reverse-link: re-emit its stored expression so it round-trips as
+  // a computed (`name := .<fwd[is Target]`), not as a stored `multi link`.
+  if (link.computed && link.computedExpr) {
+    return `${link.name} := ${link.computedExpr};`;
+  }
+
   // SDL link syntax requires the `link` keyword and `->` arrow:
   // `[required] [multi] link <name> -> <Target>;`
   const parts: string[] = [];

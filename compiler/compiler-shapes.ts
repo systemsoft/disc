@@ -114,6 +114,34 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         throw new CompilationError(`Type '${typeName}' not found`);
       }
 
+      // `select <Enum>` enumerates the enum's members as a set of scalars
+      // (matching Gel), lowered to `unnest(enum_range(NULL::<pg_enum>))`.
+      // There's no physical table, so this must be handled before the
+      // object-table path that would emit `FROM account_login_method`.
+      if (typeDef.kind === "enum") {
+        const sqlType = Context.getEnumSqlType(typeDef.name);
+        return {
+          selectItems: [
+            SQL.createSelectItem(
+              {
+                kind: "RawSQLExpression",
+                sql: `unnest(enum_range(NULL::${sqlType}))`
+              },
+              "value"
+            )
+          ],
+          fromClause: SQL.createFromClause([])
+        };
+      }
+
+      // A non-enum scalar type has no instances to select.
+      if (typeDef.kind !== "object") {
+        throw new CompilationError(
+          `Cannot select '${typeName}': it is a scalar type, not an object ` +
+            `type — there are no rows to select.`
+        );
+      }
+
       // Use the canonical name from the resolved TypeDef for property/link
       // lookups, since the schema may store the type under its qualified name
       // (e.g., "other::Foo") even though the query used "Foo".

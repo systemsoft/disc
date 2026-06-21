@@ -399,8 +399,11 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
 // Test 5: SchemaManager M2M detection sets junctionTable on both LinkDefs
 // ---------------------------------------------------------------------------
 
-Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", () => {
-  // The SDL parser requires the "multi link X -> Y" arrow syntax.
+Deno.test("SchemaManager - bidirectional M2M: stored side + computed backlink share one junction", () => {
+  // Bidirectional M2M is one stored `multi` link plus a computed backlink on
+  // the other side (mutual stored multi links are rejected — Disc can't tell
+  // which pairs with which). Both sides resolve to the same junction table,
+  // with the computed side's source/target columns swapped.
   const sdl = `
     type Student {
       required name: str;
@@ -408,7 +411,7 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
     }
     type Course {
       required title: str;
-      multi link students -> Student;
+      students := .<courses[is Student];
     }
   `;
 
@@ -475,12 +478,11 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
     "Course.students should have junctionTable set"
   );
 
-  // The forward direction (Student -> Course) is processed first and
-  // assigns the canonical junction-table name `student_courses`. Both
-  // sides share this single physical table — the reciprocal pass
-  // updates Course.students to point at the same name with source/target
-  // columns swapped, so SELECT TestCourse.students walks the same
-  // junction rows from the other end.
+  // The stored side (Student.courses) owns the junction `student_courses`.
+  // The computed backlink (Course.students) reuses the same physical table
+  // with source/target columns swapped, so SELECT Course.students walks the
+  // same junction rows from the other end.
+  assertEquals(studentsLink.computed, true, "Course.students is computed");
   assertEquals(
     coursesLink.junctionTable,
     "student_courses",

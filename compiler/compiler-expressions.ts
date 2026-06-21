@@ -10,7 +10,12 @@
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { CompilerBase, edgeqlTypeToPgType, renderEdgeQLTypeName } from "./compiler-base.ts";
+import {
+  backlinkIntersectionName,
+  CompilerBase,
+  edgeqlTypeToPgType,
+  renderEdgeQLTypeName
+} from "./compiler-base.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
@@ -344,6 +349,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       qualifiedName.startsWith("cfg::")
     ) {
       return this.compileIntrospectionFunction(qualifiedName, funcCall);
+    }
+
+    // Set-aggregates (`count`/`sum`/…) over a link-set path must become a
+    // correlated subquery — a forward multi-link / backlink is a *set* with
+    // no scalar column to wrap. Returns null (fall through) for ordinary
+    // scalar arguments.
+    if (funcCall.args.length === 1) {
+      const aggregated = this.compileAggregateOverLinkPath(
+        functionName,
+        funcCall.args[0].value
+      );
+      if (aggregated) {
+        return aggregated;
+      }
     }
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));
@@ -948,6 +967,157 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * we can rewrite it to EXISTS rather than try to compile the path
    * as a scalar value.
    */
+  /**
+   * EdgeQL → SQL name for set-aggregate functions that, when applied to a
+   * link-set path, must be lowered to a correlated subquery.
+   */
+  private static readonly SET_AGGREGATES = new Map<string, string>([
+    ["count", "COUNT"],
+    ["sum", "SUM"],
+    ["min", "MIN"],
+    ["max", "MAX"],
+    ["avg", "AVG"]
+  ]);
+
+  /**
+   * Compile a set-aggregate applied to a link-set path into a correlated
+   * scalar subquery, e.g. inside a computed property:
+   *
+   *   count(.subscribers)            → (SELECT COUNT(*) FROM <junction>
+   *                                       WHERE <junction>.<src> = parent.id)
+   *   count(.<channel[is Video])     → (SELECT COUNT(*) FROM video
+   *                                       WHERE video.channel_id = parent.id)
+   *   sum(.<creator[is Video].size)  → (SELECT COALESCE(SUM(video.size), 0)
+   *                                       FROM video
+   *                                       WHERE video.creator_id = parent.id)
+   *
+   * Returns null — fall through to the generic 1:1 function mapping — when the
+   * argument isn't a link-set path this rule understands (ordinary scalar
+   * arguments, unknown links, unsupported shapes).
+   */
+  private compileAggregateOverLinkPath(
+    funcName: string,
+    arg: EdgeQLAST.Expression
+  ): SQL.SQLExpression | null {
+    const sqlAgg = ExpressionCompilerLayer.SET_AGGREGATES.get(funcName);
+    if (!sqlAgg || arg.kind !== "Path") {
+      return null;
+    }
+    const steps = arg.steps;
+    if (steps.length === 0 || steps.length > 2) {
+      return null;
+    }
+
+    // Correlate against the current (outer) row's alias.
+    let parent: { alias: string; type: string; } | undefined;
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      parent = ta;
+      break;
+    }
+    if (!parent) {
+      return null;
+    }
+    const parentType = Context.resolveTypeName(this.ctx, parent.type);
+    if (!parentType) {
+      return null;
+    }
+
+    // Forward multi-link: count the linked set. Only `count` is meaningful
+    // without a trailing scalar property. A multi-link is stored either as a
+    // junction table or, when the FK lives on the target, as a backlink.
+    const first = steps[0];
+    if (steps.length === 1 && first.type === "property") {
+      const link = parentType.links.get(first.name);
+      if (!link?.multi || funcName !== "count") {
+        return null;
+      }
+      if (link.junctionTable) {
+        const srcCol = link.junctionSourceColumn ?? "source_id";
+        const sql = `(SELECT COUNT(*) FROM "${link.junctionTable}" ` +
+          `WHERE "${link.junctionTable}"."${srcCol}" = "${parent.alias}"."id")`;
+        return { kind: "RawSQLExpression", sql };
+      }
+      if (link.backlink) {
+        // FK on the target table; `backlink` names the forward link there.
+        const targetTd = Context.resolveTypeName(this.ctx, link.target);
+        const fkCol = targetTd?.links.get(link.backlink)?.columnName;
+        if (!targetTd || !fkCol) {
+          return null;
+        }
+        const sql = `(SELECT COUNT(*) FROM "${targetTd.tableName}" ` +
+          `WHERE "${targetTd.tableName}"."${fkCol}" = "${parent.alias}"."id")`;
+        return { kind: "RawSQLExpression", sql };
+      }
+      return null;
+    }
+
+    // Backlink, optionally with a trailing scalar property:
+    //   .<creator[is Video]        → count rows of Video by FK
+    //   .<creator[is Video].size   → aggregate Video.size over those rows
+    if (first.type !== "backlink") {
+      return null;
+    }
+    const intersection = backlinkIntersectionName(first.filter);
+    if (!intersection) {
+      return null;
+    }
+    const targetType = Context.resolveTypeName(this.ctx, intersection);
+    if (!targetType) {
+      return null;
+    }
+    const fwd = targetType.links.get(first.name);
+    if (!fwd) {
+      return null;
+    }
+
+    // Build the FROM + correlation for "target rows that link back to parent".
+    let fromSql: string;
+    let correlation: string;
+    if (fwd.columnName && !fwd.junctionTable) {
+      fromSql = `"${targetType.tableName}"`;
+      correlation = `"${targetType.tableName}"."${fwd.columnName}" = "${parent.alias}"."id"`;
+    } else if (fwd.junctionTable) {
+      const srcCol = fwd.junctionSourceColumn ?? "source_id";
+      const tgtCol = fwd.junctionTargetColumn ?? "target_id";
+      fromSql = `"${targetType.tableName}" ` +
+        `JOIN "${fwd.junctionTable}" ON "${fwd.junctionTable}"."${srcCol}" = ` +
+        `"${targetType.tableName}"."id"`;
+      correlation = `"${fwd.junctionTable}"."${tgtCol}" = "${parent.alias}"."id"`;
+    } else {
+      return null;
+    }
+
+    // Determine the aggregated expression.
+    let aggExpr: string;
+    if (steps.length === 2) {
+      const second = steps[1];
+      if (second.type !== "property") {
+        return null;
+      }
+      const prop = targetType.properties.get(second.name);
+      if (!prop?.columnName) {
+        return null;
+      }
+      const col = `"${targetType.tableName}"."${prop.columnName}"`;
+      // `sum` of an empty set is 0 in EdgeQL; SQL SUM() yields NULL, so
+      // coalesce. min/max/avg/count over an empty set stay NULL/0 as-is.
+      aggExpr = funcName === "sum" ?
+        `COALESCE(SUM(${col}), 0)` :
+        `${sqlAgg}(${col})`;
+    } else {
+      // Bare backlink with no scalar property — only count(*) is valid.
+      if (funcName !== "count") {
+        return null;
+      }
+      aggExpr = "COUNT(*)";
+    }
+
+    return {
+      kind: "RawSQLExpression",
+      sql: `(SELECT ${aggExpr} FROM ${fromSql} WHERE ${correlation})`
+    };
+  }
+
   private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
     if (expr.kind !== "Path" || expr.steps.length !== 2) {
       return false;

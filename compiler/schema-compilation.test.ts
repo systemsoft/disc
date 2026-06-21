@@ -92,10 +92,18 @@ Deno.test("Schema Compilation - SDL produces correct types", () => {
   assertEquals(post.links.has("author"), true);
 });
 
-Deno.test("Schema Compilation - backlink resolution sets reverse link", () => {
+Deno.test("Schema Compilation - stored multi-link gets its own junction table", () => {
+  // A plain `multi posts -> Post` is its own relationship, stored in a
+  // junction table — matching the DDL generator (which always emits
+  // `<table>_<link>`) and Gel semantics. It is NOT silently folded into
+  // `Post.author`'s FK; the reverse of a single link is a separate computed
+  // `:= .<author[is Post]` backlink.
   const postsLink = schema.types.get("User")!.links.get("posts")!;
   assertEquals(postsLink.multi, true);
-  assertEquals(postsLink.backlink, "author");
+  assertEquals(postsLink.backlink, undefined);
+  assertEquals(postsLink.junctionTable, "user_posts");
+  assertEquals(postsLink.junctionSourceColumn, "source_id");
+  assertEquals(postsLink.junctionTargetColumn, "target_id");
 });
 
 Deno.test("Schema Compilation - SELECT User without shape", () => {
@@ -215,7 +223,7 @@ Deno.test("Schema Compilation - DELETE User", () => {
   assertStringIncludes(sql, "returning");
 });
 
-Deno.test("Schema Compilation - SELECT with nested shape uses backlink", () => {
+Deno.test("Schema Compilation - SELECT with nested shape joins the junction table", () => {
   const sql = compileWithSchema(
     schema,
     `
@@ -232,6 +240,9 @@ Deno.test("Schema Compilation - SELECT with nested shape uses backlink", () => {
   assertStringIncludes(sql, "'posts'");
   assertStringIncludes(sql, "jsonb_agg");
   assertStringIncludes(sql, "'title'");
-  // The subquery should join on the backlink column (author_id)
-  assertStringIncludes(sql, "author_id");
+  // The subquery joins through the `user_posts` junction table — the stored
+  // multi-link's own storage — not `Post.author`'s FK.
+  assertStringIncludes(sql, "user_posts");
+  assertStringIncludes(sql, "source_id");
+  assertStringIncludes(sql, "target_id");
 });

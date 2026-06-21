@@ -267,10 +267,10 @@ Deno.test("EdgeQL to SQL - SELECT with computed field", () => {
 });
 
 Deno.test("EdgeQL to SQL - backlink through junction-table multi-link", async () => {
-  // Regression: when the forward link is `multi options -> PaymentOption`,
-  // schema-manager resolves it to a junction-table multi (no FK column on
-  // either side). The compiler must JOIN through the junction rather than
-  // looking for a column that doesn't exist.
+  // The forward link `multi options -> PaymentOption` is junction-backed, so
+  // the computed reverse-link `requirements` reuses that junction with its
+  // source/target columns swapped — aggregating the source-side ids where the
+  // target side matches the current row.
   const { SchemaManager } = await import("../migration/schema-manager.ts");
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(`
@@ -298,22 +298,19 @@ Deno.test("EdgeQL to SQL - backlink through junction-table multi-link", async ()
   const sql = new SQLCodeGenerator().generate(compileResult.value);
   const normalized = normalizeSQL(sql);
 
-  // Junction-table form should JOIN the junction, not look for a column.
+  // Aggregates source-side ids from the reversed junction, correlated on the
+  // target side.
   assertStringIncludes(normalized, "'requirements'");
-  assertStringIncludes(normalized, `FROM "payment_requirements"`);
-  assertStringIncludes(normalized, "JOIN");
+  assertStringIncludes(normalized, "jsonb_agg");
   assertStringIncludes(normalized, "payment_requirements_options");
   assertStringIncludes(normalized, "source_id");
-  assertStringIncludes(normalized, "target_id");
+  assertStringIncludes(normalized, "target_id = paymentoption_1.id");
 });
 
 Deno.test("EdgeQL to SQL - SELECT with computed backlink + type intersection", async () => {
-  // Regression: a computed property like
-  // `requirements := .<options[is PaymentRequirements]` previously threw
-  // "Complex path expressions not yet implemented" because the path
-  // compiler didn't recognize `[backlink, type_intersection]` 2-step
-  // paths. It now lowers to a correlated subquery materializing matches
-  // as a JSONB array of `{ id }` objects.
+  // The forward link `options` is a single FK (colon-form), so the computed
+  // reverse-link `requirements` resolves to an FK backlink: aggregate target
+  // rows whose `options_id` points back to the current row.
   const { SchemaManager } = await import("../migration/schema-manager.ts");
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(`
@@ -341,12 +338,11 @@ Deno.test("EdgeQL to SQL - SELECT with computed backlink + type intersection", a
   const sql = new SQLCodeGenerator().generate(compileResult.value);
   const normalized = normalizeSQL(sql);
 
-  // Should emit a correlated subquery against the target table, filtered
-  // by the FK column that points back to the current type. Colon-form and
-  // arrow-form links share the `<name>_id` column convention.
+  // Correlated subquery against the target table, filtered by the FK column
+  // that points back to the current type.
   assertStringIncludes(normalized, "'requirements'");
-  assertStringIncludes(normalized, `FROM "payment_requirements"`);
-  assertStringIncludes(normalized, `"payment_requirements"."options_id"`);
+  assertStringIncludes(normalized, "FROM payment_requirements");
+  assertStringIncludes(normalized, "payment_requirements.options_id = paymentoption_1.id");
   assertStringIncludes(normalized, "jsonb_agg");
 });
 

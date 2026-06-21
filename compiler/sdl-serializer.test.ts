@@ -26,10 +26,18 @@ function makeSchema(types: TypeDef[]): Schema {
   return { types: m, functions: getBuiltinFunctions() };
 }
 
-/** Parse the SDL text back into a Schema via SchemaManager. */
+/**
+ * Parse the SDL text back into a Schema via SchemaManager.
+ *
+ * Semantic validation is skipped here: these tests assert serializer →
+ * parser *structural* fidelity, and the shared `createTestSchema` fixture
+ * uses a non-canonical constraint name (`max_length`) that the validator
+ * correctly rejects. Constraint-name validation is exercised separately in
+ * schema/constraint-validation.test.ts.
+ */
 function reparse(sdl: string): Schema {
   const mgr = new SchemaManager({ dryRun: true });
-  const r = mgr.parseSDL(sdl);
+  const r = mgr.parseSDL(sdl, { validate: false });
   if (!r.ok) {
     throw new Error(`re-parse failed: ${JSON.stringify(r.error)}`);
   }
