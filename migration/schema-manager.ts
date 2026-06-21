@@ -38,10 +38,12 @@ import {
   Annotation as SDLAnnotation,
   AnnotationDeclaration,
   Constraint as SDLConstraint,
+  Declaration,
   Expression,
   GlobalDeclaration,
   LinkDeclaration,
   ScalarTypeDeclaration,
+  SDLDocument,
   TriggerDeclaration,
   TypeDeclaration
 } from "../schema/ast.ts";
@@ -52,6 +54,7 @@ import {
 } from "../schema/converter.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
 import { SDLParser } from "../schema/parser.ts";
+import { SchemaValidator } from "../schema/validator.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
@@ -115,6 +118,106 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
 };
 
 /**
+ * Run semantic validation on a parsed SDL document, returning a MigrationError
+ * with all collected messages when validation fails.
+ */
+function validateDocument(
+  document: SDLDocument
+): Result<void, MigrationError> {
+  const validation = new SchemaValidator().validate(document);
+  if (validation.ok) {
+    return Ok(undefined);
+  }
+  const errors = validation.errors!;
+  const lines = errors.map(e => `  • ${e.message}`).join("\n");
+  return Err(
+    new MigrationError(
+      `Schema validation failed (${errors.length} error${errors.length === 1 ? "" : "s"}):\n${lines}`
+    )
+  );
+}
+
+/**
+ * If a computed expression is a pure reverse-link path (`.<fwd[is Target]`),
+ * extract the forward link name and the intersection target type. Returns null
+ * for any other computed shape (scalar computeds, trailing-property backlinks,
+ * etc.), which stay classified as computed properties.
+ */
+function extractBacklinkInfo(
+  expr: Expression
+): { forwardLink: string; target: string; } | null {
+  if (expr.kind !== "PathExpression") {
+    return null;
+  }
+  const p = expr.path;
+  if (p.length !== 3 || p[0] !== "." || !p[1].startsWith("<")) {
+    return null;
+  }
+  const m = /^\[is (.+)\]$/.exec(p[2]);
+  if (!m) {
+    return null;
+  }
+  return { forwardLink: p[1].slice(1), target: m[1] };
+}
+
+/**
+ * Detect mutual stored `multi` links: two object types that each declare a
+ * non-computed `multi` link pointing at the other. Disc stores every stored
+ * multi link in its own junction table and can't tell which side pairs with
+ * which, so such a schema yields a DDL/query-layer disagreement that crashes
+ * at query time. Bidirectional M2M must instead be one stored link plus one
+ * computed backlink.
+ *
+ * Returns an error message when any such pair exists, or null when clean.
+ * Self-referential multi links (a type pointing `multi` at itself) are fine —
+ * they each get their own junction and are unambiguous.
+ */
+function detectMutualStoredMultiLinks(schema: Schema): string | null {
+  const resolve = (target: string): TypeDef | undefined =>
+    schema.types.get(target) ??
+      schema.types.get(`default::${target}`) ??
+      schema.types.get(target.replace(/^default::/, ""));
+
+  const seen = new Set<string>();
+  const pairs: string[] = [];
+  for (const [, t] of schema.types) {
+    for (const [lName, l] of t.links) {
+      if (!l.multi || l.computed) {
+        continue;
+      }
+      const u = resolve(l.target);
+      if (!u || u === t) {
+        continue;
+      }
+      for (const [mName, m] of u.links) {
+        if (!m.multi || m.computed || resolve(m.target) !== t) {
+          continue;
+        }
+        const key = [`${t.name}.${lName}`, `${u.name}.${mName}`].sort().join("|");
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        pairs.push(
+          `  • '${t.name}.${lName} -> ${u.name}' and '${u.name}.${mName} -> ${t.name}'`
+        );
+      }
+    }
+  }
+
+  if (pairs.length === 0) {
+    return null;
+  }
+  return `Ambiguous bidirectional links (${pairs.length}): both sides are ` +
+    `stored 'multi' links, so Disc can't tell which pairs with which.\n` +
+    `${pairs.join("\n")}\n` +
+    `Model a two-way relationship as one stored 'multi' link plus a computed ` +
+    `backlink on the other side, e.g.:\n` +
+    `    type A { multi bs -> B; }\n` +
+    `    type B { as := .<bs[is A]; }`;
+}
+
+/**
  * Map an SDL type name to a SQL column type
  */
 function sdlTypeToSqlType(sdlType: string): string {
@@ -122,8 +225,9 @@ function sdlTypeToSqlType(sdlType: string): string {
     return SDL_TO_SQL_TYPE_MAP[sdlType];
   }
 
-  // Tuple types map to jsonb (PostgreSQL has no native tuple type)
-  if (sdlType.startsWith("tuple<")) {
+  // Tuple types map to jsonb (PostgreSQL has no native tuple type).
+  // Arrays of tuples (`array<tuple<...>>`) likewise map to jsonb.
+  if (sdlType.startsWith("tuple<") || sdlType.startsWith("array<tuple<")) {
     return "jsonb";
   }
 
@@ -138,6 +242,7 @@ function typeRefToSdlString(
   typeRef: {
     name: { parts: string[]; };
     params?: { name: { parts: string[]; }; params?: unknown[]; }[];
+    fieldName?: string;
   }
 ): string {
   let result = typeRef.name.parts.join("::");
@@ -150,11 +255,16 @@ function typeRefToSdlString(
             p as {
               name: { parts: string[]; };
               params?: { name: { parts: string[]; }; params?: unknown[]; }[];
+              fieldName?: string;
             }
           )
         )
         .join(", ")
     }>`;
+  }
+  // Named-tuple field: `icon: str`.
+  if (typeRef.fieldName) {
+    result = `${typeRef.fieldName}: ${result}`;
   }
   return result;
 }
@@ -215,6 +325,13 @@ function stringifyExpression(expr: Expression): string {
       return `${stringifyExpression(expr.consequent)} if ${stringifyExpression(expr.test)} else ${stringifyExpression(expr.alternate)}`;
     case "TupleExpression":
       return `(${expr.elements.map(stringifyExpression).join(", ")})`;
+    case "NamedTupleExpression":
+      return `(${
+        expr
+          .elements
+          .map(e => `${e.name} := ${stringifyExpression(e.value)}`)
+          .join(", ")
+      })`;
     default:
       return String((expr as { value?: unknown; }).value ?? "");
   }
@@ -289,8 +406,17 @@ export class SchemaManager {
    *
    * Creates an SDLParser to tokenize and parse the source into an SDLDocument,
    * then uses SDLConverter to normalize into Module[].
+   *
+   * Semantic validation runs by default. Callers that parse one fragment of a
+   * multi-file schema (where types may be defined in a sibling file) should
+   * pass `{ validate: false }` and validate the merged module set afterwards
+   * via `validateModules()`, so cross-file references don't read as undefined.
    */
-  parseSDL(source: string): Result<Module[], MigrationError> {
+  parseSDL(
+    source: string,
+    opts: { validate?: boolean; } = {}
+  ): Result<Module[], MigrationError> {
+    const validate = opts.validate ?? true;
     try {
       // P2-06: parse with error recovery so all SDL syntax errors surface
       // in a single MigrationError message instead of just the first one.
@@ -313,8 +439,29 @@ export class SchemaManager {
           )
         );
       }
+      // Semantic validation (undefined types, bad cardinality, unknown
+      // constraints, …) runs after a clean parse and before conversion, so
+      // schema mistakes are reported up front rather than as opaque DDL or
+      // runtime failures.
+      if (validate) {
+        const validation = validateDocument(document);
+        if (!validation.ok) {
+          return Err(validation.error);
+        }
+      }
       const converter = new SDLConverter();
       const modules = converter.convertToModules(document);
+
+      // Reject mutual stored `multi` links between two types — Disc can't
+      // tell which pairs with which (the pairing is ambiguous), so the DDL
+      // and query layers can disagree on the junction table. Bidirectional
+      // M2M is modeled with one stored side + one computed backlink.
+      if (validate) {
+        const mutual = detectMutualStoredMultiLinks(this.modulesToSchema(modules));
+        if (mutual) {
+          return Err(new MigrationError(mutual));
+        }
+      }
       return Ok(modules);
     } catch (error) {
       return Err(
@@ -323,6 +470,32 @@ export class SchemaManager {
         )
       );
     }
+  }
+
+  /**
+   * Validate an already-parsed (and merged) module set, e.g. a multi-file
+   * schema assembled from several `.disc` files. Reconstructs an SDLDocument
+   * from the modules so cross-file references resolve against the full schema.
+   */
+  validateModules(modules: Module[]): Result<void, MigrationError> {
+    // Coalesce declarations by module name. Multiple Module entries can share
+    // a name (e.g. one `module default` block per file); the validator treats
+    // a repeated module declaration as an error, so merge them into one.
+    const byName = new Map<string, Declaration[]>();
+    for (const m of modules) {
+      const items = byName.get(m.name) ?? [];
+      items.push(...(m.items as Declaration[]));
+      byName.set(m.name, items);
+    }
+    const document: SDLDocument = {
+      kind: "SDLDocument",
+      declarations: [...byName.entries()].map(([name, declarations]) => ({
+        kind: "ModuleDeclaration" as const,
+        name: { kind: "QualifiedName" as const, parts: name.split("::") },
+        declarations
+      }))
+    };
+    return validateDocument(document);
   }
 
   /**
@@ -526,6 +699,31 @@ export class SchemaManager {
           // type resolution. Mirrors the arrow-shorthand reclassification
           // below (which handles `name -> ScalarType` in the inverse
           // direction).
+          // A computed pure-backlink (`subscribers := .<subscriptions[is
+          // Customer]`) is a real reverse *link*, not a scalar property.
+          // Classify it as a computed multi-link targeting the intersection
+          // type; the third pass below derives its junction/FK traversal from
+          // the forward link it reverses. `backlink` temporarily holds the
+          // forward link name until then.
+          if (propDecl.computed) {
+            const bl = extractBacklinkInfo(propDecl.computed);
+            const blTargetIsObject = bl !== null &&
+              (objectTypeNames.has(bl.target) ||
+                objectTypeNames.has(bl.target.replace(/^default::/, "")));
+            if (bl && blTargetIsObject) {
+              links.set(propName, {
+                name: propName,
+                target: bl.target,
+                required: false,
+                multi: true,
+                computed: true,
+                computedExpr: sdlExpressionToEdgeQL(propDecl.computed),
+                backlink: bl.forwardLink
+              });
+              continue;
+            }
+          }
+
           const isObjectTarget = objectTypeNames.has(sdlTypeName) ||
             objectTypeNames.has(sdlTypeName.replace(/^default::/, ""));
           if (isObjectTarget && !propDecl.computed) {
@@ -803,11 +1001,7 @@ export class SchemaManager {
       }
     }
 
-    // Third pass: resolve backlinks and junction tables for multi-links.
-    // For each type's multi-link, check if the target type has a single
-    // link pointing back (backlink) or a reciprocal multi-link
-    // (many-to-many via junction table).
-    const resolvedJunctions = new Set<string>();
+    // Third pass: resolve junction tables and computed reverse-link traversal.
 
     // Cross-module-aware lookup: SDL stores `linkDef.target` verbatim from
     // the source text (often unqualified, e.g. `multi options -> PaymentOption`
@@ -833,79 +1027,50 @@ export class SchemaManager {
       return undefined;
     };
 
-    for (const [typeName, typeDef] of types) {
-      for (const [_linkName, linkDef] of typeDef.links) {
-        if (!linkDef.multi) {
+    // (a) Every stored `multi` link is backed by its own junction table
+    // `<table>_<link>` (source_id/target_id) — matching the DDL generator,
+    // which emits one per multi link unconditionally. A plain `multi x -> T`
+    // is its own relationship; bidirectional M2M is expressed as one stored
+    // link plus a computed backlink (resolved in (b) below), and mutual stored
+    // multi links are rejected before reaching here (see
+    // `detectMutualStoredMultiLinks`).
+    for (const [, typeDef] of types) {
+      for (const [, linkDef] of typeDef.links) {
+        if (!linkDef.multi || linkDef.computed || linkDef.junctionTable) {
           continue;
         }
+        linkDef.junctionTable = `${typeDef.tableName}_${linkDef.name}`;
+        linkDef.junctionSourceColumn = "source_id";
+        linkDef.junctionTargetColumn = "target_id";
+      }
+    }
 
+    // (b) Computed reverse-link traversal (`x := .<fwd[is T]`). The link
+    // reverses a forward link on the target type; derive its junction (with
+    // source/target columns swapped) or single-FK `backlink` metadata so the
+    // compiler's existing link-shape and aggregate machinery can walk it.
+    // `backlink` currently holds the forward link's name.
+    for (const [, typeDef] of types) {
+      for (const [, linkDef] of typeDef.links) {
+        if (!linkDef.computed || !linkDef.backlink) {
+          continue;
+        }
         const targetTypeDef = resolveLinkTarget(linkDef.target, typeDef.module);
-        if (!targetTypeDef) {
+        const forwardLink = targetTypeDef?.links.get(linkDef.backlink);
+        if (!forwardLink) {
           continue;
         }
-
-        // First try: single-link backlink on the target type. Resolve each
-        // candidate's `target` (often unqualified in SDL) to its TypeDef and
-        // compare by reference — comparing the raw string against `typeName`
-        // breaks across modules (`PaymentOption` vs `payment::PaymentOption`).
-        let foundBacklink = false;
-        for (const [candidateName, candidateLink] of targetTypeDef.links) {
-          if (candidateLink.multi)
-            continue;
-          const candidateTarget = resolveLinkTarget(
-            candidateLink.target,
-            targetTypeDef.module
-          );
-          if (candidateTarget === typeDef) {
-            linkDef.backlink = candidateName;
-            foundBacklink = true;
-            break;
-          }
+        if (forwardLink.junctionTable) {
+          // Same junction, reversed direction → swap source/target columns.
+          linkDef.junctionTable = forwardLink.junctionTable;
+          linkDef.junctionSourceColumn = forwardLink.junctionTargetColumn ??
+            "target_id";
+          linkDef.junctionTargetColumn = forwardLink.junctionSourceColumn ??
+            "source_id";
+          linkDef.backlink = undefined;
         }
-
-        // Second try: many-to-many — target has a reciprocal multi-link
-        if (!foundBacklink) {
-          // If the reciprocal pass already assigned this link a canonical
-          // junction table (with swapped source/target columns), don't
-          // overwrite — that would break the agreement that both sides
-          // share one physical junction table.
-          if (linkDef.junctionTable) {
-            continue;
-          }
-          const tableName = typeDef.tableName;
-          const junctionTable = `${tableName}_${linkDef.name}`;
-
-          linkDef.junctionTable = junctionTable;
-          linkDef.junctionSourceColumn = "source_id";
-          linkDef.junctionTargetColumn = "target_id";
-
-          // Mark the reciprocal link on the target type if it exists
-          for (
-            const [_candidateName, candidateLink] of targetTypeDef.links
-          ) {
-            if (!candidateLink.multi)
-              continue;
-            const candidateTarget = resolveLinkTarget(
-              candidateLink.target,
-              targetTypeDef.module
-            );
-            if (candidateTarget === typeDef) {
-              // Use canonical ordering to avoid duplicate junction tables:
-              // the junction table belongs to whichever type comes first
-              // alphabetically
-              const pairKey = [typeName, linkDef.target].sort().join("|");
-              if (!resolvedJunctions.has(pairKey)) {
-                resolvedJunctions.add(pairKey);
-                // The reciprocal link uses the OTHER side's junction table
-                // with swapped source/target columns
-                candidateLink.junctionTable = junctionTable;
-                candidateLink.junctionSourceColumn = "target_id";
-                candidateLink.junctionTargetColumn = "source_id";
-              }
-              break;
-            }
-          }
-        }
+        // else: forward link is a single FK; keep `backlink` so the link-shape
+        // compiler resolves `target.<backlink>.columnName`.
       }
     }
 

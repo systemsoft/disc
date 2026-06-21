@@ -101,7 +101,10 @@ export async function loadMultiFileSchemaModules(files: string[]): Promise<Modul
 
   for (const file of files) {
     const source = await Deno.readTextFile(file);
-    const result = manager.parseSDL(source);
+    // Parse only — semantic validation is deferred until the files are merged
+    // so a type defined in one file and referenced in another doesn't read as
+    // undefined when its file is parsed in isolation.
+    const result = manager.parseSDL(source, { validate: false });
 
     if (!result.ok)
       throw new Error(`Failed to parse ${file}: ${result.error.message}`);
@@ -109,7 +112,14 @@ export async function loadMultiFileSchemaModules(files: string[]): Promise<Modul
     allModules.push(...result.value);
   }
 
-  return mergeModulesByName(allModules);
+  const merged = mergeModulesByName(allModules);
+
+  // Validate the complete, merged schema so cross-file references resolve.
+  const validation = manager.validateModules(merged);
+  if (!validation.ok)
+    throw new Error(validation.error.message);
+
+  return merged;
 }
 
 /**

@@ -17,6 +17,7 @@ import type {
   Expression,
   FunctionCall,
   Literal,
+  NamedTupleExpression,
   Parameter,
   PathExpression,
   TupleExpression,
@@ -46,6 +47,8 @@ export function sdlExpressionToEdgeQL(expr: Expression): string {
       return formatConditional(expr as ConditionalExpression);
     case "TupleExpression":
       return formatTuple(expr as TupleExpression);
+    case "NamedTupleExpression":
+      return formatNamedTuple(expr as NamedTupleExpression);
     default:
       // The Expression union is closed; this branch exists for forward
       // compatibility if new SDL expression kinds are added.
@@ -129,6 +132,10 @@ function formatTypeRef(ref: TypeRef): string {
   if (ref.array) {
     base = `array<${base}>`;
   }
+  // Named-tuple field: `icon: str`.
+  if (ref.fieldName) {
+    base = `${ref.fieldName}: ${base}`;
+  }
   return base;
 }
 
@@ -138,4 +145,13 @@ function formatConditional(cond: ConditionalExpression): string {
 
 function formatTuple(tup: TupleExpression): string {
   return `(${tup.elements.map(sdlExpressionToEdgeQL).join(", ")})`;
+}
+
+function formatNamedTuple(tup: NamedTupleExpression): string {
+  return `(${
+    tup
+      .elements
+      .map(e => `${e.name} := ${sdlExpressionToEdgeQL(e.value)}`)
+      .join(", ")
+  })`;
 }

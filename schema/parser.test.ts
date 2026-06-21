@@ -1237,3 +1237,183 @@ Deno.test("SDL Parser - forward path with type intersection", () => {
   }
   assertEquals(prop.computed.path, [".", "friends", "[is User]"]);
 });
+
+Deno.test("SDL Parser - named tuple type (tuple<a: str, b: str>)", () => {
+  const source = `
+    type Channel {
+      pfp -> tuple<path: str, shape: str, source: str>;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  // Arrow-shorthand on a non-object target parses as a LinkDeclaration; the
+  // target TypeRef carries the named-tuple field names on its params.
+  const prop = typeDecl.members.find(
+    m => m.kind === "LinkDeclaration" && m.name.value === "pfp"
+  );
+  const target = prop && "target" in prop ? prop.target : undefined;
+  assertEquals(target?.name.parts[0], "tuple");
+  assertEquals(target?.params?.map(p => p.fieldName), ["path", "shape", "source"]);
+  assertEquals(target?.params?.map(p => p.name.parts[0]), ["str", "str", "str"]);
+});
+
+Deno.test("SDL Parser - array of named tuples (array<tuple<...>>)", () => {
+  const source = `
+    type Channel {
+      links -> array<tuple<icon: str, title: str, url: str>>;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const prop = typeDecl.members.find(
+    m => m.kind === "LinkDeclaration" && m.name.value === "links"
+  );
+  const target = prop && "target" in prop ? prop.target : undefined;
+  assertEquals(target?.name.parts[0], "array");
+  const inner = target?.params?.[0];
+  assertEquals(inner?.name.parts[0], "tuple");
+  assertEquals(inner?.params?.map(p => p.fieldName), ["icon", "title", "url"]);
+});
+
+Deno.test("SDL Parser - named tuple expression in computed", () => {
+  const source = `
+    type Customer {
+      multi subs -> Customer;
+      counts := (
+        subscribers := count(.subs),
+        total := count(.subs)
+      );
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const prop = typeDecl.members.find(
+    m => m.kind === "PropertyDeclaration" && m.name.value === "counts"
+  );
+  if (prop?.kind !== "PropertyDeclaration" || !prop.computed) {
+    throw new Error("expected computed `counts` property");
+  }
+  if (prop.computed.kind !== "NamedTupleExpression") {
+    throw new Error(`expected NamedTupleExpression, got ${prop.computed.kind}`);
+  }
+  assertEquals(prop.computed.elements.map(e => e.name), [
+    "subscribers",
+    "total"
+  ]);
+});
+
+Deno.test("SDL Parser - property keyword accepts arrow form", () => {
+  const source = `
+    type Login {
+      required property token -> str;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const prop = typeDecl.members.find(
+    m => m.kind === "PropertyDeclaration" && m.name.value === "token"
+  );
+  assertEquals(prop?.kind, "PropertyDeclaration");
+  if (prop?.kind === "PropertyDeclaration") {
+    assertEquals(prop.required, true);
+    assertEquals(prop.type.name.parts[0], "str");
+  }
+});
+
+Deno.test("SDL Parser - keyword enum member in default (E.LINK)", () => {
+  const source = `
+    scalar type Method extending enum<"LINK", "TOKEN">;
+    type Customer {
+      loginMethod -> Method { default := Method.LINK; };
+    }
+  `;
+
+  // The `LINK` enum member lexes as the LINK keyword; the default expression
+  // must still parse it as a path step. Previously threw "Expected identifier".
+  const ast = new SDLParser(source).parse();
+  assertEquals(ast.declarations.length, 2);
+});
+
+Deno.test("SDL Parser - reserved keyword `type` as bare member name", () => {
+  const source = `
+    scalar type AccountType extending enum<"CREATOR", "SUPPORTER">;
+    type Customer {
+      type -> AccountType;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[1];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const member = typeDecl.members.find(
+    m =>
+      (m.kind === "PropertyDeclaration" || m.kind === "LinkDeclaration") &&
+      m.name.value === "type"
+  );
+  if (
+    member?.kind !== "PropertyDeclaration" && member?.kind !== "LinkDeclaration"
+  ) {
+    throw new Error("expected member named `type`");
+  }
+  assertEquals(member.name.value, "type");
+});
+
+Deno.test("SDL Validator - enum scalar base type is valid", () => {
+  const source = `
+    scalar type AccountType extending enum<"CREATOR", "SUPPORTER">;
+  `;
+
+  const result = new SchemaValidator().validate(new SDLParser(source).parse());
+  assertEquals(result.ok, true);
+  assertEquals(result.errors, undefined);
+});
+
+Deno.test("SDL Validator - computed property skips type-existence check", () => {
+  // Computed members carry the synthetic `auto` placeholder type; the
+  // validator must not flag `auto` as undefined.
+  const source = `
+    type Customer {
+      multi subs -> Customer;
+      n := count(.subs);
+      counts := (subscribers := count(.subs));
+    }
+  `;
+
+  const result = new SchemaValidator().validate(new SDLParser(source).parse());
+  assertEquals(result.ok, true);
+  assertEquals(result.errors, undefined);
+});
+
+Deno.test("SDL Validator - unknown non-computed type still errors", () => {
+  // Guard: the computed/enum relaxations must not mask genuine bad types.
+  const source = `
+    type Customer {
+      x -> Bogus;
+    }
+  `;
+
+  const result = new SchemaValidator().validate(new SDLParser(source).parse());
+  assertEquals(result.ok, false);
+  assertEquals(
+    result.errors?.some(e => e.message.includes("Type 'Bogus' is not defined")),
+    true
+  );
+});

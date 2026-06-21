@@ -240,6 +240,9 @@ export interface TypeRef extends SDLNode {
   array?: boolean;
   optional?: boolean;
   params?: TypeRef[];
+  // Element name for named-tuple fields: the `icon` in
+  // `tuple<icon: str, title: str>`. Only set on tuple parameter slots.
+  fieldName?: string;
 }
 
 // Names
@@ -264,7 +267,8 @@ export type Expression =
   | TypeCast
   | Parameter
   | ConditionalExpression
-  | TupleExpression;
+  | TupleExpression
+  | NamedTupleExpression;
 
 export interface Literal extends SDLNode {
   kind: "Literal";
@@ -319,6 +323,13 @@ export interface ConditionalExpression extends SDLNode {
 export interface TupleExpression extends SDLNode {
   kind: "TupleExpression";
   elements: Expression[];
+}
+
+// Named tuple expression: `(subscribers := count(.subscribers), videos := ...)`.
+// Used by computed properties that build a named-tuple shape.
+export interface NamedTupleExpression extends SDLNode {
+  kind: "NamedTupleExpression";
+  elements: { name: string; value: Expression; }[];
 }
 
 // Helper functions for creating AST nodes

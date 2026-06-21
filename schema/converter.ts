@@ -429,8 +429,9 @@ export class SDLConverter {
       return typeMap[sdlType];
     }
 
-    // Tuple types map to JSONB (PostgreSQL has no native tuple type)
-    if (sdlType.startsWith("tuple<")) {
+    // Tuple types map to JSONB (PostgreSQL has no native tuple type).
+    // Arrays of tuples (`array<tuple<...>>`) likewise map to JSONB.
+    if (sdlType.startsWith("tuple<") || sdlType.startsWith("array<tuple<")) {
       return "JSONB";
     }
 

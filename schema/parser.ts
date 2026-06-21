@@ -496,9 +496,9 @@ export class SDLParser {
     }
 
     // Check for computed property/link (name := expression)
-    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+    if (this.isMemberNameStart()) {
       const checkpoint = this.current;
-      const name = this.parseIdentifier();
+      const name = this.parseMemberName();
 
       if (this.match(TokenType.ASSIGN)) {
         // Computed property
@@ -556,7 +556,11 @@ export class SDLParser {
 
   private parsePropertyDeclaration(qualifiers: any): AST.PropertyDeclaration {
     const name = this.parseIdentifier();
-    this.consume(TokenType.COLON, "Expected ':' after property name");
+    // Accept both the modern colon form (`property token: str`) and the
+    // legacy arrow form (`property token -> str`).
+    if (!this.match(TokenType.COLON) && !this.match(TokenType.ARROW)) {
+      throw this.error("Expected ':' or '->' after property name");
+    }
     const type = this.parseTypeRef();
 
     return this.parsePropertyBody(name, type, qualifiers);
@@ -1396,6 +1400,19 @@ export class SDLParser {
       const value = this.parseStringLiteral();
       return AST.createTypeRef(AST.createQualifiedName([value]));
     }
+    // Named-tuple field: `icon: str` in `tuple<icon: str, title: str>`.
+    // Detect an identifier immediately followed by `:` (but not `::`, which
+    // begins a qualified name like `cal::local_date`).
+    if (
+      (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) &&
+      this.checkNext(TokenType.COLON)
+    ) {
+      const fieldName = this.advance().value;
+      this.advance(); // consume `:`
+      const type = this.parseTypeRef();
+      type.fieldName = fieldName;
+      return type;
+    }
     return this.parseTypeRef();
   }
 
@@ -1597,9 +1614,12 @@ export class SDLParser {
   // these via backticks (`` `type` ``); path references don't require it.
   private parsePathStepName(): string {
     const tok = this.peek();
+    // A keyword may appear as a path step / enum member (e.g. the `LINK` in
+    // `AccountLoginMethod.LINK`). The lexer preserves the original casing in
+    // `value` while keying KEYWORDS lowercase, so compare case-insensitively.
     if (
       tok.type === TokenType.IDENT || tok.type === TokenType.BACKTICK_IDENT ||
-      KEYWORDS.get(tok.value) === tok.type
+      KEYWORDS.get(tok.value.toLowerCase()) === tok.type
     ) {
       this.advance();
       return tok.value;
@@ -1698,6 +1718,25 @@ export class SDLParser {
     // Parenthesized expression — also covers tuple literals `(a, b, c)`.
     // Composite indexes use this form: `index on ((.a, .b))`.
     if (this.match(TokenType.LPAREN)) {
+      // Named tuple: `(a := expr, b := expr)`. Detected by an identifier
+      // immediately followed by `:=`.
+      if (
+        (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) &&
+        this.checkNext(TokenType.ASSIGN)
+      ) {
+        const elements: AST.NamedTupleExpression["elements"] = [];
+        do {
+          // Allow a trailing comma before `)`.
+          if (this.check(TokenType.RPAREN)) {
+            break;
+          }
+          const name = this.advance().value;
+          this.consume(TokenType.ASSIGN, "Expected ':=' in named tuple element");
+          elements.push({ name, value: this.parseExpression() });
+        } while (this.match(TokenType.COMMA));
+        this.consume(TokenType.RPAREN, "Expected ')' after named tuple expression");
+        return { kind: "NamedTupleExpression", elements };
+      }
       const first = this.parseExpression();
       if (this.match(TokenType.COMMA)) {
         const elements: AST.Expression[] = [first];
@@ -1765,6 +1804,34 @@ export class SDLParser {
     }
 
     throw this.error(`Expected identifier, got ${this.peek().value}`);
+  }
+
+  // A type-body member may be named with a reserved keyword used bare
+  // (e.g. `type -> AccountType`). We only treat a keyword as a name when it
+  // is immediately followed by a member operator (`:`, `->`, or `:=`), so
+  // structural keywords (`constraint`, `index`, …) are never misread.
+  private isMemberNameStart(): boolean {
+    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+      return true;
+    }
+    const tok = this.peek();
+    if (KEYWORDS.get(tok.value.toLowerCase()) === tok.type) {
+      return this.checkNext(TokenType.COLON) ||
+        this.checkNext(TokenType.ARROW) ||
+        this.checkNext(TokenType.ASSIGN);
+    }
+    return false;
+  }
+
+  private parseMemberName(): AST.Identifier {
+    if (
+      this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)
+    ) {
+      return this.parseIdentifier();
+    }
+    // Keyword-as-name (gated by isMemberNameStart).
+    const value = this.advance().value;
+    return AST.createIdentifier(value, false);
   }
 
   private parseQualifiedName(): AST.QualifiedName {
@@ -1835,6 +1902,12 @@ export class SDLParser {
       return false;
     }
     return this.peek().type === type;
+  }
+
+  // One-token lookahead beyond the current token.
+  private checkNext(type: TokenType): boolean {
+    const next = this.tokens[this.current + 1];
+    return next !== undefined && next.type === type;
   }
 
   private advance(): Token {

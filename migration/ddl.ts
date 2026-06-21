@@ -1469,8 +1469,10 @@ END $$;`,
       return typeMap[edgeqlType];
     }
 
-    // Tuple types map to JSONB (PostgreSQL has no native tuple type)
-    if (edgeqlType.startsWith("tuple<")) {
+    // Tuple types map to JSONB (PostgreSQL has no native tuple type).
+    // Arrays of tuples (`array<tuple<...>>`) likewise map to JSONB rather
+    // than a Postgres array, since their element type has no native column type.
+    if (edgeqlType.startsWith("tuple<") || edgeqlType.startsWith("array<tuple<")) {
       return "JSONB";
     }
 

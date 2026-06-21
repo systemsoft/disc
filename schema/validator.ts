@@ -385,8 +385,12 @@ export class SchemaValidator {
   }
 
   private validateProperty(property: AST.PropertyDeclaration): void {
-    // Validate type
-    this.validateTypeRef(property.type);
+    // Validate type. Computed properties carry the synthetic `auto`
+    // placeholder type (the parser can't know the inferred type), so skip
+    // type-existence checking for them — the expression is validated below.
+    if (!property.computed) {
+      this.validateTypeRef(property.type);
+    }
 
     // P3-01: cardinality sanity. `required multi` is valid in Gel and
     // means "at least one element" — but `multi` plus `optional` is
@@ -429,9 +433,11 @@ export class SchemaValidator {
   }
 
   private validateLink(link: AST.LinkDeclaration): void {
-    // Validate target type (skip placeholder target for abstract links without targets)
+    // Validate target type (skip placeholder target for abstract links without
+    // targets, and computed links whose target is the inferred `auto`
+    // placeholder — the expression is validated below).
     const targetName = link.target.name.parts.join("::");
-    if (targetName !== "std::BaseObject") {
+    if (targetName !== "std::BaseObject" && !link.computed) {
       this.validateTypeRef(link.target);
     }
 
@@ -784,6 +790,19 @@ export class SchemaValidator {
       }
       for (const param of typeRef.params) {
         this.validateTypeRef(param);
+      }
+      return;
+    }
+
+    // `enum<"A", "B", ...>` appears as a scalar's base type. Its params are
+    // string-literal enum values (the parser wraps each as a TypeRef whose
+    // name is the quoted value), not type references — so validate that the
+    // enum has at least one value but do not recurse into the params.
+    if (typeName === "enum") {
+      if (!typeRef.params || typeRef.params.length === 0) {
+        this.addError(
+          `Type 'enum' requires at least one value`
+        );
       }
       return;
     }

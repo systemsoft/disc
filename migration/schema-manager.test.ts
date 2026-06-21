@@ -587,3 +587,75 @@ Deno.test({
     }
   }
 });
+
+Deno.test("SchemaManager - parseSDL rejects semantically invalid schema", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  // `Bogus` is never declared — semantic validation should reject it.
+  const result = mgr.parseSDL(
+    `module default { type Post { required author -> Bogus; } }`
+  );
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assert(result.error.message.includes("Schema validation failed"));
+    assert(result.error.message.includes("Bogus"));
+  }
+});
+
+Deno.test("SchemaManager - parseSDL { validate: false } skips semantic checks", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const result = mgr.parseSDL(
+    `module default { type Post { required author -> Bogus; } }`,
+    { validate: false }
+  );
+  assertEquals(result.ok, true);
+});
+
+Deno.test("SchemaManager - validateModules resolves cross-file references", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  // Two fragments: User defined in one, referenced from the other. Each
+  // parses without validation; the merged set must validate cleanly.
+  const a = mgr.parseSDL(
+    `module default { type User { required name -> str; } }`,
+    { validate: false }
+  );
+  const b = mgr.parseSDL(
+    `module default { type Post { required author -> User; } }`,
+    { validate: false }
+  );
+  assert(a.ok && b.ok);
+  if (a.ok && b.ok) {
+    const merged = [...a.value, ...b.value];
+    const result = mgr.validateModules(merged);
+    assertEquals(result.ok, true);
+  }
+});
+
+Deno.test("SchemaManager - rejects mutual stored multi-links with guidance", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const result = mgr.parseSDL(`module default {
+    type A { required n -> str; multi bs -> B; }
+    type B { required m -> str; multi as -> A; }
+  }`);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assert(result.error.message.includes("Ambiguous bidirectional links"));
+    assert(result.error.message.includes("computed backlink"));
+  }
+});
+
+Deno.test("SchemaManager - one stored multi + computed backlink is accepted", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const result = mgr.parseSDL(`module default {
+    type A { required n -> str; multi bs -> B; }
+    type B { required m -> str; as := .<bs[is A]; }
+  }`);
+  assertEquals(result.ok, true);
+});
+
+Deno.test("SchemaManager - self-referential multi-links are not flagged as mutual", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const result = mgr.parseSDL(`module default {
+    type C { required n -> str; multi blocks -> C; multi mutes -> C; }
+  }`);
+  assertEquals(result.ok, true);
+});
