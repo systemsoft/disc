@@ -180,11 +180,13 @@ export class PostgresBinaryDownloader {
     const data = new Uint8Array(await response.arrayBuffer());
     await Deno.writeFile(archivePath, data);
 
-    // Extract archive
-    await this.extractArchive(archivePath, versionDir);
-
-    // Cleanup archive
-    await Deno.remove(archivePath);
+    // Extract archive, removing the downloaded archive even if extraction
+    // throws so a failed download can't orphan a multi-hundred-MB file.
+    try {
+      await this.extractArchive(archivePath, versionDir);
+    } finally {
+      await Deno.remove(archivePath).catch(() => {});
+    }
 
     // Handle nested directory structure from some archives
     await this.normalizeDirectoryStructure(versionDir);

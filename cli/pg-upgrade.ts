@@ -211,6 +211,11 @@ export class PgUpgradeCommand {
       /*** Step k: Clean up dump file ***/
       await Deno.remove(dumpFile);
 
+      /*** Step l: Prune old upgrade backups (keep the most recent few) ***/
+      if (backup) {
+        await this.pruneOldBackups(instanceDir);
+      }
+
       console.log(`\nPostgreSQL upgraded successfully from ${currentVersion} to ${targetVersion}.`);
     } catch (error) {
       console.error(`\nUpgrade failed: ${(error as Error).message}`);
@@ -268,6 +273,44 @@ export class PgUpgradeCommand {
   }
 
   /*** PRIVATE ------------------------------------------ ***/
+
+  /**
+   * Remove old `backup-*.tar.gz` upgrade artifacts, keeping the most recent
+   * `keep` by modification time. Each upgrade writes a timestamped tarball
+   * that is never otherwise reaped, so without this they accumulate
+   * unboundedly (potentially GB-scale each) across repeated upgrades.
+   */
+  private async pruneOldBackups(instanceDir: string, keep = 3): Promise<void> {
+    const backups: { path: string; mtime: number; }[] = [];
+
+    for await (const entry of Deno.readDir(instanceDir)) {
+      if (
+        !entry.isFile ||
+        !entry.name.startsWith("backup-") ||
+        !entry.name.endsWith(".tar.gz")
+      ) {
+        continue;
+      }
+      const path = join(instanceDir, entry.name);
+      try {
+        const stat = await Deno.stat(path);
+        backups.push({ path, mtime: stat.mtime?.getTime() ?? 0 });
+      } catch {
+        /*** Race with another reaper; skip. ***/
+      }
+    }
+
+    /*** Newest first; drop everything past `keep`. ***/
+    backups.sort((a, b) => b.mtime - a.mtime);
+    for (const stale of backups.slice(keep)) {
+      try {
+        await Deno.remove(stale.path);
+        console.log(`Removed old backup ${stale.path}`);
+      } catch {
+        /*** Best-effort; leave it if removal fails. ***/
+      }
+    }
+  }
 
   /**
    * Compare two semver-style version strings.

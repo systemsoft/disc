@@ -656,6 +656,13 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
 
     socket.onerror = _error => {
       log.error("WebSocket error", { connectionId: connection.id });
+      // A WebSocket error is normally followed by a close event, but clean up
+      // here too so a missing close can't strand subscriptions/connections.
+      // Both calls are idempotent.
+      this.subscription_handler.cleanup_connection(
+        connection.session.sessionId
+      );
+      this.connection_manager.closeConnection(connection.id);
     };
 
     return response;

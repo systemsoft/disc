@@ -553,6 +553,9 @@ export class DiscServer {
       logger.debug("Auth database connection closed");
     }
 
+    // Reap any temp PEM files materialized from TLS env vars.
+    cleanupTlsTempFiles();
+
     logger.debug("Server stopped successfully");
   }
 
@@ -1074,10 +1077,11 @@ function parseBoolEnv(key: string): boolean | undefined {
  * PEM contents at (2) into a temp file and returns its path. Returns
  * `undefined` when neither is set.
  *
- * Temp files inherit OS permissions (mode 0600 on POSIX). Caller is
- * the long-running server, so leaking these on shutdown is acceptable —
- * the data was already in `process.env` and visible to anyone who can
- * read /proc/<pid>/environ. (gh/geldata#4547)
+ * Temp files inherit OS permissions (mode 0600 on POSIX). They are tracked
+ * in `tlsTempFiles` and reaped by `cleanupTlsTempFiles()` on server stop, so
+ * repeated starts/reloads don't accumulate PEMs in the temp dir. (The data
+ * was already in `process.env` and visible to anyone who can read
+ * /proc/<pid>/environ. (gh/geldata#4547))
  */
 function resolveTlsMaterial(
   pathKey: string,
@@ -1108,7 +1112,25 @@ function resolveTlsMaterial(
   } catch {
     // ignore
   }
+  // Track temp-materialized PEMs so the server can reap them on shutdown.
+  // Operator-provided paths (the `direct` branch above) are never tracked.
+  tlsTempFiles.add(tempFile);
   return tempFile;
+}
+
+/** Paths to temp PEM files materialized from env vars, reaped on stop(). */
+const tlsTempFiles = new Set<string>();
+
+/** Remove any temp PEM files materialized by resolveTlsMaterial(). */
+function cleanupTlsTempFiles(): void {
+  for (const path of tlsTempFiles) {
+    try {
+      Deno.removeSync(path);
+    } catch {
+      // Best-effort: already gone, or never created. Ignore.
+    }
+  }
+  tlsTempFiles.clear();
 }
 
 /**

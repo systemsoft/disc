@@ -311,23 +311,21 @@ export class TransactionManager implements Types.TransactionManager {
       // Release any held connections for abandoned transactions
       const conn = this.transaction_connections.get(id);
       if (conn && this.pool) {
-        try {
-          // Best-effort ROLLBACK on abandoned transactions
-          conn
-            .execute("ROLLBACK")
-            .then(() => {
-              this.pool!.release(conn);
-            })
-            .catch(error => {
-              logger.error(
-                `Failed to rollback abandoned transaction ${id}: ${error}`
-              );
-              this.pool!.release(conn);
-            });
-        } catch (_) {
-          // Swallowing here is intentional: cleanup must not throw
-          this.pool.release(conn);
-        }
+        // Capture the pool reference so a concurrent teardown can't null it
+        // out before the async rollback settles.
+        const pool = this.pool;
+        // Best-effort ROLLBACK; release the connection exactly once via finally.
+        void (async () => {
+          try {
+            await conn.execute("ROLLBACK");
+          } catch (error) {
+            logger.error(
+              `Failed to rollback abandoned transaction ${id}: ${error}`
+            );
+          } finally {
+            pool.release(conn);
+          }
+        })();
         this.transaction_connections.delete(id);
       }
       this.pending_begins.delete(id);
