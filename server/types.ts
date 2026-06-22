@@ -22,6 +22,12 @@ export interface AuthServerConfig {
 export interface ServerConfig {
   host: string;
   port: number;
+  /**
+   * Human-facing project name (from `disc.toml`'s top-level `name`).
+   * Used as the API/landing-page title and the OpenAPI `info.title`.
+   * Falls back to a generic default when unset.
+   */
+  name?: string;
   databaseUrl: string;
   maxConnections: number;
   requestTimeout: number;

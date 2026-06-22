@@ -857,6 +857,60 @@ disc db drop test --force
 
 ---
 
+## disc db import
+
+Import a [Gel](https://geldata.com) CSV export into an already-migrated Disc database, preserving the original object UUIDs.
+
+**Usage:**
+
+```bash
+disc db import <dir> [options]
+```
+
+**Arguments:**
+
+| Argument | Description                                       |
+| -------- | ------------------------------------------------- |
+| `dir`    | Directory containing the Gel CSV export (`*.csv`) |
+
+**Options:**
+
+| Flag                   | Description                                                   | Default                                       |
+| ---------------------- | ------------------------------------------------------------- | --------------------------------------------- |
+| `--on-conflict <mode>` | On a duplicate `id` / junction row: `error` (abort) or `skip` | `error`                                       |
+| `--backend-dsn <url>`  | Target database DSN (external PostgreSQL; overrides project)  | --                                            |
+| `--database-url <url>` | Target database DSN (alias for `--backend-dsn`)               | `DATABASE_URL` env var or project `disc.toml` |
+
+**Examples:**
+
+```bash
+# Import an export directory into the current project's database
+disc db import ./gel-export/data
+
+# Re-import idempotently, skipping rows that already exist
+disc db import ./gel-export/data --on-conflict skip
+
+# Import into an external PostgreSQL
+disc db import ./gel-export/data --backend-dsn "postgres://user:pass@host:5432/disc"
+```
+
+**Expected export shape:** The directory must contain a Gel CSV export in **relational backing form** — one CSV per type and per multi-link, named `<module>_<TypeName>[.<linkName>].csv`:
+
+- **Object tables** carry the columns `id`, `__type__`, the type's scalar properties, and a `<link>_id` column for each single link (e.g. `public_Video.csv` with `id,__type__,title,channel_id`).
+- **Multi-link tables** carry just `source,target` rows (e.g. `public_Video.tags.csv`).
+
+**Behaviour:**
+
+- **The target database must already be migrated** to the matching schema before importing. The importer reads the schema from the live database (not from local `.esdl` files) and uses it to map each CSV column to its table column and coercion type.
+- **Original UUIDs are preserved.** Supplying `id` on insert overrides the column default, so every `<link>_id` FK and junction `source`/`target` resolves directly — there is no old→new ID remapping.
+- **Abstract-type CSVs are skipped.** Disc stores data on concrete (single-leaf) tables, so an abstract parent's export CSV is a redundant union of its concrete descendants and is intentionally ignored. Computed links and reverse/backlink CSVs are likewise skipped.
+- **Two passes in one transaction.** Pass 1 inserts concrete object rows (topologically ordered so single-link FKs resolve); Pass 2 inserts junction rows. Any failure rolls back the entire import.
+- **`--on-conflict skip`** appends `ON CONFLICT DO NOTHING`, making re-imports safe. Counts in the summary then reflect rows _attempted_, not net-new inserts.
+
+The command prints a per-table count summary and the total, lists skipped files, and exits non-zero on any error (unclassifiable file, FK cycle, or failed transaction).
+
+---
+
 ## disc pg log
 
 View PostgreSQL logs for the current project’s bundled instance.
@@ -1098,6 +1152,7 @@ When no `disc.toml` is found, commands fall back to the current directory name a
 | `disc db wipe <name> --force`          | Drop and recreate a database (wipe to empty)      |
 | `disc db dump <name>`                  | Dump a database to stdout or a file               |
 | `disc db restore <name>`               | Restore a database from stdin or a file           |
+| `disc db import <dir>`                 | Import a Gel CSV export (preserves UUIDs)         |
 | `disc db push --force`                 | Push schema directly (no migration history)       |
 | `disc schema export`                   | Export the current schema as a single SDL file    |
 | `disc schema introspect`               | Generate SDL from an existing PostgreSQL database |

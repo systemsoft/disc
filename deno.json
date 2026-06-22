@@ -28,6 +28,7 @@
     "@std/async": "jsr:@std/async@1.0.8",
     "@std/cli": "jsr:@std/cli@1.0.8",
     "@std/crypto": "jsr:@std/crypto@^1.0.5",
+    "@std/csv": "jsr:@std/csv@^1.0.6",
     "@std/encoding": "jsr:@std/encoding@^1.0.10",
     "@std/fmt": "jsr:@std/fmt@^1.0.10",
     "@std/fs": "jsr:@std/fs@1.0.8",
@@ -79,5 +80,5 @@
     "exclude": ["reference-gel/**", "ui/**"],
     "include": ["**/*.test.ts", "tests/**/*.ts"]
   },
-  "version": "2026.06.21"
+  "version": "2026.06.22"
 }

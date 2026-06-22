@@ -380,6 +380,20 @@ const COMMAND_HELP: Record<string, string> = {
       --format ${gray("<fmt>")} ${gray(".".repeat(11))} Dump format: ${bgBrightYellow("plain")} (default) or ${bgBrightYellow("custom")}
   `,
 
+  "db import": dedent`
+      Import a Gel CSV export into a Disc database
+
+    ${inverse("  USAGE ")}
+
+      disc db import ${gray("<dir> [--backend-dsn <url>] [--database-url <url>] [--on-conflict <mode>]")}
+
+    ${inverse("  OPTIONS ")}
+
+      --backend-dsn ${gray("<url>")} ${gray(".".repeat(5))} Target database DSN (overrides project context)
+      --database-url ${gray("<url>")} ${gray(".".repeat(4))} Target database DSN (alias)
+      --on-conflict ${gray("<mode>")} ${gray(".".repeat(3))} On duplicate id/junction row: ${gray("error")} (default) or ${gray("skip")}
+  `,
+
   "db list": dedent`
       List Disc-managed databases
 
@@ -670,6 +684,7 @@ async function main() {
       "level",
       "lines",
       "name",
+      "on-conflict",
       "output",
       "platform",
       "port",
@@ -905,6 +920,18 @@ async function main() {
             break;
           }
 
+          case "import": {
+            const importDir = String(args._[2] || "");
+
+            if (!importDir) {
+              console.error("Error: import directory is required. Usage: disc db import <dir>");
+              Deno.exit(1);
+            }
+
+            await commands.dbImport(importDir, args);
+            break;
+          }
+
           case "list": {
             await commands.dbList(args);
             break;
@@ -944,7 +971,7 @@ async function main() {
 
           default: {
             console.error(`Unknown db subcommand: ${dbSubcommand}`);
-            console.log("Available: db create, db list, db drop, db wipe, db dump, db restore, db push");
+            console.log("Available: db create, db list, db drop, db wipe, db dump, db restore, db import, db push");
 
             Deno.exit(1);
           }

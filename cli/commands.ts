@@ -14,6 +14,7 @@ import { buildCommand, BuildOptions } from "./build.ts";
 import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { createServerFromEnv } from "../server/server.ts";
+import { DbImport } from "./db-import.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { dbCommand } from "./db.ts";
 import { deployCommand, DeployOptions } from "./deploy.ts";
@@ -288,6 +289,53 @@ export class CLICommands {
       name,
       output: args.output
     });
+  }
+
+  /**
+   * Import a Gel CSV export into a Disc database.
+   *
+   * Stage 1: resolve the project, load the schema, and classify every CSV in
+   * the export directory into a manifest (object files, junction files, skips,
+   * errors). No data is written yet.
+   */
+  async dbImport(dir: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
+
+    if (ctx?.managed)
+      await ensurePgRunning(ctx);
+
+    const databaseUrl = args["backend-dsn"] ||
+      args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+
+    const pool = new ConnectionPool({
+      applicationName: "disc-cli-import",
+      connectionString: databaseUrl
+    });
+
+    await pool.initialize();
+
+    try {
+      /*** Load the schema from the live database (the applied/tracked schema),
+           not from SDL on disk. The DB schema preserves full EdgeQL type
+           strings (e.g. `tuple<name: str, url: str>`); the SDL-parse path
+           strips type parameters down to a bare `tuple`/`array`, which would
+           break tuple/array coercion during import. ***/
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+      const schema = manager.getSchema();
+
+      if (!schema || schema.types.size === 0) {
+        console.error("No applied schema found in the target database. Run `disc migrate` before importing.");
+        Deno.exit(1);
+      }
+
+      const importer = new DbImport(schema, pool, dir, args);
+      await importer.run();
+    } finally {
+      await pool.close();
+    }
   }
 
   /**
@@ -772,6 +820,9 @@ export class CLICommands {
 
       if (ctx?.serverOverrides)
         Object.assign(config, ctx.serverOverrides);
+
+      if (ctx?.projectName)
+        config.name = ctx.projectName;
 
       if (options.port)
         config.port = options.port;
