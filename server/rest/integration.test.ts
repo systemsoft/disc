@@ -15,6 +15,7 @@
 import { assert, assertEquals } from "@std/assert";
 import type { Schema, TypeDef } from "../../compiler/context.ts";
 import { HttpServer } from "../http.ts";
+import { renderOpenApiSpec } from "./openapi.ts";
 import type * as Types from "../types.ts";
 
 const TEST_HOST = "127.0.0.1";
@@ -116,6 +117,7 @@ function makeStubHandler(
 
 async function startServer(opts: {
   enableRest?: boolean;
+  name?: string;
   responder?: (q: string) => unknown;
 } = {}): Promise<{
   baseUrl: string;
@@ -127,6 +129,7 @@ async function startServer(opts: {
   const server = new HttpServer({
     config: {
       host: TEST_HOST,
+      name: opts.name,
       // Bind on 0 so the OS hands us a free ephemeral port. A random fixed
       // port collides under load (AddrInUse), and the unawaited start()
       // below would surface that as an uncaught rejection that fails the
@@ -342,4 +345,76 @@ Deno.test("REST integration: GET /api/User/{id}/nonsense returns 404", async () 
   } finally {
     await cleanup();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Root landing page — content negotiation + configurable title
+// ---------------------------------------------------------------------------
+
+Deno.test("root: GET / with Accept: text/html serves an HTML page titled by name", async () => {
+  const { baseUrl, cleanup } = await startServer({ name: "Acme" });
+  try {
+    const res = await fetch(`${baseUrl}/`, {
+      headers: { Accept: "text/html" }
+    });
+    assertEquals(res.status, 200);
+    assert(
+      (res.headers.get("content-type") ?? "").includes("text/html"),
+      "expected text/html content-type"
+    );
+    const body = await res.text();
+    assert(body.includes("<title>Acme</title>"));
+    assert(body.includes("<h1>Acme</h1>"));
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("root: GET / with Accept: application/json returns JSON with the configured name", async () => {
+  const { baseUrl, cleanup } = await startServer({ name: "Acme" });
+  try {
+    const res = await fetch(`${baseUrl}/`, {
+      headers: { Accept: "application/json" }
+    });
+    assertEquals(res.status, 200);
+    assert(
+      (res.headers.get("content-type") ?? "").includes("application/json"),
+      "expected application/json content-type"
+    );
+    const body = await res.json();
+    assertEquals(body.name, "Acme");
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("root: HTML output escapes HTML special chars in the name", async () => {
+  const { baseUrl, cleanup } = await startServer({ name: "A & B <x>" });
+  try {
+    const res = await fetch(`${baseUrl}/`, {
+      headers: { Accept: "text/html" }
+    });
+    const body = await res.text();
+    assert(body.includes("<title>A &amp; B &lt;x&gt;</title>"));
+    assert(!body.includes("<title>A & B <x></title>"));
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// OpenAPI title override
+// ---------------------------------------------------------------------------
+
+Deno.test("openapi: title option overrides info.title", () => {
+  const spec = renderOpenApiSpec(buildSchema(), {
+    requireAuth: false,
+    title: "Acme API"
+  });
+  assertEquals(spec.info.title, "Acme API");
+});
+
+Deno.test("openapi: omitting title falls back to the default", () => {
+  const spec = renderOpenApiSpec(buildSchema(), { requireAuth: false });
+  assertEquals(spec.info.title, "Disc Schema-Derived REST API");
 });

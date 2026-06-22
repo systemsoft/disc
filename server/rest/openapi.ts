@@ -45,6 +45,11 @@ export interface OpenApiSpec {
 export interface OpenApiOptions {
   /** When true, emit a global `bearerAuth` security requirement. */
   requireAuth: boolean;
+  /**
+   * Override the spec's `info.title` field. Defaults to
+   * `"Disc Schema-Derived REST API"`.
+   */
+  title?: string;
   /** Override the spec's `info.version` field. Defaults to `0.1.0`. */
   version?: string;
 }
@@ -131,7 +136,7 @@ export function renderOpenApiSpec(
   const spec: OpenApiSpec = {
     openapi: "3.1.0",
     info: {
-      title: "Disc Schema-Derived REST API",
+      title: options.title ?? "Disc Schema-Derived REST API",
       description: "Auto-generated from the database schema. Every object type " +
         "exposes list/get/insert/update/delete and per-link collection " +
         "endpoints. All routes pass through the standard EdgeQL " +

@@ -109,12 +109,22 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       endpoints.extensions = extEndpoints;
     }
 
+    const title = this.config.name ?? "Disc Database";
+
     const info = {
-      name: "Disc Database",
+      name: title,
       version: DISC_VERSION,
       protocol: "HTTP/JSON",
       endpoints
     };
+
+    // Browsers send `Accept: text/html`; serve a titled landing page so the
+    // tab shows the project name. API clients (json or wildcard) still get JSON.
+    if (request?.headers.get("accept")?.includes("text/html")) {
+      return new Response(renderRootHtml(title), {
+        headers: this.get_default_headers("text/html; charset=utf-8", request)
+      });
+    }
 
     return new Response(JSON.stringify(info, null, 2), {
       headers: this.get_default_headers("application/json", request)
@@ -1008,7 +1018,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
     }
     const schema = this.schemaProvider();
     const spec = renderOpenApiSpec(schema, {
-      requireAuth: this.config.requireAuth === true
+      requireAuth: this.config.requireAuth === true,
+      title: this.config.name ? `${this.config.name} API` : undefined
     });
     return new Response(JSON.stringify(spec, null, 2), {
       status: 200,
@@ -1065,4 +1076,32 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       defaultHeaders: () => this.get_default_headers("application/json")
     });
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderRootHtml(title: string): string {
+  const safe = escapeHtml(title);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${safe}</title>
+</head>
+<body>
+<h1>${safe}</h1>
+<p>Disc database server — version ${escapeHtml(DISC_VERSION)}</p>
+<ul>
+<li><a href="/ui">Admin UI</a></li>
+<li><a href="/api/openapi.json">OpenAPI spec</a></li>
+</ul>
+</body>
+</html>`;
 }
