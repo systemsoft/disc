@@ -18,6 +18,8 @@ curl -fsSL https://disc.sh/install | sh
 
 This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](docs/getting-started.md#install-disc).
 
+Disc is also [available on Homebrew](https://github.com/systemsoft/homebrew-disc)!
+
 ## Quick Start
 
 ```bash
