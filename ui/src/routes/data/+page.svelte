@@ -1219,6 +1219,10 @@
         display: flex;
         padding-right: var(--grid-unit);
 
+        + .link {
+          margin-top: 0.5rem;
+        }
+
         span {
           background-color: oklch(var(--uchu-gray-2-raw) / 50%);
           color: var(--uchu-gray-9);
