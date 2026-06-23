@@ -151,7 +151,7 @@ export class OAuthExtension extends BaseExtension {
   expires_at TIMESTAMPTZ NOT NULL
 );`,
         `CREATE TABLE IF NOT EXISTS disc_oauth_identities (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT disc_uuidv7(),
   user_id UUID NOT NULL,
   provider TEXT NOT NULL,
   provider_user_id TEXT NOT NULL,

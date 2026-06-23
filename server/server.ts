@@ -20,6 +20,7 @@ import { ExtensionRegistry } from "../extensions/registry.ts";
 import type { Extension } from "../extensions/types.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { configureLogging } from "../lib/logger.ts";
+import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
@@ -301,7 +302,21 @@ export class DiscServer {
 
       // Initialize extensions
       if (this.extensionRegistry.size > 0) {
+        // Extensions that ship setup DDL (e.g. ext-oauth's tables) need the
+        // live connection pool — without it, ExtensionRegistry skips their
+        // setupSql. Reuse the protocol handler's pool, and bootstrap the
+        // stdlib functions (disc_uuidv7, etc.) those statements may reference
+        // first. bootstrapStdlib is idempotent, so a later migration-tracker
+        // init re-running it is a no-op.
+        const extPool = (this.protocolHandler as unknown as {
+          pool?: import("../lib/connection-pool.ts").ConnectionPool;
+        })
+          .pool;
+        if (extPool)
+          await bootstrapStdlib(extPool);
+
         const extCtx = createExtensionContext({
+          pool: extPool,
           schema: this.config.extensions ?
             (this.protocolHandler as any).schema ||
             { types: new Map(), functions: new Map() } :
