@@ -81,6 +81,62 @@ Deno.test("client - query passes variables", async () => {
   }
 });
 
+Deno.test("client - query serializes bigint variables as numeric strings", async () => {
+  // Regression: int64 fields are typed `bigint` by codegen, and passing one
+  // back as a variable used to throw "Do not know how to serialize a BigInt".
+  let capturedBody = "";
+  const restore = mockFetch((_url, init) => {
+    capturedBody = init?.body as string;
+    return new Response(JSON.stringify({ data: null }));
+  });
+  try {
+    const client = new DiscClient();
+    await client.query("insert Counter { value := <int64>$value }", {
+      value: BigInt(0),
+      big: BigInt("9223372036854775807")
+    });
+    const parsed = JSON.parse(capturedBody);
+    assertEquals(parsed.variables.value, "0");
+    assertEquals(parsed.variables.big, "9223372036854775807");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - resolves baseUrl from disc.toml [server] port", () => {
+  const tmp = Deno.makeTempDirSync();
+  const cwd = Deno.cwd();
+  try {
+    Deno.writeTextFileSync(
+      `${tmp}/disc.toml`,
+      `name = "demo"\n[server]\nport = 7777\nhost = "0.0.0.0"\n`
+    );
+    Deno.chdir(tmp);
+    const client = new DiscClient();
+    assertEquals(client.getBaseUrl(), "http://0.0.0.0:7777");
+  } finally {
+    Deno.chdir(cwd);
+    Deno.removeSync(tmp, { recursive: true });
+  }
+});
+
+Deno.test("client - explicit baseUrl overrides disc.toml", () => {
+  const tmp = Deno.makeTempDirSync();
+  const cwd = Deno.cwd();
+  try {
+    Deno.writeTextFileSync(
+      `${tmp}/disc.toml`,
+      `name = "demo"\n[server]\nport = 7777\n`
+    );
+    Deno.chdir(tmp);
+    const client = new DiscClient({ baseUrl: "http://example.com:1234" });
+    assertEquals(client.getBaseUrl(), "http://example.com:1234");
+  } finally {
+    Deno.chdir(cwd);
+    Deno.removeSync(tmp, { recursive: true });
+  }
+});
+
 Deno.test("client - query throws DiscQueryError on server errors", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({

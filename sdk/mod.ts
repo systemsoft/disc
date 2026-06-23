@@ -13,6 +13,7 @@ export { createClient, DiscClient } from "./client.ts";
 // Wire-format codecs (P1-29)
 export {
   encodeBytes,
+  jsonReplacer,
   parseBytes,
   parseDateTime,
   parseInt64,

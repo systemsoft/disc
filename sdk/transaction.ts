@@ -5,7 +5,7 @@
  * Transaction — Execute multiple queries atomically
  */
 
-import { reviveResponse } from "./codecs.ts";
+import { jsonReplacer, reviveResponse } from "./codecs.ts";
 import { DiscQueryError, DiscTransactionError } from "./errors.ts";
 import type {
   QueryOptions,
@@ -42,7 +42,8 @@ export class Transaction {
     this.assertActive();
 
     const body = JSON.stringify(
-      variables ? { query, variables } : { query }
+      variables ? { query, variables } : { query },
+      jsonReplacer
     );
 
     const response = await this.client.fetch("/query", {

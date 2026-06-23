@@ -46,13 +46,13 @@ const client = createClient({
 
 ### Configuration Options
 
-| Option       | Type                     | Default                   | Description                                                 |
-| ------------ | ------------------------ | ------------------------- | ----------------------------------------------------------- |
-| `baseUrl`    | `string`                 | `"http://localhost:5656"` | URL of the Disc server                                      |
-| `headers`    | `Record<string, string>` | `{}`                      | Custom headers included with every request                  |
-| `retries`    | `number`                 | `0`                       | Number of retries on network or server errors               |
-| `retryDelay` | `number`                 | `1000`                    | Base delay between retries in milliseconds (linear backoff) |
-| `timeout`    | `number`                 | `30000`                   | Request timeout in milliseconds                             |
+| Option       | Type                     | Default                                                   | Description                                                 |
+| ------------ | ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------- |
+| `baseUrl`    | `string`                 | resolved from `disc.toml`, else `"http://localhost:5656"` | URL of the Disc server                                      |
+| `headers`    | `Record<string, string>` | `{}`                                                      | Custom headers included with every request                  |
+| `retries`    | `number`                 | `0`                                                       | Number of retries on network or server errors               |
+| `retryDelay` | `number`                 | `1000`                                                    | Base delay between retries in milliseconds (linear backoff) |
+| `timeout`    | `number`                 | `30000`                                                   | Request timeout in milliseconds                             |
 
 The `DiscClient` class can also be instantiated directly if you prefer:
 
@@ -61,6 +61,18 @@ import { DiscClient } from "disc/sdk/mod.ts";
 
 const client = new DiscClient({ baseUrl: "https://disc.example.com" });
 ```
+
+### Zero-config baseUrl from `disc.toml`
+
+When `baseUrl` is omitted, the client walks up from the current working directory for a `disc.toml` (the same lookup the CLI uses) and derives `http://<host>:<port>` from its `[server]` section. This means a codegen client running inside your project connects on the configured port without any options:
+
+```typescript
+import { DiscClient } from "./dbschema/disc-client/index.ts";
+
+const client = new DiscClient(); // baseUrl resolved from disc.toml
+```
+
+Resolution is best-effort: outside a Deno runtime (e.g. a browser bundle), when no `disc.toml` is found, or when filesystem reads are denied, the client falls back to `http://localhost:5656`. An explicit `baseUrl` always takes precedence.
 
 ---
 
@@ -71,6 +83,8 @@ const client = new DiscClient({ baseUrl: "https://disc.example.com" });
 Executes an EdgeQL query and returns the result data directly. Throws `DiscQueryError` if the server returns any errors.
 
 The optional `options` argument accepts `{ revive, validate }`: `revive` auto-converts wire-encoded scalars (e.g. ISO date strings into `Date`), and `validate` runs a validator against the result, throwing `DiscValidationError` if it rejects.
+
+`bigint` variables (the type codegen assigns to `int64` fields) are supported directly — the client encodes them as numeric strings on the wire, so `{ count: 0n }` works where plain `JSON.stringify` would throw "Do not know how to serialize a BigInt". `Uint8Array` values should be wrapped with `encodeBytes()` before being passed as variables.
 
 ```typescript
 // Select all users
@@ -876,13 +890,14 @@ Schema-declaration type exports: `FieldMarker`, `FieldType`, `IsLink`, `Link`, `
 
 Wire-format encode/decode helpers.
 
-| Export           | Kind     | Description                                   |
-| ---------------- | -------- | --------------------------------------------- |
-| `encodeBytes`    | function | Encode a byte string for the wire format      |
-| `parseBytes`     | function | Decode a wire-format byte string              |
-| `parseDateTime`  | function | Parse a wire-format datetime value            |
-| `parseInt64`     | function | Parse a wire-format 64-bit integer            |
-| `reviveResponse` | function | Revive typed values in a raw response payload |
+| Export           | Kind     | Description                                                              |
+| ---------------- | -------- | ------------------------------------------------------------------------ |
+| `encodeBytes`    | function | Encode a byte string for the wire format                                 |
+| `jsonReplacer`   | function | `JSON.stringify` replacer encoding outbound `bigint` as a numeric string |
+| `parseBytes`     | function | Decode a wire-format byte string                                         |
+| `parseDateTime`  | function | Parse a wire-format datetime value                                       |
+| `parseInt64`     | function | Parse a wire-format 64-bit integer                                       |
+| `reviveResponse` | function | Revive typed values in a raw response payload                            |
 
 ---
 

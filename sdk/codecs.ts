@@ -88,6 +88,20 @@ export function parseBytes(value: string): Uint8Array | undefined {
 }
 
 /**
+ * `JSON.stringify` replacer that encodes outbound `bigint` values as numeric
+ * strings. Plain `JSON.stringify` throws "Do not know how to serialize a
+ * BigInt", which is exactly what callers hit when they pass an `int64` field
+ * (typed `bigint` by codegen) back into a query as a variable.
+ *
+ * Numeric strings are the same wire form `int64` arrives in on responses (see
+ * `parseInt64`), and the Disc server binds string params to `int8` columns
+ * without precision loss — so the round-trip is lossless even past 2^53.
+ */
+export function jsonReplacer(_key: string, value: unknown): unknown {
+  return typeof value === "bigint" ? value.toString() : value;
+}
+
+/**
  * Encode a `Uint8Array` back into a base64 string for outbound payloads
  * (e.g. variables in `client.query(eql, { blob: encodeBytes(buf) })`).
  */

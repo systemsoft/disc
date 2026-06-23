@@ -5,6 +5,7 @@
  * SubscriptionClient — WebSocket-based subscription client for Disc database
  */
 
+import { jsonReplacer } from "./codecs.ts";
 import { DiscConnectionError } from "./errors.ts";
 import type {
   DiscClientConfig,
@@ -289,7 +290,7 @@ export class SubscriptionClient {
 
   private sendRaw(message: Record<string, unknown>): void {
     if (this.socket !== null && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
+      this.socket.send(JSON.stringify(message, jsonReplacer));
     }
   }
 

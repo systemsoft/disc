@@ -227,7 +227,7 @@ export class CLICommands {
       getLogger("cli").info(`TypeScript generation complete!`);
       getLogger("cli").info(`  Usage example:`);
       getLogger("cli").info(`  import { DiscClient } from "${outputDir}/index.ts";`);
-      getLogger("cli").info(`  const client = new DiscClient({ host: "localhost", port: 5656 });`);
+      getLogger("cli").info(`  const client = new DiscClient(); // baseUrl resolved from disc.toml`);
       getLogger("cli").info(`  const users = await client.user.select();`);
     } catch (error) {
       getLogger("cli").error(`Failed to generate types: ${(error as Error).message}`);

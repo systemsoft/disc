@@ -172,10 +172,12 @@ EdgeQL types are mapped to TypeScript types as follows:
 | `float64`                | `number`        | `number \| null`     | `number[]`     |
 | `int16`                  | `number`        | `number \| null`     | `number[]`     |
 | `int32`                  | `number`        | `number \| null`     | `number[]`     |
-| `int64`                  | `number`        | `number \| null`     | `number[]`     |
+| `int64`                  | `bigint`        | `bigint \| null`     | `bigint[]`     |
 | `json`                   | `unknown`       | `unknown \| null`    | `unknown[]`    |
 | `str`                    | `string`        | `string \| null`     | `string[]`     |
 | `uuid`                   | `string`        | `string \| null`     | `string[]`     |
+
+`int64` maps to `bigint` (not `number`) so values beyond `Number.MAX_SAFE_INTEGER` survive without precision loss. You can pass `bigint` values straight back as query variables — `new DiscClient().query("… <int64>$n", { n: 0n })` — and the client encodes them as numeric strings on the wire automatically. On the way back, `int64` arrives as a numeric string; pass `{ revive: true }` (or use `parseInt64`) to get a `bigint`.
 
 SQL type names (`text`, `integer`, `boolean`, `timestamptz`, etc.) are also recognized for backward compatibility and mapped through to their EdgeQL equivalents.
 
@@ -503,7 +505,8 @@ Usage:
 ```typescript
 import { DiscClient } from "./dbschema/disc-client/index.ts";
 
-const client = new DiscClient({ dsn: "disc://localhost:5656/mydb" });
+// baseUrl is resolved from your project's disc.toml when omitted.
+const client = new DiscClient();
 
 // Fully typed queries via builders
 const users = await client.user.select();

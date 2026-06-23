@@ -5,7 +5,7 @@
  * DiscClient — Core HTTP client for Disc database
  */
 
-import { reviveResponse } from "./codecs.ts";
+import { jsonReplacer, reviveResponse } from "./codecs.ts";
 import {
   DiscAuthError,
   DiscConnectionError,
@@ -29,6 +29,97 @@ import { applyValidator } from "./validation.ts";
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_TIMEOUT = 30000;
 
+/**
+ * Best-effort: in a Deno project that has a `disc.toml`, derive the server URL
+ * from its `[server]` host/port so a codegen client connects on the configured
+ * port without an explicit `baseUrl`. Walks up from the cwd like the CLI does.
+ *
+ * Returns undefined — and the caller falls back to {@link DEFAULT_BASE_URL} —
+ * outside a Deno runtime (browser bundles), when no `disc.toml` is found, when
+ * filesystem reads are denied, or when the file pins neither host nor port.
+ */
+function resolveProjectBaseUrl(): string | undefined {
+  // deno-lint-ignore no-explicit-any
+  const deno = (globalThis as any).Deno;
+  if (!deno?.readTextFileSync || !deno?.cwd) {
+    return undefined;
+  }
+  try {
+    let dir: string = deno.cwd();
+    while (dir) {
+      let source: string | undefined;
+      try {
+        // Deno accepts forward slashes as path separators on every platform.
+        source = deno.readTextFileSync(`${dir}/disc.toml`);
+      } catch {
+        source = undefined;
+      }
+      if (source !== undefined) {
+        return baseUrlFromToml(source);
+      }
+      const idx = Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"));
+      if (idx <= 0) {
+        break;
+      }
+      const parent = dir.slice(0, idx);
+      if (parent === dir) {
+        break;
+      }
+      dir = parent;
+    }
+  } catch {
+    // Permission denied or other I/O error — fall back to the default.
+  }
+  return undefined;
+}
+
+/**
+ * Extract a base URL from a `disc.toml`'s `[server]` host/port. Mirrors the
+ * subset of the CLI's TOML parsing the client cares about (see
+ * `lib/project-context.ts`); kept self-contained so the SDK has no
+ * cross-module imports when codegen materializes it standalone.
+ */
+function baseUrlFromToml(source: string): string | undefined {
+  let section = "";
+  let host = "localhost";
+  let port = 5656;
+  let pinned = false;
+  for (const rawLine of source.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const sectionMatch = line.match(/^\[([a-z_]+)\]$/);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+    if (section !== "server") {
+      continue;
+    }
+    const kv = line.match(/^([a-z_]+)\s*=\s*(.+)$/);
+    if (!kv) {
+      continue;
+    }
+    const key = kv[1];
+    let value = kv[2].trim();
+    if (value.startsWith("\"") && value.endsWith("\"")) {
+      value = value.slice(1, -1);
+    }
+    if (key === "host") {
+      host = value;
+      pinned = true;
+    } else if (key === "port") {
+      const parsed = parseInt(value, 10);
+      if (!Number.isNaN(parsed)) {
+        port = parsed;
+        pinned = true;
+      }
+    }
+  }
+  return pinned ? `http://${host}:${port}` : undefined;
+}
+
 export class DiscClient {
   private baseUrl: string;
   private timeout: number;
@@ -39,7 +130,8 @@ export class DiscClient {
   private logger?: DiscClientConfig["logger"];
 
   constructor(config?: DiscClientConfig) {
-    this.baseUrl = (config?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    this.baseUrl = (config?.baseUrl ?? resolveProjectBaseUrl() ?? DEFAULT_BASE_URL)
+      .replace(/\/+$/, "");
     this.timeout = config?.timeout ?? DEFAULT_TIMEOUT;
     this.customHeaders = config?.headers ?? {};
     this.retries = config?.retries ?? 0;
@@ -115,7 +207,8 @@ export class DiscClient {
     variables?: Record<string, unknown>
   ): Promise<QueryResponse<T>> {
     const body = JSON.stringify(
-      variables ? { query, variables } : { query }
+      variables ? { query, variables } : { query },
+      jsonReplacer
     );
 
     const response = await this.fetch("/query", {
