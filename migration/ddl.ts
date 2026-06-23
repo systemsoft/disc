@@ -473,14 +473,16 @@ END $$;`,
 
     // Generate column definitions from properties
     const columns: Types.ColumnDefinition[] = [
-      // Always add an ID column
+      // Always add an ID column. Defaults to disc_uuidv7() (time-ordered,
+      // RFC 9562 v7) — bootstrapped in lib/stdlib-sql.ts before any table is
+      // created. Time-ordered keys keep primary-key index inserts sequential.
       {
         name: "id",
         type: "UUID",
         nullable: false,
         primaryKey: true,
         unique: false,
-        default: "gen_random_uuid()"
+        default: "disc_uuidv7()"
       }
     ];
 

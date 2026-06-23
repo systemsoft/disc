@@ -34,6 +34,33 @@ const STDLIB_SQL = [
   // simple and matches operator expectations from older PG versions.
   "CREATE EXTENSION IF NOT EXISTS pgcrypto;",
 
+  // disc_uuidv7() — time-ordered UUIDv7 (RFC 9562) used as the default for
+  // every object's primary key. Disc's deliberate divergence from Gel's
+  // random v4 ids: the 48-bit millisecond timestamp prefix gives sequential
+  // index inserts (no B-tree page-split churn) and a free chronological sort.
+  //
+  // Built on pgcrypto's gen_random_bytes so it works identically on PG 16/17/18
+  // and external servers, rather than depending on PG 18's native uuidv7().
+  // Bytes are set explicitly (0-indexed) to keep the version/variant nibbles
+  // auditable: byte 6 high nibble = 0x7 (version), byte 8 high bits = 0b10
+  // (variant); all other bits stay random.
+  `CREATE OR REPLACE FUNCTION disc_uuidv7() RETURNS uuid AS $$
+     DECLARE
+       ts_ms bigint := floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint;
+       v bytea := gen_random_bytes(16);
+     BEGIN
+       v := set_byte(v, 0, ((ts_ms >> 40) & 255)::int);
+       v := set_byte(v, 1, ((ts_ms >> 32) & 255)::int);
+       v := set_byte(v, 2, ((ts_ms >> 24) & 255)::int);
+       v := set_byte(v, 3, ((ts_ms >> 16) & 255)::int);
+       v := set_byte(v, 4, ((ts_ms >> 8) & 255)::int);
+       v := set_byte(v, 5, (ts_ms & 255)::int);
+       v := set_byte(v, 6, ((get_byte(v, 6) & 15) | 112));
+       v := set_byte(v, 8, ((get_byte(v, 8) & 63) | 128));
+       RETURN encode(v, 'hex')::uuid;
+     END;
+   $$ LANGUAGE plpgsql VOLATILE;`,
+
   `CREATE OR REPLACE FUNCTION std_md5(msg bytea) RETURNS bytea AS $$
      SELECT decode(md5(msg), 'hex');
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
