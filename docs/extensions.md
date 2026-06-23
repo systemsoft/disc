@@ -862,7 +862,7 @@ override getDatabaseSetup(): ExtensionDatabaseSetup {
   return {
     setupSql: [
       `CREATE TABLE IF NOT EXISTS my_extension_data (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id UUID PRIMARY KEY DEFAULT disc_uuidv7(),
         key TEXT NOT NULL,
         value JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()

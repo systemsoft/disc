@@ -78,7 +78,7 @@ Planning migration...
 
 Generating DDL:
   CREATE TABLE "user" (
-    id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY NOT NULL DEFAULT disc_uuidv7(),
     email TEXT NOT NULL,
     name TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW()
@@ -289,7 +289,7 @@ module default {
 CREATE TYPE disc_enum_status AS ENUM ('draft', 'published', 'archived');
 
 CREATE TABLE article (
-  id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY NOT NULL DEFAULT disc_uuidv7(),
   title TEXT NOT NULL,
   status disc_enum_status
 );

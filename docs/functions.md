@@ -416,6 +416,25 @@ select re_test('^[0-9]+$', 'hello');
 
 ## Math Functions
 
+### `random`
+
+Returns a pseudo-random `float64` in the range `0.0 <= x < 1.0`. Volatile — a new value every call.
+
+```
+random() -> float64
+```
+
+**Example:**
+
+```edgeql
+# random row ordering
+select User { name } order by random() limit 1;
+```
+
+**SQL equivalent:** `RANDOM()`
+
+---
+
 ### `math_abs`
 
 Returns the absolute value of a number.
@@ -1403,6 +1422,25 @@ select uuid_generate_v1mc();
 
 ---
 
+### `disc_uuidv7`
+
+Generates a time-ordered UUID (version 7, RFC 9562). The high 48 bits are a millisecond timestamp, so values sort chronologically and keep primary-key index inserts sequential. This is the **default** generator for every object type's `id` (Disc diverges from Gel's random v4 here). It's provided by a bootstrapped stdlib function built on `pgcrypto`, so it works on PostgreSQL 16/17/18 without relying on PG 18's native `uuidv7()`.
+
+```
+disc_uuidv7() -> uuid
+```
+
+**Example:**
+
+```edgeql
+select disc_uuidv7();
+# => '019ef662-b2a4-77a9-a6b3-c1d5c2208af9' (time-ordered)
+```
+
+**SQL equivalent:** `disc_uuidv7()` (Disc stdlib function)
+
+---
+
 ## Datetime Functions
 
 ### `datetime_current`
@@ -2160,14 +2198,14 @@ order by fts::rank('database migration') desc;
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | String           | `len`, `str_lower`, `str_upper`, `str_title`, `str_trim`, `str_ltrim`, `str_rtrim`, `str_repeat`, `str_replace`, `str_split`, `str_starts_with`, `str_ends_with`, `str_pad_start`, `str_pad_end`, `contains`, `find` |
 | Regex            | `re_match`, `re_match_all`, `re_replace`, `re_test`                                                                                                                                                                  |
-| Math             | `math_abs`, `math_ceil`, `math_floor`, `round`, `math_sqrt`, `math_pow`, `math_power`, `math_log`, `math_ln`, `math_log10`, `math_log2`, `math_pi`, `math_e`, `math_mean`                                            |
+| Math             | `random`, `math_abs`, `math_ceil`, `math_floor`, `round`, `math_sqrt`, `math_pow`, `math_power`, `math_log`, `math_ln`, `math_log10`, `math_log2`, `math_pi`, `math_e`, `math_mean`                                  |
 | Aggregate        | `count`, `sum`, `min`, `max`, `avg`, `stddev`, `stddev_pop`, `stddev_samp`, `array_agg`, `any`, `all`                                                                                                                |
 | Type Conversion  | `to_str`, `to_int16`, `to_int32`, `to_int64`, `to_float32`, `to_float64`, `to_bigint`, `to_decimal`, `to_bool`, `to_uuid`                                                                                            |
 | JSON             | `to_json`, `json_typeof`, `json_get`, `json_array_unpack`, `json_object_unpack`                                                                                                                                      |
 | Array            | `array_agg`, `array_unpack`, `array_join`, `array_get`                                                                                                                                                               |
 | Set              | `distinct`, `exists`, `enumerate`, `any`, `all`                                                                                                                                                                      |
 | Assertion        | `assert_exists`, `assert_single`                                                                                                                                                                                     |
-| UUID             | `uuid_generate_v4`, `uuid_generate_v1mc`                                                                                                                                                                             |
+| UUID             | `disc_uuidv7`, `uuid_generate_v4`, `uuid_generate_v1mc`                                                                                                                                                              |
 | Datetime         | `datetime_current`, `datetime_of_transaction`, `datetime_of_statement`, `datetime_get`, `datetime_truncate`, `to_datetime`, `to_duration`                                                                            |
 | Calendar         | `cal_to_local_date`, `cal_to_local_time`, `cal_to_local_datetime`                                                                                                                                                    |
 | Window           | `row_number`, `rank`, `dense_rank`, `ntile`, `lag`, `lead`, `first_value`, `last_value`                                                                                                                              |

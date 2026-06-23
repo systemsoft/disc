@@ -198,6 +198,20 @@ await client.payment.filter({
 // → ... order by .created desc then .amount
 ```
 
+For a random ordering, pass `"random()"` as an `order_by` entry. It compiles to SQL `order by random()` and can be combined with field keys (later keys break ties). `random()` is the only function form accepted here; any other value must be a plain field name.
+
+```ts
+await client.payment.filter({
+  order_by: "random()", // random row order
+  limit: 1
+});
+
+await client.payment.filter({
+  order_by: ["-created", "random()"] // newest first, ties broken randomly
+});
+// → ... order by .created desc then random()
+```
+
 `limit` and `offset` work together or alone, in either order at the EdgeQL level.
 
 ---

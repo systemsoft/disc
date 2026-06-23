@@ -139,7 +139,7 @@ Disc supports all standard scalar types. These map directly to PostgreSQL column
 | `bytes`    | Binary data               | `bytea`         |
 | `json`     | JSON data                 | `jsonb`         |
 | `sequence` | Auto-incrementing integer | `bigint`        |
-| `uuid`     | UUID v4 identifier        | `uuid`          |
+| `uuid`     | UUID identifier           | `uuid`          |
 
 ### Custom Scalar Types
 
@@ -191,7 +191,7 @@ module default {
 };
 ```
 
-Every object type automatically gets an `id` property of type `uuid` with a default value. You never need to declare it.
+Every object type automatically gets an `id` property of type `uuid`. You never need to declare it. Its default is a **time-ordered UUIDv7** (RFC 9562), generated server-side by Disc's built-in `disc_uuidv7()` function — not a random v4. The 48-bit millisecond-timestamp prefix keeps primary-key index inserts sequential and makes `id` roughly sortable by creation time. (This is a deliberate divergence from Gel, which uses random v4 ids.)
 
 ### Required vs Optional
 
