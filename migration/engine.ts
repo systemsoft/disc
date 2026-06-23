@@ -14,6 +14,10 @@ import { Module } from "../schema/converter.ts";
 import { DataMigrationRunner } from "./data-migration.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
+import {
+  reconcileCreateTables,
+  type ExistingColumn
+} from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
@@ -263,7 +267,20 @@ export class MigrationEngine {
 
       try {
         // In a real implementation, this would execute against a database
-        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
+        const generatedDDL = this.ddlGenerator.generateDDL(migration.operations);
+
+        // Drift reconciliation: when the DB has diverged from migration
+        // history (e.g. disc_migrations was dropped but tables remain), a
+        // from-scratch plan re-emits CREATE TABLE for tables that already
+        // exist. Skip CREATEs whose target already matches the intended
+        // shape; fail loudly on a genuinely diverged table. (Never a blanket
+        // CREATE TABLE IF NOT EXISTS, which would mask drift.)
+        const ddlStatements = this.pool ?
+          await reconcileCreateTables(
+            generatedDDL,
+            tableName => this.readExistingColumns(tableName)
+          ) :
+          generatedDDL;
 
         if (ddlStatements.length > 0) {
           this.emit({
@@ -1200,6 +1217,33 @@ export class MigrationEngine {
     }
 
     return duration;
+  }
+
+  /**
+   * Read the columns of an existing public-schema table for drift
+   * reconciliation. Returns `null` when the table does not exist. Uses the
+   * connection pool (the only path where reconciliation runs).
+   */
+  private async readExistingColumns(
+    tableName: string
+  ): Promise<ExistingColumn[] | null> {
+    if (!this.pool) {
+      return null;
+    }
+    const result = await this.pool.query(
+      `SELECT column_name, data_type
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position`,
+      [tableName]
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return result.rows.map(row => {
+      const r = row as { column_name: string; data_type: string; };
+      return { name: r.column_name, dataType: r.data_type };
+    });
   }
 
   private async executeStatements(statements: string[]): Promise<void> {

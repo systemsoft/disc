@@ -187,6 +187,23 @@ const COMPREHENSIVE_SDL = `
   };
 `;
 
+// Every table COMPREHENSIVE_SDL creates, so each test can clean up
+// independently and the suite is order-independent. Abstract types (`Named`,
+// `Timestamped`) DO create backing tables; omitting them left them behind so a
+// later test's fresh `CREATE TABLE "named"` failed with "already exists".
+// Order matters for DROP without CASCADE elsewhere, but dropTables() uses
+// CASCADE, so listing is sufficient.
+const COMPREHENSIVE_TABLES = [
+  "comment",
+  "user_posts",
+  "post",
+  "user",
+  "named",
+  "timestamped",
+  "disc_migrations",
+  "disc_migration_checkpoints"
+];
+
 // ---------------------------------------------------------------------------
 // Test 1: Full schema migration - SDL -> parse -> migrate -> verify PG objects
 // ---------------------------------------------------------------------------
@@ -417,15 +434,7 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(
-        dsn,
-        "comment",
-        "user_posts",
-        "post",
-        "user",
-        "disc_migrations",
-        "disc_migration_checkpoints"
-      );
+      await dropTables(dsn, ...COMPREHENSIVE_TABLES);
       await pool.close();
     }
   }
@@ -569,15 +578,7 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(
-        dsn,
-        "comment",
-        "user_posts",
-        "post",
-        "user",
-        "disc_migrations",
-        "disc_migration_checkpoints"
-      );
+      await dropTables(dsn, ...COMPREHENSIVE_TABLES);
       await pool.close();
     }
   }
@@ -679,15 +680,7 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(
-        dsn,
-        "comment",
-        "user_posts",
-        "post",
-        "user",
-        "disc_migrations",
-        "disc_migration_checkpoints"
-      );
+      await dropTables(dsn, ...COMPREHENSIVE_TABLES);
       await pool.close();
     }
   }
@@ -826,15 +819,7 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(
-        dsn,
-        "comment",
-        "user_posts",
-        "post",
-        "user",
-        "disc_migrations",
-        "disc_migration_checkpoints"
-      );
+      await dropTables(dsn, ...COMPREHENSIVE_TABLES);
       await pool.close();
     }
   }
@@ -898,15 +883,7 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(
-        dsn,
-        "comment",
-        "user_posts",
-        "post",
-        "user",
-        "disc_migrations",
-        "disc_migration_checkpoints"
-      );
+      await dropTables(dsn, ...COMPREHENSIVE_TABLES);
       await pool.close();
     }
   }

@@ -588,6 +588,139 @@ Deno.test({
   }
 });
 
+// ---------------------------------------------------------------------------
+// Drift reconciliation: a fresh from-scratch apply whose CREATE TABLE targets
+// a table that already exists (the DB drifted from migration history, e.g.
+// disc_migrations was dropped but the tables remain).
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "SchemaManager - re-applying a schema over an existing matching table no-ops (drift reconcile)",
+  ignore: !canRunPgTests(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+
+    const pool = new ConnectionPool({
+      connectionString: dsn,
+      applicationName: "disc-test-reconcile"
+    });
+    await pool.initialize();
+
+    const sdl = `
+      type Widget {
+        required name: str;
+        count: int64;
+      }
+    `;
+
+    try {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+
+      // First apply creates the table.
+      const mgr1 = new SchemaManager({ pool });
+      await mgr1.initialize();
+      const first = await mgr1.applySchema(sdl);
+      assertEquals(first.ok, true, "first applySchema should succeed");
+      await mgr1.close();
+
+      // Simulate drift: drop migration history but leave the table in place.
+      await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
+      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+
+      // A fresh manager re-plans from scratch and would emit CREATE TABLE
+      // "widget". Because the existing table MATCHES the intended shape, the
+      // reconcile path skips the CREATE and the apply succeeds.
+      const mgr2 = new SchemaManager({ pool });
+      await mgr2.initialize();
+      const second = await mgr2.applySchema(sdl);
+      assertEquals(
+        second.ok,
+        true,
+        `re-apply over a matching existing table should succeed: ${second.ok ? "" : second.error.message}`
+      );
+      await mgr2.close();
+
+      // The table is still present and untouched.
+      const exists = await pool.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'widget'"
+      );
+      assertEquals(exists.rowCount, 1, "widget table must still exist");
+    } finally {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+      await pool.close();
+      await cleanupTestTables(dsn);
+    }
+  }
+});
+
+Deno.test({
+  name: "SchemaManager - re-applying a schema over a DRIFTED table fails with a descriptive error",
+  ignore: !canRunPgTests(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+
+    const pool = new ConnectionPool({
+      connectionString: dsn,
+      applicationName: "disc-test-drift"
+    });
+    await pool.initialize();
+
+    const sdl = `
+      type Widget {
+        required name: str;
+        count: int64;
+      }
+    `;
+
+    try {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+
+      const mgr1 = new SchemaManager({ pool });
+      await mgr1.initialize();
+      const first = await mgr1.applySchema(sdl);
+      assertEquals(first.ok, true, "first applySchema should succeed");
+      await mgr1.close();
+
+      // Drop history, then mutate the leftover table so it no longer matches
+      // the intended shape (drop the `count` column the schema requires).
+      await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
+      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query("ALTER TABLE widget DROP COLUMN count");
+
+      const mgr2 = new SchemaManager({ pool });
+      await mgr2.initialize();
+      const second = await mgr2.applySchema(sdl);
+      assertEquals(
+        second.ok,
+        false,
+        "re-apply over a drifted table must fail rather than silently accept it"
+      );
+      if (!second.ok) {
+        const message = second.error.message;
+        assert(
+          message.includes("widget"),
+          `drift error should name the table, got: ${message}`
+        );
+        assert(
+          message.includes("drift") || message.includes("does not match"),
+          `drift error should describe the mismatch, got: ${message}`
+        );
+      }
+      await mgr2.close();
+    } finally {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+      await pool.close();
+      await cleanupTestTables(dsn);
+    }
+  }
+});
+
 Deno.test("SchemaManager - parseSDL rejects semantically invalid schema", () => {
   const mgr = new SchemaManager({ dryRun: true });
   // `Bogus` is never declared — semantic validation should reject it.
