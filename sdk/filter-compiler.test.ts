@@ -329,6 +329,37 @@ Deno.test("Stage D — orderBy: array of strings joins with `then`", () => {
   assertEquals(result.orderBy, "order by .created desc then .amount");
 });
 
+Deno.test("Stage D — orderBy: random() compiles to a random ordering", () => {
+  const result = compileFilter(
+    "Payment",
+    { order_by: "random()" },
+    paymentInfo
+  );
+  assertEquals(result.orderBy, "order by random()");
+});
+
+Deno.test("Stage D — orderBy: random() composes with field ordering via `then`", () => {
+  const result = compileFilter(
+    "Payment",
+    { order_by: ["-created", "random()"] },
+    paymentInfo
+  );
+  assertEquals(result.orderBy, "order by .created desc then random()");
+});
+
+Deno.test("Stage D — orderBy rejects unknown zero-arg functions", () => {
+  assertThrows(
+    () =>
+      compileFilter(
+        "Payment",
+        { order_by: "now()" } as Record<string, unknown>,
+        paymentInfo
+      ),
+    Error,
+    "Invalid order_by function"
+  );
+});
+
 Deno.test("Stage D — orderBy rejects identifier-injection", () => {
   assertThrows(
     () =>

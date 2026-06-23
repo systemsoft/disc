@@ -175,6 +175,12 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
     }],
 
     // Math functions
+    ["random", {
+      name: "random",
+      args: [],
+      returnType: "float64",
+      sqlName: "RANDOM"
+    }],
     ["math_abs", {
       name: "math_abs",
       args: [{ name: "val", type: "anyreal", required: true }],

@@ -208,9 +208,23 @@ function compileSelectShape(
   return `{ ${parts.join(", ")} }`;
 }
 
+// Zero-arg functions allowed in order_by, e.g. "random()". Name-allowlisted
+// to keep the raw EdgeQL emission injection-safe; the registry of what
+// actually compiles lives in compiler/builtin-functions.ts.
+const ORDER_BY_FUNCS = new Set(["random"]);
+const ORDER_FN_RE = /^([a-z_][a-z0-9_]*)\(\)$/;
+
 function compileOrderBy(orderBy: string | string[]): string {
   const fields = Array.isArray(orderBy) ? orderBy : [orderBy];
   const parts = fields.map(field => {
+    const fnMatch = ORDER_FN_RE.exec(field);
+    if (fnMatch) {
+      const fn = fnMatch[1];
+      if (!ORDER_BY_FUNCS.has(fn)) {
+        throw new Error(`Invalid order_by function: ${JSON.stringify(field)}`);
+      }
+      return `${fn}()`;
+    }
     const isDesc = field.startsWith("-");
     const name = isDesc ? field.slice(1) : field;
     if (!IDENT_RE.test(name)) {
