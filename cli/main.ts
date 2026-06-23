@@ -328,6 +328,7 @@ const COMMAND_HELP: Record<string, string> = {
     ${inverse("  OPTIONS ")}
 
       --lite ${gray(".".repeat(19))} Skip bundling UI assets (smaller binary)
+      --release ${gray(".".repeat(16))} Rebuild UI + refresh server/ui-asset-manifest.ts (else reuse the committed bundle)
       -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output binary path
       --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64 | windows-x64
   `,
@@ -659,6 +660,7 @@ async function main() {
       "no-queries",
       "non-interactive",
       "read-only",
+      "release",
       /*** Instance-level security toggles (gh/geldata#5234). Each pairs with a `DISC_*` env var and
            a `[server]` key in `disc.toml`; the CLI flag wins over both when supplied. ***/
       "require-auth",
@@ -869,7 +871,8 @@ async function main() {
         await commands.build({
           lite: args.lite,
           output: args.output,
-          platform: args.platform
+          platform: args.platform,
+          release: args.release
         });
 
         break;

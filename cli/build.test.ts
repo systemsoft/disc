@@ -17,10 +17,30 @@ import {
   platformPgStagingDir,
   refreshEmbeddedPgManifest,
   refreshEmbeddedSdkManifest,
-  runUiBuild
+  runUiBuild,
+  shouldRefreshUiManifest
 } from "./build.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
+
+Deno.test("shouldRefreshUiManifest - false for a routine build (no flag, no env)", () => {
+  assertEquals(shouldRefreshUiManifest({}, () => undefined), false);
+  assertEquals(shouldRefreshUiManifest({ release: false }, () => undefined), false);
+});
+
+Deno.test("shouldRefreshUiManifest - true when --release is set", () => {
+  assertEquals(shouldRefreshUiManifest({ release: true }, () => undefined), true);
+});
+
+Deno.test("shouldRefreshUiManifest - true when DISC_BUILD_REFRESH_MANIFEST=1 (CI opt-in)", () => {
+  const env = (key: string) => (key === "DISC_BUILD_REFRESH_MANIFEST" ? "1" : undefined);
+  assertEquals(shouldRefreshUiManifest({}, env), true);
+});
+
+Deno.test("shouldRefreshUiManifest - env values other than \"1\" do not trigger a refresh", () => {
+  const env = (key: string) => (key === "DISC_BUILD_REFRESH_MANIFEST" ? "true" : undefined);
+  assertEquals(shouldRefreshUiManifest({}, env), false);
+});
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
   const command = new BuildCommand();
