@@ -29,16 +29,54 @@ import { applyValidator } from "./validation.ts";
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_TIMEOUT = 30000;
 
+/** Env var that overrides the server URL on any runtime, before `disc.toml`. */
+const SERVER_URL_ENV = "DISC_SERVER_URL";
+
+type ClientLogger = DiscClientConfig["logger"];
+
 /**
- * Best-effort: in a Deno project that has a `disc.toml`, derive the server URL
- * from its `[server]` host/port so a codegen client connects on the configured
- * port without an explicit `baseUrl`. Walks up from the cwd like the CLI does.
+ * Read an environment variable across runtimes (Deno, Node, Bun). Returns
+ * undefined when the runtime exposes no env access or the read is denied
+ * (e.g. Deno without `--allow-env`).
+ */
+function readEnvVar(name: string): string | undefined {
+  try {
+    // deno-lint-ignore no-explicit-any
+    const g = globalThis as any;
+    if (g.Deno?.env?.get) {
+      const value = g.Deno.env.get(name);
+      return value ? value : undefined;
+    }
+    if (g.process?.env) {
+      const value = g.process.env[name];
+      return value ? value : undefined;
+    }
+  } catch {
+    // Env access denied — treat as unset.
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a base URL when the caller didn't pass one, in priority order:
+ *
+ *   1. `DISC_SERVER_URL` — works on any runtime; the robust path for deployed
+ *      servers where the cwd and filesystem permissions are unpredictable.
+ *   2. A `disc.toml` walked up from the cwd (Deno only — needs sync fs access),
+ *      deriving the URL from its `[server]` host/port like the CLI does.
  *
  * Returns undefined — and the caller falls back to {@link DEFAULT_BASE_URL} —
- * outside a Deno runtime (browser bundles), when no `disc.toml` is found, when
- * filesystem reads are denied, or when the file pins neither host nor port.
+ * outside Deno (e.g. a browser bundle), when nothing is found, or when the file
+ * pins neither host nor port. A *failed* read (permission denied, etc.) is
+ * surfaced through `logger.warn` rather than swallowed silently, because the
+ * silent fallback to localhost is exactly what makes this hard to diagnose.
  */
-function resolveProjectBaseUrl(): string | undefined {
+function resolveBaseUrl(logger?: ClientLogger): string | undefined {
+  const fromEnv = readEnvVar(SERVER_URL_ENV);
+  if (fromEnv) {
+    return fromEnv;
+  }
+
   // deno-lint-ignore no-explicit-any
   const deno = (globalThis as any).Deno;
   if (!deno?.readTextFileSync || !deno?.cwd) {
@@ -51,8 +89,17 @@ function resolveProjectBaseUrl(): string | undefined {
       try {
         // Deno accepts forward slashes as path separators on every platform.
         source = deno.readTextFileSync(`${dir}/disc.toml`);
-      } catch {
-        source = undefined;
+      } catch (err) {
+        if (deno.errors && err instanceof deno.errors.NotFound) {
+          source = undefined; // Expected while walking up — keep looking.
+        } else {
+          logger?.warn?.(
+            `DiscClient: could not read ${dir}/disc.toml; falling back to ${DEFAULT_BASE_URL}. ` +
+              `Pass { baseUrl }, set ${SERVER_URL_ENV}, or grant --allow-read.`,
+            { error: err instanceof Error ? err.name : String(err) }
+          );
+          return undefined;
+        }
       }
       if (source !== undefined) {
         return baseUrlFromToml(source);
@@ -67,8 +114,11 @@ function resolveProjectBaseUrl(): string | undefined {
       }
       dir = parent;
     }
-  } catch {
-    // Permission denied or other I/O error — fall back to the default.
+  } catch (err) {
+    logger?.warn?.(
+      `DiscClient: baseUrl auto-resolution failed; falling back to ${DEFAULT_BASE_URL}.`,
+      { error: err instanceof Error ? err.name : String(err) }
+    );
   }
   return undefined;
 }
@@ -130,13 +180,14 @@ export class DiscClient {
   private logger?: DiscClientConfig["logger"];
 
   constructor(config?: DiscClientConfig) {
-    this.baseUrl = (config?.baseUrl ?? resolveProjectBaseUrl() ?? DEFAULT_BASE_URL)
+    // Set the logger first so baseUrl resolution can surface read failures.
+    this.logger = config?.logger;
+    this.baseUrl = (config?.baseUrl ?? resolveBaseUrl(this.logger) ?? DEFAULT_BASE_URL)
       .replace(/\/+$/, "");
     this.timeout = config?.timeout ?? DEFAULT_TIMEOUT;
     this.customHeaders = config?.headers ?? {};
     this.retries = config?.retries ?? 0;
     this.retryDelay = config?.retryDelay ?? 1000;
-    this.logger = config?.logger;
   }
 
   /**

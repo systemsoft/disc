@@ -31,9 +31,11 @@ Deno.test("extractEmbeddedSdk - first run writes every entry + marker", async ()
     const mod = await Deno.readTextFile(join(targetDir, "mod.ts"));
     assertStringIncludes(mod, "./client.ts");
 
-    /*** Marker pinned to the supplied version ***/
+    /*** Marker pins the version on line 1 and a content hash on line 2 ***/
     const marker = await Deno.readTextFile(join(targetDir, ".disc-sdk-marker"));
-    assertEquals(marker.trim(), "2026.05.07");
+    const markerLines = marker.split("\n");
+    assertEquals(markerLines[0], "2026.05.07");
+    assertEquals(/^[0-9a-f]{64}$/.test(markerLines[1]), true);
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
@@ -86,7 +88,7 @@ Deno.test("extractEmbeddedSdk - marker with different version triggers re-extrac
 
     /*** Marker advanced to the new version ***/
     const marker = await Deno.readTextFile(join(targetDir, ".disc-sdk-marker"));
-    assertEquals(marker.trim(), "2026.05.07");
+    assertEquals(marker.split("\n")[0], "2026.05.07");
 
     /*** The "stale user edit" was overwritten with the embedded source ***/
     const client = await Deno.readTextFile(join(targetDir, "client.ts"));
@@ -107,7 +109,62 @@ Deno.test("extractEmbeddedSdk - empty manifest still writes marker", async () =>
     assertEquals(result.extracted, 0);
 
     const marker = await Deno.readTextFile(join(targetDir, ".disc-sdk-marker"));
-    assertEquals(marker.trim(), "2026.05.07");
+    assertEquals(marker.split("\n")[0], "2026.05.07");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("extractEmbeddedSdk - same version but changed content re-extracts", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-sdk-extractor-content-" });
+
+  try {
+    const { entries, sourceDir } = await makeFakeSdkSources(tmp);
+    const targetDir = join(tmp, "out", "sdk");
+
+    const first = await extractEmbeddedSdkWithEntries(targetDir, "2026.05.07", entries);
+    assertEquals(first.alreadyExtracted, false);
+
+    /*** Ship a fix WITHIN the same version — the exact case that used to be invisible because the
+         marker only tracked the version string. ***/
+    await Deno.writeTextFile(join(sourceDir, "client.ts"), "export const CLIENT = false; // fixed\n");
+
+    const second = await extractEmbeddedSdkWithEntries(targetDir, "2026.05.07", entries);
+    assertEquals(second.alreadyExtracted, false);
+    assertEquals(second.extracted, 3);
+
+    /*** The materialized client now reflects the fix ***/
+    const client = await Deno.readTextFile(join(targetDir, "client.ts"));
+    assertStringIncludes(client, "// fixed");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("extractEmbeddedSdk - legacy version-only marker re-extracts once", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-sdk-extractor-legacy-" });
+
+  try {
+    const { entries } = await makeFakeSdkSources(tmp);
+    const targetDir = join(tmp, "out", "sdk");
+
+    await extractEmbeddedSdkWithEntries(targetDir, "2026.05.07", entries);
+
+    /*** Simulate a pre-content-hash marker: version line only, no hash. Projects generated before
+         the marker format changed look exactly like this. ***/
+    await Deno.writeTextFile(join(targetDir, ".disc-sdk-marker"), "2026.05.07\n");
+    await Deno.writeTextFile(join(targetDir, "client.ts"), "// stale\n");
+
+    const result = await extractEmbeddedSdkWithEntries(targetDir, "2026.05.07", entries);
+    assertEquals(result.alreadyExtracted, false);
+    assertEquals(result.extracted, 3);
+
+    const client = await Deno.readTextFile(join(targetDir, "client.ts"));
+    assertStringIncludes(client, "CLIENT");
+
+    /*** Marker now carries a hash, so the next run is a clean no-op ***/
+    const noop = await extractEmbeddedSdkWithEntries(targetDir, "2026.05.07", entries);
+    assertEquals(noop.alreadyExtracted, true);
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }

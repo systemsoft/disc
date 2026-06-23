@@ -46,13 +46,13 @@ const client = createClient({
 
 ### Configuration Options
 
-| Option       | Type                     | Default                                                   | Description                                                 |
-| ------------ | ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------- |
-| `baseUrl`    | `string`                 | resolved from `disc.toml`, else `"http://localhost:5656"` | URL of the Disc server                                      |
-| `headers`    | `Record<string, string>` | `{}`                                                      | Custom headers included with every request                  |
-| `retries`    | `number`                 | `0`                                                       | Number of retries on network or server errors               |
-| `retryDelay` | `number`                 | `1000`                                                    | Base delay between retries in milliseconds (linear backoff) |
-| `timeout`    | `number`                 | `30000`                                                   | Request timeout in milliseconds                             |
+| Option       | Type                     | Default                                                                 | Description                                                 |
+| ------------ | ------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `baseUrl`    | `string`                 | `DISC_SERVER_URL` env, else `disc.toml`, else `"http://localhost:5656"` | URL of the Disc server                                      |
+| `headers`    | `Record<string, string>` | `{}`                                                                    | Custom headers included with every request                  |
+| `retries`    | `number`                 | `0`                                                                     | Number of retries on network or server errors               |
+| `retryDelay` | `number`                 | `1000`                                                                  | Base delay between retries in milliseconds (linear backoff) |
+| `timeout`    | `number`                 | `30000`                                                                 | Request timeout in milliseconds                             |
 
 The `DiscClient` class can also be instantiated directly if you prefer:
 
@@ -62,17 +62,34 @@ import { DiscClient } from "disc/sdk/mod.ts";
 const client = new DiscClient({ baseUrl: "https://disc.example.com" });
 ```
 
-### Zero-config baseUrl from `disc.toml`
+### Zero-config baseUrl
 
-When `baseUrl` is omitted, the client walks up from the current working directory for a `disc.toml` (the same lookup the CLI uses) and derives `http://<host>:<port>` from its `[server]` section. This means a codegen client running inside your project connects on the configured port without any options:
+When `baseUrl` is omitted, the client resolves the server URL automatically in this order:
+
+1. **`config.baseUrl`** — an explicit value always wins.
+2. **`DISC_SERVER_URL` env var** — works on any runtime (Deno, Node, Bun). The recommended option for deployed servers, where the working directory and filesystem permissions are unpredictable.
+3. **`disc.toml`** — on Deno, the client walks up from the current working directory for a `disc.toml` (the same lookup the CLI uses) and derives `http://<host>:<port>` from its `[server]` section.
+4. **`http://localhost:5656`** — the final fallback.
+
+So a codegen client running inside your project connects on the configured port with no options:
 
 ```typescript
 import { DiscClient } from "./dbschema/disc-client/index.ts";
 
-const client = new DiscClient(); // baseUrl resolved from disc.toml
+const client = new DiscClient(); // baseUrl from DISC_SERVER_URL, else disc.toml
 ```
 
-Resolution is best-effort: outside a Deno runtime (e.g. a browser bundle), when no `disc.toml` is found, or when filesystem reads are denied, the client falls back to `http://localhost:5656`. An explicit `baseUrl` always takes precedence.
+```bash
+# Or pin it explicitly for a deployed GraphQL/API server:
+DISC_SERVER_URL=http://db.internal:5656 deno run --allow-net --allow-env server.ts
+```
+
+`disc.toml` resolution is best-effort and **Deno-only**: a Node or Bun process (e.g. an Apollo/Yoga server) skips step 3 entirely, so set `DISC_SERVER_URL` there. Within Deno it also needs `--allow-read` for the project directory and `--allow-env` to read the variable. If a `disc.toml` is found but can't be read (permission denied), the client emits a `logger.warn` (when a `logger` is configured) instead of silently falling back — pass `{ logger: console }` while debugging:
+
+```typescript
+const client = new DiscClient({ logger: console });
+// → warns: "DiscClient: could not read …/disc.toml; falling back to http://localhost:5656…"
+```
 
 ---
 

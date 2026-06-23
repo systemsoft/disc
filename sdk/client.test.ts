@@ -137,6 +137,63 @@ Deno.test("client - explicit baseUrl overrides disc.toml", () => {
   }
 });
 
+Deno.test("client - resolves baseUrl from DISC_SERVER_URL env", () => {
+  Deno.env.set("DISC_SERVER_URL", "http://env-host:8888");
+  try {
+    const client = new DiscClient();
+    assertEquals(client.getBaseUrl(), "http://env-host:8888");
+  } finally {
+    Deno.env.delete("DISC_SERVER_URL");
+  }
+});
+
+Deno.test("client - DISC_SERVER_URL takes precedence over disc.toml", () => {
+  const tmp = Deno.makeTempDirSync();
+  const cwd = Deno.cwd();
+  Deno.env.set("DISC_SERVER_URL", "http://env-host:8888");
+  try {
+    Deno.writeTextFileSync(`${tmp}/disc.toml`, `name = "demo"\n[server]\nport = 7777\n`);
+    Deno.chdir(tmp);
+    const client = new DiscClient();
+    assertEquals(client.getBaseUrl(), "http://env-host:8888");
+  } finally {
+    Deno.env.delete("DISC_SERVER_URL");
+    Deno.chdir(cwd);
+    Deno.removeSync(tmp, { recursive: true });
+  }
+});
+
+Deno.test("client - explicit baseUrl overrides DISC_SERVER_URL", () => {
+  Deno.env.set("DISC_SERVER_URL", "http://env-host:8888");
+  try {
+    const client = new DiscClient({ baseUrl: "http://explicit:1234" });
+    assertEquals(client.getBaseUrl(), "http://explicit:1234");
+  } finally {
+    Deno.env.delete("DISC_SERVER_URL");
+  }
+});
+
+Deno.test("client - warns via logger when disc.toml read fails", () => {
+  // A non-NotFound read error (e.g. permission denied) should surface through
+  // the logger instead of silently falling back to localhost.
+  const original = Deno.readTextFileSync;
+  Deno.env.delete("DISC_SERVER_URL");
+  const warnings: string[] = [];
+  (Deno as { readTextFileSync: typeof Deno.readTextFileSync; }).readTextFileSync = () => {
+    throw new Deno.errors.PermissionDenied("denied");
+  };
+  try {
+    const client = new DiscClient({
+      logger: { warn: (message: string) => warnings.push(message) }
+    });
+    assertEquals(client.getBaseUrl(), "http://localhost:5656");
+    assertEquals(warnings.length >= 1, true);
+    assertEquals(warnings[0].includes("could not read"), true);
+  } finally {
+    (Deno as { readTextFileSync: typeof Deno.readTextFileSync; }).readTextFileSync = original;
+  }
+});
+
 Deno.test("client - query throws DiscQueryError on server errors", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({

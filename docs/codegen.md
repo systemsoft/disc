@@ -63,6 +63,8 @@ dbschema/disc-client/
 
 In multi-module schemas (schemas with more than one `module`), the types file is named `interfaces.ts` instead of `types.ts` and uses TypeScript namespaces to separate modules.
 
+The `sdk/` copy is written from the SDK embedded in your `disc` binary, tracked by a `sdk/.disc-sdk-marker` holding the binary version and a hash of the embedded SDK bytes. Re-running `disc codegen` rewrites `sdk/` whenever either changes — so after upgrading or rebuilding `disc`, a plain `disc codegen` picks up the new SDK even if the version string is unchanged. If you ever suspect a stale copy, delete the `sdk/` directory and regenerate.
+
 All generated files include a header comment:
 
 ```typescript
