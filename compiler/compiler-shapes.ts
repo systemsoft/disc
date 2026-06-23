@@ -1010,9 +1010,13 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       );
     }
 
-    // Build the JSON fields for the subquery's shape
+    // Build the JSON fields for the subquery's shape. Expand any splat
+    // (`{ * }`) to one element per scalar property of the target type —
+    // otherwise a `link: { * }` projects zero fields and each row comes
+    // back as `{}` (which a non-null consumer like GraphQL rejects).
+    const elements = this.expandSplats(shape.elements, targetTypeDef.name);
     const jsonFields: SQL.JsonField[] = [];
-    for (const element of shape.elements) {
+    for (const element of elements) {
       if (element.expr.kind === "Identifier") {
         const propName = element.expr.name;
         const property = Context.getProperty(this.ctx, link.target, propName);

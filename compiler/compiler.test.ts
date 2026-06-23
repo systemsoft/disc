@@ -1767,6 +1767,18 @@ Deno.test("SQL Compiler - junction multi-link .tags.name rewrites to EXISTS with
   assertEquals(/JOIN/i.test(sql), true);
 });
 
+Deno.test("SQL Compiler - junction multi-link { * } sub-shape expands to target scalar fields", () => {
+  // Regression: `link: { * }` on a junction-backed multi-link used to drop
+  // the splat and emit `jsonb_build_object()` with no fields, yielding `{}`
+  // rows (which non-null consumers like GraphQL reject). The splat must
+  // expand to the target type's scalar properties.
+  const sql = compileJunction("SELECT User { id, tags: { * } }");
+  assertEquals(sql.includes("jsonb_agg"), true, `expected jsonb_agg: ${sql}`);
+  // Splat expanded to Tag's scalar fields inside the aggregated object
+  assertEquals(sql.includes("'name'"), true, `expected 'name' field: ${sql}`);
+  assertEquals(sql.includes("'id'"), true, `expected 'id' field: ${sql}`);
+});
+
 Deno.test("SQL Compiler - junction multi-link .tags.id collapses (junction's tag_id IS the tag id)", () => {
   // When asking for .tags.id, no JOIN to `tags` is needed — the
   // junction's target FK column is already the id we're comparing.
