@@ -759,6 +759,10 @@ export class TypeScriptGenerator {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Select {\n`;
 
+    // Splat: include every scalar field. Combine with link keys to get all
+    // scalars plus shaped links (e.g. `{ "*": true, posts: true }`).
+    content += `${indent}  "*"?: boolean;\n`;
+
     for (const [propName] of typeDef.properties) {
       content += `${indent}  ${propName}?: boolean;\n`;
     }

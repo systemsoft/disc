@@ -606,6 +606,7 @@ Deno.test("Stage A — UserSelect has boolean per scalar field", () => {
 
   const selectEnd = content.indexOf("\n}", selectStart);
   const selectBlock = content.substring(selectStart, selectEnd + 2);
+  assertStringIncludes(selectBlock, "\"*\"?: boolean");
   assertStringIncludes(selectBlock, "id?: boolean");
   assertStringIncludes(selectBlock, "email?: boolean");
   assertStringIncludes(selectBlock, "name?: boolean");

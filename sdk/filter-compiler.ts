@@ -156,6 +156,22 @@ function compileSelectShape(
 ): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(select)) {
+    if (key === "*") {
+      // Splat: pull every scalar field of this type. Pairs with explicit
+      // link keys (e.g. `{ "*": true, posts: true }` → `{ *, posts: { * } }`),
+      // letting callers get all scalars plus shaped links — something the
+      // default `{ * }` shape can't express once a `select` is supplied.
+      if (value === false || value === undefined || value === null) {
+        continue;
+      }
+      if (value !== true) {
+        throw new Error(
+          `Invalid select value for "*": ${JSON.stringify(value)}`
+        );
+      }
+      parts.push("*");
+      continue;
+    }
     if (!IDENT_RE.test(key)) {
       throw new Error(`Invalid select key: ${JSON.stringify(key)}`);
     }

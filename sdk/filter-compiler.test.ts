@@ -240,6 +240,42 @@ Deno.test("Stage D — selectShape: link as `true` pulls all fields (uses *)", (
   assertEquals(result.selectShape, "{ id, merchant: { * } }");
 });
 
+Deno.test("Stage D — selectShape: `*` splat key emits a bare splat", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { "*": true } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ * }");
+});
+
+Deno.test("Stage D — selectShape: `*` splat combines with a nested link", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { "*": true, merchant: true } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ *, merchant: { * } }");
+});
+
+Deno.test("Stage D — selectShape: `*` splat is honored inside a nested link", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { id: true, merchant: { "*": true } } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ id, merchant: { * } }");
+});
+
+Deno.test("Stage D — selectShape: `*` splat set to false is skipped", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { "*": false, id: true } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ id }");
+});
+
 Deno.test("Stage D — selectShape: throws on unknown link in nested select", () => {
   assertThrows(
     () =>
