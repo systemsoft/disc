@@ -189,6 +189,40 @@ interface QueryExtensions {
 
 ---
 
+## Typed Multi-Link Writes
+
+When you generate a typed client with `disc codegen`, junction-backed multi links are writable directly through the generated `insert()` / `update()` methods — no raw EdgeQL required. Multi links are typed as arrays of target UUIDs.
+
+Given a schema where `User` has `multi link teams -> Team`:
+
+```typescript
+// Insert — assign the full set of linked targets
+const user = await client.user.insert({
+  name: "Ada",
+  teams: [teamId1, teamId2]
+});
+
+// Update (replace) — pass an array to replace the whole set
+await client.user.update(user.id, { teams: [teamId2, teamId3] });
+
+// Update (delta add) — add members without disturbing the rest
+await client.user.update(user.id, { teams: { add: [teamId1] } });
+
+// Update (delta remove) — remove members without disturbing the rest
+await client.user.update(user.id, { teams: { remove: [teamId2] } });
+```
+
+The set semantics are:
+
+- **`insert({ link: [...] })`** assigns exactly the listed targets.
+- **`update(id, { link: [...] })`** replaces the set with exactly the listed targets.
+- **`update(id, { link: { add: [...] } })`** adds targets (existing members are left in place; re-adding an existing member is a no-op).
+- **`update(id, { link: { remove: [...] } })`** removes the listed targets.
+
+`add` and `remove` may be combined in a single `update` call. Each write compiles to a single atomic statement against PostgreSQL, so the junction rows are never left half-applied.
+
+---
+
 ## Health Checks
 
 The SDK provides three methods for checking server health, suitable for orchestration systems and monitoring.

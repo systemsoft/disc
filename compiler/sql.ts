@@ -105,6 +105,12 @@ export interface InsertStatement extends SQLNode {
   table: string;
   columns: string[];
   values: SQLExpression[][];
+  /**
+   * `INSERT INTO t (cols) SELECT ...` form. When present, the row source is
+   * this SELECT instead of a VALUES list (used by junction-table writes,
+   * where target ids come from a subquery). `values` is ignored.
+   */
+  insertSelect?: SelectStatement;
   returning?: SelectItem[];
   onConflict?: OnConflictClause;
 }

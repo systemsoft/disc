@@ -154,6 +154,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileIsTypeCheck(binOp);
     }
 
+    // Set-membership over an unpacked array: `x in array_unpack(<array<T>>$p)`
+    // maps to `array_unpack` → SQL `UNNEST`, but `x IN UNNEST(...)` is invalid
+    // Postgres. Lower it to `x = ANY(arr)` (and `x <> ALL(arr)` for `NOT IN`).
+    if (binOp.op === "IN" || binOp.op === "NOT IN") {
+      const arrayMembership = this.compileArrayMembership(binOp);
+      if (arrayMembership) {
+        return arrayMembership;
+      }
+    }
+
     // Multi-cardinality 2-step path on the LHS: rewrite the entire
     // comparison to EXISTS over the target table. EdgeQL set-comparison
     // semantics say `set OP scalar` is true if any element matches; SQL
@@ -209,6 +219,46 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
+  }
+
+  /**
+   * Lower `<scalar> IN array_unpack(<array<T>>$p)` (and the `NOT IN` form) to a
+   * valid Postgres array comparison. `array_unpack` maps to SQL `UNNEST`, but
+   * `<x> IN UNNEST(...)` is not valid syntax — the correct lowering is:
+   *
+   *   x IN array_unpack(arr)      → x = ANY(<compiled arr>)
+   *   x NOT IN array_unpack(arr)  → x <> ALL(<compiled arr>)
+   *
+   * The array argument is compiled directly (so `<array<uuid>>$ids` becomes
+   * `CAST($1 AS uuid[])`) and spliced as the operand of `ANY(...)` / `ALL(...)`.
+   *
+   * Returns `null` to fall through to the generic binary-op compilation when
+   * the RHS is not a single-argument `array_unpack(...)` call — leaving
+   * set-literal (`in {a, b}`) and subquery (`in (select ...)`) membership
+   * unchanged.
+   */
+  private compileArrayMembership(
+    binOp: EdgeQLAST.BinaryOp
+  ): SQL.SQLExpression | null {
+    const right = binOp.right;
+    if (right.kind !== "FunctionCall") {
+      return null;
+    }
+    if (right.name.parts.join("_") !== "array_unpack") {
+      return null;
+    }
+    if (right.args.length !== 1) {
+      return null;
+    }
+
+    const left = this.renderSqlExpr(this.compileExpression(binOp.left));
+    const arr = this.renderSqlExpr(
+      this.compileExpression(right.args[0].value)
+    );
+    const sql = binOp.op === "NOT IN" ?
+      `${left} <> ALL(${arr})` :
+      `${left} = ANY(${arr})`;
+    return { kind: "RawSQLExpression" as const, sql };
   }
 
   /**

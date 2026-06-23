@@ -812,7 +812,7 @@ Deno.test("PaymentUpdate includes single link as optional UUID string", () => {
   assertStringIncludes(updateBlock, "merchant?: string;");
 });
 
-Deno.test("Insert type excludes multi and computed links, keeps optional links optional", () => {
+Deno.test("Insert type includes multi-links as string[], excludes computed links, keeps optional links optional", () => {
   const authorLink: Context.LinkDef = {
     columnName: "author_id",
     multi: false,
@@ -872,8 +872,10 @@ Deno.test("Insert type excludes multi and computed links, keeps optional links o
   const insertBlock = content.substring(insertStart, insertEnd + 1);
 
   assertStringIncludes(insertBlock, "author?: string;");
+  /*** Multi-link is now a UUID array (Stage 3) ***/
+  assertStringIncludes(insertBlock, "tags?: string[];");
+  /*** Computed link still excluded ***/
   assertEquals(insertBlock.includes("latest"), false);
-  assertEquals(insertBlock.includes("tags"), false);
 });
 
 Deno.test("builder _typeCasts includes single links as <uuid>", () => {
@@ -994,6 +996,121 @@ Deno.test("Stage D — generated filter() assembles selectShape / orderBy / limi
   assertStringIncludes(body, "if (compiled.orderBy) parts.push(compiled.orderBy)");
   assertStringIncludes(body, "if (compiled.limit !== null) parts.push(`limit ${compiled.limit}`)");
   assertStringIncludes(body, "if (compiled.offset !== null) parts.push(`offset ${compiled.offset}`)");
+});
+
+/*** --- Stage 3: typed multi-link insert/update --- ***/
+
+Deno.test("Stage 3 — Insert interface includes multi-link as string[] (optional and required)", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "types")!.content;
+
+  const insertStart = content.indexOf("export interface ChannelInsert");
+  const insertEnd = content.indexOf("}", insertStart);
+  const insertBlock = content.substring(insertStart, insertEnd + 1);
+
+  /*** Optional multi-link → string[] with `?` ***/
+  assertStringIncludes(insertBlock, "tags?: string[];");
+  /*** Required multi-link → string[] without `?` ***/
+  assertStringIncludes(insertBlock, "owners: string[];");
+  /*** Doc comment names the target ***/
+  assertStringIncludes(insertBlock, "UUIDs of linked Tag (assigns the full set)");
+  /*** Single link stays a UUID string ***/
+  assertStringIncludes(insertBlock, "merchant?: string;");
+  /*** Computed multi-link excluded ***/
+  assertEquals(insertBlock.includes("history"), false);
+});
+
+Deno.test("Stage 3 — Update interface includes multi-link as string[] | { add; remove }", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "types")!.content;
+
+  const updateStart = content.indexOf("export interface ChannelUpdate");
+  /*** Stop at the next interface so the inline `{ add; remove }` braces don't truncate the block ***/
+  const nextInterface = content.indexOf("export interface", updateStart + 1);
+  const updateBlock = content.substring(updateStart, nextInterface === -1 ? undefined : nextInterface);
+
+  assertStringIncludes(updateBlock, "tags?: string[] | { add?: string[]; remove?: string[] };");
+  assertStringIncludes(updateBlock, "owners?: string[] | { add?: string[]; remove?: string[] };");
+  /*** Single link stays a UUID string ***/
+  assertStringIncludes(updateBlock, "merchant?: string;");
+  /*** Computed multi-link excluded ***/
+  assertEquals(updateBlock.includes("history"), false);
+});
+
+Deno.test("Stage 3 — builder declares _multiLinkTargets mapping link → target type", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "queries")!.content;
+
+  const start = content.indexOf("class ChannelQueryBuilder");
+  const end = content.indexOf("_typeInfo", start);
+  const block = content.substring(start, end);
+
+  assertStringIncludes(block, "_multiLinkTargets");
+  assertStringIncludes(block, `tags: "Tag"`);
+  assertStringIncludes(block, `owners: "Tag"`);
+  /*** Multi-links are NOT in _typeCasts (only scalar + single links) ***/
+  assertEquals(block.includes(`tags: "<uuid>"`), false);
+});
+
+Deno.test("Stage 3 — generated insert() body emits array_unpack subquery for multi-links", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "queries")!.content;
+
+  const insertStart = content.indexOf("async insert(", content.indexOf("class ChannelQueryBuilder"));
+  const insertEnd = content.indexOf("async update(", insertStart);
+  const body = content.substring(insertStart, insertEnd);
+
+  /*** Multi-link assignment builds a filtered subquery from the array param ***/
+  assertStringIncludes(body, "_multiLinkTargets");
+  assertStringIncludes(body, "select ${target} filter .id in array_unpack(<array<uuid>>$${key})");
+});
+
+Deno.test("Stage 3 — generated update() body emits replace and += / -= delta forms", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "queries")!.content;
+
+  const updateStart = content.indexOf("async update(", content.indexOf("class ChannelQueryBuilder"));
+  const updateEnd = content.indexOf("async delete(", updateStart);
+  const body = content.substring(updateStart, updateEnd);
+
+  /*** Branches on value shape: array replace vs { add, remove } delta ***/
+  assertStringIncludes(body, "Array.isArray(value)");
+  /*** Replace form ***/
+  assertStringIncludes(body, ":= (select ${target} filter .id in array_unpack(<array<uuid>>$${key}))");
+  /*** Delta add form with __add param suffix ***/
+  assertStringIncludes(body, "+= (select ${target} filter .id in array_unpack(<array<uuid>>$${key}__add))");
+  /*** Delta remove form with __remove param suffix ***/
+  assertStringIncludes(body, "-= (select ${target} filter .id in array_unpack(<array<uuid>>$${key}__remove))");
+});
+
+Deno.test("Stage 3 — single-link/scalar codegen unchanged; computed links excluded", () => {
+  const schema = createSchemaWithMultiLink();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const queries = result.files.find(f => f.type === "queries")!.content;
+
+  /*** Single link still in _typeCasts as <uuid> ***/
+  const start = queries.indexOf("class ChannelQueryBuilder");
+  const end = queries.indexOf("_multiLinkTargets", start);
+  const castsBlock = queries.substring(start, end);
+  assertStringIncludes(castsBlock, `merchant: "<uuid>"`);
+  /*** Scalar prop still in _typeCasts ***/
+  assertStringIncludes(castsBlock, `name: "<str>"`);
+  /*** Computed multi-link absent from the target map ***/
+  const mtStart = queries.indexOf("_multiLinkTargets", start);
+  const mtEnd = queries.indexOf("};", mtStart);
+  const mtBlock = queries.substring(mtStart, mtEnd);
+  assertEquals(mtBlock.includes("history"), false);
 });
 
 /*** --- Regression tests: codegen output must be valid TS --- ***/
@@ -1396,6 +1513,110 @@ function createSchemaWithLink(): Context.Schema {
     types: new Map([
       ["Merchant", merchantType],
       ["Payment", paymentType]
+    ])
+  };
+}
+
+/**
+ * Helper: create a schema with one scalar prop, one single link, one required
+ * multi-link, one optional multi-link, and one computed multi-link — exercising
+ * the Stage 3 typed multi-link insert/update codegen paths.
+ */
+function createSchemaWithMultiLink(): Context.Schema {
+  const tagType: Context.TypeDef = {
+    kind: "object",
+    links: new Map(),
+    name: "Tag",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        edgeqlType: "uuid",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }]
+    ]),
+    tableName: "tags"
+  };
+
+  const channelType: Context.TypeDef = {
+    kind: "object",
+    links: new Map([
+      ["merchant", {
+        columnName: "merchant_id",
+        multi: false,
+        name: "merchant",
+        required: false,
+        target: "Merchant"
+      }],
+      ["owners", {
+        junctionTable: "channel_owners",
+        multi: true,
+        name: "owners",
+        required: true,
+        target: "Tag"
+      }],
+      ["tags", {
+        junctionTable: "channel_tags",
+        multi: true,
+        name: "tags",
+        required: false,
+        target: "Tag"
+      }],
+      ["history", {
+        computed: true,
+        multi: true,
+        name: "history",
+        required: false,
+        target: "Tag"
+      }]
+    ]),
+    name: "Channel",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        edgeqlType: "uuid",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }],
+      ["name", {
+        columnName: "name",
+        edgeqlType: "str",
+        multi: false,
+        name: "name",
+        required: true,
+        type: "text"
+      }]
+    ]),
+    tableName: "channels"
+  };
+
+  const merchantType: Context.TypeDef = {
+    kind: "object",
+    links: new Map(),
+    name: "Merchant",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        edgeqlType: "uuid",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }]
+    ]),
+    tableName: "merchants"
+  };
+
+  return {
+    functions: new Map(),
+    types: new Map([
+      ["Channel", channelType],
+      ["Merchant", merchantType],
+      ["Tag", tagType]
     ])
   };
 }

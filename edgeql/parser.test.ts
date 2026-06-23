@@ -188,6 +188,83 @@ Deno.test("EdgeQL Parser - UPDATE Query", () => {
   }
 });
 
+Deno.test("EdgeQL Parser - UPDATE set := defaults operator", () => {
+  const source = `
+    UPDATE User
+    SET {
+      name := <str>$n
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "UpdateQuery");
+  if (ast.kind === "UpdateQuery") {
+    const nameElement = ast.shape.elements[0];
+    assertEquals(nameElement.name?.name, "name");
+    assertEquals(nameElement.operator, ":=");
+  }
+});
+
+Deno.test("EdgeQL Parser - UPDATE set += operator", () => {
+  const source = `
+    UPDATE Channel
+    FILTER .id = <uuid>$id
+    SET {
+      tags += (SELECT Tag FILTER .id = <uuid>$t)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "UpdateQuery");
+  if (ast.kind === "UpdateQuery") {
+    const tagsElement = ast.shape.elements[0];
+    assertEquals(tagsElement.name?.name, "tags");
+    assertEquals(tagsElement.operator, "+=");
+  }
+});
+
+Deno.test("EdgeQL Parser - UPDATE set -= operator", () => {
+  const source = `
+    UPDATE Channel
+    FILTER .id = <uuid>$id
+    SET {
+      tags -= (SELECT Tag FILTER .id = <uuid>$t)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "UpdateQuery");
+  if (ast.kind === "UpdateQuery") {
+    const tagsElement = ast.shape.elements[0];
+    assertEquals(tagsElement.name?.name, "tags");
+    assertEquals(tagsElement.operator, "-=");
+  }
+});
+
+Deno.test("EdgeQL Parser - INSERT shape element defaults to := operator", () => {
+  const source = `
+    INSERT User {
+      name := <str>$n
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "InsertQuery");
+  if (ast.kind === "InsertQuery") {
+    const nameElement = ast.shape?.elements[0];
+    assertEquals(nameElement?.name?.name, "name");
+    assertEquals(nameElement?.operator, ":=");
+  }
+});
+
 Deno.test("EdgeQL Parser - DELETE Query", () => {
   const source = `
     DELETE User

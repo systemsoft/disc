@@ -747,8 +747,21 @@ export class EdgeQLParser {
     if (this.checkIdentLike()) {
       const ident = this.parseIdentifier();
 
-      if (this.match(TokenType.ASSIGN)) {
-        // Computed property
+      const assignToken = this.peek();
+      if (
+        assignToken.type === TokenType.ASSIGN ||
+        assignToken.type === TokenType.ADDASSIGN ||
+        assignToken.type === TokenType.SUBASSIGN
+      ) {
+        // Computed property / UPDATE set clause. `:=` replaces, `+=` adds,
+        // `-=` removes — only UPDATE set-clauses use `+=`/`-=`; INSERT and
+        // SELECT shapes only ever produce `:=`.
+        this.advance();
+        const operator: ":=" | "+=" | "-=" = assignToken.type === TokenType.ADDASSIGN ?
+          "+=" :
+          assignToken.type === TokenType.SUBASSIGN ?
+          "-=" :
+          ":=";
         name = ident;
         computable = true;
         const expr = this.parseExpression();
@@ -763,6 +776,7 @@ export class EdgeQLParser {
           name,
           computable,
           cardinality,
+          operator,
           shape
         });
       } else if (this.match(TokenType.COLON)) {

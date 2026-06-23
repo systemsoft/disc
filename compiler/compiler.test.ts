@@ -1791,3 +1791,56 @@ Deno.test("SQL Compiler - junction multi-link .tags.id collapses (junction's tag
   // No JOIN needed in the optimised path
   assertEquals(/JOIN/i.test(sql), false, `unexpected JOIN: ${sql}`);
 });
+
+Deno.test("SQL Compiler - 'in array_unpack(<array<T>>$p)' lowers to '= ANY(...)'", () => {
+  // `<scalar> in array_unpack(<array<uuid>>$ids)` must NOT emit the invalid
+  // `IN UNNEST(...)`; the correct Postgres lowering is `= ANY(CAST($1 AS uuid[]))`.
+  const sql = compileEdgeQL(
+    "select User { name } filter .id in array_unpack(<array<uuid>>$ids)"
+  );
+  assertEquals(sql.includes("= ANY("), true, `expected = ANY(: ${sql}`);
+  assertEquals(
+    /IN\s+UNNEST/i.test(sql),
+    false,
+    `unexpected IN UNNEST: ${sql}`
+  );
+  assertEquals(
+    sql.includes("CAST($1 AS uuid[])"),
+    true,
+    `expected array cast preserved: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - 'not in array_unpack(<array<T>>$p)' lowers to '<> ALL(...)'", () => {
+  const sql = compileEdgeQL(
+    "select User { name } filter .id not in array_unpack(<array<uuid>>$ids)"
+  );
+  assertEquals(sql.includes("<> ALL("), true, `expected <> ALL(: ${sql}`);
+  assertEquals(
+    /UNNEST/i.test(sql),
+    false,
+    `unexpected UNNEST: ${sql}`
+  );
+  assertEquals(
+    sql.includes("CAST($1 AS uuid[])"),
+    true,
+    `expected array cast preserved: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - set-literal 'in {a, b}' membership is unchanged", () => {
+  // Regression: the array_unpack fix must not touch set-literal membership,
+  // which still compiles to `IN (...)`.
+  const sql = compileEdgeQL("select User { name } filter .name in {'a', 'b'}");
+  assertEquals(sql.includes("IN ('a', 'b')"), true, `expected IN (...): ${sql}`);
+  assertEquals(sql.includes("ANY("), false, `unexpected ANY(: ${sql}`);
+});
+
+Deno.test("SQL Compiler - subquery 'in (select ...)' membership is unchanged", () => {
+  // Regression: subquery membership still compiles to `IN (subquery)`.
+  const sql = compileEdgeQL(
+    "select User { name } filter .name in (select User.name)"
+  );
+  assertEquals(/IN\s*\(\s*SELECT/i.test(sql), true, `expected IN (SELECT: ${sql}`);
+  assertEquals(sql.includes("ANY("), false, `unexpected ANY(: ${sql}`);
+});

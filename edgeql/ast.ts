@@ -168,6 +168,12 @@ export interface ShapeElement extends EdgeQLNode {
   name?: Identifier;
   computable?: boolean;
   cardinality?: Cardinality;
+  /**
+   * Assignment operator used in an UPDATE `set { ... }` clause: `:=` replaces,
+   * `+=` adds to a multi-set, `-=` removes. Defaults to `:=` for every other
+   * shape context (INSERT, SELECT), which only ever assign.
+   */
+  operator?: ":=" | "+=" | "-=";
   shape?: Shape;
   /** Type filter for polymorphic shape fields: [IS Type].property */
   typeFilter?: string;
@@ -544,6 +550,7 @@ export function createShapeElement(
     name?: Identifier;
     computable?: boolean;
     cardinality?: Cardinality;
+    operator?: ":=" | "+=" | "-=";
     shape?: Shape;
   }
 ): ShapeElement {

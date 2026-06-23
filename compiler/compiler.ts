@@ -389,9 +389,45 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     return this.compileExpression(expr);
   }
 
+  // Compile a multi-link assignment value down to a SELECT yielding the
+  // target rows' `id` column. Mirrors compileLinkAssignmentExpression but
+  // returns the bare SelectStatement (not wrapped as a SubqueryExpression)
+  // so it can drive a junction INSERT/DELETE `SELECT <src>, sub.id FROM (...)`.
+  private compileTargetIdSelect(
+    expr: EdgeQLAST.Expression
+  ): SQL.SelectStatement {
+    const query = expr.kind === "Subquery" ?
+      (expr as EdgeQLAST.Subquery).query :
+      expr;
+
+    if (query.kind === "SelectQuery") {
+      const select = query as EdgeQLAST.SelectQuery;
+      if (select.expr.kind === "TypeName") {
+        const statement = this.compileSelectQueryRaw(select);
+        const table = statement.from?.tables[0];
+        if (table?.alias) {
+          statement.select = SQL.createSelectClause([
+            SQL.createSelectItem(
+              SQL.createColumnReference("id", table.alias)
+            )
+          ]);
+          return statement;
+        }
+      }
+    }
+
+    // Fallback: wrap whatever the expression compiles to as a single-column
+    // `SELECT <expr> AS id`. Covers explicit `<array<uuid>>$x` casts etc.
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(this.compileExpression(expr), "id")
+      ])
+    });
+  }
+
   private compileInsertQuery(
     query: EdgeQLAST.InsertQuery
-  ): SQL.InsertStatement {
+  ): SQL.InsertStatement | SQL.CTEStatement {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -400,6 +436,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
     const columns: string[] = [];
     const values: SQL.SQLExpression[] = [];
+    // Multi-links (junction-backed, no FK column) are written as separate
+    // junction INSERTs in a CTE — collect them here, keyed by link.
+    const multiLinks: { link: Context.LinkDef; idSelect: SQL.SelectStatement; }[] = [];
 
     // Process shape elements to extract column assignments
     for (const element of query.shape.elements) {
@@ -417,6 +456,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         if (link && link.columnName) {
           columns.push(link.columnName);
           isLink = true;
+        } else if (link && link.junctionTable) {
+          multiLinks.push({
+            link,
+            idSelect: this.compileTargetIdSelect(element.expr)
+          });
+          continue;
         } else {
           throw new CompilationError(
             `Property '${propName}' not found on type '${typeName}'`
@@ -520,7 +565,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       }
     }
 
-    return {
+    const sourceInsert: SQL.InsertStatement = {
       kind: "InsertStatement",
       table: typeDef.tableName,
       columns,
@@ -533,11 +578,182 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
       ]
     };
+
+    if (multiLinks.length === 0) {
+      return sourceInsert;
+    }
+
+    // Multi-link INSERT: wrap the source row in a CTE so each junction INSERT
+    // can cross-join the new row's id against its target-id set. The final
+    // statement re-selects the inserted row so callers still get `RETURNING *`
+    // semantics (raw columns, mapped to the schema shape by the server).
+    const ctes: SQL.CTE[] = [{
+      kind: "CTE",
+      name: "ins",
+      recursive: false,
+      columns: [],
+      query: sourceInsert
+    }];
+
+    multiLinks.forEach(({ link, idSelect }, index) => {
+      ctes.push(
+        this.buildJunctionInsertCTE(
+          `link_${index}`,
+          link,
+          SQL.createColumnReference("id", "ins"),
+          idSelect,
+          true,
+          "ins"
+        )
+      );
+    });
+
+    return SQL.withCTEs(ctes, this.selectAllFrom("ins"));
+  }
+
+  // Build a junction INSERT as a CTE row:
+  //   <name> AS (
+  //     INSERT INTO <junction> (<srcCol>, <tgtCol>)
+  //     SELECT <sourceId>, sub.id FROM (<idSelect>) AS sub
+  //     [ON CONFLICT DO NOTHING]
+  //   )
+  // When `crossJoinSource` is set, the source id comes from a preceding CTE
+  // (the INSERT path joins `FROM <sourceCteName> CROSS JOIN (sub)`); otherwise
+  // the source id is a literal/parameter expression (the UPDATE path).
+  private buildJunctionInsertCTE(
+    name: string,
+    link: Context.LinkDef,
+    sourceId: SQL.SQLExpression,
+    idSelect: SQL.SelectStatement,
+    onConflictDoNothing: boolean,
+    crossJoinSourceCteName?: string
+  ): SQL.CTE {
+    const srcCol = link.junctionSourceColumn ?? "source_id";
+    const tgtCol = link.junctionTargetColumn ?? "target_id";
+
+    const subAlias = "sub";
+    const fromTables: SQL.TableReference[] = [];
+    if (crossJoinSourceCteName) {
+      fromTables.push(SQL.createTableReference(crossJoinSourceCteName));
+    }
+    fromTables.push({
+      kind: "TableReference",
+      name: "(subquery)",
+      alias: subAlias,
+      subquery: idSelect
+    });
+
+    const selectStmt = SQL.createSelectStatement({
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(sourceId),
+        SQL.createSelectItem(SQL.createColumnReference("id", subAlias))
+      ]),
+      from: SQL.createFromClause(fromTables)
+    });
+
+    const junctionInsert: SQL.InsertStatement = {
+      kind: "InsertStatement",
+      table: link.junctionTable!,
+      columns: [srcCol, tgtCol],
+      values: [],
+      insertSelect: selectStmt,
+      onConflict: onConflictDoNothing ?
+        { kind: "OnConflictClause", action: "DO NOTHING" } :
+        undefined
+    };
+
+    return {
+      kind: "CTE",
+      name,
+      recursive: false,
+      columns: [],
+      query: junctionInsert
+    };
+  }
+
+  // Build a junction DELETE as a CTE row:
+  //   <name> AS (
+  //     DELETE FROM <junction>
+  //     WHERE <srcCol> IN (SELECT id FROM <sourceCte>)
+  //       [AND <tgtCol> {IN|NOT IN} (<idSelect>)]
+  //   )
+  // The source predicate is a subquery (not a column ref) because a DELETE
+  // inside a WITH cannot reference a sibling CTE by name in its WHERE — it
+  // must pull the source ids through a `SELECT ... FROM <sourceCte>`.
+  //
+  // `targetOp` selects the target predicate: "IN" for `-=` (remove the named
+  // set) and "NOT IN" for `:=` (clear everything except the new set, so rows
+  // already present survive the replace — sibling INSERT/DELETE CTEs run on the
+  // same snapshot, so deleting-then-reinserting a kept row would otherwise
+  // violate the junction's unique constraint).
+  private buildJunctionDeleteCTE(
+    name: string,
+    link: Context.LinkDef,
+    sourceCteName: string,
+    targetIdSelect?: SQL.SelectStatement,
+    targetOp: "IN" | "NOT IN" = "IN"
+  ): SQL.CTE {
+    const srcCol = link.junctionSourceColumn ?? "source_id";
+    const tgtCol = link.junctionTargetColumn ?? "target_id";
+
+    let condition: SQL.SQLExpression = SQL.createBinaryExpression(
+      "IN",
+      SQL.createColumnReference(srcCol),
+      SQL.createSubqueryExpression(this.selectIdFrom(sourceCteName))
+    );
+
+    if (targetIdSelect) {
+      condition = SQL.createBinaryExpression(
+        "AND",
+        condition,
+        SQL.createBinaryExpression(
+          targetOp,
+          SQL.createColumnReference(tgtCol),
+          SQL.createSubqueryExpression(targetIdSelect)
+        )
+      );
+    }
+
+    const junctionDelete: SQL.DeleteStatement = {
+      kind: "DeleteStatement",
+      table: link.junctionTable!,
+      where: SQL.createWhereClause(condition)
+    };
+
+    return {
+      kind: "CTE",
+      name,
+      recursive: false,
+      columns: [],
+      query: junctionDelete
+    };
+  }
+
+  // `SELECT * FROM <cteName>` — the final projection of a write CTE so the
+  // server's RETURNING-shaped mutation handling still sees the row columns.
+  private selectAllFrom(cteName: string): SQL.SelectStatement {
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(SQL.createColumnReference("*"))
+      ]),
+      from: SQL.createFromClause([SQL.createTableReference(cteName)])
+    });
+  }
+
+  // `SELECT id FROM <cteName>` — pulls source ids out of a sibling CTE so a
+  // junction DELETE can correlate without referencing the CTE name directly.
+  private selectIdFrom(cteName: string): SQL.SelectStatement {
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(SQL.createColumnReference("id"))
+      ]),
+      from: SQL.createFromClause([SQL.createTableReference(cteName)])
+    });
   }
 
   private compileUpdateQuery(
     query: EdgeQLAST.UpdateQuery
-  ): SQL.UpdateStatement {
+  ): SQL.UpdateStatement | SQL.CTEStatement {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -545,6 +761,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
 
     const setClauses: SQL.SetClause[] = [];
+    // Multi-link ops carry their assignment operator so the CTE knows whether
+    // to replace (`:=`), add (`+=`), or remove (`-=`) junction rows.
+    const multiLinkOps: {
+      link: Context.LinkDef;
+      operator: ":=" | "+=" | "-=";
+      idSelect: SQL.SelectStatement;
+    }[] = [];
 
     // Process shape elements to extract SET clauses
     for (const element of query.shape.elements) {
@@ -563,6 +786,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
             kind: "SetClause",
             column: link.columnName,
             value: this.compileLinkAssignmentExpression(element.expr)
+          });
+        } else if (link && link.junctionTable) {
+          multiLinkOps.push({
+            link,
+            operator: element.operator ?? ":=",
+            idSelect: this.compileTargetIdSelect(element.expr)
           });
         } else {
           throw new CompilationError(
@@ -585,18 +814,143 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       whereClause = SQL.createWhereClause(condition);
     }
 
-    return {
-      kind: "UpdateStatement",
-      table: typeDef.tableName,
-      set: setClauses,
-      where: whereClause,
-      returning: [
-        {
-          kind: "SelectItem",
-          expression: SQL.createColumnReference("*")
+    if (multiLinkOps.length === 0) {
+      return {
+        kind: "UpdateStatement",
+        table: typeDef.tableName,
+        set: setClauses,
+        where: whereClause,
+        returning: [
+          {
+            kind: "SelectItem",
+            expression: SQL.createColumnReference("*")
+          }
+        ]
+      };
+    }
+
+    return this.compileMultiLinkUpdate(
+      typeDef,
+      setClauses,
+      whereClause,
+      multiLinkOps
+    );
+  }
+
+  // Build an UPDATE that touches one or more junction-backed multi-links,
+  // optionally alongside scalar/single-link SETs. Emits a single atomic CTE:
+  //
+  //   WITH <source> AS ( <UPDATE ... RETURNING *>  |  <SELECT * FROM table WHERE ...> ),
+  //        <junction ops...>
+  //   SELECT * FROM <source>
+  //
+  // The source row's id drives each junction op. When scalar SETs exist the
+  // source CTE is the UPDATE itself (so the row is mutated once); otherwise
+  // it is a plain SELECT of the matching rows — no empty `UPDATE ... SET`.
+  private compileMultiLinkUpdate(
+    typeDef: Context.TypeDef,
+    setClauses: SQL.SetClause[],
+    whereClause: SQL.WhereClause | undefined,
+    multiLinkOps: {
+      link: Context.LinkDef;
+      operator: ":=" | "+=" | "-=";
+      idSelect: SQL.SelectStatement;
+    }[]
+  ): SQL.CTEStatement {
+    const sourceCte = "upd";
+    const sourceId = SQL.createColumnReference("id", sourceCte);
+
+    let sourceQuery: SQL.SQLStatement;
+    if (setClauses.length > 0) {
+      sourceQuery = {
+        kind: "UpdateStatement",
+        table: typeDef.tableName,
+        set: setClauses,
+        where: whereClause,
+        returning: [
+          {
+            kind: "SelectItem",
+            expression: SQL.createColumnReference("*")
+          }
+        ]
+      };
+    } else {
+      sourceQuery = SQL.createSelectStatement({
+        select: SQL.createSelectClause([
+          SQL.createSelectItem(SQL.createColumnReference("*"))
+        ]),
+        from: SQL.createFromClause([
+          SQL.createTableReference(typeDef.tableName)
+        ]),
+        where: whereClause
+      });
+    }
+
+    const ctes: SQL.CTE[] = [{
+      kind: "CTE",
+      name: sourceCte,
+      recursive: false,
+      columns: [],
+      query: sourceQuery
+    }];
+
+    multiLinkOps.forEach(({ link, operator, idSelect }, index) => {
+      switch (operator) {
+        case ":=": {
+          // Replace: delete existing junction rows whose target is NOT in the
+          // new set, then insert the new set with ON CONFLICT DO NOTHING. This
+          // keeps rows present in both old and new sets untouched — a plain
+          // delete-all + insert would, within one snapshot, try to re-insert a
+          // just-deleted row and trip the unique constraint.
+          ctes.push(
+            this.buildJunctionDeleteCTE(
+              `del_${index}`,
+              link,
+              sourceCte,
+              idSelect,
+              "NOT IN"
+            )
+          );
+          ctes.push(
+            this.buildJunctionInsertCTE(
+              `link_${index}`,
+              link,
+              sourceId,
+              idSelect,
+              true,
+              sourceCte
+            )
+          );
+          break;
         }
-      ]
-    };
+        case "+=": {
+          ctes.push(
+            this.buildJunctionInsertCTE(
+              `link_${index}`,
+              link,
+              sourceId,
+              idSelect,
+              true,
+              sourceCte
+            )
+          );
+          break;
+        }
+        case "-=": {
+          ctes.push(
+            this.buildJunctionDeleteCTE(
+              `del_${index}`,
+              link,
+              sourceCte,
+              idSelect
+            )
+          );
+          break;
+        }
+      }
+    });
+
+    return SQL.withCTEs(ctes, this.selectAllFrom(sourceCte));
   }
 
   private compileDeleteQuery(

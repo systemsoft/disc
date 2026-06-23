@@ -228,7 +228,26 @@ class UserQueryBuilder {
 
 Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.
 
-Single links appear in the `Insert`/`Update` types as the target object's UUID (`string`) and are cast as `<uuid>`, so `client.post.insert({ title, author: userId })` assigns the link directly. Multi links and computed links are excluded — set multi links via raw EdgeQL for now.
+Single links appear in the `Insert`/`Update` types as the target object's UUID (`string`) and are cast as `<uuid>`, so `client.post.insert({ title, author: userId })` assigns the link directly.
+
+Multi links (junction-backed) are typed as arrays of target UUIDs:
+
+- **Insert** — `link: string[]` assigns the full set:
+  ```typescript
+  await client.user.insert({ name: "Ada", teams: [teamId1, teamId2] });
+  ```
+- **Update (replace)** — `link: string[]` replaces the whole set:
+  ```typescript
+  await client.user.update(userId, { teams: [teamId2, teamId3] });
+  ```
+- **Update (delta)** — `link: { add?: string[]; remove?: string[] }` adds/removes
+  members without touching the rest of the set:
+  ```typescript
+  await client.user.update(userId, { teams: { add: [teamId1] } });
+  await client.user.update(userId, { teams: { remove: [teamId2] } });
+  ```
+
+Computed links remain excluded from `Insert`/`Update`.
 
 ### `client.ts` -- Typed Client
 

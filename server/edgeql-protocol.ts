@@ -638,7 +638,19 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
 
-        if (normalizedSQL.includes("select")) {
+        // Junction-backed multi-link writes compile to a data-modifying CTE:
+        // `WITH ins/upd AS (INSERT|UPDATE ...), link_n AS (...) SELECT * FROM ...`.
+        // Such SQL begins with `with` and contains a top-level `select`, but it
+        // is still a mutation — the leading INSERT/UPDATE drives a single row
+        // back through the final `SELECT *`. Detect it first so the response
+        // keeps the single-object mutation shape (not the SELECT array shape).
+        const isCteWrite = normalizedSQL.startsWith("with") &&
+          (normalizedSQL.includes("insert into") ||
+            normalizedSQL.includes("update "));
+
+        if (isCteWrite) {
+          return { data: result.rows[0] || { success: true } };
+        } else if (normalizedSQL.includes("select")) {
           // The compiler emits `SELECT jsonb_build_object(...)` for shape
           // expressions, which surfaces as rows of `{jsonb_build_object: {...}}`.
           // Unwrap that single-column wrapper so callers see clean object

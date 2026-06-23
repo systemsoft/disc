@@ -229,16 +229,21 @@ export class SQLCodeGenerator {
       );
     }
 
-    parts.push("\nVALUES");
+    if (stmt.insertSelect) {
+      // `INSERT INTO t (cols) SELECT ...` — the row source is a subquery.
+      parts.push("\n" + this.generateStatement(stmt.insertSelect));
+    } else {
+      parts.push("\nVALUES");
 
-    for (let i = 0; i < stmt.values.length; i++) {
-      if (i > 0) {
-        parts.push(",");
+      for (let i = 0; i < stmt.values.length; i++) {
+        if (i > 0) {
+          parts.push(",");
+        }
+        parts.push(
+          "\n" + this.indent() + "(" + stmt.values[i].map(expr => this.generateExpression(expr)).join(", ") +
+            ")"
+        );
       }
-      parts.push(
-        "\n" + this.indent() + "(" + stmt.values[i].map(expr => this.generateExpression(expr)).join(", ") +
-          ")"
-      );
     }
 
     if (stmt.onConflict) {

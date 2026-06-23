@@ -516,3 +516,123 @@ Deno.test("SchemaManager - bidirectional M2M: stored side + computed backlink sh
     "Course.students junctionTargetColumn should be source_id (swapped)"
   );
 });
+
+// ---------------------------------------------------------------------------
+// Multi-link writes: INSERT / UPDATE emit junction CTEs (Stage 2)
+// ---------------------------------------------------------------------------
+
+const MULTI_SELECT = "(select Team filter .id in array_unpack(<array<uuid>>$ids))";
+
+Deno.test("Junction write - INSERT with multi-link set emits source INSERT + junction INSERT CTE", () => {
+  const schema = createUserTeamSchema();
+
+  const sql = compileWithSchema(
+    schema,
+    `INSERT User { name := "Ada", email := "ada@x.io", memberships := ${MULTI_SELECT} }`
+  );
+  const lower = sql.toLowerCase();
+
+  // CTE wrapping the source INSERT (returns its id for the junction).
+  assertStringIncludes(lower, "with ins as (");
+  assertStringIncludes(lower, "insert into users (name, email)");
+  assertStringIncludes(lower, "returning *");
+
+  // Junction INSERT selecting (ins.id, sub.id) into the correctly-named cols.
+  assertStringIncludes(lower, "insert into user_memberships (source_id, target_id)");
+  assertStringIncludes(lower, "ins.id");
+  assertStringIncludes(lower, "sub.id");
+  // Scalar/single-link columns stay on the source INSERT — not the junction.
+  assertStringIncludes(lower, "on conflict do nothing");
+  // Final projection re-selects the inserted row so RETURNING semantics hold.
+  assertStringIncludes(lower, "from\nins");
+});
+
+Deno.test("Junction write - UPDATE := (replace) deletes targets not in the new set then inserts it", () => {
+  const schema = createUserTeamSchema();
+
+  const sql = compileWithSchema(
+    schema,
+    `UPDATE User filter .id = <uuid>$id set { memberships := ${MULTI_SELECT} }`
+  );
+  const lower = sql.toLowerCase();
+
+  // No scalar SETs → source CTE is a plain SELECT, never an empty UPDATE SET.
+  assertEquals(lower.includes("update users"), false);
+  assertStringIncludes(lower, "with upd as (");
+
+  // Delete existing targets NOT in the new set, then insert the new set
+  // (ON CONFLICT DO NOTHING keeps rows present in both sets — a snapshot-safe
+  // replace that won't trip the junction's unique constraint).
+  assertStringIncludes(lower, "delete from user_memberships");
+  assertStringIncludes(lower, "source_id in (");
+  assertStringIncludes(lower, "target_id not in (");
+  assertStringIncludes(lower, "insert into user_memberships (source_id, target_id)");
+  assertStringIncludes(lower, "on conflict do nothing");
+  assertStringIncludes(lower, "upd.id");
+});
+
+Deno.test("Junction write - UPDATE += (add) emits junction INSERT with ON CONFLICT DO NOTHING", () => {
+  const schema = createUserTeamSchema();
+
+  const sql = compileWithSchema(
+    schema,
+    `UPDATE User filter .id = <uuid>$id set { memberships += ${MULTI_SELECT} }`
+  );
+  const lower = sql.toLowerCase();
+
+  assertStringIncludes(lower, "insert into user_memberships (source_id, target_id)");
+  assertStringIncludes(lower, "on conflict do nothing");
+  // += must NOT delete existing rows.
+  assertEquals(lower.includes("delete from user_memberships"), false);
+});
+
+Deno.test("Junction write - UPDATE -= (remove) emits junction DELETE on the target-id set", () => {
+  const schema = createUserTeamSchema();
+
+  const sql = compileWithSchema(
+    schema,
+    `UPDATE User filter .id = <uuid>$id set { memberships -= ${MULTI_SELECT} }`
+  );
+  const lower = sql.toLowerCase();
+
+  assertStringIncludes(lower, "delete from user_memberships");
+  assertStringIncludes(lower, "source_id in (");
+  assertStringIncludes(lower, "target_id in (");
+  // -= must NOT insert.
+  assertEquals(lower.includes("insert into user_memberships"), false);
+});
+
+Deno.test("Junction write - UPDATE mixing a scalar SET + multi-link += uses one CTE with a real UPDATE source", () => {
+  const schema = createUserTeamSchema();
+
+  const sql = compileWithSchema(
+    schema,
+    `UPDATE User filter .id = <uuid>$id set { name := "Grace", memberships += ${MULTI_SELECT} }`
+  );
+  const lower = sql.toLowerCase();
+
+  // Scalar SET present → the source CTE is the UPDATE itself (mutated once).
+  assertStringIncludes(lower, "with upd as (");
+  assertStringIncludes(lower, "update users");
+  assertStringIncludes(lower, "set name = 'grace'");
+  assertStringIncludes(lower, "returning *");
+  // Junction add in the same statement.
+  assertStringIncludes(lower, "insert into user_memberships (source_id, target_id)");
+  assertStringIncludes(lower, "on conflict do nothing");
+});
+
+Deno.test("Junction write - reciprocal multi-link += uses the correctly-oriented (swapped) junction columns", () => {
+  const schema = createReciprocalSchema();
+
+  // Team.members is the reverse side: junctionSourceColumn=target_id (Team),
+  // junctionTargetColumn=source_id (User). Writing it must respect that
+  // orientation so both sides share one junction table correctly.
+  const sql = compileWithSchema(
+    schema,
+    `UPDATE Team filter .id = <uuid>$id set { members += (select User filter .id in array_unpack(<array<uuid>>$ids)) }`
+  );
+  const lower = sql.toLowerCase();
+
+  assertStringIncludes(lower, "insert into user_memberships (target_id, source_id)");
+  assertStringIncludes(lower, "on conflict do nothing");
+});

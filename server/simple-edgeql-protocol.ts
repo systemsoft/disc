@@ -486,7 +486,17 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
 
-        if (normalizedSQL.includes("select")) {
+        // Junction-backed multi-link writes compile to a data-modifying CTE
+        // (`WITH ins/upd AS (INSERT|UPDATE ...) ... SELECT * FROM ...`): a
+        // mutation that also contains a top-level SELECT. Detect it first so
+        // the response keeps the single-row mutation shape.
+        const isCteWrite = normalizedSQL.startsWith("with") &&
+          (normalizedSQL.includes("insert into") ||
+            normalizedSQL.includes("update "));
+
+        if (isCteWrite) {
+          return { data: result.rows[0] || { success: true } };
+        } else if (normalizedSQL.includes("select")) {
           return { data: result.rows };
         } else if (
           normalizedSQL.includes("insert") &&

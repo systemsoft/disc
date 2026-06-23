@@ -77,6 +77,15 @@ export class TypeScriptGenerator {
 
   /*** PRIVATE ------------------------------------------ ***/
 
+  /**
+   * Strip a module qualifier from a link target (e.g. "default::Tag" → "Tag").
+   * Multi-link junction-write subqueries and doc comments reference the bare
+   * target type name.
+   */
+  private bareTargetName(target: string): string {
+    return target.includes("::") ? target.split("::").pop()! : target;
+  }
+
   private formatContent(content: string): string {
     if (!this.config.formatOutput)
       return content;
@@ -339,14 +348,22 @@ export class TypeScriptGenerator {
       content += `${indent}  ${propName}${optional}: ${tsType};\n`;
     }
 
-    /*** Single links are settable by target UUID — insert() casts them as <uuid> and the
-         compiler maps the link onto its FK column. Multi links need junction rows and computed
-         links aren't stored, so both are excluded. ***/
+    /*** Links. Single links are settable by target UUID — insert() casts them as <uuid> and the
+         compiler maps the link onto its FK column. Multi links assign the full set by target UUID
+         array — insert() turns that into a junction-write subquery. Computed links aren't stored,
+         so they're excluded either way. ***/
     for (const [linkName, link] of typeDef.links) {
-      if (link.multi || link.computed)
+      if (link.computed)
         continue;
 
       const optional = link.required ? "" : "?";
+
+      if (link.multi) {
+        content += `${indent}  /** UUIDs of linked ${this.bareTargetName(link.target)} (assigns the full set) */\n`;
+        content += `${indent}  ${linkName}${optional}: string[];\n`;
+        continue;
+      }
+
       content += `${indent}  /** UUID of the linked ${link.target} */\n`;
       content += `${indent}  ${linkName}${optional}: string;\n`;
     }
@@ -568,11 +585,19 @@ export class TypeScriptGenerator {
     }
 
     /*** Single links are set by target UUID, so insert()/update() cast them as <uuid> and the
-         compiler maps the link name onto its FK column. Multi links (junction rows) and computed
-         links (not stored) are excluded — matching the Insert/Update interfaces. ***/
+         compiler maps the link name onto its FK column. Multi links go in _multiLinkTargets below
+         (junction-write subquery, not a scalar cast); computed links (not stored) are excluded —
+         matching the Insert/Update interfaces. ***/
+    const multiLinkTargetEntries: string[] = [];
+
     for (const [linkName, link] of typeDef.links) {
-      if (link.multi || link.computed)
+      if (link.computed)
         continue;
+
+      if (link.multi) {
+        multiLinkTargetEntries.push(`    ${linkName}: "${this.bareTargetName(link.target)}"`);
+        continue;
+      }
 
       typeCastEntries.push(`    ${linkName}: "<uuid>"`);
     }
@@ -619,6 +644,17 @@ export class TypeScriptGenerator {
     content += typeCastEntries.join(",\n");
 
     if (typeCastEntries.length > 0)
+      content += ",\n";
+
+    content += `  };\n\n`;
+
+    /*** Static multi-link target map — link name → bare target EdgeQL type. insert()/update()
+         build a `select <Target> filter .id in array_unpack(<array<uuid>>$...)` subquery from a
+         UUID array param so junction rows are written/replaced/deltaed. ***/
+    content += `  private static _multiLinkTargets: Record<string, string> = {\n`;
+    content += multiLinkTargetEntries.join(",\n");
+
+    if (multiLinkTargetEntries.length > 0)
       content += ",\n";
 
     content += `  };\n\n`;
@@ -678,24 +714,56 @@ export class TypeScriptGenerator {
     content += `    return await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables);\n`;
     content += `  }\n\n`;
 
-    /*** Insert method ***/
+    /*** Insert method. Multi-link keys assign the full set via a junction-write subquery built from
+         a UUID array param; scalar/single-link keys keep the cast-and-bind path. ***/
     content += `  /** Insert new ${typeName} */\n`;
     content += `  async insert(data: ${insertRef}): Promise<${typeRef}> {\n`;
-    content += `    const assignments = Object.entries(data)\n`;
-    content += `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
-    content += `      .join(", ");\n`;
+    content += `    const variables: Record<string, unknown> = {};\n`;
+    content += `    const assignments = Object.entries(data).map(([key, value]) => {\n`;
+    content += `      const target = ${builderName}._multiLinkTargets[key];\n`;
+    content += `      if (target) {\n`;
+    content += `        variables[key] = value;\n`;
+    content += `        return \`\${key} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`;\n`;
+    content += `      }\n`;
+    content += `      variables[key] = value;\n`;
+    content += `      return \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
+    content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
-    content += `    return await this.client.query<${typeRef}>(query, data);\n`;
+    content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
     content += `  }\n\n`;
 
-    /*** Update method ***/
+    /*** Update method. Multi-link keys branch on value shape: a bare array replaces the whole set
+         (\`:=\`), while a { add, remove } object applies a junction delta (\`+=\` / \`-=\`) with
+         distinct \`__add\` / \`__remove\` params so they never collide with each other or \`id\`.
+         Scalar/single-link keys keep the cast-and-bind path. ***/
     content += `  /** Update ${typeName} by ID */\n`;
     content += `  async update(id: string, data: ${updateRef}): Promise<${typeRef}> {\n`;
-    content += `    const assignments = Object.entries(data)\n`;
-    content += `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
-    content += `      .join(", ");\n`;
-    content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
-    content += `    return await this.client.query<${typeRef}>(query, { id, ...data });\n`;
+    content += `    const variables: Record<string, unknown> = { id };\n`;
+    content += `    const assignments: string[] = [];\n`;
+    content += `    for (const [key, value] of Object.entries(data)) {\n`;
+    content += `      const target = ${builderName}._multiLinkTargets[key];\n`;
+    content += `      if (target) {\n`;
+    content += `        if (Array.isArray(value)) {\n`;
+    content += `          variables[key] = value;\n`;
+    content += `          assignments.push(\`\${key} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`);\n`;
+    content += `        } else {\n`;
+    content += `          const delta = (value ?? {}) as { add?: string[]; remove?: string[] };\n`;
+    content += `          if (delta.add) {\n`;
+    content += `            variables[\`\${key}__add\`] = delta.add;\n`;
+    content += `            assignments.push(\`\${key} += (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__add))\`);\n`;
+    content += `          }\n`;
+    content += `          if (delta.remove) {\n`;
+    content += `            variables[\`\${key}__remove\`] = delta.remove;\n`;
+    content += `            assignments.push(\`\${key} -= (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__remove))\`);\n`;
+    content += `          }\n`;
+    content += `        }\n`;
+    content += `        continue;\n`;
+    content += `      }\n`;
+    content += `      variables[key] = value;\n`;
+    content += `      assignments.push(\`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
+    content += `    }\n`;
+    content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;
+    content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
     content += `  }\n\n`;
 
     /*** Delete method ***/
@@ -887,10 +955,18 @@ export class TypeScriptGenerator {
       content += `${indent}  ${propName}?: ${tsType};\n`;
     }
 
-    /*** Single links — same UUID-string convention as Insert, always optional ***/
+    /*** Links — always optional in update. Single links take a UUID string (same convention as
+         Insert). Multi links take either a bare array (replaces the whole set) or a delta object
+         (`add` / `remove`). Computed links aren't stored, so they're excluded. ***/
     for (const [linkName, link] of typeDef.links) {
-      if (link.multi || link.computed)
+      if (link.computed)
         continue;
+
+      if (link.multi) {
+        content += `${indent}  /** UUIDs of linked ${this.bareTargetName(link.target)}: an array replaces the whole set; { add, remove } applies a delta */\n`;
+        content += `${indent}  ${linkName}?: string[] | { add?: string[]; remove?: string[] };\n`;
+        continue;
+      }
 
       content += `${indent}  /** UUID of the linked ${link.target} */\n`;
       content += `${indent}  ${linkName}?: string;\n`;
