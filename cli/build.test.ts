@@ -18,28 +18,28 @@ import {
   refreshEmbeddedPgManifest,
   refreshEmbeddedSdkManifest,
   runUiBuild,
-  shouldRefreshUiManifest
+  shouldRebuildUi
 } from "./build.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
 
-Deno.test("shouldRefreshUiManifest - false for a routine build (no flag, no env)", () => {
-  assertEquals(shouldRefreshUiManifest({}, () => undefined), false);
-  assertEquals(shouldRefreshUiManifest({ release: false }, () => undefined), false);
+Deno.test("shouldRebuildUi - false for a routine build (no flag, no env)", () => {
+  assertEquals(shouldRebuildUi({}, () => undefined), false);
+  assertEquals(shouldRebuildUi({ release: false }, () => undefined), false);
 });
 
-Deno.test("shouldRefreshUiManifest - true when --release is set", () => {
-  assertEquals(shouldRefreshUiManifest({ release: true }, () => undefined), true);
+Deno.test("shouldRebuildUi - true when --release is set", () => {
+  assertEquals(shouldRebuildUi({ release: true }, () => undefined), true);
 });
 
-Deno.test("shouldRefreshUiManifest - true when DISC_BUILD_REFRESH_MANIFEST=1 (CI opt-in)", () => {
-  const env = (key: string) => (key === "DISC_BUILD_REFRESH_MANIFEST" ? "1" : undefined);
-  assertEquals(shouldRefreshUiManifest({}, env), true);
+Deno.test("shouldRebuildUi - true when DISC_BUILD_REBUILD_UI=1 (CI opt-in)", () => {
+  const env = (key: string) => (key === "DISC_BUILD_REBUILD_UI" ? "1" : undefined);
+  assertEquals(shouldRebuildUi({}, env), true);
 });
 
-Deno.test("shouldRefreshUiManifest - env values other than \"1\" do not trigger a refresh", () => {
-  const env = (key: string) => (key === "DISC_BUILD_REFRESH_MANIFEST" ? "true" : undefined);
-  assertEquals(shouldRefreshUiManifest({}, env), false);
+Deno.test("shouldRebuildUi - env values other than \"1\" do not trigger a rebuild", () => {
+  const env = (key: string) => (key === "DISC_BUILD_REBUILD_UI" ? "true" : undefined);
+  assertEquals(shouldRebuildUi({}, env), false);
 });
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {

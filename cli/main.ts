@@ -328,7 +328,7 @@ const COMMAND_HELP: Record<string, string> = {
     ${inverse("  OPTIONS ")}
 
       --lite ${gray(".".repeat(19))} Skip bundling UI assets (smaller binary)
-      --release ${gray(".".repeat(16))} Rebuild UI + refresh server/ui-asset-manifest.ts (else reuse the committed bundle)
+      --release ${gray(".".repeat(16))} Rebuild the UI bundle via Vite (else reuse the committed ui/build/)
       -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output binary path
       --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64 | windows-x64
   `,

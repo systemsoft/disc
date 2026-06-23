@@ -8,11 +8,11 @@
  * Wraps `deno compile` to produce self-contained binaries for Disc.
  * Supports cross-compilation to multiple platforms via --platform flag.
  *
- * Bundle I: a `--release` build (or DISC_BUILD_REFRESH_MANIFEST=1) regenerates
- * `server/ui-asset-manifest.ts` from the contents of `ui/build/` so the runtime
- * asset handler matches the embedded files. Routine builds reuse the committed
- * bundle + manifest as-is, so they never churn that tracked file as a side
- * effect — see `shouldRefreshUiManifest`.
+ * Bundle I: the build always refreshes `server/ui-asset-manifest.ts` from the
+ * contents of `ui/build/` so the runtime asset handler matches the embedded
+ * files (it's a conditional write — a no-op when nothing changed). The UI
+ * *rebuild* (Vite, which churns content hashes) is what's gated behind a
+ * `--release` build or DISC_BUILD_REBUILD_UI=1 — see `shouldRebuildUi`.
  */
 
 /*** NATIVE ------------------------------------------- ***/
@@ -46,18 +46,19 @@ export interface BuildOptions {
 }
 
 /**
- * Decide whether a build should (re)build the UI and rewrite the tracked
- * `server/ui-asset-manifest.ts`. That file is derived from the git-ignored
- * `ui/build/`, so refreshing it on every routine build (e.g. building the
- * binary to verify codegen) churns a tracked source file with machine-specific
- * Vite content hashes. Gate it: only an explicit `--release` build, or
- * `DISC_BUILD_REFRESH_MANIFEST=1` (for CI), regenerates the manifest.
+ * Decide whether a build should re-run the UI build (Vite). Vite mints fresh
+ * content hashes on every run even from identical source, so rebuilding on every
+ * routine build (e.g. building the binary to verify codegen) churns the embedded
+ * `ui/build/` — and, through the manifest refresh, the tracked
+ * `server/ui-asset-manifest.ts`. Gate it: only an explicit `--release` build, or
+ * `DISC_BUILD_REBUILD_UI=1` (for CI), re-runs the UI build. The manifest itself
+ * is always refreshed to match `ui/build/`; only the rebuild is gated.
  */
-export function shouldRefreshUiManifest(
+export function shouldRebuildUi(
   options: Pick<BuildOptions, "release">,
   env: (key: string) => string | undefined = key => Deno.env.get(key)
 ): boolean {
-  return options.release === true || env("DISC_BUILD_REFRESH_MANIFEST") === "1";
+  return options.release === true || env("DISC_BUILD_REBUILD_UI") === "1";
 }
 
 /** Whether `path` exists and is a directory. */
@@ -309,18 +310,25 @@ export class BuildCommand {
          release tag never ships a stale or broken UI; host builds warn + continue with whatever’s
          already in `ui/build/`. Skip entirely in --lite mode where the UI isn’t shipped. ***/
     if (!options.lite) {
-      /*** The embedded UI assets (`ui/build/`) and the tracked manifest (`server/ui-asset-manifest.ts`,
-           the `UI_ASSET_SET`) are a matched pair, so rebuilding the UI and refreshing the manifest are
-           gated together. Routine builds reuse the committed pair as-is and never rewrite the tracked
-           file; only `--release` (or DISC_BUILD_REFRESH_MANIFEST=1) regenerates it. As a one-time
-           necessity, a build with no `ui/build/` yet still builds + refreshes so there’s something
-           consistent to embed. ***/
-      const refreshManifest = shouldRefreshUiManifest(options);
+      /*** Two distinct steps that the build used to conflate:
+
+           1. Rebuild the UI (`runUiBuild` → Vite). Vite mints fresh content hashes on every run even
+              from identical source, so doing this on every build churns the tracked manifest. Gate it
+              behind `--release` (or DISC_BUILD_REBUILD_UI=1). A build with no `ui/build/` yet
+              still rebuilds once so there’s something to embed.
+
+           2. Refresh the tracked manifest (`server/ui-asset-manifest.ts`) from whatever is in
+              `ui/build/`. ALWAYS do this: `ui/build/` is git-ignored, so the embedded bundle can drift
+              from the committed manifest the moment the UI is rebuilt locally — and the runtime asset
+              handler 404s every file the stale manifest doesn’t list. The refresh is a conditional
+              write (no-op when contents match), so an unchanged `ui/build/` never churns the file; it
+              only rewrites when the bundle genuinely changed. ***/
+      const rebuildUi = shouldRebuildUi(options);
       const uiBuildPresent = await directoryExists(join(Deno.cwd(), "ui", "build"));
 
-      if (refreshManifest || !uiBuildPresent) {
-        if (!refreshManifest)
-          console.log("  No ui/build/ yet — building UI and refreshing manifest (one-time).");
+      if (rebuildUi || !uiBuildPresent) {
+        if (!rebuildUi)
+          console.log("  No ui/build/ yet — building UI (one-time).");
 
         try {
           const uiBuild = await runUiBuild();
@@ -335,19 +343,18 @@ export class BuildCommand {
 
           console.warn(`  UI rebuild failed: ${(err as Error).message}`);
         }
-
-        /*** Refresh the manifest from whatever’s now in ui/build/ — either the fresh bundle we just
-             produced, or the pre-existing one if we skipped above. ***/
-        try {
-          const refreshed = await refreshUiManifest();
-
-          if (refreshed.wrote)
-            console.log(`  Refreshed UI manifest: ${refreshed.path}`);
-        } catch (err) {
-          console.warn(`  Skipped UI manifest refresh: ${(err as Error).message}`);
-        }
       } else {
-        console.log("  Using existing UI bundle; pass --release to rebuild and refresh the manifest.");
+        console.log("  Using existing UI bundle; pass --release to rebuild it.");
+      }
+
+      /*** Always reconcile the manifest with the embedded `ui/build/` so they can’t drift. ***/
+      try {
+        const refreshed = await refreshUiManifest();
+
+        if (refreshed.wrote)
+          console.log(`  Refreshed UI manifest: ${refreshed.path}`);
+      } catch (err) {
+        console.warn(`  Skipped UI manifest refresh: ${(err as Error).message}`);
       }
     }
 
