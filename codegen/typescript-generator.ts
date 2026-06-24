@@ -15,6 +15,7 @@ import { default as dedent } from "@netopwibby/dedent";
 import * as Context from "../compiler/context.ts";
 import * as Types from "./types.ts";
 import { getLogger } from "../lib/logger.ts";
+import { inferComputedTupleFields } from "./computed-tuple-inference.ts";
 
 const log = getLogger("codegen");
 
@@ -234,6 +235,29 @@ export class TypeScriptGenerator {
     content += `${indent}export interface ${tsTypeName}Filter {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
+      // Computed named-tuple property (e.g. `counts := (videos := count(...))`):
+      // emit a typed nested filter `counts?: { videos?: number | Op<…> }`.
+      // Computed props we can't infer are omitted (rather than emitting a
+      // broken `unknown | Op<unknown>` field).
+      if (prop.computed) {
+        const fields = prop.computedExpr ?
+          inferComputedTupleFields(prop.computedExpr) :
+          null;
+        if (!fields) {
+          continue;
+        }
+        const inner = Object
+          .entries(fields)
+          .map(([field, edgeqlType]) => {
+            const ts = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, false);
+            const op = this.getOperatorHelperFor(edgeqlType, ts);
+            return `${field}?: ${ts} | ${op}`;
+          })
+          .join("; ");
+        content += `${indent}  ${propName}?: { ${inner} };\n`;
+        continue;
+      }
+
       const typeForMapping = prop.edgeqlType ?? prop.type;
       const tsType = Types.mapEdgeQLTypeToTypeScript(typeForMapping, true, prop.multi);
       const opHelper = this.getOperatorHelperFor(typeForMapping, tsType);
@@ -607,10 +631,25 @@ export class TypeScriptGenerator {
          without forward-reference gymnastics. Computed properties are skipped — you can’t filter on
          them and their cast would be the `<auto>` placeholder. ***/
     const typeInfoCastEntries: string[] = [];
+    // Computed named-tuple props the filter compiler can recurse into:
+    // `counts: { videos: "<int64>", … }`. Lets `{ counts: { videos: {gte} } }`
+    // emit `.counts.videos >= <int64>$p` (the compiler inlines the field expr).
+    const typeInfoComputedEntries: string[] = [];
 
     for (const [propName, prop] of typeDef.properties) {
-      if (prop.computed)
+      if (prop.computed) {
+        const fields = prop.computedExpr ?
+          inferComputedTupleFields(prop.computedExpr) :
+          null;
+        if (fields) {
+          const casts = Object
+            .entries(fields)
+            .map(([field, edgeqlType]) => `${field}: "${Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType)}"`)
+            .join(", ");
+          typeInfoComputedEntries.push(`      ${propName}: { ${casts} }`);
+        }
         continue;
+      }
 
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
@@ -676,8 +715,15 @@ export class TypeScriptGenerator {
     if (typeInfoLinkEntries.length > 0)
       content += ",\n";
 
-    content += `    }\n`;
-    content += `  };\n\n`;
+    content += `    }`;
+
+    if (typeInfoComputedEntries.length > 0) {
+      content += `,\n    computed: {\n`;
+      content += typeInfoComputedEntries.join(",\n");
+      content += `\n    }`;
+    }
+
+    content += `\n  };\n\n`;
     content += `  constructor(private client: DiscClient) {}\n\n`;
 
     /*** Select methods ***/

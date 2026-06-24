@@ -90,6 +90,30 @@ Deno.test("TypeScriptGenerator - generated query builder has correct _typeCasts 
   assertStringIncludes(content, `score: "<float64>"`);
 });
 
+/*** --- Computed named-tuple property → typed nested filter + TypeInfo --- ***/
+
+Deno.test("TypeScriptGenerator - computed tuple property generates typed nested filter and _typeInfo.computed", () => {
+  const manager = new SchemaManager({});
+  const parsed = manager.parseSDL(`module default {
+    type Video { required title: str; required channel: Channel; required size: int64; }
+    type Channel {
+      required name: str;
+      counts := ( videos := count(.<channel[is Video]), posts := count(.<channel[is Video]) );
+    }
+  }`);
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+  const result = new TypeScriptGenerator(schema, createDefaultConfig()).generate();
+  const all = result.files.map(f => f.content).join("\n");
+
+  // Typed nested filter on the computed tuple (not a broken `unknown | Op`).
+  assertStringIncludes(all, "counts?: { videos?:");
+  // Runtime TypeInfo carries per-field casts so the filter compiler recurses.
+  assertStringIncludes(all, "computed: {");
+  assertStringIncludes(all, `counts: { videos: "<int64>"`);
+});
+
 /*** --- Insert method uses correct casts --- ***/
 
 Deno.test("TypeScriptGenerator - insert method uses _typeCasts lookup", () => {
