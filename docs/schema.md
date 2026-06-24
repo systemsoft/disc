@@ -323,6 +323,14 @@ module default {
 
 Computed properties use the `:=` assignment syntax and reference other properties using the dot prefix (`.property_name`).
 
+A computed value can be a **named tuple** of aggregates — a common pattern for rollups:
+
+```sdl
+counts := ( videos := count(.<channel[is Video]), posts := count(.<channel[is Post]) );
+```
+
+Computed properties are read-only outputs: they're excluded from the `{ * }` splat (select them explicitly) and from insert/update. Fields of a named-tuple computed are filterable — see [Filter API → Computed field filters](filter-api.md#computed-field-filters).
+
 ### Property Qualifiers Summary
 
 | Qualifier       | Effect                                          |

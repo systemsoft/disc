@@ -49,6 +49,17 @@ await client.payment.filter({
 
 Range queries on one field stay grouped (`{ amount: { gte, lt } }`) instead of being split into two unrelated keys.
 
+### `undefined` vs `null`
+
+A field whose value is `undefined` is **skipped** — it adds no constraint. This lets you pass optional predicates without branching:
+
+```ts
+// Filter by id OR slug — whichever is set. The undefined one is ignored.
+await client.video.filter({ id: maybeId, slug: maybeSlug, limit: 1 });
+```
+
+`null` is a real value (`.f = <T>$p` with a null binding), so use `undefined`, not `null`, to mean "no constraint."
+
 ---
 
 ## Boolean composition
@@ -98,6 +109,20 @@ await client.payment.filter({
     id: true,
     amount: true,
     merchant: { name: true, tier: true }
+  }
+});
+```
+
+### Computed properties are opt-in
+
+The `{ * }` splat (and `link: true`, which expands to `{ * }`) returns **stored columns only** — computed properties are excluded. Select them explicitly, including inside a nested link:
+
+```ts
+await client.channel.filter({
+  select: {
+    "*": true, // stored columns
+    counts: true, // computed — must be named explicitly
+    owner: { name: true, counts: true } // computed on a linked object, too
   }
 });
 ```
@@ -173,6 +198,36 @@ When the terminal step is `id`, the JOIN is elided since the junction's target c
 await client.user.filter({ tags: { id: tagId } });
 // → ... filter EXISTS (SELECT 1 FROM user_tags j WHERE j.user_id = u.id AND j.tag_id = $1)
 ```
+
+Operators work through the link too. Membership (`in`) over a multi-link means "has a related row whose field is in the set" — e.g. videos sharing any tag with a set of ids:
+
+```ts
+await client.video.filter({ tags: { id: { in: tagIds } } });
+// → ... filter EXISTS (SELECT 1 FROM video_tags j WHERE j.video_id = v.id AND j.tag_id = ANY($1))
+```
+
+---
+
+## Computed field filters
+
+You can filter on a field of a computed **named-tuple** property. Given:
+
+```
+type Channel {
+  counts := ( videos := count(.<channel[is Video]), posts := count(.<channel[is Post]) );
+}
+```
+
+filter on `counts.videos` with the same operator objects as any scalar — the field is typed (`count`/`sum` → `bigint`):
+
+```ts
+await client.channel.filter({
+  counts: { videos: { gte: 5n } } // channels with ≥ 5 videos
+});
+// → ... filter (SELECT count(*) FROM video WHERE video.channel_id = channel.id) >= <int64>$p
+```
+
+The compiler inlines the named field's underlying expression, so `counts.videos` becomes the same correlated aggregate it computes on read — no stored column, no extra query. Only named-tuple computeds whose fields are aggregates/simple scalars are exposed in the typed filter; anything else stays reachable via raw EdgeQL (`filter count(.<channel[is Video]) >= 5`).
 
 ---
 
