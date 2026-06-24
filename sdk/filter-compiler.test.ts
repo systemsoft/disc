@@ -55,6 +55,57 @@ Deno.test("compileFilter — multiple top-level keys are implicit AND", () => {
   assertEquals(result.variables, { p0: "paid", p1: 100 });
 });
 
+const channelInfo: TypeInfo = {
+  casts: { id: "<uuid>", name: "<str>" },
+  links: {},
+  computed: {
+    counts: { videos: "<int64>", posts: "<int64>" },
+    storage: { bytes: "<int64>" }
+  }
+};
+
+Deno.test("compileFilter — computed tuple field compiles to a dotted path with the field cast", () => {
+  const result = compileFilter(
+    "Channel",
+    { counts: { videos: { gte: 5 } } },
+    channelInfo
+  );
+  assertEquals(result.clause, "(.counts.videos >= <int64>$p0)");
+  assertEquals(result.variables, { p0: 5 });
+});
+
+Deno.test("compileFilter — computed tuple coexists with scalar predicate", () => {
+  const result = compileFilter(
+    "Channel",
+    { name: "x", storage: { bytes: { gt: 1000 } } },
+    channelInfo
+  );
+  assertEquals(
+    result.clause,
+    ".name = <str>$p0 and (.storage.bytes > <int64>$p1)"
+  );
+  assertEquals(result.variables, { p0: "x", p1: 1000 });
+});
+
+Deno.test("compileFilter — undefined field value is skipped (no unbound placeholder)", () => {
+  // Pattern: filter by id OR slug, where one is undefined. The undefined
+  // field must NOT emit a $param (which would have no bound value and break
+  // parameter binding: "supplies 1 parameters, but ... requires 2").
+  const result = compileFilter(
+    "Payment",
+    { status: undefined, amount: 100 },
+    paymentInfo
+  );
+  assertEquals(result.clause, ".amount = <float64>$p0");
+  assertEquals(result.variables, { p0: 100 });
+});
+
+Deno.test("compileFilter — null is a real value, not skipped", () => {
+  const result = compileFilter("Payment", { status: null }, paymentInfo);
+  assertEquals(result.clause, ".status = <str>$p0");
+  assertEquals(result.variables, { p0: null });
+});
+
 Deno.test("compileFilter — operator object emits one clause per op", () => {
   const result = compileFilter(
     "Payment",

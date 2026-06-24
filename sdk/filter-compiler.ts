@@ -27,6 +27,14 @@ import type { Expr, FilterArg } from "./query-builder.ts";
 export interface TypeInfo {
   casts: Record<string, string>;
   links: Record<string, () => TypeInfo>;
+  /**
+   * Computed named-tuple properties (e.g. `counts := (videos := count(...))`)
+   * keyed by property name → { tupleField → EdgeQL cast }. Lets the filter
+   * compiler treat `{ counts: { videos: { gte: 5 } } }` as a pseudo-link,
+   * emitting `.counts.videos >= <int64>$p` (the compiler inlines the field's
+   * underlying expression). Omitted for types with no filterable computeds.
+   */
+  computed?: Record<string, Record<string, string>>;
 }
 
 export interface CompiledFilter {
@@ -288,6 +296,16 @@ function compileObject(
       continue;
     }
 
+    // `undefined` means "no constraint on this field" — skip it entirely.
+    // Emitting a placeholder for an undefined value produces SQL with a
+    // bound `$param` that has no value, which breaks parameter binding
+    // ("supplies N parameters, but ... requires N+1"). This lets callers
+    // pass optional predicates (e.g. id OR slug). `null` is left intact as
+    // a real value (compiles to `= <cast>$p` with a null binding).
+    if (value === undefined) {
+      continue;
+    }
+
     // Link — recurse with extended path prefix.
     const linkThunk = info.links[key];
     if (linkThunk) {
@@ -295,6 +313,23 @@ function compileObject(
       const savedPrefix = ctx.pathPrefix;
       ctx.pathPrefix = `${savedPrefix}.${key}`;
       const inner = compileArg(value as FilterArg, targetInfo, ctx);
+      ctx.pathPrefix = savedPrefix;
+      if (inner.length > 0) {
+        clauses.push(`(${inner})`);
+      }
+      continue;
+    }
+
+    // Computed named-tuple property — recurse as a pseudo-link, treating each
+    // tuple field as a scalar with the field's cast. `{ counts: { videos:
+    // { gte: 5 } } }` → `.counts.videos >= <int64>$p`; the compiler inlines
+    // the field's underlying expression.
+    const computedFields = info.computed?.[key];
+    if (computedFields) {
+      const fieldInfo: TypeInfo = { casts: computedFields, links: {} };
+      const savedPrefix = ctx.pathPrefix;
+      ctx.pathPrefix = `${savedPrefix}.${key}`;
+      const inner = compileArg(value as FilterArg, fieldInfo, ctx);
       ctx.pathPrefix = savedPrefix;
       if (inner.length > 0) {
         clauses.push(`(${inner})`);
