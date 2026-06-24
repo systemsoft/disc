@@ -1423,6 +1423,18 @@ Deno.test("SQL Compiler - SELECT User { * } expands to all scalar properties", (
   }
 });
 
+Deno.test("SQL Compiler - { * } splat excludes computed properties", () => {
+  // `postCount` is a computed property on User (columnName "post_count").
+  // Splat must NOT emit it — doing so referenced a nonexistent column
+  // (e.g. `column user.post_count does not exist`). Computed fields are
+  // opt-in via explicit selection.
+  const sql = compileEdgeQL("SELECT User { * }");
+  assertEquals(sql.includes("post_count"), false, `splat leaked computed col: ${sql}`);
+  assertEquals(sql.includes("'postCount'"), false, `splat leaked computed key: ${sql}`);
+  // Stored scalars are still present.
+  assertEquals(sql.includes("'name'"), true);
+});
+
 Deno.test("SQL Compiler - { * } splat coexists with FILTER", () => {
   const sql = compileEdgeQL(
     "SELECT User { * } FILTER .active = true"
@@ -1511,6 +1523,35 @@ Deno.test("SQL Compiler - multi-link .posts.id rewrites to EXISTS using FK short
   );
   assertEquals(/EXISTS/i.test(sql), true);
   assertEquals(sql.includes("posts"), true);
+});
+
+Deno.test("SQL Compiler - multi-link .posts.id IN array_unpack rewrites to EXISTS with = ANY", () => {
+  // The SDK filter API emits `.tags.id in array_unpack(<array<uuid>>$p)` for
+  // `{ tags: { id: { in: [...] } } }`. Over a multi-link this must become an
+  // EXISTS whose inner membership is `= ANY(arr)` (not invalid `IN UNNEST`).
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.id in array_unpack(<array<uuid>>$ids)"
+  );
+  assertEquals(/EXISTS/i.test(sql), true, `expected EXISTS: ${sql}`);
+  assertEquals(/=\s*ANY\(/i.test(sql), true, `expected = ANY(...): ${sql}`);
+  assertEquals(sql.includes("IN UNNEST"), false, `must not emit IN UNNEST: ${sql}`);
+});
+
+Deno.test("SQL Compiler - multi-link .posts.title IN array_unpack joins target inside EXISTS", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.title in array_unpack(<array<str>>$ts)"
+  );
+  assertEquals(/EXISTS/i.test(sql), true);
+  assertEquals(/=\s*ANY\(/i.test(sql), true, `expected = ANY(...): ${sql}`);
+  assertEquals(sql.includes("title"), true);
+});
+
+Deno.test("SQL Compiler - multi-link .posts.id NOT IN array_unpack uses <> ALL inside EXISTS", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.id not in array_unpack(<array<uuid>>$ids)"
+  );
+  assertEquals(/EXISTS/i.test(sql), true);
+  assertEquals(/<>\s*ALL\(/i.test(sql), true, `expected <> ALL(...): ${sql}`);
 });
 
 // --- Showcase #2: 3+ hop path expressions ---

@@ -726,7 +726,14 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         });
       };
       pushIfNew("id");
-      for (const propName of typeDef.properties.keys()) {
+      for (const [propName, prop] of typeDef.properties) {
+        // Splat covers stored columns only. Computed properties (e.g.
+        // `counts := count(...)`) have no physical column, so emitting them
+        // here produced `column <table>.<name> does not exist`. They remain
+        // available via explicit selection.
+        if (prop.computed) {
+          continue;
+        }
         pushIfNew(propName);
       }
     }
@@ -746,6 +753,37 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       return this.compileExpression(expr);
     }
     return SQL.createColumnReference(property.columnName, tableAlias);
+  }
+
+  /**
+   * Compile `.<computedProp>.<field>` where `computedProp` is a computed
+   * named-tuple property (e.g. `counts := (videos := count(...), ...)`).
+   * Pulls the named field's sub-expression out of the parsed tuple and
+   * compiles it in the current scope, so `.counts.videos` becomes the same
+   * SQL as the underlying `count(...)`. Returns null when the property
+   * isn't a computed named tuple or has no such field.
+   */
+  private compileComputedTupleField(
+    propName: string,
+    fieldName: string
+  ): SQL.SQLExpression | null {
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const property = td?.properties.get(propName);
+      if (!property?.computed || !property.computedExpr) {
+        continue;
+      }
+      const expr = new EdgeQLParser(property.computedExpr).parseExpressionOnly();
+      if (expr.kind !== "NamedTuple") {
+        return null;
+      }
+      const element = expr.elements.find(e => e.name === fieldName);
+      if (!element) {
+        return null;
+      }
+      return this.compileExpression(element.value);
+    }
+    return null;
   }
 
   private compileShapeElement(
@@ -914,8 +952,14 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
   ): SQL.SelectItem[] {
     const fields: SQL.JsonField[] = [];
 
-    // Add all properties
+    // Add all stored properties. Computed properties have no physical
+    // column, so emitting them as `table.<name>` would reference a column
+    // that doesn't exist — skip them (they're available via explicit
+    // selection, same as splat).
     for (const [name, property] of typeDef.properties) {
+      if (property.computed) {
+        continue;
+      }
       const value = SQL.createColumnReference(property.columnName, tableAlias);
       fields.push(SQL.createJsonField(name, value));
     }
@@ -1016,22 +1060,35 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     // back as `{}` (which a non-null consumer like GraphQL rejects).
     const elements = this.expandSplats(shape.elements, targetTypeDef.name);
     const jsonFields: SQL.JsonField[] = [];
-    for (const element of elements) {
-      if (element.expr.kind === "Identifier") {
-        const propName = element.expr.name;
-        const property = Context.getProperty(this.ctx, link.target, propName);
-        if (property) {
-          jsonFields.push(
-            SQL.createJsonField(
-              propName,
-              SQL.createColumnReference(
-                property.columnName,
-                targetTypeDef.tableName
-              )
-            )
-          );
+    // Compile the sub-shape with the same machinery as a top-level shape
+    // (compileShapeElement handles computed properties, nested links, and
+    // aliases — the old hand-rolled loop only emitted plain columns and so
+    // turned a computed prop into a nonexistent `<table>.<name>` column).
+    // Push a scope aliasing the linked type to this subquery's table so a
+    // computed property's backlink/aggregate expressions correlate here, not
+    // to the outer query.
+    Context.pushScope(this.ctx);
+    this.ctx.currentScope.aliases.set(
+      targetTypeDef.name.replace(/::/g, "_").toLowerCase(),
+      {
+        table: targetTypeDef.tableName,
+        alias: targetTypeDef.tableName,
+        type: targetTypeDef.name
+      }
+    );
+    try {
+      for (const element of elements) {
+        const field = this.compileShapeElement(
+          element,
+          targetTypeDef.name,
+          targetTypeDef.tableName
+        );
+        if (field) {
+          jsonFields.push(field);
         }
       }
+    } finally {
+      Context.popScope(this.ctx);
     }
 
     const jsonObject = SQL.createJsonBuildObject(jsonFields);
@@ -1273,6 +1330,20 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       const linked = this.compileLinkedPath(firstStep.name, secondStep.name);
       if (linked) {
         return linked;
+      }
+
+      // Field of a computed named-tuple property, e.g. `.counts.videos`
+      // where `counts := (videos := count(...), ...)`. Inline the named
+      // field's sub-expression so it compiles to the same SQL as selecting
+      // that aggregate directly.
+      if (firstStep.type === "property" && secondStep.type === "property") {
+        const tupleField = this.compileComputedTupleField(
+          firstStep.name,
+          secondStep.name
+        );
+        if (tupleField) {
+          return tupleField;
+        }
       }
 
       throw new CompilationError(

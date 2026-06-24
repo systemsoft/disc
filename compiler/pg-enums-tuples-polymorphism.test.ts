@@ -17,6 +17,7 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
+import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import type { Schema, TypeDef } from "./context.ts";
@@ -791,6 +792,11 @@ Deno.test({
     await pool.initialize();
 
     try {
+      // Generated CREATE TABLE defaults id to disc_uuidv7(); bootstrap the
+      // stdlib function first since this test runs raw DDL directly (not via
+      // the migration engine, which would bootstrap it).
+      await bootstrapStdlib(pool);
+
       // Use the DDL generator to produce CREATE TABLE with __type__
       const { DDLGenerator } = await import("../migration/ddl.ts");
       const generator = new DDLGenerator();

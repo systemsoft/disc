@@ -9,7 +9,6 @@
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
 import {
   backlinkIntersectionName,
   CompilerBase,
@@ -154,20 +153,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileIsTypeCheck(binOp);
     }
 
-    // Set-membership over an unpacked array: `x in array_unpack(<array<T>>$p)`
-    // maps to `array_unpack` → SQL `UNNEST`, but `x IN UNNEST(...)` is invalid
-    // Postgres. Lower it to `x = ANY(arr)` (and `x <> ALL(arr)` for `NOT IN`).
-    if (binOp.op === "IN" || binOp.op === "NOT IN") {
-      const arrayMembership = this.compileArrayMembership(binOp);
-      if (arrayMembership) {
-        return arrayMembership;
-      }
-    }
-
     // Multi-cardinality 2-step path on the LHS: rewrite the entire
     // comparison to EXISTS over the target table. EdgeQL set-comparison
     // semantics say `set OP scalar` is true if any element matches; SQL
     // EXISTS captures that without needing a "set" type.
+    //
+    // This MUST run before the array-membership lowering below: that lowering
+    // compiles the LHS as a path, which a multi-link path like `.tags.id`
+    // can't satisfy (it's not single-cardinality). `compileMultiLinkComparison`
+    // handles the `IN array_unpack(...)` RHS itself, inside the EXISTS.
     if (this.isMultiLinkPath(binOp.left) && this.isComparisonOp(binOp.op)) {
       const rewritten = this.compileMultiLinkComparison(
         binOp.left as EdgeQLAST.Path,
@@ -176,6 +170,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       );
       if (rewritten) {
         return rewritten;
+      }
+    }
+
+    // Set-membership over an unpacked array: `x in array_unpack(<array<T>>$p)`
+    // maps to `array_unpack` → SQL `UNNEST`, but `x IN UNNEST(...)` is invalid
+    // Postgres. Lower it to `x = ANY(arr)` (and `x <> ALL(arr)` for `NOT IN`).
+    if (binOp.op === "IN" || binOp.op === "NOT IN") {
+      const arrayMembership = this.compileArrayMembership(binOp);
+      if (arrayMembership) {
+        return arrayMembership;
       }
     }
 
@@ -1222,13 +1226,6 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return null;
       }
 
-      // Compile the RHS in the current scope (so parameters and other
-      // refs resolve correctly), then render to SQL so we can splice
-      // it as a string into the EXISTS body.
-      const rhsSql = new SQLCodeGenerator().generateExpression(
-        this.compileExpression(rhsExpr)
-      );
-
       // Junction-table multi link (many-to-many): EXISTS over the
       // junction with an INNER JOIN to the target. When the terminal
       // step is `id`, the junction's target column already holds the
@@ -1241,7 +1238,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         if (secondStep.name === "id") {
           const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
             `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
-            `AND "${jAlias}"."${targetCol}" ${op} ${rhsSql})`;
+            `AND ${this.renderInnerPredicate(`"${jAlias}"."${targetCol}"`, op, rhsExpr)})`;
           return { kind: "RawSQLExpression", sql };
         }
 
@@ -1255,7 +1252,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           `INNER JOIN "${targetType.tableName}" "${tAlias}" ` +
           `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" ` +
           `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
-          `AND "${tAlias}"."${prop.columnName}" ${op} ${rhsSql})`;
+          `AND ${this.renderInnerPredicate(`"${tAlias}"."${prop.columnName}"`, op, rhsExpr)})`;
         return { kind: "RawSQLExpression", sql };
       }
 
@@ -1284,10 +1281,43 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const subAlias = `__sub_${firstStep.name}`;
       const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" ` +
         `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" ` +
-        `AND "${subAlias}"."${targetColName}" ${op} ${rhsSql})`;
+        `AND ${this.renderInnerPredicate(`"${subAlias}"."${targetColName}"`, op, rhsExpr)})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;
+  }
+
+  /**
+   * Render the inner `<column> <op> <rhs>` predicate spliced into a multi-link
+   * EXISTS body. `<column>` is already-quoted SQL for the target column.
+   *
+   * `IN array_unpack(<array<T>>$p)` must lower to `<col> = ANY(arr)` (and
+   * `NOT IN` to `<> ALL(arr)`) — same reason as the top-level array-membership
+   * lowering: `<col> IN UNNEST(...)` is invalid Postgres. Everything else
+   * (scalar `=`, `<`, set-literal `IN {a, b}`, …) splices `<op> <rhs>` directly.
+   */
+  private renderInnerPredicate(
+    columnSql: string,
+    op: string,
+    rhsExpr: EdgeQLAST.Expression
+  ): string {
+    if (op === "IN" || op === "NOT IN") {
+      const r = rhsExpr;
+      if (
+        r.kind === "FunctionCall" &&
+        r.name.parts.join("_") === "array_unpack" &&
+        r.args.length === 1
+      ) {
+        const arr = this.renderSqlExpr(
+          this.compileExpression(r.args[0].value)
+        );
+        return op === "NOT IN" ?
+          `${columnSql} <> ALL(${arr})` :
+          `${columnSql} = ANY(${arr})`;
+      }
+    }
+    const rhsSql = this.renderSqlExpr(this.compileExpression(rhsExpr));
+    return `${columnSql} ${op} ${rhsSql}`;
   }
 
   private compileSetExpr(setExpr: EdgeQLAST.SetExpr): SQL.SQLExpression {
