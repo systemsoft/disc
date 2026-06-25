@@ -810,7 +810,12 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         const linkName = element.name.name;
         const link = Context.getLink(this.ctx, typeName, linkName);
         if (link) {
-          value = this.compileLinkWithShape(link, element.shape, tableAlias);
+          value = this.compileLinkWithShape(
+            link,
+            element.shape,
+            tableAlias,
+            element.orderBy
+          );
         } else {
           // Try as a property reference
           const property = Context.getProperty(this.ctx, typeName, linkName);
@@ -1041,7 +1046,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
   private compileLinkWithShape(
     link: Context.LinkDef,
     shape: EdgeQLAST.Shape,
-    parentAlias: string
+    parentAlias: string,
+    orderBy?: EdgeQLAST.OrderByClause[]
   ): SQL.SQLExpression {
     // Generate a subquery for the linked type with the given shape.
     // Use `resolveTypeName` (not `getTypeDef`) so a link target like
@@ -1076,6 +1082,10 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         type: targetTypeDef.name
       }
     );
+    // Compile the optional sub-shape ordering inside the pushed scope so its
+    // path expressions (e.g. `.created`) resolve to the target table's columns,
+    // not the outer query's.
+    let aggOrderBy: SQL.OrderByItem[] | undefined;
     try {
       for (const element of elements) {
         const field = this.compileShapeElement(
@@ -1087,12 +1097,19 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
           jsonFields.push(field);
         }
       }
+      if (orderBy && orderBy.length > 0) {
+        aggOrderBy = orderBy.map(item => ({
+          kind: "OrderByItem" as const,
+          expression: this.compileExpression(item.expr),
+          direction: item.direction || "ASC" as "ASC" | "DESC"
+        }));
+      }
     } finally {
       Context.popScope(this.ctx);
     }
 
     const jsonObject = SQL.createJsonBuildObject(jsonFields);
-    const jsonAgg = SQL.createJsonAgg(jsonObject);
+    const jsonAgg = SQL.createJsonAgg(jsonObject, aggOrderBy);
 
     // Determine the join condition and FROM clause
     // Three cases:

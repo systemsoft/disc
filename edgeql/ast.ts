@@ -175,6 +175,12 @@ export interface ShapeElement extends EdgeQLNode {
    */
   operator?: ":=" | "+=" | "-=";
   shape?: Shape;
+  /**
+   * Sub-shape ordering for a link element: `link: { ... } order by .field desc`.
+   * Applied to the linked set before aggregation — compiles to an `ORDER BY`
+   * inside the link's `jsonb_agg(...)`. Only meaningful when `shape` is set.
+   */
+  orderBy?: OrderByClause[];
   /** Type filter for polymorphic shape fields: [IS Type].property */
   typeFilter?: string;
   /**
@@ -552,6 +558,7 @@ export function createShapeElement(
     cardinality?: Cardinality;
     operator?: ":=" | "+=" | "-=";
     shape?: Shape;
+    orderBy?: OrderByClause[];
   }
 ): ShapeElement {
   return {

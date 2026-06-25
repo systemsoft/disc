@@ -673,6 +673,21 @@ export class EdgeQLParser {
     return AST.createShape(elements);
   }
 
+  /**
+   * Parse an optional `order by ...` clause trailing a link sub-shape, e.g.
+   * `posts: { title } order by .created desc`. Only valid when the element
+   * carried a nested shape; returns `undefined` when no `order by` follows.
+   */
+  private parseShapeOrderBy(
+    shape: AST.Shape | undefined
+  ): AST.OrderByClause[] | undefined {
+    if (!shape || !this.match(TokenType.ORDER)) {
+      return undefined;
+    }
+    this.consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
+    return this.parseOrderByList();
+  }
+
   private parseShapeElement(): AST.ShapeElement {
     let name: AST.Identifier | undefined;
     let computable = false;
@@ -806,7 +821,8 @@ export class EdgeQLParser {
           name,
           computable: false,
           cardinality,
-          shape
+          shape,
+          orderBy: this.parseShapeOrderBy(shape)
         });
       } else {
         // Reset if not a computed or aliased property
@@ -823,7 +839,11 @@ export class EdgeQLParser {
       shape = this.parseShape();
     }
 
-    return AST.createShapeElement(expr, { cardinality, shape });
+    return AST.createShapeElement(expr, {
+      cardinality,
+      shape,
+      orderBy: this.parseShapeOrderBy(shape)
+    });
   }
 
   private parseExpression(): AST.Expression {

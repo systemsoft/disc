@@ -164,6 +164,13 @@ function compileSelectShape(
 ): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(select)) {
+    // `order_by` inside a link's select object is consumed by the parent link
+    // (it orders that link's set, emitted as `link: { ... } order by ...`), so
+    // it's not a field of this shape. At the top level it has no parent link
+    // and is simply ignored — top-level ordering uses the sibling `order_by`.
+    if (key === "order_by") {
+      continue;
+    }
     if (key === "*") {
       // Splat: pull every scalar field of this type. Pairs with explicit
       // link keys (e.g. `{ "*": true, posts: true }` → `{ *, posts: { * } }`),
@@ -202,11 +209,13 @@ function compileSelectShape(
       if (!linkThunk) {
         throw new Error(`select: unknown link ${JSON.stringify(key)}`);
       }
-      const inner = compileSelectShape(
-        value as Record<string, unknown>,
-        linkThunk()
-      );
-      parts.push(`${key}: ${inner}`);
+      const linkSelect = value as Record<string, unknown>;
+      const inner = compileSelectShape(linkSelect, linkThunk());
+      // Order the linked set: `link: { ... } order by .field [desc]`.
+      const order = linkSelect.order_by !== undefined ?
+        ` ${compileOrderBy(linkSelect.order_by as string | string[])}` :
+        "";
+      parts.push(`${key}: ${inner}${order}`);
       continue;
     }
     throw new Error(

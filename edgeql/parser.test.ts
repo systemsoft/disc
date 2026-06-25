@@ -66,6 +66,32 @@ Deno.test("EdgeQL Parser - SELECT with Nested Shape", () => {
   }
 });
 
+Deno.test("EdgeQL Parser - link sub-shape with ORDER BY", () => {
+  const source = `
+    SELECT User {
+      name,
+      posts: {
+        title
+      } order by .created desc then .title
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const postsElement = ast.shape?.elements[1];
+    assertEquals(postsElement?.shape?.elements.length, 1);
+    // The trailing `order by` attaches to the link element, not the query.
+    assertEquals(postsElement?.orderBy?.length, 2);
+    assertEquals(postsElement?.orderBy?.[0].direction, "DESC");
+    assertEquals(postsElement?.orderBy?.[1].direction, undefined);
+    // The query itself carries no top-level order.
+    assertEquals(ast.orderBy, undefined);
+  }
+});
+
 Deno.test("EdgeQL Parser - SELECT with FILTER", () => {
   const source = `
     SELECT User {

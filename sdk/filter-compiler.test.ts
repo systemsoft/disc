@@ -282,6 +282,43 @@ Deno.test("Stage D — selectShape: nested link narrows sub-selection", () => {
   assertEquals(result.selectShape, "{ id, merchant: { email } }");
 });
 
+Deno.test("Stage D — selectShape: order_by on a link sub-shape orders that link", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { id: true, merchant: { email: true, order_by: ["-name"] } } },
+    paymentInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ id, merchant: { email } order by .name desc }"
+  );
+});
+
+Deno.test("Stage D — selectShape: order_by at the top level of select is ignored", () => {
+  // Top-level result ordering uses the sibling `order_by`, not one buried in
+  // the select shape — the latter has no parent link to attach to.
+  const result = compileFilter(
+    "Payment",
+    { select: { id: true, order_by: ["-amount"] } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ id }");
+  assertEquals(result.orderBy, null);
+});
+
+Deno.test("Stage D — selectShape: link `order_by` coexists with top-level order_by", () => {
+  const result = compileFilter(
+    "Payment",
+    {
+      order_by: "-amount",
+      select: { merchant: { "*": true, order_by: "name" } }
+    },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ merchant: { * } order by .name }");
+  assertEquals(result.orderBy, "order by .amount desc");
+});
+
 Deno.test("Stage D — selectShape: link as `true` pulls all fields (uses *)", () => {
   const result = compileFilter(
     "Payment",

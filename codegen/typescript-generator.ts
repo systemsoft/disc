@@ -866,7 +866,9 @@ export class TypeScriptGenerator {
   /**
    * Per-type Select interface. Each scalar field is `boolean` (true to
    * include); each link is `boolean | TargetSelect` (true to pull all
-   * fields, or a nested Select to narrow).
+   * fields, or a nested Select to narrow). When this Select is used as a
+   * link's sub-shape, `order_by` orders that link's set; at the top level it
+   * is ignored (use the sibling `order_by` on the filter instead).
    */
   private generateSelectType(typeDef: Context.TypeDef, indent: string = "", currentModule?: string): string {
     const tsTypeName = this.getTypeScriptTypeName(typeDef.name);
@@ -876,6 +878,8 @@ export class TypeScriptGenerator {
     // Splat: include every scalar field. Combine with link keys to get all
     // scalars plus shaped links (e.g. `{ "*": true, posts: true }`).
     content += `${indent}  "*"?: boolean;\n`;
+    // Order a link's set when this Select is a sub-shape: `-field` = desc.
+    content += `${indent}  order_by?: string | string[];\n`;
 
     for (const [propName] of typeDef.properties) {
       content += `${indent}  ${propName}?: boolean;\n`;

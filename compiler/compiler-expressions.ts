@@ -173,6 +173,24 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
     }
 
+    // Multi-link chain on the LHS, e.g. `.channels.videos.isDraft` or the
+    // deeper `.channels.videos.tags.name`: the SDK filter API emits this for a
+    // nested `{ channels: { videos: { … } } }` filter. Rewrite to nested
+    // EXISTS — each multi hop matches a linked row that itself has a linked row
+    // satisfying the inner predicate, to any depth. Runs before the generic
+    // path compilation (`compileLinkChain`), which only walks single-
+    // cardinality chains and would reject a multi hop.
+    if (this.isMultiHopLinkPath(binOp.left) && this.isComparisonOp(binOp.op)) {
+      const rewritten = this.compileMultiHopComparison(
+        binOp.left as EdgeQLAST.Path,
+        binOp.op,
+        binOp.right
+      );
+      if (rewritten) {
+        return rewritten;
+      }
+    }
+
     // Set-membership over an unpacked array: `x in array_unpack(<array<T>>$p)`
     // maps to `array_unpack` → SQL `UNNEST`, but `x IN UNNEST(...)` is invalid
     // Postgres. Lower it to `x = ANY(arr)` (and `x <> ALL(arr)` for `NOT IN`).
@@ -1285,6 +1303,192 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return { kind: "RawSQLExpression", sql };
     }
     return null;
+  }
+
+  /**
+   * True iff `expr` is a Path of 3+ steps whose first step resolves to a
+   * multi-cardinality link on any active alias's type — the `.multi....field`
+   * shape produced by a nested filter object two or more levels deep. The
+   * first hop being multi is what distinguishes this from a pure single-link
+   * chain (handled by `compileLinkChain`); `buildHopChainExists` walks the
+   * rest, descending through both further multi links and single-FK hops to
+   * any depth.
+   */
+  private isMultiHopLinkPath(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind !== "Path" || expr.steps.length < 3) {
+      return false;
+    }
+    if (!expr.steps.every(s => s.type === "property")) {
+      return false;
+    }
+    const first = expr.steps[0];
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const link = td?.links.get(first.name);
+      if (link?.multi) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Rewrite `.linkA.linkB.field <op> rhs` (two multi-link hops) into nested
+   * EXISTS:
+   *
+   *   EXISTS (SELECT 1 FROM <A_rows> WHERE <correlate A to outer>
+   *     AND EXISTS (SELECT 1 FROM <B_rows> WHERE <correlate B to A>
+   *       AND "<B>"."<col>" <op> <rhs>))
+   *
+   * Each hop may be a junction-table multi link or a backlink-style multi
+   * link; `buildHopChainExists` handles both. Returns `null` (fall through to
+   * the generic path compilation, which then errors) when any link in the
+   * chain isn't a resolvable multi link — e.g. a single-cardinality hop, which
+   * `compileLinkChain` already covers.
+   */
+  private compileMultiHopComparison(
+    path: EdgeQLAST.Path,
+    op: string,
+    rhsExpr: EdgeQLAST.Expression
+  ): SQL.SQLExpression | null {
+    const names = path.steps.map(s => (s as { name: string; }).name);
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const startType = Context.resolveTypeName(this.ctx, ta.type);
+      if (!startType?.links.get(names[0])) {
+        continue;
+      }
+      const sql = this.buildHopChainExists(
+        `"${ta.alias}"`,
+        startType,
+        names,
+        op,
+        rhsExpr,
+        0
+      );
+      if (sql) {
+        return { kind: "RawSQLExpression", sql };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Recursively build the nested-EXISTS body for a link chain whose first hop
+   * is multi-cardinality.
+   *
+   * `names` is `[linkName, …intermediate links…, terminalProp]`. The head is
+   * the link to descend; `parentRef` is the already-quoted alias of the row
+   * this hop correlates against (e.g. `"u"` or `"__h0_channels"`), so the
+   * correlation can read either `.id` (multi backlink / junction) or the FK
+   * column (single forward link) off it. When only `[linkName, terminalProp]`
+   * remains, the recursion bottoms out into a scalar predicate on the target
+   * column (via `renderInnerPredicate`, so `id`-shortcut and `array_unpack`
+   * membership are handled uniformly).
+   *
+   * Each hop may be a junction-table multi link, a backlink-style multi link,
+   * or a single forward-FK link — mixing freely along the chain. Returns
+   * `null` if a hop can't be resolved as one of those, so the caller can fall
+   * through to the generic path compiler.
+   */
+  private buildHopChainExists(
+    parentRef: string,
+    parentType: { links: Map<string, unknown>; },
+    names: string[],
+    op: string,
+    rhsExpr: EdgeQLAST.Expression,
+    depth: number
+  ): string | null {
+    const linkName = names[0];
+    const link = (parentType.links as Map<string, {
+      target: string;
+      multi?: boolean;
+      backlink?: string;
+      columnName?: string;
+      junctionTable?: string;
+      junctionSourceColumn?: string;
+      junctionTargetColumn?: string;
+    }>)
+      .get(linkName);
+    if (!link) {
+      return null;
+    }
+    const targetType = Context.resolveTypeName(this.ctx, link.target);
+    if (!targetType) {
+      return null;
+    }
+
+    const tAlias = `__h${depth}_${linkName}`;
+    let fromSql: string;
+    let correlation: string;
+
+    if (link.junctionTable) {
+      // Junction-table multi link: correlate the junction's source side to the
+      // parent row's id, joining the target so its columns are addressable.
+      const srcCol = link.junctionSourceColumn ?? "source_id";
+      const tgtCol = link.junctionTargetColumn ?? "target_id";
+      const jAlias = `__hj${depth}_${linkName}`;
+      fromSql = `"${targetType.tableName}" "${tAlias}" ` +
+        `INNER JOIN "${link.junctionTable}" "${jAlias}" ` +
+        `ON "${jAlias}"."${tgtCol}" = "${tAlias}"."id"`;
+      correlation = `"${jAlias}"."${srcCol}" = ${parentRef}."id"`;
+    } else if (link.multi && link.backlink) {
+      // Backlink-style multi link: the FK lives on the target, pointing back
+      // at the parent row's id.
+      const fkCol = (targetType.links.get(link.backlink) as
+        | { columnName?: string; }
+        | undefined)
+        ?.columnName;
+      if (!fkCol) {
+        return null;
+      }
+      fromSql = `"${targetType.tableName}" "${tAlias}"`;
+      correlation = `"${tAlias}"."${fkCol}" = ${parentRef}."id"`;
+    } else if (!link.multi && link.columnName) {
+      // Single forward link: the FK lives on the parent row; the target is the
+      // row whose id it points at.
+      fromSql = `"${targetType.tableName}" "${tAlias}"`;
+      correlation = `"${tAlias}"."id" = ${parentRef}."${link.columnName}"`;
+    } else {
+      return null;
+    }
+
+    const rest = names.slice(1);
+    let inner: string;
+    if (rest.length === 1) {
+      // Terminal scalar predicate on the target column.
+      const terminal = rest[0];
+      let colName: string;
+      if (terminal === "id") {
+        colName = "id";
+      } else {
+        const prop = targetType.properties.get(terminal);
+        if (!prop?.columnName) {
+          return null;
+        }
+        colName = prop.columnName;
+      }
+      inner = this.renderInnerPredicate(
+        `"${tAlias}"."${colName}"`,
+        op,
+        rhsExpr
+      );
+    } else {
+      // Descend one more hop, correlating it to this hop's target row.
+      const nested = this.buildHopChainExists(
+        `"${tAlias}"`,
+        targetType,
+        rest,
+        op,
+        rhsExpr,
+        depth + 1
+      );
+      if (!nested) {
+        return null;
+      }
+      inner = nested;
+    }
+
+    return `EXISTS (SELECT 1 FROM ${fromSql} WHERE ${correlation} AND ${inner})`;
   }
 
   /**

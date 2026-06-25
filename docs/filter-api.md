@@ -127,6 +127,22 @@ await client.channel.filter({
 });
 ```
 
+### Ordering a linked set
+
+A link sub-shape can carry its own `order_by` to sort that link's rows. Same convention as the top-level key: a string or array of strings, `-` prefix for descending.
+
+```ts
+await client.channel.filter({
+  select: {
+    "*": true,
+    videos: { "*": true, order_by: ["-created"] } // newest videos first
+  }
+});
+// → ... { *, videos: { * } order by .created desc }
+```
+
+The ordering applies to that link only (it compiles to an `ORDER BY` inside the link's `jsonb_agg`) and nests to any depth. An `order_by` placed at the **top level** of `select` is ignored — top-level result ordering uses the sibling `order_by` (see [Ordering, limit, offset](#ordering-limit-offset)). Capping a linked set (`limit`/`offset` on a sub-shape) is not yet supported; see [Not yet supported](#not-yet-supported).
+
 ---
 
 ## Link traversal
@@ -205,6 +221,22 @@ Operators work through the link too. Membership (`in`) over a multi-link means "
 await client.video.filter({ tags: { id: { in: tagIds } } });
 // → ... filter EXISTS (SELECT 1 FROM video_tags j WHERE j.video_id = v.id AND j.tag_id = ANY($1))
 ```
+
+### Multi-link chain — nested EXISTS
+
+Nested filter objects can descend through **more than one** multi link. Each multi hop adds an EXISTS layer, correlated to the one above it:
+
+```ts
+await client.customer.filter({
+  channels: { videos: { isDraft: 0n } }
+});
+// → ... filter EXISTS (SELECT 1 FROM channels c WHERE c.customer_id = cu.id
+//      AND EXISTS (SELECT 1 FROM videos v WHERE v.channel_id = c.id AND v.is_draft = $1))
+```
+
+This composes to any depth, and the hops can mix junction-table, backlink, and a trailing single-FK link freely. The one rule: the **first** hop must be a multi link — a chain that starts with a single link and only later reaches a multi link still needs raw EdgeQL (see [Not yet supported](#not-yet-supported)).
+
+Sibling keys each become their own nested EXISTS, AND-ed together, so `{ channels: { videos: { isDraft: 0n, isPrivate: 0n } } }` matches a customer that has a channel with a non-draft video **and** a channel with a non-private video (standard EdgeQL set semantics — not necessarily the same video).
 
 ---
 
@@ -306,11 +338,12 @@ const [PAYMENT] = await client.payment.filter({
   // they're needed:
   // ...or({ tier: "gold" }, { spend: { gte: 1000 } }),
 
-  // Shape narrowing (links can recurse)
+  // Shape narrowing (links can recurse and order their own set)
   select: {
     id: true,
     amount: true,
-    merchant: { name: true, tier: true }
+    merchant: { name: true, tier: true },
+    refunds: { "*": true, order_by: ["-created"] }
   },
 
   // Result shaping
@@ -334,9 +367,10 @@ When the object form doesn't fit (deeply custom EdgeQL, schema features the filt
 
 ## Not yet supported
 
-A few link-traversal patterns lower to compiler errors today and should fall back to raw EdgeQL until they land:
+A few patterns lower to compiler errors today and should fall back to raw EdgeQL until they land:
 
-- **Multi-link in the middle of a chain** (e.g. `.posts.author.email`). Single-cardinality link chains and 2-step multi-link traversals work; mixing the two in one chain needs EXISTS rewrites at each multi hop.
+- **A multi link reached _after_ a single link in the same chain** (e.g. `.author.posts.title`, where `author` is single and `posts` is multi). Chains that **start** with a multi link work to any depth — including a trailing single-FK hop — but when the first hop is single and a later hop is multi, the compiler can't yet place the EXISTS.
+- **`filter` / `limit` / `offset` on a `select` link sub-shape.** Only `order_by` is supported inside a linked set today; narrowing or capping it (e.g. "the latest 5 videos") needs raw EdgeQL.
 - **Explicit `<-` backlink syntax** (e.g. `.<author[is Post]`). When the source type doesn't pre-declare the back-link as a schema field, the explicit Gel syntax isn't yet plumbed through the parser.
 
 These are tracked alongside the closed gaps in the test suite at `sdk/filter-compiler-edgeql.test.ts` and `compiler/compiler.test.ts`.

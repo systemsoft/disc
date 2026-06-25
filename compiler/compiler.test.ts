@@ -1885,3 +1885,259 @@ Deno.test("SQL Compiler - subquery 'in (select ...)' membership is unchanged", (
   assertEquals(/IN\s*\(\s*SELECT/i.test(sql), true, `expected IN (SELECT: ${sql}`);
   assertEquals(sql.includes("ANY("), false, `unexpected ANY(: ${sql}`);
 });
+
+// --- Link sub-shape ordering (jsonb_agg ORDER BY) ---
+
+Deno.test("SQL Compiler - link sub-shape order by emits jsonb_agg ORDER BY", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { name, posts: { title } order by .title desc }"
+  );
+  assertEquals(sql.includes("jsonb_agg("), true, `expected jsonb_agg: ${sql}`);
+  assertEquals(
+    sql.includes("ORDER BY posts.title DESC"),
+    true,
+    `expected ordered jsonb_agg: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape multi-key order by joins with comma", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { posts: { title } order by .title then .body }"
+  );
+  // Two keys inside the same jsonb_agg ORDER BY.
+  assertEquals(
+    sql.includes("ORDER BY posts.title ASC, posts.body ASC"),
+    true,
+    `expected two-key ordering: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape without order by is unchanged", () => {
+  const sql = compileEdgeQL("SELECT User { posts: { title } }");
+  assertEquals(sql.includes("jsonb_agg"), true);
+  assertEquals(/ORDER BY/i.test(sql), false, `unexpected ORDER BY: ${sql}`);
+});
+
+// --- Showcase #4: two multi-link hops (nested EXISTS) ---
+
+/**
+ * A chain mixing backlink-style and junction-table multi links, plus a single
+ * forward link, so deep filter paths can be exercised end to end:
+ *   Customer --(multi channels)--> Channel --(multi videos)--> Video
+ *   Video --(multi tags, junction)--> Tag
+ *   Video --(single channel)--> Channel
+ * The filter `.channels.videos.isDraft = 0` lowers to a 2-layer nested EXISTS;
+ * `.channels.videos.tags.name = X` to a 3-layer one (junction at the deepest).
+ */
+function makeTwoHopSchema() {
+  const tagType = {
+    name: "Tag",
+    kind: "object" as const,
+    tableName: "tags",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str"
+      }]
+    ]),
+    links: new Map()
+  };
+  const videoType = {
+    name: "Video",
+    kind: "object" as const,
+    tableName: "videos",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["isDraft", {
+        name: "isDraft",
+        type: "int64",
+        required: true,
+        multi: false,
+        columnName: "is_draft",
+        edgeqlType: "int64"
+      }]
+    ]),
+    links: new Map<string, unknown>([
+      ["channel", {
+        name: "channel",
+        target: "Channel",
+        required: true,
+        multi: false,
+        columnName: "channel_id"
+      }],
+      ["tags", {
+        name: "tags",
+        target: "Tag",
+        required: false,
+        multi: true,
+        junctionTable: "video_tags",
+        junctionSourceColumn: "video_id",
+        junctionTargetColumn: "tag_id"
+      }]
+    ])
+  };
+  const channelType = {
+    name: "Channel",
+    kind: "object" as const,
+    tableName: "channels",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }]
+    ]),
+    links: new Map<string, unknown>([
+      ["customer", {
+        name: "customer",
+        target: "Customer",
+        required: true,
+        multi: false,
+        columnName: "customer_id"
+      }],
+      ["videos", {
+        name: "videos",
+        target: "Video",
+        required: false,
+        multi: true,
+        backlink: "channel"
+      }]
+    ])
+  };
+  const customerType = {
+    name: "Customer",
+    kind: "object" as const,
+    tableName: "customers",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }]
+    ]),
+    links: new Map<string, unknown>([
+      ["channels", {
+        name: "channels",
+        target: "Channel",
+        required: false,
+        multi: true,
+        backlink: "customer"
+      }]
+    ])
+  };
+  return {
+    types: new Map([
+      ["Tag", tagType],
+      ["Video", videoType],
+      ["Channel", channelType],
+      ["Customer", customerType]
+    ]),
+    functions: new Map()
+  };
+}
+
+function compileTwoHop(source: string): string {
+  const localCompiler = new EdgeQLCompiler(makeTwoHopSchema() as never);
+  const ast = new EdgeQLParser(source).parse();
+  const r = localCompiler.compile(ast);
+  if (!r.ok) {
+    throw r.error;
+  }
+  return new SQLCodeGenerator().generate(r.value);
+}
+
+Deno.test("SQL Compiler - two multi-link hops .channels.videos.isDraft nests EXISTS", () => {
+  const sql = compileTwoHop(
+    "SELECT Customer { id } FILTER .channels.videos.isDraft = <int64>$d"
+  );
+  // Two EXISTS layers, one per multi hop.
+  assertEquals(
+    (sql.match(/EXISTS/gi) ?? []).length,
+    2,
+    `expected two EXISTS layers: ${sql}`
+  );
+  // Outer hop hits channels, correlated to the customer row.
+  assertEquals(sql.includes("channels"), true, `expected channels: ${sql}`);
+  assertEquals(sql.includes("customer_id"), true, `expected customer_id: ${sql}`);
+  // Inner hop hits videos, correlated to the channel row, with the predicate.
+  assertEquals(sql.includes("videos"), true, `expected videos: ${sql}`);
+  assertEquals(sql.includes("channel_id"), true, `expected channel_id: ${sql}`);
+  assertEquals(sql.includes("is_draft"), true, `expected is_draft column: ${sql}`);
+});
+
+Deno.test("SQL Compiler - two multi-link hops compose with AND across fields", () => {
+  // The shape the SDK filter API emits for
+  // `{ channels: { videos: { isDraft: 0, isPrivate: 0 } } }` — two separate
+  // comparisons, each its own nested EXISTS, joined by AND.
+  const sql = compileTwoHop(
+    "SELECT Customer { id } FILTER .channels.videos.isDraft = <int64>$a " +
+      "and .channels.videos.id = <uuid>$b"
+  );
+  assertEquals(
+    (sql.match(/EXISTS/gi) ?? []).length,
+    4,
+    `expected four EXISTS layers (two per comparison): ${sql}`
+  );
+  assertEquals(/\bAND\b/i.test(sql), true, `expected AND: ${sql}`);
+});
+
+Deno.test("SQL Compiler - three multi-link hops .channels.videos.tags.name nests three EXISTS", () => {
+  // Backlink → backlink → junction. The deepest hop joins the junction to the
+  // tags table to project `name`.
+  const sql = compileTwoHop(
+    "SELECT Customer { id } FILTER .channels.videos.tags.name = <str>$n"
+  );
+  assertEquals(
+    (sql.match(/EXISTS/gi) ?? []).length,
+    3,
+    `expected three EXISTS layers: ${sql}`
+  );
+  // Each hop's table is present, ending at the junction + tags projection.
+  assertEquals(sql.includes("channels"), true, `expected channels: ${sql}`);
+  assertEquals(sql.includes("videos"), true, `expected videos: ${sql}`);
+  assertEquals(sql.includes("video_tags"), true, `expected junction: ${sql}`);
+  assertEquals(sql.includes("name"), true, `expected name column: ${sql}`);
+});
+
+Deno.test("SQL Compiler - deep chain may end on a single-FK hop", () => {
+  // ...videos.channel.id mixes two multi hops with a trailing single forward
+  // link; the single hop correlates via the FK on its parent row.
+  const sql = compileTwoHop(
+    "SELECT Customer { id } FILTER .channels.videos.channel.id = <uuid>$x"
+  );
+  assertEquals(
+    (sql.match(/EXISTS/gi) ?? []).length,
+    3,
+    `expected three EXISTS layers: ${sql}`
+  );
+  assertEquals(sql.includes("channel_id"), true, `expected channel_id FK: ${sql}`);
+});
