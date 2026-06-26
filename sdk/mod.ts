@@ -61,6 +61,9 @@ export type {
 export { compileFilter } from "./filter-compiler.ts";
 export type { CompiledFilter, TypeInfo } from "./filter-compiler.ts";
 
+// EdgeQL identifier escaping (reserved-keyword field names)
+export { escapeEdgeQLIdent } from "./edgeql-ident.ts";
+
 // Codegen-free schema declaration (Phase 2 — drives typed builder inference)
 export { defineSchema, t } from "./schema-types.ts";
 export type {

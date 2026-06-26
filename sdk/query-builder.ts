@@ -24,6 +24,7 @@ import type {
   SelectShape
 } from "./schema-types.ts";
 import type { QueryOptions } from "./types.ts";
+import { escapeEdgeQLIdent } from "./edgeql-ident.ts";
 
 /** Minimum surface a client must expose to be awaitable from the builder. */
 export interface QueryRunner {
@@ -178,10 +179,10 @@ function compileExpr(arg: FilterArg, ctx: CompileCtx): string {
     case "binop": {
       const param = `p${ctx.nextN++}`;
       ctx.vars[param] = arg.value;
-      return `.${arg.field} ${arg.op} <${inferCast(arg.value)}>$${param}`;
+      return `.${escapeEdgeQLIdent(arg.field)} ${arg.op} <${inferCast(arg.value)}>$${param}`;
     }
     case "exists":
-      return `exists .${arg.field}`;
+      return `exists .${escapeEdgeQLIdent(arg.field)}`;
     case "and":
       return arg.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" and ");
     case "or":
@@ -196,9 +197,9 @@ function compileShape(shape: Shape): string {
   for (const [key, value] of Object.entries(shape)) {
     assertIdent(key, "shape field");
     if (value === true) {
-      parts.push(key);
+      parts.push(escapeEdgeQLIdent(key));
     } else {
-      parts.push(`${key}: ${compileShape(value)}`);
+      parts.push(`${escapeEdgeQLIdent(key)}: ${compileShape(value)}`);
     }
   }
   return `{ ${parts.join(", ")} }`;
@@ -308,7 +309,7 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
 
     if (this.order) {
       const dir = this.order.direction === "desc" ? " desc" : "";
-      parts.push(`order by .${this.order.field}${dir}`);
+      parts.push(`order by .${escapeEdgeQLIdent(this.order.field)}${dir}`);
     }
 
     if (this.limitN !== null) {

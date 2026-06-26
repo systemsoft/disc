@@ -25,6 +25,7 @@ export const EMBEDDED_SDK_MANIFEST: readonly EmbeddedSdkEntry[] = [
   { mode: 0o644, relPath: "auth.ts", sourceUrl: new URL(import.meta.resolve("../sdk/auth.ts")) },
   { mode: 0o644, relPath: "client.ts", sourceUrl: new URL(import.meta.resolve("../sdk/client.ts")) },
   { mode: 0o644, relPath: "codecs.ts", sourceUrl: new URL(import.meta.resolve("../sdk/codecs.ts")) },
+  { mode: 0o644, relPath: "edgeql-ident.ts", sourceUrl: new URL(import.meta.resolve("../sdk/edgeql-ident.ts")) },
   { mode: 0o644, relPath: "errors.ts", sourceUrl: new URL(import.meta.resolve("../sdk/errors.ts")) },
   { mode: 0o644, relPath: "filter-compiler.ts", sourceUrl: new URL(import.meta.resolve("../sdk/filter-compiler.ts")) },
   { mode: 0o644, relPath: "mod.ts", sourceUrl: new URL(import.meta.resolve("../sdk/mod.ts")) },

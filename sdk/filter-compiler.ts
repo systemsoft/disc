@@ -16,6 +16,7 @@
  */
 
 import type { Expr, FilterArg } from "./query-builder.ts";
+import { escapeEdgeQLIdent } from "./edgeql-ident.ts";
 
 /**
  * Per-type compile-time metadata. The codegen emits a `_typeInfo` per
@@ -198,9 +199,9 @@ function compileSelectShape(
       // selecting a link without a sub-shape yields just its id, which is
       // rarely what callers want, so we expand to {*} for links.
       if (info.links[key]) {
-        parts.push(`${key}: { * }`);
+        parts.push(`${escapeEdgeQLIdent(key)}: { * }`);
       } else {
-        parts.push(key);
+        parts.push(escapeEdgeQLIdent(key));
       }
       continue;
     }
@@ -215,7 +216,7 @@ function compileSelectShape(
       const order = linkSelect.order_by !== undefined ?
         ` ${compileOrderBy(linkSelect.order_by as string | string[])}` :
         "";
-      parts.push(`${key}: ${inner}${order}`);
+      parts.push(`${escapeEdgeQLIdent(key)}: ${inner}${order}`);
       continue;
     }
     throw new Error(
@@ -247,7 +248,7 @@ function compileOrderBy(orderBy: string | string[]): string {
     if (!IDENT_RE.test(name)) {
       throw new Error(`Invalid order_by field: ${JSON.stringify(field)}`);
     }
-    return `.${name}${isDesc ? " desc" : ""}`;
+    return `.${escapeEdgeQLIdent(name)}${isDesc ? " desc" : ""}`;
   });
   return `order by ${parts.join(" then ")}`;
 }
@@ -320,7 +321,7 @@ function compileObject(
     if (linkThunk) {
       const targetInfo = linkThunk();
       const savedPrefix = ctx.pathPrefix;
-      ctx.pathPrefix = `${savedPrefix}.${key}`;
+      ctx.pathPrefix = `${savedPrefix}.${escapeEdgeQLIdent(key)}`;
       const inner = compileArg(value as FilterArg, targetInfo, ctx);
       ctx.pathPrefix = savedPrefix;
       if (inner.length > 0) {
@@ -337,7 +338,7 @@ function compileObject(
     if (computedFields) {
       const fieldInfo: TypeInfo = { casts: computedFields, links: {} };
       const savedPrefix = ctx.pathPrefix;
-      ctx.pathPrefix = `${savedPrefix}.${key}`;
+      ctx.pathPrefix = `${savedPrefix}.${escapeEdgeQLIdent(key)}`;
       const inner = compileArg(value as FilterArg, fieldInfo, ctx);
       ctx.pathPrefix = savedPrefix;
       if (inner.length > 0) {
@@ -348,7 +349,7 @@ function compileObject(
 
     // Scalar — operator object or bare value.
     const cast = info.casts[key] ?? "<str>";
-    const path = `${ctx.pathPrefix}.${key}`;
+    const path = `${ctx.pathPrefix}.${escapeEdgeQLIdent(key)}`;
 
     if (isOperatorObject(value)) {
       for (const [op, opValue] of Object.entries(value)) {

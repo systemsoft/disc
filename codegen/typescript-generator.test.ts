@@ -717,7 +717,7 @@ Deno.test("Stage C — generated queries.ts imports compileFilter + FilterArg + 
   const queryFile = result.files.find(f => f.type === "queries");
   const content = queryFile!.content;
 
-  assertStringIncludes(content, "import { compileFilter, type FilterArg, type TypeInfo }");
+  assertStringIncludes(content, "import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo }");
 });
 
 Deno.test("Stage C — each builder declares a static _typeInfo with casts + link thunks", () => {

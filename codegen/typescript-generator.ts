@@ -769,10 +769,10 @@ export class TypeScriptGenerator {
     content += `      const target = ${builderName}._multiLinkTargets[key];\n`;
     content += `      if (target) {\n`;
     content += `        variables[key] = value;\n`;
-    content += `        return \`\${key} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`;\n`;
+    content += `        return \`\${escapeEdgeQLIdent(key)} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`;\n`;
     content += `      }\n`;
     content += `      variables[key] = value;\n`;
-    content += `      return \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
+    content += `      return \`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
     content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
     content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
@@ -791,22 +791,23 @@ export class TypeScriptGenerator {
     content += `      if (target) {\n`;
     content += `        if (Array.isArray(value)) {\n`;
     content += `          variables[key] = value;\n`;
-    content += `          assignments.push(\`\${key} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`);\n`;
+    content += `          assignments.push(\`\${escapeEdgeQLIdent(key)} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`);\n`;
     content += `        } else {\n`;
     content += `          const delta = (value ?? {}) as { add?: string[]; remove?: string[] };\n`;
     content += `          if (delta.add) {\n`;
     content += `            variables[\`\${key}__add\`] = delta.add;\n`;
-    content += `            assignments.push(\`\${key} += (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__add))\`);\n`;
+    content += `            assignments.push(\`\${escapeEdgeQLIdent(key)} += (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__add))\`);\n`;
     content += `          }\n`;
     content += `          if (delta.remove) {\n`;
     content += `            variables[\`\${key}__remove\`] = delta.remove;\n`;
-    content += `            assignments.push(\`\${key} -= (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__remove))\`);\n`;
+    content +=
+      `            assignments.push(\`\${escapeEdgeQLIdent(key)} -= (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}__remove))\`);\n`;
     content += `          }\n`;
     content += `        }\n`;
     content += `        continue;\n`;
     content += `      }\n`;
     content += `      variables[key] = value;\n`;
-    content += `      assignments.push(\`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
+    content += `      assignments.push(\`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
     content += `    }\n`;
     content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;
     content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
@@ -846,7 +847,7 @@ export class TypeScriptGenerator {
     const sdkBase = this.config.sdkImportBase ?? "./sdk/mod.ts";
     content += `import * as Types from "${typesImport}";\n`;
     content += `import { DiscClient } from "./client.ts";\n`;
-    content += `import { compileFilter, type FilterArg, type TypeInfo } from "${sdkBase}";\n\n`;
+    content += `import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "${sdkBase}";\n\n`;
 
     /*** Generate builder for each type ***/
     for (const [_typeName, typeDef] of this.schema.types) {
