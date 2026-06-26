@@ -66,11 +66,12 @@ Deno.test("DeployCommand - systemd format generates valid disc.service", () => {
   assertStringIncludes(content, "[Service]");
   assertStringIncludes(content, "[Install]");
   assertStringIncludes(content, "After=network.target postgresql.service");
-  /*** Paths are parameterized via env vars with the old defaults as fallbacks, so the literal
-       "/etc/disc/disc.env" appears inside the ${…:-default} expansion. ***/
+  /*** Unit directives use literal values — systemd does not support ${…:-default}
+       expansion in unit files, so the env-file path appears verbatim. ***/
   assertStringIncludes(content, "/etc/disc/disc.env");
   assertStringIncludes(content, "Restart=on-failure");
-  assertStringIncludes(content, "ExecStart=");
+  assertStringIncludes(content, "ExecStart=/opt/disc/disc serve");
+  assertStringIncludes(content, "User=disc");
   assertStringIncludes(content, "my-app");
 });
 

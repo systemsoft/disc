@@ -253,16 +253,19 @@ export class DeployCommand {
 
       [Service]
       Type=simple
-      User=\${DISC_USER:-disc}
-      Group=\${DISC_GROUP:-disc}
-      WorkingDirectory=\${DISC_HOME:-/opt/disc}
-      EnvironmentFile=\${DISC_ENV_FILE:-/etc/disc/disc.env}
-      # Two ways to run — prefer the compiled binary for production (no Deno
-      # dependency), fall back to the source path for dev installs. Override
-      # DISC_EXEC to point at a custom path, e.g.
-      #   DISC_EXEC=/opt/disc/disc              # native binary
-      #   DISC_EXEC=/usr/bin/deno run ...       # custom deno invocation
-      ExecStart=\${DISC_EXEC:-/opt/disc/disc serve}
+      # systemd does NOT support shell-style \${VAR:-default} expansion in unit
+      # directives, and User=/Group=/WorkingDirectory=/EnvironmentFile= do not
+      # expand environment variables at all. These values are therefore literal.
+      # To customize, edit them here or add a drop-in: \`sudo systemctl edit disc\`.
+      User=disc
+      Group=disc
+      WorkingDirectory=/opt/disc
+      EnvironmentFile=/etc/disc/disc.env
+      # Native compiled binary (no Deno dependency). For a different path or a
+      # custom Deno invocation, override ExecStart via a drop-in, e.g.
+      #   ExecStart=/opt/disc/bin/disc serve     # curl|sh installer layout
+      #   ExecStart=/usr/bin/deno run -A main.ts serve
+      ExecStart=/opt/disc/disc serve
       Restart=on-failure
       RestartSec=5
       StandardOutput=journal
