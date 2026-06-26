@@ -321,7 +321,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const result = await this.executeSQL(
         globalsPrefix + sqlString,
         request.variables || {},
-        context
+        context,
+        sqlStatement
       );
       const executeMs = Date.now() - executeStart;
 
@@ -599,7 +600,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   private async executeSQL(
     sql: string,
     variables: Record<string, any>,
-    context: Types.QueryContext
+    context: Types.QueryContext,
+    sqlStatement?: SQL.SQLStatement
   ): Promise<{ data: any; warnings?: string[]; }> {
     log.debug("Executing SQL", {
       sessionId: context.session.sessionId,
@@ -628,7 +630,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Use connection pool if available
     if (pool) {
       try {
-        const params = this.prepareParameters(variables);
+        const params = this.prepareParameters(variables, sqlStatement);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
         const result = timeoutMs > 0 ?
@@ -731,10 +733,36 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return parts.join("");
   }
 
-  private prepareParameters(variables: Record<string, any>): any[] {
-    // Convert variables object to array for PostgreSQL parameterized queries
-    // This is simplified — a full implementation would track parameter positions
-    return Object.values(variables);
+  private prepareParameters(
+    variables: Record<string, any>,
+    sqlStatement?: SQL.SQLStatement
+  ): any[] {
+    // Convert variables object to array for PostgreSQL parameterized queries.
+    // Values are ordered by first-seen parameter position, which the compiler
+    // assigns in the same first-seen order the SDK/codegen builds `variables`
+    // in — so `Object.values` lines up with PG's `$1..$n`.
+    const values = Object.values(variables);
+
+    // Parameters cast to `jsonb` (tuples, array-of-tuple, json) must be bound as
+    // JSON text. deno-postgres encodes a JS array as a PG array literal (`{a,b}`),
+    // which a jsonb cast rejects with "invalid input syntax for type json"; an
+    // explicit JSON.stringify makes every jsonb param bind uniformly. Native PG
+    // arrays (`text[]`, etc.) and scalars are left for the driver to encode.
+    if (!sqlStatement) {
+      return values;
+    }
+    const typeMap = Compiler.buildParameterTypeMap(sqlStatement);
+    if (typeMap.size === 0) {
+      return values;
+    }
+    return values.map((value, i) => {
+      // `values[i]` corresponds to the parameter at 1-indexed position i + 1.
+      const pgType = typeMap.get(i + 1);
+      if (pgType === "jsonb" && value !== undefined) {
+        return JSON.stringify(value);
+      }
+      return value;
+    });
   }
 
   private executeMockSQL(

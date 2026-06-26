@@ -1063,3 +1063,49 @@ Deno.test("EdgeQL Parser - parseTypeName captures subtypes on <array<int64>>", (
     assertEquals(ast.expr.type.subtypes?.[0].name.parts, ["int64"]);
   }
 });
+
+// --- Named-tuple casts: <tuple<name: str, url: str>> ---
+
+Deno.test("EdgeQL Parser - named-tuple cast parses and captures field names", () => {
+  const ast = new EdgeQLParser(
+    "SELECT <tuple<name: str, url: str>>$c"
+  )
+    .parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
+    assertEquals(ast.expr.type.name.parts, ["tuple"]);
+    assertEquals(ast.expr.type.subtypes?.length, 2);
+    assertEquals(ast.expr.type.subtypes?.[0].fieldName, "name");
+    assertEquals(ast.expr.type.subtypes?.[0].name.parts, ["str"]);
+    assertEquals(ast.expr.type.subtypes?.[1].fieldName, "url");
+    assertEquals(ast.expr.type.subtypes?.[1].name.parts, ["str"]);
+  }
+});
+
+Deno.test("EdgeQL Parser - positional tuple cast still parses without field names", () => {
+  const ast = new EdgeQLParser(
+    "SELECT <tuple<str, int64>>$c"
+  )
+    .parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
+    assertEquals(ast.expr.type.subtypes?.length, 2);
+    assertEquals(ast.expr.type.subtypes?.[0].fieldName, undefined);
+    assertEquals(ast.expr.type.subtypes?.[1].name.parts, ["int64"]);
+  }
+});
+
+Deno.test("EdgeQL Parser - array of named tuple cast parses", () => {
+  const ast = new EdgeQLParser(
+    "SELECT <array<tuple<title: str, url: str>>>$links"
+  )
+    .parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
+    assertEquals(ast.expr.type.name.parts, ["array"]);
+    const inner = ast.expr.type.subtypes?.[0];
+    assertEquals(inner?.name.parts, ["tuple"]);
+    assertEquals(inner?.subtypes?.[0].fieldName, "title");
+    assertEquals(inner?.subtypes?.[1].fieldName, "url");
+  }
+});

@@ -282,6 +282,66 @@ export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
   return castMap[edgeqlType] || `<${edgeqlType}>`;
 }
 
+/**
+ * Split a collection type's parameter list on top-level commas, ignoring
+ * commas nested inside `<...>` (e.g. `tuple<int64, str>, str` → two params).
+ */
+function splitTopLevelParams(inner: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === "<")
+      depth++;
+    else if (ch === ">")
+      depth--;
+    else if (ch === "," && depth === 0) {
+      parts.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(inner.slice(start));
+  return parts.map(p => p.trim()).filter(p => p.length > 0);
+}
+
+/**
+ * Recursively map an EdgeQL type string to a *base* TypeScript type (no
+ * nullability/multi suffix). Handles `array<T>` → `T[]`, named
+ * `tuple<a: T, b: U>` → `{ a: T; b: U }`, and positional `tuple<T, U>` →
+ * `[T, U]`; scalars/enums/objects defer to mapEdgeQLTypeToTypeScript. Without
+ * this, raw EdgeQL collection syntax (the `:` inside `<>`) would leak into
+ * generated .ts as invalid TypeScript.
+ */
+function edgeqlCollectionToTsBase(edgeqlType: string): string {
+  const t = edgeqlType.trim();
+
+  if (t.startsWith("array<") && t.endsWith(">")) {
+    const inner = t.slice("array<".length, -1);
+    return `${edgeqlCollectionToTsBase(inner)}[]`;
+  }
+
+  if (t.startsWith("tuple<") && t.endsWith(">")) {
+    const params = splitTopLevelParams(t.slice("tuple<".length, -1));
+    const labeled = params.map(p => {
+      const m = p.match(/^([A-Za-z_$][\w$]*)\s*:\s*([\s\S]+)$/);
+      return m ? { name: m[1], type: m[2] } : { name: null, type: p };
+    });
+    /*** Named when every field carries a label (EdgeQL requires all-or-none). ***/
+    if (labeled.every(f => f.name !== null)) {
+      const fields = labeled
+        .map(f => `${f.name}: ${edgeqlCollectionToTsBase(f.type)}`)
+        .join("; ");
+      return `{ ${fields} }`;
+    }
+    return `[${labeled.map(f => edgeqlCollectionToTsBase(f.type)).join(", ")}]`;
+  }
+
+  /*** Scalar / enum / object element — reuse the scalar mapping (required,
+       non-multi) so `str` → `string`, `PFPShape` → `PFPShape`, etc. ***/
+  return mapEdgeQLTypeToTypeScript(t, true, false);
+}
+
 export function mapEdgeQLTypeToTypeScript(edgeqlType: string, required: boolean = true, multi: boolean = false): string {
   /*** Computed properties carry the parser’s placeholder type `auto` — there’s no inference engine
        yet, so the surface type is genuinely unknown. Emit `unknown` rather than letting the keyword
@@ -293,6 +353,16 @@ export function mapEdgeQLTypeToTypeScript(edgeqlType: string, required: boolean 
       return required ? `${base}[]` : `${base}[] | null`;
 
     return required ? base : `${base} | null`;
+  }
+
+  /*** Collection types (array<…>, tuple<…>) have no scalar mapping — map them
+       structurally so the generated .ts is valid TypeScript instead of leaking
+       raw EdgeQL syntax. ***/
+  const trimmed = edgeqlType.trim();
+  if (trimmed.startsWith("array<") || trimmed.startsWith("tuple<")) {
+    const base = edgeqlCollectionToTsBase(trimmed);
+    const withMulti = multi ? `${base}[]` : base;
+    return required ? withMulti : `${withMulti} | null`;
   }
 
   /*** Try direct EdgeQL type mapping first ***/

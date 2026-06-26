@@ -459,6 +459,10 @@ export interface TypeName extends EdgeQLNode {
   kind: "TypeName";
   name: QualifiedName;
   subtypes?: TypeName[];
+  // Named-tuple field label, set on each subtype of a
+  // `tuple<name: str, url: str>` cast. Absent for positional tuples and
+  // non-tuple generics (e.g. array element types).
+  fieldName?: string;
 }
 
 // Qualified name

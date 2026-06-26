@@ -90,6 +90,46 @@ Deno.test("TypeScriptGenerator - generated query builder has correct _typeCasts 
   assertStringIncludes(content, `score: "<float64>"`);
 });
 
+/*** --- Collection-typed properties emit fully-parameterized casts --- ***/
+
+Deno.test("TypeScriptGenerator - array/tuple props emit full type-arg casts, never bare <array>/<tuple>", () => {
+  // Arrow form (`name -> Type`) is the syntax that regressed: it parses as a
+  // LinkDeclaration and previously dropped collection params, yielding bare
+  // `<array>`/`<tuple>` casts. Colon-form props are interleaved to prove both
+  // declaration styles round-trip identically.
+  const manager = new SchemaManager({});
+  const parsed = manager.parseSDL(`module default {
+    scalar type PFPShape extending enum<circle, square>;
+    type Vid {
+      required title -> str;
+      captions -> array<str>;
+      client: tuple<name: str, url: str>;
+      links -> array<tuple<title: str, url: str>>;
+      pfp -> tuple<path: str, shape: PFPShape, source: str>;
+    }
+  }`);
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+  const content = new TypeScriptGenerator(schema, createDefaultConfig())
+    .generate()
+    .files
+    .find(f => f.type === "queries")!
+    .content;
+
+  /*** Full type arguments on every collection cast — these are what the
+       parser + jsonb binding actually accept end-to-end. ***/
+  assertStringIncludes(content, `captions: "<array<str>>"`);
+  assertStringIncludes(content, `client: "<tuple<name: str, url: str>>"`);
+  assertStringIncludes(content, `links: "<array<tuple<title: str, url: str>>>"`);
+  assertStringIncludes(content, `pfp: "<tuple<path: str, shape: PFPShape, source: str>>"`);
+
+  /*** Regression: never the bare, unbindable forms that the stale Nickel
+       client emitted (`type "tuple" does not exist`). ***/
+  assertEquals(content.includes(`"<array>"`), false);
+  assertEquals(content.includes(`"<tuple>"`), false);
+});
+
 /*** --- Computed named-tuple property → typed nested filter + TypeInfo --- ***/
 
 Deno.test("TypeScriptGenerator - computed tuple property generates typed nested filter and _typeInfo.computed", () => {

@@ -1936,15 +1936,37 @@ export class EdgeQLParser {
     // into two GREATERs in-place via consumeGenericClose().
     if (this.match(TokenType.LESS)) {
       const subtypes: AST.TypeName[] = [];
-      subtypes.push(this.parseTypeName());
+      subtypes.push(this.parseTypeArgument());
       while (this.match(TokenType.COMMA)) {
-        subtypes.push(this.parseTypeName());
+        subtypes.push(this.parseTypeArgument());
       }
       this.consumeGenericClose();
       typeName.subtypes = subtypes;
     }
 
     return typeName;
+  }
+
+  /**
+   * Parse a single generic type argument. Named-tuple fields carry a
+   * `label: Type` prefix (e.g. `tuple<name: str, url: str>`); the label is
+   * stashed on the resulting TypeName so the compiler can round-trip the
+   * full type string. Positional arguments (`tuple<str, str>`, array element
+   * types) have no label and parse as a plain type name.
+   */
+  private parseTypeArgument(): AST.TypeName {
+    if (
+      (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) &&
+      this.checkNext(TokenType.COLON)
+    ) {
+      const fieldName = this.advance().value;
+      this.advance(); // consume ':'
+      const type = this.parseTypeName();
+      type.fieldName = fieldName;
+      return type;
+    }
+
+    return this.parseTypeName();
   }
 
   /**
@@ -1990,6 +2012,12 @@ export class EdgeQLParser {
       return false;
     }
     return this.peek().type === type;
+  }
+
+  /** Lookahead one token past the cursor without consuming. */
+  private checkNext(type: TokenType): boolean {
+    const next = this.tokens[this.current + 1];
+    return next !== undefined && next.type === type;
   }
 
   private advance(): Token {

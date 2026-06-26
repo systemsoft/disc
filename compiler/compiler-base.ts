@@ -41,10 +41,11 @@ export function backlinkIntersectionName(
  */
 export function renderEdgeQLTypeName(type: EdgeQLAST.TypeName): string {
   const head = type.name.parts.join("::");
+  const label = type.fieldName ? `${type.fieldName}: ` : "";
   if (!type.subtypes || type.subtypes.length === 0) {
-    return head;
+    return `${label}${head}`;
   }
-  return `${head}<${type.subtypes.map(renderEdgeQLTypeName).join(", ")}>`;
+  return `${label}${head}<${type.subtypes.map(renderEdgeQLTypeName).join(", ")}>`;
 }
 
 /** Maps EdgeQL type names to PostgreSQL type names */
@@ -127,6 +128,13 @@ export function edgeqlTypeToPgType(edgeqlType: string): string {
     return "jsonb";
   }
 
+  // Arrays of non-scalar elements (e.g. array<tuple<...>>) have no native PG
+  // array representation — only the scalar `array<T>` forms above do. Store
+  // them as jsonb, matching how the tuple element itself is stored.
+  if (edgeqlType.startsWith("array<tuple<")) {
+    return "jsonb";
+  }
+
   return edgeqlType;
 }
 
@@ -156,6 +164,50 @@ export function buildParameterIndex(node: unknown): Map<string, number> {
       if (Number.isNaN(parseInt(bare, 10)) && !out.has(bare)) {
         out.set(bare, out.size + 1);
       }
+    }
+    for (const v of Object.values(obj as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          visit(item);
+        }
+      } else if (v && typeof v === "object") {
+        visit(v);
+      }
+    }
+  }
+
+  visit(node);
+  return out;
+}
+
+/**
+ * Walk a compiled SQL AST and map each parameter's 1-indexed position to the
+ * PostgreSQL type it is cast to (e.g. `1 -> "jsonb"`, `2 -> "text[]"`). Built
+ * from `CastExpression` nodes wrapping a `ParameterReference`, which is how the
+ * compiler emits every typed parameter (`CAST($n AS <type>)`). The binding
+ * layer uses this to decide which params need JSON serialization (jsonb) versus
+ * native driver encoding (scalars, PG arrays).
+ */
+export function buildParameterTypeMap(node: unknown): Map<number, string> {
+  const out = new Map<number, string>();
+
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") {
+      return;
+    }
+    const obj = n as {
+      kind?: string;
+      targetType?: string;
+      expression?: { kind?: string; index?: number; };
+    };
+    if (
+      obj.kind === "CastExpression" &&
+      typeof obj.targetType === "string" &&
+      obj.expression &&
+      obj.expression.kind === "ParameterReference" &&
+      typeof obj.expression.index === "number"
+    ) {
+      out.set(obj.expression.index, obj.targetType);
     }
     for (const v of Object.values(obj as Record<string, unknown>)) {
       if (Array.isArray(v)) {

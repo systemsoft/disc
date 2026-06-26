@@ -844,7 +844,12 @@ export class SchemaManager {
           const isObjectTarget = objectTypeNames.has(targetName) ||
             objectTypeNames.has(targetName.replace(/^default::/, ""));
           if (!isObjectTarget) {
-            const sqlType = sdlTypeToSqlType(targetName);
+            // Render the FULL target type — `targetName` is only the bare head
+            // (`tuple`, `array`), so collection parameters would otherwise be
+            // lost and codegen would emit unbindable `<tuple>`/`<array>` casts.
+            // Mirrors the PropertyDeclaration branch, which uses the same helper.
+            const fullTypeName = typeRefToSdlString(linkDecl.target);
+            const sqlType = sdlTypeToSqlType(fullTypeName);
             const linkConstraints = extractPropertyConstraints(
               linkDecl.constraints
             );
@@ -854,7 +859,7 @@ export class SchemaManager {
               required: linkDecl.required ?? false,
               multi: isMulti,
               columnName: propNameToColumnName(linkName),
-              edgeqlType: targetName,
+              edgeqlType: fullTypeName,
               readonly: linkDecl.readonly ?? false,
               hasDefault: linkDecl.default !== undefined,
               computed: linkDecl.computed !== undefined,

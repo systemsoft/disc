@@ -70,6 +70,42 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for special types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("bytes", false, false), "Uint8Array | null");
 });
 
+Deno.test("Types - mapEdgeQLTypeToTypeScript for collection types", () => {
+  /*** array<scalar> → TS array ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("array<str>", true, false), "string[]");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("array<int64>", false, false), "bigint[] | null");
+
+  /*** named tuple → object type ***/
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("tuple<name: str, url: str>", true, false),
+    "{ name: string; url: string }"
+  );
+
+  /*** positional tuple → TS tuple (int64 → bigint by design) ***/
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("tuple<str, int64>", true, false),
+    "[string, bigint]"
+  );
+
+  /*** array of named tuple → object[] ***/
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("array<tuple<title: str, url: str>>", true, false),
+    "{ title: string; url: string }[]"
+  );
+
+  /*** enum member inside a tuple keeps its referenced type name ***/
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("tuple<path: str, shape: PFPShape, source: str>", false, false),
+    "{ path: string; shape: PFPShape; source: string } | null"
+  );
+
+  /*** Critically: never leak raw EdgeQL syntax (the `<…>` generic is invalid TS here). ***/
+  const out = Types.mapEdgeQLTypeToTypeScript("tuple<name: str, url: str>", true, false);
+  assertEquals(out.includes("tuple<"), false);
+  assertEquals(out.includes("array<"), false);
+  assertEquals(/\bstr\b/.test(out), false);
+});
+
 Deno.test("Types - mapEdgeQLTypeToTypeScript for custom object types", () => {
   /*** For object types that don’t have built-in mappings ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("User", true, false), "User");

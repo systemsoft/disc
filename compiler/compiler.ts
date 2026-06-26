@@ -19,7 +19,7 @@ import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
-export { buildParameterIndex } from "./compiler-base.ts";
+export { buildParameterIndex, buildParameterTypeMap } from "./compiler-base.ts";
 export type { CompilerOptions } from "./compiler-base.ts";
 
 export class EdgeQLCompiler extends ShapeCompilerLayer {

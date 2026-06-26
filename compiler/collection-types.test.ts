@@ -28,6 +28,7 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { edgeqlTypeToPgType } from "./compiler-base.ts";
 import { DDLGenerator } from "../migration/ddl.ts";
 import { SchemaDiffer } from "../migration/differ.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
@@ -366,6 +367,42 @@ Deno.test("SchemaManager - tuple<float64, float64> property gets jsonb SQL type"
   assertEquals(coordProp!.edgeqlType, "tuple<float64, float64>");
 });
 
+// Arrow-form (`name -> Type`) collection properties parse as LinkDeclarations
+// and must preserve their type parameters through reclassification, exactly
+// like the colon form. Regression for bare `<tuple>`/`<array>` casts in codegen.
+Deno.test("SchemaManager - arrow-form array<str> property preserves element type", () => {
+  const schema = createSchemaFromSDL(`
+    type Config {
+      captions -> array<str>;
+    }
+  `);
+  const prop = schema.types.get("Config")!.properties.get("captions");
+  assertEquals(prop!.type, "text[]");
+  assertEquals(prop!.edgeqlType, "array<str>");
+});
+
+Deno.test("SchemaManager - arrow-form named tuple property preserves field types", () => {
+  const schema = createSchemaFromSDL(`
+    type Profile {
+      client -> tuple<name: str, url: str>;
+    }
+  `);
+  const prop = schema.types.get("Profile")!.properties.get("client");
+  assertEquals(prop!.type, "jsonb");
+  assertEquals(prop!.edgeqlType, "tuple<name: str, url: str>");
+});
+
+Deno.test("SchemaManager - arrow-form array-of-tuple property preserves full type", () => {
+  const schema = createSchemaFromSDL(`
+    type Page {
+      links -> array<tuple<title: str, url: str>>;
+    }
+  `);
+  const prop = schema.types.get("Page")!.properties.get("links");
+  assertEquals(prop!.type, "jsonb");
+  assertEquals(prop!.edgeqlType, "array<tuple<title: str, url: str>>");
+});
+
 // ============================================================
 // 5. Differ: typeToString handles collection types
 // ============================================================
@@ -454,4 +491,22 @@ Deno.test("Converter - sdlTypeToSqlType maps array<int64> to BIGINT[]", () => {
 Deno.test("Converter - sdlTypeToSqlType maps tuple<str, int64> to JSONB", () => {
   const converter = new SDLConverter();
   assertEquals(converter.sdlTypeToSqlType("tuple<str, int64>"), "JSONB");
+});
+
+// ============================================================
+// 7. edgeqlTypeToPgType: cast target types (param binding)
+// ============================================================
+
+Deno.test("edgeqlTypeToPgType - array<str> maps to text[]", () => {
+  assertEquals(edgeqlTypeToPgType("array<str>"), "text[]");
+});
+
+Deno.test("edgeqlTypeToPgType - tuple maps to jsonb", () => {
+  assertEquals(edgeqlTypeToPgType("tuple<name: str, url: str>"), "jsonb");
+  assertEquals(edgeqlTypeToPgType("tuple<str, str>"), "jsonb");
+});
+
+Deno.test("edgeqlTypeToPgType - array of tuple maps to jsonb (not a PG array)", () => {
+  assertEquals(edgeqlTypeToPgType("array<tuple<title: str, url: str>>"), "jsonb");
+  assertEquals(edgeqlTypeToPgType("array<tuple<str, str>>"), "jsonb");
 });
