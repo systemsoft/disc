@@ -14,6 +14,7 @@ set -eu
 
 # --- Tunables (override via environment) -------------------------------------
 DISC_USER="${DISC_USER:-disc}"
+DISC_PROJECT="${DISC_PROJECT:-disc}"   # project + managed-instance + db name
 DISC_PREFIX="${DISC_PREFIX:-/opt/disc}"
 DISC_ETC="${DISC_ETC:-/etc/disc}"
 DISC_HOME="${DISC_HOME:-${DISC_PREFIX}}"
@@ -49,16 +50,22 @@ ${SUDO} chown -R "${DISC_USER}:${DISC_USER}" "${DISC_PREFIX}"
 #    Unquoted heredoc so the variables above expand; literal $ in comments is escaped.
 ${SUDO} mkdir -p "${DISC_ETC}"
 ${SUDO} tee "${DISC_ENV}" >/dev/null <<ENV
-# Data root. Must live inside the unit's ReadWritePaths; the unit sets
-# ProtectHome=true, so the disc user's real \$HOME is unreadable -- point
-# DISC_HOME at ${DISC_PREFIX} instead of relying on ~/.disc.
-DISC_HOME=${DISC_HOME}
+# Data root. We override HOME (not DISC_HOME) deliberately: the bundled
+# PostgreSQL instance manager resolves its data dir from \$HOME/.disc/instances,
+# while the project context resolves from \$DISC_HOME -- setting only DISC_HOME
+# makes the two disagree. Pointing HOME at ${DISC_HOME} makes every resolver
+# (instance manager, project context, embedded-PG extraction) agree on
+# ${DISC_HOME}/.disc, which lives inside the unit's ReadWritePaths. The unit
+# also sets ProtectHome=true, which only blanks /home and /root -- HOME here is
+# under /opt, so it stays writable.
+HOME=${DISC_HOME}
 DISC_HOST=${DISC_HOST}
 DISC_PORT=${DISC_PORT}
 # Bundled PostgreSQL needs no DATABASE_URL -- the embedded distribution is
-# extracted under \$DISC_HOME and managed automatically, all as the disc user.
+# extracted under \$HOME/.disc and managed automatically, all as the disc user.
 # To use external PostgreSQL instead, set DATABASE_URL with a dedicated,
-# non-superuser role and remove the bundled data dir.
+# non-superuser role (disc.toml below is written with managed=false in that
+# case, so the server connects out instead of starting a local instance).
 ENV
 
 # Append DATABASE_URL only when one was supplied.
@@ -69,13 +76,46 @@ fi
 ${SUDO} chown "${DISC_USER}:${DISC_USER}" "${DISC_ENV}"
 ${SUDO} chmod 0640 "${DISC_ENV}"
 
+# 3b. Write the project config the server resolves at startup. Without a
+#     disc.toml on (or above) the unit's WorkingDirectory, `disc serve` finds
+#     no project context, skips starting the bundled PostgreSQL entirely, and
+#     falls back to a TCP DSN nothing is listening on (ConnectionRefused). It
+#     must live at ${DISC_HOME}/disc.toml because the unit's WorkingDirectory is
+#     ${DISC_HOME} and the server walks UP from there to find it. We write it by
+#     hand rather than `disc init` -- init scaffolds dev files, nests the project
+#     in a subdirectory, and creates the instance in the default HOME location.
+if [ -n "${DATABASE_URL}" ]; then
+  DB_BLOCK="# External PostgreSQL -- disc does not manage the instance lifecycle
+managed = false
+backend_dsn = \"${DATABASE_URL}\""
+else
+  DB_BLOCK="# Managed PostgreSQL instance (bundled, started by disc serve)
+managed = true
+instance_name = \"${DISC_PROJECT}\""
+fi
+
+${SUDO} tee "${DISC_HOME}/disc.toml" >/dev/null <<TOML
+# Disc Project Configuration
+name = "${DISC_PROJECT}"
+
+[database]
+${DB_BLOCK}
+
+[server]
+port = ${DISC_PORT}
+host = "${DISC_HOST}"
+TOML
+${SUDO} chown "${DISC_USER}:${DISC_USER}" "${DISC_HOME}/disc.toml"
+
 # Make `disc` resolve for every user (-f so a re-run replaces the symlink).
 ${SUDO} ln -sf "${DISC_PREFIX}/bin/disc" /usr/local/bin/disc
 export PATH="/usr/local/bin:${PATH}"
 disc --version
 
-# Note: future project commands should run as the disc user with the env loaded, e.g.
-#   sudo -u disc env $(grep -v '^#' /etc/disc/disc.env | xargs) disc migrate
+# Note: future project commands must run as the disc user, with the env loaded,
+# AND from the project dir so `disc` finds disc.toml by walking up, e.g.
+#   sudo -u disc env $(grep -v '^#' /etc/disc/disc.env | xargs) \
+#     sh -c 'cd ${DISC_HOME} && disc migrate'
 # Worth wrapping that in an alias/helper so you don't retype it.
 
 # 4. Generate the unit, then rewrite its directives to match THIS install.
