@@ -703,19 +703,21 @@ sudo chown -R disc:disc /opt/disc
 
 `--no-modify-path` and `--no-man` matter here: the `disc` account is `nologin`, so there is no shell rc worth editing, and you don't want the installer prompting for `sudo` mid-provision.
 
-The installer lands the binary at `/opt/disc/bin/disc`, but the generated unit's `ExecStart` is the literal `/opt/disc/disc serve` (systemd does not support `${VAR:-default}` expansion, so the path cannot be redirected via an env var). Bridge the gap with a symlink so the unit's path resolves:
+The installer lands the binary at `/opt/disc/bin/disc`, but the generated unit's `ExecStart` is the literal `/opt/disc/disc serve` — the generator targets the `disc build` single-binary layout and has no way to know the curl installer's `bin/` path (systemd does not support `${VAR:-default}` expansion, so it cannot be redirected via an env var). Rather than reach for a symlink, normalize the generated unit in place so its directives match your actual layout. This survives binary-version drift: the `^Directive=` anchors overwrite the value whether it's literal or — from a binary predating the literal-value fix — an unsupported `${VAR:-default}` (which systemd rejects with `bad unit file setting`):
 
 ```bash
-sudo ln -s /opt/disc/bin/disc /opt/disc/disc
+disc deploy --format systemd --output /tmp/disc-deploy
+sed -i \
+  -e "s#^ExecStart=.*#ExecStart=/opt/disc/bin/disc serve#" \
+  -e "s#^ReadWritePaths=.*#ReadWritePaths=/opt/disc#" \
+  /tmp/disc-deploy/disc.service
+sudo cp /tmp/disc-deploy/disc.service /etc/systemd/system/disc.service
+sudo systemctl daemon-reload
+sudo systemd-analyze verify /etc/systemd/system/disc.service   # catch a bad setting before enable
+sudo systemctl enable --now disc
 ```
 
-Alternatively, point the unit straight at the installer path with a drop-in — `sudo systemctl edit disc`, then add `[Service]` / `ExecStart=` (an empty `ExecStart=` first clears the original):
-
-```ini
-[Service]
-ExecStart=
-ExecStart=/opt/disc/bin/disc serve
-```
+The full provisioning flow — user, env file, directory ownership, and this normalization — is packaged as [`deploy/install-disc.sh`](../deploy/install-disc.sh), which honors `DISC_USER`/`DISC_PREFIX`/`DISC_PORT`/`DATABASE_URL` overrides. The manual steps below remain useful for understanding what it does.
 
 Because `--no-modify-path` skips all shell-rc editing, `disc` will not be on any user's `PATH` after this install — by design, since systemd invokes the binary by absolute path and the `disc` account is `nologin`. The daemon needs nothing further, but you'll want the CLI on hand for admin commands (`disc migrate`, `disc shell`, `disc status`) and for step 5's `disc deploy --format systemd`. Symlink it into a directory already on `PATH`:
 
