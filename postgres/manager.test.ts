@@ -4,7 +4,7 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
-import { PostgresManager } from "./manager.ts";
+import { defaultInstancesDir, PostgresManager } from "./manager.ts";
 
 // Use /tmp directly to keep Unix socket paths under the 108-char limit.
 const TEST_BASE_DIR = Deno.makeTempDirSync({
@@ -15,6 +15,43 @@ const TEST_BASE_DIR = Deno.makeTempDirSync({
 // Skip guard: tests that require real PostgreSQL binaries
 const RUN_PG = canRunPgTests();
 const PG_BIN_DIR = findPgBinDir();
+
+// Default-baseDir resolution needs no PostgreSQL binaries — it is pure path math.
+Deno.test("defaultInstancesDir - honors DISC_HOME when set", () => {
+  const prevDiscHome = Deno.env.get("DISC_HOME");
+  try {
+    Deno.env.set("DISC_HOME", "/srv/disc-data");
+    assertEquals(defaultInstancesDir(), join("/srv/disc-data", "instances"));
+  } finally {
+    if (prevDiscHome === undefined) {
+      Deno.env.delete("DISC_HOME");
+    } else {
+      Deno.env.set("DISC_HOME", prevDiscHome);
+    }
+  }
+});
+
+Deno.test("defaultInstancesDir - falls back to HOME/.disc when DISC_HOME unset", () => {
+  const prevDiscHome = Deno.env.get("DISC_HOME");
+  const prevHome = Deno.env.get("HOME");
+  try {
+    Deno.env.delete("DISC_HOME");
+    Deno.env.set("HOME", "/home/tester");
+    assertEquals(
+      defaultInstancesDir(),
+      join("/home/tester", ".disc", "instances")
+    );
+  } finally {
+    if (prevDiscHome !== undefined) {
+      Deno.env.set("DISC_HOME", prevDiscHome);
+    }
+    if (prevHome !== undefined) {
+      Deno.env.set("HOME", prevHome);
+    } else {
+      Deno.env.delete("HOME");
+    }
+  }
+});
 
 Deno.test({
   name: "PostgresManager - create instance",

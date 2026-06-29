@@ -3,6 +3,7 @@
 
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
+import { discHome } from "../lib/project-context.ts";
 import { PostgresInstance, PostgresInstanceOptions } from "./instance.ts";
 import { logger } from "./logger.ts";
 import { PostgresMonitor } from "./monitor.ts";
@@ -13,11 +14,22 @@ export interface ManagedInstance {
   name: string;
 }
 
+/**
+ * Default directory under which managed instances are created.
+ *
+ * Derived from `discHome()` (`$DISC_HOME`, else `$HOME/.disc`) so it matches
+ * the paths `resolveProjectContext()` builds. With `$DISC_HOME` unset this is
+ * `$HOME/.disc/instances` — identical to the historical default.
+ */
+export function defaultInstancesDir(): string {
+  return join(discHome(), "instances");
+}
+
 export class PostgresManager {
   private baseDir: string;
   private instances: Map<string, ManagedInstance> = new Map();
 
-  constructor(baseDir = join(Deno.env.get("HOME")!, ".disc", "instances")) {
+  constructor(baseDir = defaultInstancesDir()) {
     this.baseDir = baseDir;
   }
 

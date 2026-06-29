@@ -385,9 +385,12 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
 /**
  * Derive the ~/.disc base directory.
  *
- * Prefers $DISC_HOME, then falls back to $HOME/.disc.
+ * Prefers $DISC_HOME, then falls back to $HOME/.disc. Exported so the
+ * PostgreSQL instance manager resolves instance paths from the same base the
+ * project context uses — otherwise `DISC_HOME` would relocate the context's
+ * view of an instance without relocating where the manager creates it.
  */
-function discHome(): string {
+export function discHome(): string {
   const discHome = Deno.env.get("DISC_HOME");
   if (discHome) {
     return discHome;
