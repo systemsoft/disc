@@ -747,6 +747,40 @@ Deno.test("Stage B — generated index.ts re-exports combinators via client.ts",
   assertStringIncludes(content, `export { and, AuthManager, not, or, SubscriptionClient } from "./client.ts"`);
 });
 
+/*** --- Schema epoch: bake SCHEMA_EPOCH into the generated client --- ***/
+
+Deno.test("Schema epoch — generated client bakes in SCHEMA_EPOCH when config.schemaEpoch is set", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  config.schemaEpoch = "testepoch123";
+
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const clientFile = result.files.find(f => f.type === "client");
+  assertEquals(clientFile !== undefined, true);
+
+  const content = clientFile!.content;
+  /*** Static constant + constructor assignment carry the epoch through ***/
+  assertStringIncludes(content, `static readonly SCHEMA_EPOCH = "testepoch123"`);
+  assertStringIncludes(content, "this.schemaEpoch = DiscClient.SCHEMA_EPOCH;");
+});
+
+Deno.test("Schema epoch — no SCHEMA_EPOCH emitted when config.schemaEpoch is unset (back-compat)", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  // schemaEpoch deliberately left unset.
+
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const clientFile = result.files.find(f => f.type === "client");
+  const content = clientFile!.content;
+
+  assertEquals(content.includes("SCHEMA_EPOCH"), false);
+  assertEquals(content.includes("this.schemaEpoch = DiscClient.SCHEMA_EPOCH;"), false);
+});
+
 /*** --- Stage C: filter() method uses compileFilter at runtime --- ***/
 
 Deno.test("Stage C — generated queries.ts imports compileFilter + FilterArg + TypeInfo from the SDK", () => {

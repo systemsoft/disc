@@ -37,6 +37,34 @@ export const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 export const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
 export const DEFAULT_CORS_MAX_AGE = 86400;
 
+/**
+ * Schema-drift detection for `/query` (Stage 2). Lets the HTTP layer
+ * report how a client's generated-against schema epoch compares to the
+ * server's current epoch via response headers — it never blocks a query.
+ *
+ * Implementations cache the current epoch + modules in memory and
+ * memoize per-expected-epoch classifications, refreshing only when the
+ * schema changes (via `invalidate()`). PG is touched lazily and only on
+ * a cache miss for an unknown expected epoch.
+ */
+export interface SchemaDriftProvider {
+  /** The server's current schema epoch, or null when none is known. */
+  currentEpoch(): Promise<string | null>;
+  /**
+   * Classify how the server's current schema has drifted from the
+   * schema identified by `expectedEpoch`:
+   *  - `none`       — epochs match (or no diff).
+   *  - `compatible` — only additive/safe changes; old clients keep working.
+   *  - `breaking`   — at least one unsafe/ambiguous change.
+   *  - `unknown`    — the expected epoch isn't recorded (legacy/unrecognized).
+   */
+  classify(
+    expectedEpoch: string
+  ): Promise<"none" | "compatible" | "breaking" | "unknown">;
+  /** Drop cached epoch/modules/memo; call when the schema changes. */
+  invalidate(): void;
+}
+
 export interface HttpServerOptions {
   config: Types.ServerConfig;
   protocolHandler: Types.ProtocolHandler;
@@ -50,6 +78,13 @@ export interface HttpServerOptions {
   databaseRegistry?: DatabaseRegistry;
   schemaProvider?: SchemaProvider;
   migrationsProvider?: MigrationsProvider;
+  /**
+   * Schema-drift detection for `/query` (Stage 2). When set, the query
+   * handler reads the client's `X-Disc-Expected-Schema` header and sets
+   * `X-Disc-Schema-Version` / `X-Disc-Schema-Mismatch` response headers.
+   * Omitted → those headers are simply not emitted (back-compat).
+   */
+  schemaDriftProvider?: SchemaDriftProvider;
   /**
    * File-storage manager backing the `/files/*` endpoints. Optional:
    * apps that don't need uploads omit it and the routes return 404.
@@ -94,6 +129,7 @@ export abstract class HttpServerBase {
   protected databaseRegistry?: DatabaseRegistry;
   protected schemaProvider?: SchemaProvider;
   protected migrationsProvider?: MigrationsProvider;
+  protected schemaDriftProvider?: SchemaDriftProvider;
   protected adminSchemaWatch?: HttpServerOptions["adminSchemaWatch"];
   protected dataWatchRegistry?: DataWatchRegistry;
   protected rate_limiter?: RateLimiter;
@@ -134,6 +170,7 @@ export abstract class HttpServerBase {
     this.databaseRegistry = options.databaseRegistry;
     this.schemaProvider = options.schemaProvider;
     this.migrationsProvider = options.migrationsProvider;
+    this.schemaDriftProvider = options.schemaDriftProvider;
     this.adminSchemaWatch = options.adminSchemaWatch;
     this.dataWatchRegistry = options.dataWatchRegistry;
     this.connection_manager = new ConnectionManager();

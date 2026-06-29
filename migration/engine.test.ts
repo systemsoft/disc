@@ -802,6 +802,111 @@ Deno.test("Migration Engine - colon-form and link-keyword links produce identica
   assertEquals(/\bauthor\b(?!_id)[^\n]*TEXT/i.test(joined), false);
 });
 
+// classifyDrift: how a client's generated-against schema (old) compares to
+// the server's current schema. The diff runs old→current, so a field the old
+// client still references but current dropped surfaces as a Drop* op → breaking.
+// ------------------------------------------------------------------------
+
+/** A `str` property declaration with the given name/required flag. */
+function strProp(name: string, required: boolean) {
+  return {
+    kind: "PropertyDeclaration",
+    name: { kind: "Identifier", value: name },
+    type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+    required,
+    multi: false
+  };
+}
+
+/** Build a single-module schema with one `User` type from the given members. */
+function userSchema(
+  members: ReturnType<typeof strProp>[],
+  extraTypes: unknown[] = []
+): Module[] {
+  return [
+    {
+      name: "default",
+      items: [
+        {
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "User" },
+          members
+        },
+        ...extraTypes
+      ]
+    }
+  ] as Module[];
+}
+
+Deno.test("classifyDrift - identical schemas → none", () => {
+  const engine = new MigrationEngine(config);
+  const schema = userSchema([strProp("name", true), strProp("email", true)]);
+  // Two independently built but identical schemas — zero diff ops.
+  const current = userSchema([strProp("name", true), strProp("email", true)]);
+
+  assertEquals(engine.classifyDrift(schema, current), "none");
+});
+
+Deno.test("classifyDrift - added optional property + new type → compatible", () => {
+  const engine = new MigrationEngine(config);
+  const old = userSchema([strProp("name", true), strProp("email", true)]);
+  // current adds an optional `bio` prop AND a brand-new Post type. Both are
+  // additive — old clients keep working.
+  const current = userSchema(
+    [strProp("name", true), strProp("email", true), strProp("bio", false)],
+    [
+      {
+        kind: "TypeDeclaration",
+        name: { kind: "Identifier", value: "Post" },
+        members: [strProp("title", true)]
+      }
+    ]
+  );
+
+  assertEquals(engine.classifyDrift(old, current), "compatible");
+});
+
+Deno.test("classifyDrift - removed property → breaking", () => {
+  const engine = new MigrationEngine(config);
+  // old has `email`; current dropped it. Direction matters: an old client
+  // still selecting `email` would break, so old→current must be breaking.
+  const old = userSchema([strProp("name", true), strProp("email", true)]);
+  const current = userSchema([strProp("name", true)]);
+
+  assertEquals(engine.classifyDrift(old, current), "breaking");
+});
+
+Deno.test("classifyDrift - changed property type → breaking", () => {
+  const engine = new MigrationEngine(config);
+  const old = userSchema([strProp("name", true), strProp("email", true)]);
+  // `email` changes from str to int32 — an unsafe/ambiguous conversion.
+  const current = userSchema([
+    strProp("name", true),
+    {
+      kind: "PropertyDeclaration",
+      name: { kind: "Identifier", value: "email" },
+      type: {
+        kind: "TypeRef",
+        name: { kind: "QualifiedName", parts: ["int32"] }
+      },
+      required: true,
+      multi: false
+    } as ReturnType<typeof strProp>
+  ]);
+
+  assertEquals(engine.classifyDrift(old, current), "breaking");
+});
+
+Deno.test("classifyDrift - optional property made required → breaking", () => {
+  const engine = new MigrationEngine(config);
+  // old `bio` is optional; current makes it required — existing NULL rows
+  // would fail SET NOT NULL, so this is breaking.
+  const old = userSchema([strProp("name", true), strProp("bio", false)]);
+  const current = userSchema([strProp("name", true), strProp("bio", true)]);
+
+  assertEquals(engine.classifyDrift(old, current), "breaking");
+});
+
 Deno.test("MigrationEngine - initial migration creates tables for linked abstract types", async () => {
   // Regression: `planMigration(null, …)` used to route through a separate
   // initial-migration path that skipped abstract types while still emitting

@@ -25,6 +25,11 @@ import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { MigrationEngine } from "../migration/engine.ts";
+import { MigrationTracker } from "../migration/tracker.ts";
+import type { ConnectionPool } from "../lib/connection-pool.ts";
+import type { Module } from "../schema/converter.ts";
+import type { SchemaDriftProvider } from "./http-base.ts";
 import { DatabaseRegistry } from "./database-registry.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { HttpServer } from "./http.ts";
@@ -134,6 +139,180 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
   appliedSdl?: string;
 }
 
+/**
+ * Schema-drift provider backing the `/query` drift headers (Stage 2).
+ *
+ * Caches the server's current epoch + modules and memoizes per-expected
+ * classifications in memory, refreshed only on `invalidate()` (wired to
+ * the schema-change path). PG (`getSchemaModulesByHash`) is hit lazily and
+ * only on a memo miss for an expected epoch that differs from current — so
+ * repeated queries from the same old client never re-query PG. Drift logic
+ * never throws out of here in a way that blocks a query: the caller wraps
+ * every call in try/catch, and lookups degrade to `unknown`.
+ */
+class SchemaDriftProviderImpl implements SchemaDriftProvider {
+  private readonly engine = new MigrationEngine({
+    autoApprove: false,
+    backupBeforeMigration: false,
+    databaseUrl: "",
+    dryRun: true,
+    migrationsDir: "",
+    rollbackOnError: false,
+    schemaFile: ""
+  });
+  private tracker?: MigrationTracker;
+  private trackerInitFailed = false;
+  /** `undefined` = not loaded yet; `null` = loaded, nothing recorded. */
+  private cachedEpoch?: string | null;
+  private cachedModules?: Module[] | null;
+  private readonly memo = new Map<
+    string,
+    "none" | "compatible" | "breaking" | "unknown"
+  >();
+
+  constructor(private readonly getPool: () => ConnectionPool | undefined) {}
+
+  invalidate(): void {
+    this.cachedEpoch = undefined;
+    this.cachedModules = undefined;
+    this.memo.clear();
+  }
+
+  async currentEpoch(): Promise<string | null> {
+    return await this.loadCurrentEpoch();
+  }
+
+  async classify(
+    expectedEpoch: string
+  ): Promise<"none" | "compatible" | "breaking" | "unknown"> {
+    const memoized = this.memo.get(expectedEpoch);
+    if (memoized !== undefined) {
+      return memoized;
+    }
+
+    const result = await this.computeClassification(expectedEpoch);
+    this.memo.set(expectedEpoch, result);
+    return result;
+  }
+
+  private async computeClassification(
+    expectedEpoch: string
+  ): Promise<"none" | "compatible" | "breaking" | "unknown"> {
+    const currentEpoch = await this.loadCurrentEpoch();
+
+    // No recorded epoch on this server — nothing meaningful to compare.
+    if (currentEpoch === null) {
+      return "unknown";
+    }
+
+    if (expectedEpoch === currentEpoch) {
+      return "none";
+    }
+
+    const tracker = await this.ensureTracker();
+    if (!tracker) {
+      return "unknown";
+    }
+
+    const oldModulesResult = await tracker.getSchemaModulesByHash(expectedEpoch);
+    if (!oldModulesResult.ok) {
+      logger.warn("schema-drift: failed to load expected schema modules", {
+        clientEpoch: expectedEpoch,
+        currentEpoch,
+        error: oldModulesResult.error.message
+      });
+      return "unknown";
+    }
+
+    if (oldModulesResult.value === null) {
+      logger.warn("schema-drift: client schema epoch is unknown", {
+        clientEpoch: expectedEpoch,
+        currentEpoch
+      });
+      return "unknown";
+    }
+
+    const currentModules = await this.loadCurrentModules();
+    if (currentModules === null) {
+      return "unknown";
+    }
+
+    const verdict = this.engine.classifyDrift(
+      oldModulesResult.value,
+      currentModules
+    );
+
+    if (verdict !== "none") {
+      logger.warn("schema-drift: client schema differs from current", {
+        clientEpoch: expectedEpoch,
+        currentEpoch,
+        mismatch: verdict
+      });
+    }
+
+    return verdict;
+  }
+
+  private async loadCurrentEpoch(): Promise<string | null> {
+    if (this.cachedEpoch !== undefined) {
+      return this.cachedEpoch;
+    }
+
+    const tracker = await this.ensureTracker();
+    if (!tracker) {
+      return null;
+    }
+
+    const result = await tracker.getLatestSchemaHash();
+    this.cachedEpoch = result.ok ? result.value : null;
+    return this.cachedEpoch;
+  }
+
+  private async loadCurrentModules(): Promise<Module[] | null> {
+    if (this.cachedModules !== undefined) {
+      return this.cachedModules;
+    }
+
+    const tracker = await this.ensureTracker();
+    if (!tracker) {
+      return null;
+    }
+
+    const result = await tracker.getLatestSchemaModules();
+    this.cachedModules = result.ok ? result.value : null;
+    return this.cachedModules;
+  }
+
+  private async ensureTracker(): Promise<MigrationTracker | null> {
+    if (this.tracker) {
+      return this.tracker;
+    }
+    if (this.trackerInitFailed) {
+      return null;
+    }
+
+    const pool = this.getPool();
+    if (!pool) {
+      // Pool not ready yet (e.g. dry-run). Don't mark as failed — a
+      // later call can succeed once the handler's pool is available.
+      return null;
+    }
+
+    const tracker = new MigrationTracker(pool);
+    const init = await tracker.initialize();
+    if (!init.ok) {
+      this.trackerInitFailed = true;
+      logger.warn("schema-drift: migration tracker init failed", {
+        error: init.error.message
+      });
+      return null;
+    }
+
+    this.tracker = tracker;
+    return tracker;
+  }
+}
+
 export class DiscServer {
   private config: Types.ServerConfig;
   private httpServer?: HttpServer;
@@ -166,6 +345,14 @@ export class DiscServer {
    */
   private schemaWatchSource?: import("./admin/schema-watch.ts").SchemaWatchSource;
   private appliedSdl?: string;
+  /**
+   * Schema-drift provider for `/query` (Stage 2). Built before the HTTP
+   * server so `updateSchema()` can invalidate its caches on a live
+   * schema change. Reads the protocol handler's pool lazily.
+   */
+  private schemaDriftProvider: SchemaDriftProvider = new SchemaDriftProviderImpl(
+    () => (this.protocolHandler as { pool?: ConnectionPool; }).pool
+  );
 
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
@@ -400,6 +587,7 @@ export class DiscServer {
           () => this.extensionRegistry.getHealthStatus() :
           undefined,
         databaseRegistry: this.databaseRegistry,
+        schemaDriftProvider: this.schemaDriftProvider,
         /*** Live-schema-diff. When the CLI passed a schema source, HttpServer mounts
              `/admin/schema-watch` and `/admin/schema-apply`; otherwise both 404. ***/
         adminSchemaWatch: this.schemaWatchSource ?
@@ -858,6 +1046,10 @@ export class DiscServer {
 
   updateSchema(schema: Schema): void {
     this.protocolHandler.updateSchema?.(schema);
+    // A live schema change invalidates the cached drift epoch/modules and
+    // memoized classifications so `/query` drift headers reflect the new
+    // schema on the next request (Stage 2).
+    this.schemaDriftProvider.invalidate();
   }
 
   getProtocolHandler(): Types.ProtocolHandler {

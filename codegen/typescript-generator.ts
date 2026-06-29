@@ -123,6 +123,14 @@ export class TypeScriptGenerator {
     content += ` */\n`;
     content += `export class DiscClient extends BaseClient {\n`;
 
+    /*** Bake the schema epoch so the client can advertise which schema version it targets. Gated on
+         config so existing callers (and snapshot tests) that don't supply an epoch emit no extra
+         members. The value matches `disc_migrations.schema_hash` on the server. ***/
+    const schemaEpoch = this.config.schemaEpoch;
+
+    if (schemaEpoch !== undefined)
+      content += `  static readonly SCHEMA_EPOCH = ${JSON.stringify(schemaEpoch)};\n\n`;
+
     if (multiModule) {
       /*** Group by module with comment headers ***/
       const groups = this.groupTypesByModule();
@@ -169,6 +177,9 @@ export class TypeScriptGenerator {
     /*** Constructor ***/
     content += `  constructor(config?: DiscClientConfig) {\n`;
     content += `    super(config);\n`;
+
+    if (schemaEpoch !== undefined)
+      content += `    this.schemaEpoch = DiscClient.SCHEMA_EPOCH;\n`;
 
     /*** Initialize query builders. Use typeDef.name (always bare) rather than the schema map key —
          non-default modules are keyed as "module::Type", and that "::" would land verbatim in the

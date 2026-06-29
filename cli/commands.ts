@@ -23,6 +23,7 @@ import { extractEmbeddedSdk } from "../codegen/sdk-extractor.ts";
 import { getLogger } from "../lib/logger.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
+import { MigrationEngine } from "../migration/engine.ts";
 import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
 import { pgLogCommand, PgLogOptions } from "./pg-log.ts";
 import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
@@ -130,7 +131,7 @@ export class CLICommands {
     const target = args.target || "client";
 
     try {
-      let schema: Schema;
+      let modules: Module[];
 
       if (schemaFile) {
         /*** Single-file mode (explicit --schema flag) ***/
@@ -145,18 +146,16 @@ export class CLICommands {
           throw err;
         }
 
-        const loaded = await this.readSchemaAsCompilerSchema(schemaFile);
+        const loaded = await this.readSchemaFile(schemaFile);
 
         if (!loaded) {
-          /*** readSchemaAsCompilerSchema already printed the parse/convert failure detail. Surface
-               as a hard error rather than silently substituting a test schema — a successful exit
-               code on a broken schema misleads CI and local users alike. ***/
+          /*** readSchemaFile already printed the parse failure detail. Surface as a hard error
+               rather than silently substituting a test schema — a successful exit code on a broken
+               schema misleads CI and local users alike. ***/
           throw new Error(`Cannot generate types from ${schemaFile} — see errors above.`);
         }
 
-        schema = loaded;
-        const typeNames = Array.from(schema.types.keys()).join(", ");
-        getLogger("cli").info(`Loaded types: ${typeNames}`);
+        modules = loaded;
       } else {
         /*** Multi-file mode: discover schema files from directory ***/
         getLogger("cli").info(`Schema dir: ${schemaDir}`);
@@ -170,11 +169,30 @@ export class CLICommands {
         }
 
         getLogger("cli").info(`Discovered ${files.length} schema file${files.length === 1 ? "" : "s"}: ${files.map(f => f.split("/").pop()).join(", ")}`);
-        schema = await Codegen.loadMultiFileSchema(files);
-
-        const typeNames = Array.from(schema.types.keys()).join(", ");
-        getLogger("cli").info(`Loaded types: ${typeNames}`);
+        modules = await Codegen.loadMultiFileSchemaModules(files);
       }
+
+      /*** Convert the parsed modules into a compiler Schema for the generator. Done once here (both
+           modes produce Module[]) so the same parse feeds both the codegen and the schema-epoch
+           hash below — no second parse. ***/
+      const schema: Schema = new SchemaManager({}).modulesToSchema(modules);
+      const typeNames = Array.from(schema.types.keys()).join(", ");
+      getLogger("cli").info(`Loaded types: ${typeNames}`);
+
+      /*** Compute the schema epoch identically to `disc migrate`. hashSchemaForBaseline is pure
+           (JSON-stringify + hash) and needs no DB pool, so a minimal engine instance suffices. The
+           value is baked into the generated client as SCHEMA_EPOCH so client and server agree on the
+           schema version. ***/
+      const schemaEpoch = new MigrationEngine({
+        autoApprove: false,
+        backupBeforeMigration: false,
+        databaseUrl: "",
+        dryRun: true,
+        migrationsDir: schemaDir,
+        rollbackOnError: false,
+        schemaFile: schemaFile || schemaDir
+      })
+        .hashSchemaForBaseline(modules);
 
       getLogger("cli").info(`Output: ${outputDir}`);
       getLogger("cli").info(`Target: ${target}`);
@@ -182,6 +200,7 @@ export class CLICommands {
       /*** Generate TypeScript code ***/
       const config: Partial<Codegen.CodegenConfig> = {
         outputDir: outputDir,
+        schemaEpoch: schemaEpoch,
         schemaSource: schemaFile || schemaDir,
         schemaDir: schemaDir,
         target: target as "client" | "server" | "both",

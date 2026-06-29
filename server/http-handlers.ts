@@ -361,16 +361,20 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
 
       if (hasRealErrors && !response.data) {
         this.stats.failed_requests++;
+        const errorHeaders = this.get_default_headers("application/json");
+        await this.apply_schema_drift_headers(request, errorHeaders);
         return new Response(JSON.stringify(response), {
           status: 400,
-          headers: this.get_default_headers("application/json")
+          headers: errorHeaders
         });
       }
 
       this.stats.successful_requests++;
 
+      const successHeaders = this.get_default_headers("application/json");
+      await this.apply_schema_drift_headers(request, successHeaders);
       return new Response(JSON.stringify(response), {
-        headers: this.get_default_headers("application/json")
+        headers: successHeaders
       });
     } catch (error) {
       log.error("Query execution failed", {
@@ -388,6 +392,44 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       return new Response(JSON.stringify(errorResponse), {
         status: 500,
         headers: this.get_default_headers("application/json")
+      });
+    }
+  }
+
+  /**
+   * Set schema-drift response headers on a `/query` response (Stage 2).
+   *
+   * Best-effort and non-blocking: when no drift provider is wired, or any
+   * lookup throws, this returns without touching the response — drift
+   * detection must never fail or block a query.
+   *
+   *  - `X-Disc-Schema-Version`  — always set when the current epoch is known.
+   *  - `X-Disc-Schema-Mismatch` — set only when the client supplied an
+   *    `X-Disc-Expected-Schema` header (nothing to compare otherwise).
+   */
+  protected async apply_schema_drift_headers(
+    request: Request,
+    headers: Headers
+  ): Promise<void> {
+    const provider = this.schemaDriftProvider;
+    if (!provider) {
+      return;
+    }
+
+    try {
+      const currentEpoch = await provider.currentEpoch();
+      if (currentEpoch !== null) {
+        headers.set("X-Disc-Schema-Version", currentEpoch);
+      }
+
+      const expected = request.headers.get("X-Disc-Expected-Schema");
+      if (expected !== null && expected.length > 0) {
+        const mismatch = await provider.classify(expected);
+        headers.set("X-Disc-Schema-Mismatch", mismatch);
+      }
+    } catch (error) {
+      log.warn("schema-drift header computation failed; skipping", {
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }

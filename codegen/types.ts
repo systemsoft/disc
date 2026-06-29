@@ -57,6 +57,15 @@ export interface CodegenConfig {
   interfaceSuffix?: string;
   outputDir: string;
   schemaDir?: string;
+  /**
+   * Schema epoch baked into the generated client as
+   * `static readonly SCHEMA_EPOCH`. Must equal the value `disc migrate`
+   * stores in `disc_migrations.schema_hash` (computed via
+   * `MigrationEngine.hashSchemaForBaseline`) so the client and server
+   * agree on which schema version the generated code targets. Optional
+   * for back-compat: when absent, no epoch is emitted.
+   */
+  schemaEpoch?: string;
   schemaSource: string;
   /**
    * Base module specifier for the Disc SDK re-exports emitted into the

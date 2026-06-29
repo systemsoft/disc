@@ -27,6 +27,22 @@ export interface DiscClientConfig {
     warn?(message: string, details?: Record<string, unknown>): void;
     error?(message: string, details?: Record<string, unknown>): void;
   };
+  /**
+   * Baked-in schema epoch this client was generated against. Sent as the
+   * `X-Disc-Expected-Schema` request header so the server can detect drift.
+   * Normally set by the generated `DiscClient` subclass, not by hand.
+   */
+  schemaEpoch?: string;
+  /**
+   * Invoked whenever the server reports schema drift (the
+   * `X-Disc-Schema-Mismatch` response header is anything but `none`).
+   * Fires in addition to the `logger.warn` notice. Fully optional.
+   */
+  onSchemaMismatch?(info: {
+    status: "compatible" | "breaking" | "unknown";
+    serverVersion: string | null;
+    clientEpoch: string | undefined;
+  }): void;
 }
 
 // --- Validation (P1-28) ---

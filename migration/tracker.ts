@@ -241,6 +241,54 @@ export class MigrationTracker {
   }
 
   /**
+   * Load the stored schema modules for the migration whose post-state
+   * hashes to `hash`. Used by drift detection to recover the schema a
+   * client was generated against (its epoch). Returns Ok(null) when no
+   * migration matches the hash or the matched row's `schema_modules` was
+   * left NULL (pre-baseline-reconstruction rows).
+   */
+  async getSchemaModulesByHash(
+    hash: string
+  ): Promise<Result<Module[] | null, MigrationError>> {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      const result = await this.pool.query(
+        `
+        SELECT schema_modules
+        FROM disc_migrations
+        WHERE schema_hash = $1
+        ORDER BY applied_order DESC
+        LIMIT 1
+      `,
+        [hash]
+      );
+
+      if (result.rows.length === 0) {
+        return Ok(null);
+      }
+
+      const raw = (result.rows[0] as { schema_modules: unknown; }).schema_modules;
+      if (raw === null || raw === undefined) {
+        return Ok(null);
+      }
+
+      const modules = typeof raw === "string" ?
+        JSON.parse(raw) as Module[] :
+        raw as Module[];
+      return Ok(modules);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get schema modules by hash: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
    * Backfill `schema_modules` on the latest applied migration row.
    * Called when the schema-hash fallback detects a no-op against a
    * legacy row that lacks schema_modules — persisting the modules now

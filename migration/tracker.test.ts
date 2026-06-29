@@ -14,6 +14,7 @@ import {
   cleanupTestTables,
   getTestDsn
 } from "../tests/pg-test-harness.ts";
+import { Module } from "../schema/converter.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
@@ -459,6 +460,130 @@ Deno.test({
     assertEquals(integrityResult.ok, true);
     if (integrityResult.ok) {
       assertEquals(integrityResult.value, true);
+    }
+
+    await tracker.close();
+  }
+});
+
+// getSchemaModulesByHash: recover the schema modules a client was generated
+// against (its epoch), keyed by the migration's post-state schema_hash. Used
+// by drift detection. Returns Ok(null) when the hash is unknown or the
+// matched row's schema_modules column is NULL.
+// ------------------------------------------------------------------------
+
+/** A one-module schema carrying a single `User` type with the given props. */
+function snapshotModules(propNames: string[]): Module[] {
+  return [
+    {
+      name: "default",
+      items: [
+        {
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "User" },
+          members: propNames.map(propName => ({
+            kind: "PropertyDeclaration",
+            name: { kind: "Identifier", value: propName },
+            type: {
+              kind: "TypeRef",
+              name: { kind: "QualifiedName", parts: ["str"] }
+            },
+            required: true,
+            multi: false
+          }))
+        }
+      ]
+    }
+  ] as Module[];
+}
+
+Deno.test({
+  name: "Migration Tracker - getSchemaModulesByHash returns the snapshot for a recorded hash",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
+
+    // Two migrations with distinct schema_hash + schema_modules snapshots.
+    const firstModules = snapshotModules(["name"]);
+    const secondModules = snapshotModules(["name", "email"]);
+
+    await tracker.recordMigration(
+      { ...createTestMigration(), id: "m1", schemaHash: "hash_v1" },
+      { ...createTestMigrationResult(), migrationId: "m1" },
+      firstModules
+    );
+    await tracker.recordMigration(
+      { ...createTestMigration(), id: "m2", schemaHash: "hash_v2" },
+      { ...createTestMigrationResult(), migrationId: "m2" },
+      secondModules
+    );
+
+    // Lookup by the FIRST hash returns the FIRST snapshot, not the latest.
+    const firstResult = await tracker.getSchemaModulesByHash("hash_v1");
+    assertEquals(firstResult.ok, true);
+    if (firstResult.ok) {
+      assertEquals(firstResult.value, firstModules);
+    }
+
+    // Lookup by the second hash returns the second snapshot.
+    const secondResult = await tracker.getSchemaModulesByHash("hash_v2");
+    assertEquals(secondResult.ok, true);
+    if (secondResult.ok) {
+      assertEquals(secondResult.value, secondModules);
+    }
+
+    await tracker.close();
+  }
+});
+
+Deno.test({
+  name: "Migration Tracker - getSchemaModulesByHash returns Ok(null) for an unknown hash",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
+
+    await tracker.recordMigration(
+      { ...createTestMigration(), id: "m1", schemaHash: "hash_v1" },
+      { ...createTestMigrationResult(), migrationId: "m1" },
+      snapshotModules(["name"])
+    );
+
+    const result = await tracker.getSchemaModulesByHash("nonexistent");
+    assertEquals(result.ok, true);
+    if (result.ok) {
+      assertEquals(result.value, null);
+    }
+
+    await tracker.close();
+  }
+});
+
+Deno.test({
+  name: "Migration Tracker - getSchemaModulesByHash returns Ok(null) when schema_modules is NULL",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
+
+    // Record WITHOUT post-state modules — the column is stored NULL
+    // (mirrors pre-baseline-reconstruction legacy rows).
+    await tracker.recordMigration(
+      { ...createTestMigration(), id: "m1", schemaHash: "hash_legacy" },
+      { ...createTestMigrationResult(), migrationId: "m1" }
+    );
+
+    const result = await tracker.getSchemaModulesByHash("hash_legacy");
+    assertEquals(result.ok, true);
+    if (result.ok) {
+      assertEquals(result.value, null);
     }
 
     await tracker.close();

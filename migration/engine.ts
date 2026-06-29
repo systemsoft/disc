@@ -960,6 +960,47 @@ export class MigrationEngine {
   }
 
   /**
+   * Classify how `currentModules` has drifted from `oldModules` — the
+   * schema a client was generated against (its epoch). The diff runs
+   * old→current, so a removed field surfaces as a Drop* op (a field the
+   * old client may still reference). Reuses `classifyUnsafeOperations` so
+   * the breaking-vs-safe verdict matches the migration gate exactly.
+   *
+   *  - `"none"`        — no operations; schemas are identical.
+   *  - `"compatible"`  — every op is additive/safe; old clients keep working.
+   *  - `"breaking"`    — at least one unsafe or ambiguous op; old clients
+   *                      may break.
+   */
+  classifyDrift(
+    oldModules: Module[],
+    currentModules: Module[]
+  ): "none" | "compatible" | "breaking" {
+    const operations = this.differ.diff(oldModules, currentModules);
+    if (operations.length === 0) {
+      return "none";
+    }
+
+    const plan: Types.MigrationPlan = {
+      estimatedDuration: 0,
+      migrations: [
+        {
+          createdAt: new Date(),
+          description: "",
+          id: "drift-check",
+          name: "drift-check",
+          operations,
+          schemaHash: ""
+        }
+      ],
+      operationsCount: operations.length,
+      targetSchemaHash: ""
+    };
+
+    const flagged = this.classifyUnsafeOperations(plan);
+    return flagged.length === 0 ? "compatible" : "breaking";
+  }
+
+  /**
    * Create a checkpoint before migration
    */
   createMigrationCheckpoint(

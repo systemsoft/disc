@@ -178,6 +178,14 @@ export class DiscClient {
   private retryDelay: number;
   private authToken?: string;
   private logger?: DiscClientConfig["logger"];
+  private onSchemaMismatch?: DiscClientConfig["onSchemaMismatch"];
+  /**
+   * Schema epoch this client was generated against. The generated `DiscClient`
+   * subclass assigns `this.schemaEpoch = DiscClient.SCHEMA_EPOCH`; it can also
+   * be supplied via `config.schemaEpoch`. When set, it is sent as the
+   * `X-Disc-Expected-Schema` request header for server-side drift detection.
+   */
+  protected schemaEpoch?: string;
 
   constructor(config?: DiscClientConfig) {
     // Set the logger first so baseUrl resolution can surface read failures.
@@ -188,6 +196,8 @@ export class DiscClient {
     this.customHeaders = config?.headers ?? {};
     this.retries = config?.retries ?? 0;
     this.retryDelay = config?.retryDelay ?? 1000;
+    this.onSchemaMismatch = config?.onSchemaMismatch;
+    this.schemaEpoch = config?.schemaEpoch;
   }
 
   /**
@@ -378,6 +388,12 @@ export class DiscClient {
       headers.set("Authorization", `Bearer ${this.authToken}`);
     }
 
+    // Advertise the schema epoch this client was generated against so the
+    // server can detect drift. Omitted entirely when unknown.
+    if (this.schemaEpoch) {
+      headers.set("X-Disc-Expected-Schema", this.schemaEpoch);
+    }
+
     // Merge any extra headers from init
     if (init?.headers) {
       const extra = new Headers(init.headers);
@@ -411,6 +427,7 @@ export class DiscClient {
           );
         }
 
+        this.checkSchemaDrift(response);
         return response;
       } catch (error) {
         // Don't retry auth, query, protocol, or server errors
@@ -479,6 +496,51 @@ export class DiscClient {
 
     // Should not reach here, but satisfy TypeScript
     throw lastError ?? new DiscNetworkError("Request failed after retries");
+  }
+
+  /**
+   * Inspect a response for the server's schema-drift verdict
+   * (`X-Disc-Schema-Mismatch` / `X-Disc-Schema-Version`). Emits an actionable
+   * warning via the logger for `compatible` / `breaking`, and invokes the
+   * optional `onSchemaMismatch` callback for any non-`none` status. `Headers.get`
+   * is case-insensitive, so header casing doesn't matter.
+   */
+  private checkSchemaDrift(response: Response): void {
+    const mismatch = response.headers.get("x-disc-schema-mismatch");
+    if (!mismatch || mismatch === "none") {
+      return;
+    }
+
+    const serverVersion = response.headers.get("x-disc-schema-version");
+
+    if (mismatch === "breaking") {
+      this.logger?.warn?.(
+        `Disc schema drift: server schema (${serverVersion}) has BREAKING ` +
+          `changes vs this client's generated schema (${this.schemaEpoch}). ` +
+          `This client may hit query failures; redeploy with regenerated code.`,
+        { serverVersion, clientEpoch: this.schemaEpoch, status: mismatch }
+      );
+    } else if (mismatch === "compatible") {
+      this.logger?.warn?.(
+        `Disc schema drift: server schema (${serverVersion}) drifted from this ` +
+          `client's generated schema (${this.schemaEpoch}), but the changes are ` +
+          `additive/compatible; consider regenerating the client.`,
+        { serverVersion, clientEpoch: this.schemaEpoch, status: mismatch }
+      );
+    }
+    // "unknown" (or any unrecognized value) gets no logger warning — the
+    // optional `onSchemaMismatch` callback below still fires for it.
+
+    if (this.onSchemaMismatch) {
+      const status: "compatible" | "breaking" | "unknown" = mismatch === "compatible" || mismatch === "breaking" ?
+        mismatch :
+        "unknown";
+      this.onSchemaMismatch({
+        status,
+        serverVersion,
+        clientEpoch: this.schemaEpoch
+      });
+    }
   }
 
   private delay(ms: number): Promise<void> {
