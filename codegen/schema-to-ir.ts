@@ -119,6 +119,9 @@ function objectOf(typeDef: TypeDef, moduleName: string, resolve: NameResolver): 
 
   return {
     name,
+    tableName: typeDef.tableName,
+    parentTypes: (typeDef.parentTypes ?? []).map((p) => resolveQualified(p, resolve)),
+    description: typeDef.annotations?.["description"],
     fields,
     shapes: {
       insert: insertShape(props, links, resolve),
@@ -135,15 +138,18 @@ function objectOf(typeDef: TypeDef, moduleName: string, resolve: NameResolver): 
 // ---------------------------------------------------------------------------
 
 function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
+  const constraints = (prop.constraints ?? []).map((c) => ({ name: c.name, args: c.args ?? [] }));
   return {
     name: prop.name,
     type: typeRefOf(prop.edgeqlType ?? prop.type, resolve),
     cardinality: cardinalityOf(prop.required, prop.multi),
     isLink: false,
     isComputed: prop.computed ?? false,
-    isExclusive: (prop.constraints ?? []).some((c) => c.name === "exclusive"),
+    isExclusive: constraints.some((c) => c.name === "exclusive"),
+    constraints,
     hasDefault: prop.hasDefault ?? false,
     readonly: prop.readonly ?? false,
+    description: prop.annotations?.["description"],
   };
 }
 
@@ -155,8 +161,10 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
     isLink: true,
     isComputed: link.computed ?? false,
     isExclusive: false,
+    constraints: [],
     hasDefault: false,
     readonly: false,
+    description: link.annotations?.["description"],
   };
 }
 

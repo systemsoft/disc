@@ -95,6 +95,17 @@ Deno.test("schemaToIR - exclusive constraint and required single link", () => {
   assertEquals(merchantLink.type, { kind: "object", name: { module: "default", name: "Merchant" } });
 });
 
+Deno.test("schemaToIR - object carries tableName and full constraints", () => {
+  const ir = schemaToIR(createMultiModuleTestSchema());
+  const merchant = obj(mod(ir.modules, "default"), "Merchant");
+  assertEquals(merchant.tableName, "merchants");
+  assertEquals(merchant.parentTypes, []);
+
+  const apiKey = obj(mod(ir.modules, "api"), "ApiKey");
+  assertEquals(apiKey.tableName, "api_keys");
+  assertEquals(field<Field>(apiKey.fields, "key").constraints, [{ name: "exclusive", args: [] }]);
+});
+
 Deno.test("schemaToIR - decimal scalar preserved", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   const payment = obj(mod(ir.modules, "payment"), "Payment");

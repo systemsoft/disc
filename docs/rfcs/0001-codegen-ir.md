@@ -211,3 +211,18 @@ second one does.
 
 → IR types implemented in `codegen/ir.ts` (Phase 1, types only). Awaiting
 final sign-off on the concrete types before Phase 2.
+
+### Contract enrichment (2026-06-30, during Phase 3)
+
+The Phase 3 byte-identical oracle proved the initial IR was lossy: it dropped
+schema data the generated JSDoc/structure depends on. Per sign-off, the
+contract was extended additively (no existing consumer breaks):
+
+- `ObjectType`: `tableName` (backing table, not derivable), `parentTypes`
+  (`extending …` — structural), `description?`.
+- `Field`: `constraints: { name, args }[]` (full set, e.g. `max_length(255)`;
+  `isExclusive` retained as a derived convenience flag), `description?`.
+
+Deferred (not exercised by the Phase 3 fixtures): preserving the raw
+`edgeqlType` display spelling (e.g. `cal::local_datetime`) — tracked as a TODO,
+to be reconstructed by the emitter or carried explicitly when a fixture needs it.

@@ -196,12 +196,18 @@ export interface EnumType {
 }
 
 /**
- * An object type: its base field set, its denormalized shape variants
- * (decision 1), and its operation set. Keys are grouped logically (identity,
- * structure, derived) rather than alphabetically for readability.
+ * An object type: its identity, storage table, inheritance, base field set, its
+ * denormalized shape variants (decision 1), and its operation set. Keys are
+ * grouped logically (identity, structure, derived) rather than alphabetically.
  */
 export interface ObjectType {
   name: QualifiedName;
+  /** Backing storage table name (not derivable from `name`). */
+  tableName: string;
+  /** Direct supertypes (`extending A, B`), resolved to qualified names. */
+  parentTypes: QualifiedName[];
+  /** Optional doc description (from the schema annotation). */
+  description?: string;
   fields: Field[];
   shapes: ShapeVariants;
   operations: Operation[];
@@ -217,9 +223,19 @@ export interface Field {
   cardinality: Cardinality;
   isLink: boolean;
   isComputed: boolean;
+  /** Convenience flag: true iff `constraints` contains an `exclusive` entry. */
   isExclusive: boolean;
+  /** Full constraint set with args (e.g. `max_length(255)`); source of truth. */
+  constraints: FieldConstraint[];
   hasDefault: boolean;
   readonly: boolean;
+  /** Optional doc description (from the schema annotation). */
+  description?: string;
+}
+
+export interface FieldConstraint {
+  name: string;
+  args: string[];
 }
 
 // ---------------------------------------------------------------------------
