@@ -1,4 +1,4 @@
-name: discord-notify
+name: Notify Discord
 
 on:
   push:
