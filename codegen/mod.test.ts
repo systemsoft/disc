@@ -33,6 +33,21 @@ Deno.test("Codegen - generateTypeScript with default config", () => {
   assertEquals(hasTypesFile, true);
 });
 
+Deno.test("Codegen - generateRust emits a Cargo crate", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateRust(schema);
+
+  assertExists(result);
+  assertEquals(result.errors.length, 0);
+
+  const paths = result.files.map(f => f.path);
+  assertEquals(paths.some(p => p.endsWith("/Cargo.toml")), true);
+  assertEquals(paths.some(p => p.endsWith("/src/lib.rs")), true);
+  assertEquals(paths.some(p => p.endsWith("/src/disc_runtime.rs")), true);
+  /*** Defaults to a Rust-specific output dir so it never collides with the TS client. ***/
+  assertStringIncludes(paths[0], "disc-client-rust");
+});
+
 Deno.test("Codegen - generateTypeScript with custom config", () => {
   const schema = Context.createTestSchema();
 

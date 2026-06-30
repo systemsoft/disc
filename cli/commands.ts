@@ -125,7 +125,9 @@ export class CLICommands {
   async codegen(args: CLIArgs): Promise<void> {
     getLogger("cli").info("Generating TypeScript types…");
 
-    const outputDir = args.output || "./dbschema/disc-client";
+    const rust = args.rust === true;
+    const outputDir = (args.output as string | undefined) ||
+      (rust ? "./dbschema/disc-client-rust" : "./dbschema/disc-client");
     const schemaDir = args["schema-dir"] || "./dbschema";
     const schemaFile = args.schema as string | undefined;
     const target = args.target || "client";
@@ -211,6 +213,29 @@ export class CLICommands {
       };
 
       getLogger("cli").info(`Generating code…`);
+
+      if (rust) {
+        const rustResult = Codegen.generateRust(schema, config);
+
+        if (rustResult.errors.length > 0) {
+          getLogger("cli").error(`Generation failed with errors:`);
+          rustResult.errors.forEach(error => getLogger("cli").error(`  ${error}`));
+          return;
+        }
+
+        /*** No SDK extraction or `deno fmt` for Rust — the emitted crate is self-contained. ***/
+        getLogger("cli").info(`Writing ${rustResult.files.length} file${rustResult.files.length === 1 ? "" : "s"}…`);
+        await Codegen.writeGeneratedFiles(rustResult, ".", { runFmt: false });
+
+        getLogger("cli").info(`Generation Summary:`);
+        getLogger("cli").info(`  Files generated: ${rustResult.files.length}`);
+        getLogger("cli").info(`  Types generated: ${Array.from(schema.types.keys()).length}`);
+        getLogger("cli").info(`Rust generation complete!`);
+        getLogger("cli").info(`  Crate written to ${outputDir}/`);
+        getLogger("cli").info(`  Build it with: cd ${outputDir} && cargo build`);
+        return;
+      }
+
       const result = Codegen.generateTypeScript(schema, config);
 
       if (result.errors.length > 0) {

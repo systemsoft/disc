@@ -12,6 +12,7 @@ import * as Types from "./types.ts";
 
 import { getLogger } from "../lib/logger.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { emitRust } from "./emit-rust.ts";
 import { emitTypeScript } from "./emit-typescript.ts";
 import { schemaToIR } from "./schema-to-ir.ts";
 
@@ -22,6 +23,11 @@ const log = getLogger("codegen");
 /*** EXPORT ------------------------------------------- ***/
 
 export * from "./types.ts";
+
+/*** The IR pipeline, exposed for programmatic use: schema -> IR -> emit(language). ***/
+export { schemaToIR } from "./schema-to-ir.ts";
+export { emitTypeScript } from "./emit-typescript.ts";
+export { emitRust } from "./emit-rust.ts";
 
 /**
  * Discover schema files in a directory.
@@ -82,6 +88,41 @@ export function generateTypeScript(schema: Context.Schema, config: Partial<Types
   try {
     result.files = emitTypeScript(schemaToIR(schema), fullConfig);
     log.info("TypeScript files generated", { count: result.files.length });
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return result;
+}
+
+/**
+ * Generate a Rust client crate from the EdgeQL schema. Second emitter on the
+ * same IR (`schema -> IR -> emitRust`): produces a self-contained Cargo crate
+ * (structs, query builders, std-only HTTP/JSON client). Defaults to a separate
+ * output dir so it never collides with the TypeScript client.
+ */
+export function generateRust(schema: Context.Schema, config: Partial<Types.CodegenConfig> = {}): Types.CodegenResult {
+  const fullConfig: Types.CodegenConfig = {
+    formatOutput: config.formatOutput !== false,
+    includeClient: config.includeClient !== false,
+    includeMutations: config.includeMutations !== false,
+    includeQueryBuilders: config.includeQueryBuilders !== false,
+    interfaceSuffix: config.interfaceSuffix || "",
+    outputDir: config.outputDir || "./dbschema/disc-client-rust",
+    schemaSource: config.schemaSource || "./dbschema/default.disc",
+    target: config.target || "client",
+    typePrefix: config.typePrefix || ""
+  };
+
+  const result: Types.CodegenResult = {
+    errors: [],
+    files: [],
+    warnings: []
+  };
+
+  try {
+    result.files = emitRust(schemaToIR(schema), fullConfig);
+    log.info("Rust files generated", { count: result.files.length });
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : "Unknown error");
   }
