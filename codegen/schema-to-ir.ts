@@ -29,7 +29,7 @@ import type {
   ScalarKind,
   Shape,
   ShapeField,
-  TypeRef,
+  TypeRef
 } from "./ir.ts";
 
 /** Current IR schema version emitted by this frontend. */
@@ -56,7 +56,7 @@ const SCALAR_KINDS: ReadonlySet<string> = new Set<ScalarKind>([
   "date_duration",
   "bytes",
   "json",
-  "memory",
+  "memory"
 ]);
 
 /** Resolves a (possibly bare) type name to its definition, if known. */
@@ -67,8 +67,8 @@ export function schemaToIR(schema: Schema): CodegenIR {
   const resolve = makeResolver(schema);
   // Mirrors the generator's isMultiModule: namespace mode if any type declares a
   // module at all, even "default".
-  const multiModule = [...schema.types.values()].some((t) => Boolean(t.module));
-  const byModule = new Map<string, { enums: EnumType[]; objects: ObjectType[] }>();
+  const multiModule = [...schema.types.values()].some(t => Boolean(t.module));
+  const byModule = new Map<string, { enums: EnumType[]; objects: ObjectType[]; }>();
 
   for (const typeDef of schema.types.values()) {
     const moduleName = typeDef.module ?? "default";
@@ -81,10 +81,10 @@ export function schemaToIR(schema: Schema): CodegenIR {
     byModule.set(moduleName, bucket);
   }
 
-  const modules: Module[] = orderModules([...byModule.keys()]).map((name) => ({
+  const modules: Module[] = orderModules([...byModule.keys()]).map(name => ({
     name,
     enums: byModule.get(name)!.enums,
-    objects: byModule.get(name)!.objects,
+    objects: byModule.get(name)!.objects
   }));
 
   return { version: IR_VERSION, multiModule, modules };
@@ -97,8 +97,10 @@ export function schemaToIR(schema: Schema): CodegenIR {
 /** Default module first, then the rest alphabetically (matches the generator). */
 function orderModules(names: string[]): string[] {
   return names.sort((a, b) => {
-    if (a === "default") return b === "default" ? 0 : -1;
-    if (b === "default") return 1;
+    if (a === "default")
+      return b === "default" ? 0 : -1;
+    if (b === "default")
+      return 1;
     return a.localeCompare(b);
   });
 }
@@ -106,7 +108,7 @@ function orderModules(names: string[]): string[] {
 function enumOf(typeDef: TypeDef, moduleName: string): EnumType {
   return {
     name: { module: moduleName, name: typeDef.name },
-    members: [...(typeDef.enumValues ?? [])],
+    members: [...(typeDef.enumValues ?? [])]
   };
 }
 
@@ -116,23 +118,23 @@ function objectOf(typeDef: TypeDef, moduleName: string, resolve: NameResolver): 
   const links = [...typeDef.links.values()];
 
   const fields: Field[] = [
-    ...props.map((p) => fieldOfProperty(p, resolve)),
-    ...links.map((l) => fieldOfLink(l, resolve)),
+    ...props.map(p => fieldOfProperty(p, resolve)),
+    ...links.map(l => fieldOfLink(l, resolve))
   ];
 
   return {
     name,
     tableName: typeDef.tableName,
-    parentTypes: (typeDef.parentTypes ?? []).map((p) => resolveQualified(p, resolve)),
+    parentTypes: (typeDef.parentTypes ?? []).map(p => resolveQualified(p, resolve)),
     description: typeDef.annotations?.["description"],
     fields,
     shapes: {
       insert: insertShape(props, links, resolve),
       update: updateShape(props, links, resolve),
       filter: filterShape(props, links, resolve),
-      filterVars: filterVarsShape(props, resolve),
+      filterVars: filterVarsShape(props, resolve)
     },
-    operations: operations(name),
+    operations: operations(name)
   };
 }
 
@@ -141,20 +143,20 @@ function objectOf(typeDef: TypeDef, moduleName: string, resolve: NameResolver): 
 // ---------------------------------------------------------------------------
 
 function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
-  const constraints = (prop.constraints ?? []).map((c) => ({ name: c.name, args: c.args ?? [] }));
+  const constraints = (prop.constraints ?? []).map(c => ({ name: c.name, args: c.args ?? [] }));
   return {
     name: prop.name,
     type: typeRefOf(prop.edgeqlType ?? prop.type, resolve),
     cardinality: cardinalityOf(prop.required, prop.multi),
     isLink: false,
     isComputed: prop.computed ?? false,
-    isExclusive: constraints.some((c) => c.name === "exclusive"),
+    isExclusive: constraints.some(c => c.name === "exclusive"),
     constraints,
     hasDefault: prop.hasDefault ?? false,
     readonly: prop.readonly ?? false,
     sourceType: prop.edgeqlType ?? prop.type,
     computedExpr: prop.computedExpr,
-    description: prop.annotations?.["description"],
+    description: prop.annotations?.["description"]
   };
 }
 
@@ -171,7 +173,7 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
     readonly: false,
     sourceType: link.target,
     computedExpr: link.computedExpr,
-    description: link.annotations?.["description"],
+    description: link.annotations?.["description"]
   };
 }
 
@@ -187,17 +189,19 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
 function insertShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolver): Shape {
   const fields: ShapeField[] = [];
   for (const p of props) {
-    if (p.name === "id" || p.computed || (p.readonly && p.hasDefault)) continue;
+    if (p.name === "id" || p.computed || (p.readonly && p.hasDefault))
+      continue;
     fields.push({
       name: p.name,
       type: typeRefOf(p.edgeqlType ?? p.type, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
       isLink: false,
-      optional: (p.hasDefault ?? false) || !p.required,
+      optional: (p.hasDefault ?? false) || !p.required
     });
   }
   for (const l of links) {
-    if (l.computed) continue;
+    if (l.computed)
+      continue;
     fields.push(linkShapeField(l, !l.required));
   }
   return { fields };
@@ -212,17 +216,19 @@ function insertShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
 function updateShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolver): Shape {
   const fields: ShapeField[] = [];
   for (const p of props) {
-    if (p.name === "id" || p.computed || p.readonly) continue;
+    if (p.name === "id" || p.computed || p.readonly)
+      continue;
     fields.push({
       name: p.name,
       type: typeRefOf(p.edgeqlType ?? p.type, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
       isLink: false,
-      optional: true,
+      optional: true
     });
   }
   for (const l of links) {
-    if (l.computed) continue;
+    if (l.computed)
+      continue;
     fields.push(linkShapeField(l, true));
   }
   return { fields };
@@ -235,7 +241,7 @@ function linkShapeField(link: LinkDef, optional: boolean): ShapeField {
     type: { kind: "scalar", scalar: "uuid" },
     cardinality: cardinalityOf(link.required, link.multi),
     isLink: true,
-    optional,
+    optional
   };
 }
 
@@ -248,12 +254,13 @@ function linkShapeField(link: LinkDef, optional: boolean): ShapeField {
 function filterShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolver): FilterShape {
   const fields: FilterField[] = [];
   for (const p of props) {
-    if (p.computed) continue;
+    if (p.computed)
+      continue;
     fields.push({
       name: p.name,
       operand: typeRefOf(p.edgeqlType ?? p.type, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
-      isLink: false,
+      isLink: false
     });
   }
   for (const l of links) {
@@ -261,7 +268,7 @@ function filterShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
       name: l.name,
       operand: { kind: "object", name: resolveQualified(l.target, resolve) },
       cardinality: cardinalityOf(l.required, l.multi),
-      isLink: true,
+      isLink: true
     });
   }
   return { fields };
@@ -269,9 +276,9 @@ function filterShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
 
 /** FilterVars: every property as a bindable value (computed included); no links. */
 function filterVarsShape(props: PropertyDef[], resolve: NameResolver): FilterVarsShape {
-  const fields: FilterVarField[] = props.map((p) => ({
+  const fields: FilterVarField[] = props.map(p => ({
     name: p.name,
-    type: typeRefOf(p.edgeqlType ?? p.type, resolve),
+    type: typeRefOf(p.edgeqlType ?? p.type, resolve)
   }));
   return { fields };
 }
@@ -287,7 +294,7 @@ function operations(object: QualifiedName): Operation[] {
     type: { kind: "scalar", scalar: "uuid" },
     cardinality: "One",
     optional: false,
-    hasDefault: false,
+    hasDefault: false
   };
   const out = (cardinality: Cardinality): Output => ({ type: self, cardinality });
   const dataParam = (variant: "insert" | "update"): Param => ({
@@ -295,7 +302,7 @@ function operations(object: QualifiedName): Operation[] {
     type: { kind: "shape", object, variant },
     cardinality: "One",
     optional: false,
-    hasDefault: false,
+    hasDefault: false
   });
 
   return [
@@ -309,9 +316,9 @@ function operations(object: QualifiedName): Operation[] {
         type: { kind: "shape", object, variant: "filter" },
         cardinality: "One",
         optional: false,
-        hasDefault: false,
+        hasDefault: false
       }],
-      output: out("Many"),
+      output: out("Many")
     },
     { name: "insert", kind: "insert", params: [dataParam("insert")], output: out("One") },
     { name: "update", kind: "update", params: [id, dataParam("update")], output: out("One") },
@@ -325,18 +332,18 @@ function operations(object: QualifiedName): Operation[] {
           type: { kind: "scalar", scalar: "str" },
           cardinality: "One",
           optional: true,
-          hasDefault: false,
+          hasDefault: false
         },
         {
           name: "variables",
           type: { kind: "shape", object, variant: "filterVars" },
           cardinality: "One",
           optional: true,
-          hasDefault: false,
-        },
+          hasDefault: false
+        }
       ],
-      output: { type: { kind: "scalar", scalar: "int64" }, cardinality: "One" },
-    },
+      output: { type: { kind: "scalar", scalar: "int64" }, cardinality: "One" }
+    }
   ];
 }
 
@@ -346,7 +353,8 @@ function operations(object: QualifiedName): Operation[] {
 
 /** required x multi -> cardinality (see ir.ts Cardinality). */
 function cardinalityOf(required: boolean, multi: boolean): Cardinality {
-  if (multi) return required ? "AtLeastOne" : "Many";
+  if (multi)
+    return required ? "AtLeastOne" : "Many";
   return required ? "One" : "AtMostOne";
 }
 
@@ -355,10 +363,12 @@ function typeRefOf(raw: string, resolve: NameResolver): TypeRef {
   const s = raw.trim();
 
   const collection = collectionRefOf(s, resolve);
-  if (collection) return collection;
+  if (collection)
+    return collection;
 
   const scalar = scalarKindOf(s);
-  if (scalar) return { kind: "scalar", scalar };
+  if (scalar)
+    return { kind: "scalar", scalar };
 
   const def = resolve(s);
   if (def?.kind === "enum") {
@@ -372,25 +382,27 @@ function collectionRefOf(s: string, resolve: NameResolver): TypeRef | null {
     const inner = unwrap(s, wrapper);
     if (inner !== null) {
       const element = typeRefOf(inner, resolve);
-      if (wrapper === "array") return { kind: "array", element };
-      if (wrapper === "multirange") return { kind: "multirange", element };
+      if (wrapper === "array")
+        return { kind: "array", element };
+      if (wrapper === "multirange")
+        return { kind: "multirange", element };
       return { kind: "range", element };
     }
   }
   const tupleInner = unwrap(s, "tuple");
   if (tupleInner !== null) {
     const parts = splitTopLevel(tupleInner);
-    const labeled = parts.every((p) => /^[A-Za-z_]\w*\s*:/.test(p));
+    const labeled = parts.every(p => /^[A-Za-z_]\w*\s*:/.test(p));
     if (labeled) {
       return {
         kind: "named_tuple",
-        elements: parts.map((p) => {
+        elements: parts.map(p => {
           const idx = p.indexOf(":");
           return { name: p.slice(0, idx).trim(), type: typeRefOf(p.slice(idx + 1), resolve) };
-        }),
+        })
       };
     }
-    return { kind: "tuple", elements: parts.map((p) => typeRefOf(p, resolve)) };
+    return { kind: "tuple", elements: parts.map(p => typeRefOf(p, resolve)) };
   }
   return null;
 }
@@ -411,15 +423,17 @@ function splitTopLevel(s: string): string[] {
   let start = 0;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
-    if (ch === "<") depth++;
-    else if (ch === ">") depth--;
+    if (ch === "<")
+      depth++;
+    else if (ch === ">")
+      depth--;
     else if (ch === "," && depth === 0) {
       parts.push(s.slice(start, i));
       start = i + 1;
     }
   }
   parts.push(s.slice(start));
-  return parts.map((p) => p.trim()).filter((p) => p.length > 0);
+  return parts.map(p => p.trim()).filter(p => p.length > 0);
 }
 
 function scalarKindOf(s: string): ScalarKind | null {
@@ -430,7 +444,8 @@ function scalarKindOf(s: string): ScalarKind | null {
 /** Resolve a (bare or qualified) type name to a QualifiedName. */
 function resolveQualified(name: string, resolve: NameResolver): QualifiedName {
   const def = resolve(name);
-  if (def) return { module: def.module ?? "default", name: def.name };
+  if (def)
+    return { module: def.module ?? "default", name: def.name };
   if (name.includes("::")) {
     const [module, bare] = name.split("::");
     return { module, name: bare };
@@ -442,10 +457,12 @@ function resolveQualified(name: string, resolve: NameResolver): QualifiedName {
 function makeResolver(schema: Schema): NameResolver {
   const byBare = new Map<string, TypeDef>();
   for (const def of schema.types.values()) {
-    if (!byBare.has(def.name)) byBare.set(def.name, def);
+    if (!byBare.has(def.name))
+      byBare.set(def.name, def);
   }
   return (name: string) => {
-    if (schema.types.has(name)) return schema.types.get(name);
+    if (schema.types.has(name))
+      return schema.types.get(name);
     const bare = name.includes("::") ? name.split("::").pop()! : name;
     return byBare.get(bare);
   };

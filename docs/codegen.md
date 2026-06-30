@@ -710,7 +710,6 @@ A typical workflow:
 
 If you use `disc watch` during development, both migrations and codegen can run automatically when schema files change.
 
-
 ## Architecture & Language Targets
 
 Codegen runs on a language-neutral **intermediate representation (IR)**. The

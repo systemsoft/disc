@@ -136,7 +136,8 @@ Deno.test("emitGo: insert/update bind params in deterministic sorted order", () 
   // sorted keys, so the assignment order must be sorted too. A non-deterministic
   // `range obj` here silently corrupts inserts (a value lands in the wrong slot).
   const queries = emitGo(schemaToIR(createMultiModuleTestSchema()), goConfig())
-    .find(f => f.path.endsWith("queries.go"))!.content;
+    .find(f => f.path.endsWith("queries.go"))!
+    .content;
   assert(queries.includes("sort.Strings(keys)"), "sorts the assignment keys");
   assert(queries.includes("for _, key := range keys {"), "builds assignments from sorted keys");
   // The buggy form built assignments straight from non-deterministic map iteration.

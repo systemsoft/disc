@@ -3,7 +3,7 @@
 
 /**
  * Golden-snapshot regression oracle for the IR-driven TypeScript emitter
- *.
+ * .
  *
  * For each fixture schema we generate the IR-driven output and assert each
  * emitted file's content against a committed snapshot. The snapshots ARE the
@@ -234,7 +234,7 @@ function createQualifiedTargetSchema(): Schema {
     multi: false,
     columnName: "id",
     edgeqlType: "uuid",
-    hasDefault: true,
+    hasDefault: true
   };
   const person: TypeDef = {
     name: "Person",
@@ -242,7 +242,7 @@ function createQualifiedTargetSchema(): Schema {
     tableName: "persons",
     module: "default",
     properties: new Map([["id", { ...idProp }]]),
-    links: new Map(),
+    links: new Map()
   };
   const pet: TypeDef = {
     name: "Pet",
@@ -252,31 +252,31 @@ function createQualifiedTargetSchema(): Schema {
     properties: new Map([["id", { ...idProp }]]),
     links: new Map<string, LinkDef>([
       ["owner", { name: "owner", target: "default::Person", required: true, multi: false, columnName: "owner_id" }],
-      ["friends", { name: "friends", target: "default::Person", required: false, multi: true, backlink: "pets" }],
-    ]),
+      ["friends", { name: "friends", target: "default::Person", required: false, multi: true, backlink: "pets" }]
+    ])
   };
   return {
     types: new Map<string, TypeDef>([["Person", person], ["Pet", pet]]),
     functions: new Map(),
     aliases: new Map(),
-    globals: new Map(),
+    globals: new Map()
   };
 }
 
 // --- tests -----------------------------------------------------------------
 
-Deno.test("emitTypeScript matches golden snapshot (flat schema)", async (t) => {
+Deno.test("emitTypeScript matches golden snapshot (flat schema)", async t => {
   await assertEmittedSnapshot(t, createTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript matches golden snapshot (multi-module schema)", async (t) => {
+Deno.test("emitTypeScript matches golden snapshot (multi-module schema)", async t => {
   await assertEmittedSnapshot(t, createMultiModuleTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript matches golden snapshot (computed + collection schema)", async (t) => {
+Deno.test("emitTypeScript matches golden snapshot (computed + collection schema)", async t => {
   await assertEmittedSnapshot(t, createCollectionTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript matches golden snapshot (module-qualified link target)", async (t) => {
+Deno.test("emitTypeScript matches golden snapshot (module-qualified link target)", async t => {
   await assertEmittedSnapshot(t, createQualifiedTargetSchema(), clientConfig());
 });

@@ -26,20 +26,23 @@ import { IR_VERSION, schemaToIR } from "./schema-to-ir.ts";
 // --- helpers ---------------------------------------------------------------
 
 function mod(modules: Module[], name: string): Module {
-  const m = modules.find((x) => x.name === name);
-  if (!m) throw new Error(`module ${name} not found`);
+  const m = modules.find(x => x.name === name);
+  if (!m)
+    throw new Error(`module ${name} not found`);
   return m;
 }
 
 function obj(m: Module, name: string): ObjectType {
-  const o = m.objects.find((x) => x.name.name === name);
-  if (!o) throw new Error(`object ${name} not found in module ${m.name}`);
+  const o = m.objects.find(x => x.name.name === name);
+  if (!o)
+    throw new Error(`object ${name} not found in module ${m.name}`);
   return o;
 }
 
-function field<T extends { name: string }>(fields: T[], name: string): T {
-  const f = fields.find((x) => x.name === name);
-  if (!f) throw new Error(`field ${name} not found`);
+function field<T extends { name: string; }>(fields: T[], name: string): T {
+  const f = fields.find(x => x.name === name);
+  if (!f)
+    throw new Error(`field ${name} not found`);
   return f;
 }
 
@@ -48,23 +51,23 @@ function field<T extends { name: string }>(fields: T[], name: string): T {
 Deno.test("schemaToIR - module grouping and ordering", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   assertEquals(ir.version, IR_VERSION);
-  assertEquals(ir.modules.map((m) => m.name), ["default", "api", "payment"]);
+  assertEquals(ir.modules.map(m => m.name), ["default", "api", "payment"]);
   assertEquals(ir.multiModule, true);
 });
 
 Deno.test("schemaToIR - multiModule is false when no type declares a module", () => {
   const schema: Schema = {
     types: new Map<string, TypeDef>([
-      ["Thing", { name: "Thing", kind: "object", tableName: "things", properties: new Map(), links: new Map() }],
+      ["Thing", { name: "Thing", kind: "object", tableName: "things", properties: new Map(), links: new Map() }]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
   assertEquals(schemaToIR(schema).multiModule, false);
 });
 
 Deno.test("schemaToIR - enums land in their module with members", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
-  assertEquals(mod(ir.modules, "default").enums.map((e) => e.name.name), ["MerchantStatus"]);
+  assertEquals(mod(ir.modules, "default").enums.map(e => e.name.name), ["MerchantStatus"]);
   assertEquals(mod(ir.modules, "default").enums[0].members, ["active", "suspended", "pending"]);
   const payment = mod(ir.modules, "payment");
   assertEquals(payment.enums[0].name, { module: "payment", name: "PaymentStatus" });
@@ -129,7 +132,7 @@ Deno.test("schemaToIR - insert shape excludes id, links become uuid FKs", () => 
   const insert = apiKey.shapes.insert;
 
   // id excluded
-  assertEquals(insert.fields.some((f) => f.name === "id"), false);
+  assertEquals(insert.fields.some(f => f.name === "id"), false);
   // required, no default -> not optional
   assertEquals(field<ShapeField>(insert.fields, "key").optional, false);
   // required but defaulted -> optional
@@ -145,8 +148,8 @@ Deno.test("schemaToIR - update shape: all optional, id excluded", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   const merchant = obj(mod(ir.modules, "default"), "Merchant");
   const update = merchant.shapes.update;
-  assertEquals(update.fields.some((f) => f.name === "id"), false);
-  assertEquals(update.fields.every((f) => f.optional), true);
+  assertEquals(update.fields.some(f => f.name === "id"), false);
+  assertEquals(update.fields.every(f => f.optional), true);
   // multi link still represented as uuid FK with Many cardinality
   const apiKeys = field<ShapeField>(update.fields, "apiKeys");
   assertEquals(apiKeys.isLink, true);
@@ -170,14 +173,14 @@ Deno.test("schemaToIR - filter shape: scalar operands + nested-object link opera
 Deno.test("schemaToIR - filterVars: every property, no links", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   const merchant = obj(mod(ir.modules, "default"), "Merchant");
-  const names = merchant.shapes.filterVars.fields.map((f) => f.name);
+  const names = merchant.shapes.filterVars.fields.map(f => f.name);
   assertEquals(names, ["id", "name", "status"]);
 });
 
 Deno.test("schemaToIR - standard CRUD operations with cardinalities", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   const merchant = obj(mod(ir.modules, "default"), "Merchant");
-  const byKind = Object.fromEntries(merchant.operations.map((o) => [o.kind, o]));
+  const byKind = Object.fromEntries(merchant.operations.map(o => [o.kind, o]));
 
   assertEquals(Object.keys(byKind).sort(), [
     "count",
@@ -186,7 +189,7 @@ Deno.test("schemaToIR - standard CRUD operations with cardinalities", () => {
     "insert",
     "select",
     "selectById",
-    "update",
+    "update"
   ]);
   assertEquals(byKind.select.output.cardinality, "Many");
   assertEquals(byKind.selectById.output.cardinality, "AtMostOne");
@@ -198,12 +201,12 @@ Deno.test("schemaToIR - standard CRUD operations with cardinalities", () => {
 // --- hand-built fixture: collections, computed, readonly, gnarly scalars ----
 
 function gnarlySchema(): Schema {
-  const prop = (over: Partial<PropertyDef> & { name: string; edgeqlType: string }): PropertyDef => ({
+  const prop = (over: Partial<PropertyDef> & { name: string; edgeqlType: string; }): PropertyDef => ({
     type: over.edgeqlType,
     required: true,
     multi: false,
     columnName: over.name,
-    ...over,
+    ...over
   });
 
   const widget: TypeDef = {
@@ -218,14 +221,14 @@ function gnarlySchema(): Schema {
       ["tags", prop({ name: "tags", edgeqlType: "array<str>", required: false })],
       ["span", prop({ name: "span", edgeqlType: "range<int32>", required: false })],
       ["pair", prop({ name: "pair", edgeqlType: "tuple<lat: float64, lng: float64>", required: false })],
-      ["slug", prop({ name: "slug", edgeqlType: "auto", computed: true, required: false })],
+      ["slug", prop({ name: "slug", edgeqlType: "auto", computed: true, required: false })]
     ]),
-    links: new Map<string, LinkDef>(),
+    links: new Map<string, LinkDef>()
   };
 
   return {
     types: new Map<string, TypeDef>([["Widget", widget]]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -233,18 +236,18 @@ Deno.test("schemaToIR - collection type refs (array/range/named tuple)", () => {
   const widget = obj(mod(schemaToIR(gnarlySchema()).modules, "default"), "Widget");
   assertEquals(field<Field>(widget.fields, "tags").type, {
     kind: "array",
-    element: { kind: "scalar", scalar: "str" },
+    element: { kind: "scalar", scalar: "str" }
   });
   assertEquals(field<Field>(widget.fields, "span").type, {
     kind: "range",
-    element: { kind: "scalar", scalar: "int32" },
+    element: { kind: "scalar", scalar: "int32" }
   });
   assertEquals(field<Field>(widget.fields, "pair").type, {
     kind: "named_tuple",
     elements: [
       { name: "lat", type: { kind: "scalar", scalar: "float64" } },
-      { name: "lng", type: { kind: "scalar", scalar: "float64" } },
-    ],
+      { name: "lng", type: { kind: "scalar", scalar: "float64" } }
+    ]
   });
 });
 
@@ -259,12 +262,12 @@ Deno.test("schemaToIR - computed and readonly exclusion rules", () => {
 
   // computed: present in base fields and filterVars, absent from insert/update/filter
   assertEquals(field<Field>(widget.fields, "slug").isComputed, true);
-  assertEquals(widget.shapes.filterVars.fields.some((f) => f.name === "slug"), true);
-  assertEquals(widget.shapes.insert.fields.some((f) => f.name === "slug"), false);
-  assertEquals(widget.shapes.update.fields.some((f) => f.name === "slug"), false);
-  assertEquals(widget.shapes.filter.fields.some((f) => f.name === "slug"), false);
+  assertEquals(widget.shapes.filterVars.fields.some(f => f.name === "slug"), true);
+  assertEquals(widget.shapes.insert.fields.some(f => f.name === "slug"), false);
+  assertEquals(widget.shapes.update.fields.some(f => f.name === "slug"), false);
+  assertEquals(widget.shapes.filter.fields.some(f => f.name === "slug"), false);
 
   // created is readonly+hasDefault: excluded from insert; readonly: excluded from update
-  assertEquals(widget.shapes.insert.fields.some((f) => f.name === "created"), false);
-  assertEquals(widget.shapes.update.fields.some((f) => f.name === "created"), false);
+  assertEquals(widget.shapes.insert.fields.some(f => f.name === "created"), false);
+  assertEquals(widget.shapes.update.fields.some(f => f.name === "created"), false);
 });
