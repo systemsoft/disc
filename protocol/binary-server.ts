@@ -266,6 +266,31 @@ interface ParamInfo {
 interface OutputField {
   name: string;
   edgeqlType: string;
+  /**
+   * Wire cardinality byte for this field (see `protocol/enums.ts`
+   * `Cardinality`). Derived from the schema: required+single→ONE,
+   * optional+single→AT_MOST_ONE, required+multi→AT_LEAST_ONE,
+   * optional+multi→MANY. Drives the per-element cardinality emitted by
+   * `buildOutputDescriptor` so the binary type descriptor is honest.
+   */
+  cardinality: number;
+}
+
+/**
+ * Map a field's `required`/`multi` schema flags to the Gel wire
+ * cardinality byte, matching the structured encoder's convention in
+ * `protocol/typedesc.ts` `buildResultDescriptors`:
+ *
+ *   required + single → ONE
+ *   optional + single → AT_MOST_ONE
+ *   required + multi  → AT_LEAST_ONE
+ *   optional + multi  → MANY
+ */
+function cardinalityFor(required: boolean, multi: boolean): number {
+  if (multi) {
+    return required ? Cardinality.AT_LEAST_ONE : Cardinality.MANY;
+  }
+  return required ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
 }
 
 interface OutputShape {
@@ -382,16 +407,27 @@ function collectParameters(node: unknown): ParamInfo[] {
  *     property types in the schema; default unknown fields to uuid.
  *   - SELECT without shape → `{id: uuid}`.
  */
-function inferOutputShape(
+export function inferOutputShape(
   query: unknown,
   schema?: {
     types?: Map<
       string,
-      { properties: Map<string, { edgeqlType?: string; type: string; }>; }
+      {
+        properties: Map<
+          string,
+          { edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
+        >;
+        links?: Map<string, { required?: boolean; multi?: boolean; }>;
+      }
     >;
   }
 ): OutputShape {
-  const idField: OutputField = { name: "id", edgeqlType: "uuid" };
+  // `id` is always required + single → ONE.
+  const idField: OutputField = {
+    name: "id",
+    edgeqlType: "uuid",
+    cardinality: Cardinality.ONE
+  };
   if (!query || typeof query !== "object") {
     return { typeName: "Object", fields: [idField] };
   }
@@ -417,7 +453,9 @@ function inferOutputShape(
       if (scalar !== null) {
         return {
           typeName: scalar,
-          fields: [{ name: "_value", edgeqlType: scalar }],
+          fields: [
+            { name: "_value", edgeqlType: scalar, cardinality: Cardinality.ONE }
+          ],
           isScalar: true
         };
       }
@@ -437,8 +475,38 @@ function inferOutputShape(
         // the original EdgeQL type via a property-level field. Always
         // prefer the EdgeQL type since that's what the wire codec needs.
         const propType = typeDef?.properties.get(fieldName);
-        const eqlType = propType?.edgeqlType ?? propType?.type ?? "uuid";
-        fields.push({ name: fieldName, edgeqlType: eqlType });
+        if (propType) {
+          const eqlType = propType.edgeqlType ?? propType.type ?? "uuid";
+          fields.push({
+            name: fieldName,
+            edgeqlType: eqlType,
+            cardinality: cardinalityFor(
+              propType.required ?? false,
+              propType.multi ?? false
+            )
+          });
+          continue;
+        }
+        // Not a stored property — a link resolves to its target id (uuid)
+        // on the wire, but its cardinality reflects required/multi.
+        const linkDef = typeDef?.links?.get(fieldName);
+        if (linkDef) {
+          fields.push({
+            name: fieldName,
+            edgeqlType: "uuid",
+            cardinality: cardinalityFor(
+              linkDef.required ?? false,
+              linkDef.multi ?? false
+            )
+          });
+          continue;
+        }
+        // Unknown field — fall back to an optional single uuid.
+        fields.push({
+          name: fieldName,
+          edgeqlType: "uuid",
+          cardinality: Cardinality.AT_MOST_ONE
+        });
       }
     }
 
@@ -716,7 +784,7 @@ function encodeRowsAsObjects(
   return rows.map(row => encodeRowAsObject(row, shape));
 }
 
-function buildOutputDescriptor(
+export function buildOutputDescriptor(
   shape: OutputShape
 ): { id: Uint8Array; data: Uint8Array; } {
   // Bare-scalar SELECT: emit a single CTYPE_BASE_SCALAR descriptor and
@@ -752,12 +820,12 @@ function buildOutputDescriptor(
   const elements: ShapeElementV2[] = shape.fields.map(f => ({
     name: f.name,
     pos: ensureScalar(f.edgeqlType),
-    cardinality: 0x41 // ONE
+    cardinality: f.cardinality
   }));
 
   const tid = generateDescriptorIdSync(
     new TextEncoder().encode(
-      `disc:output:${shape.typeName}:${shape.fields.map(f => f.name + ":" + f.edgeqlType).join(",")}`
+      `disc:output:${shape.typeName}:${shape.fields.map(f => f.name + ":" + f.edgeqlType + ":" + f.cardinality).join(",")}`
     )
   );
   descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
