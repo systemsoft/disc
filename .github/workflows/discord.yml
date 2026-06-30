@@ -11,21 +11,32 @@ jobs:
     steps:
       - name: Notify Discord
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          COMMIT_AUTHOR_USERNAME: ${{ github.event.head_commit.author.username }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           COMMIT_URL: ${{ github.event.head_commit.url }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          SENDER_AVATAR: ${{ github.event.sender.avatar_url }}
         run: |
+          if [ -n "$COMMIT_AUTHOR_USERNAME" ]; then
+            avatar="https://github.com/${COMMIT_AUTHOR_USERNAME}.png"
+          else
+            avatar="$SENDER_AVATAR"
+          fi
+          title=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          if [ ${#title} -gt 256 ]; then
+            title="${title:0:255}…"
+          fi
           payload=$(jq -n \
             --arg author "$COMMIT_AUTHOR" \
-            --arg msg "$COMMIT_MESSAGE" \
+            --arg avatar "$avatar" \
+            --arg title "$title" \
             --arg url "$COMMIT_URL" \
             '{
               embeds: [{
-                author: { name: $author },
+                author: { icon_url: $avatar, name: $author },
                 color: 5814783,
-                description: $msg,
-                title: "New push to primary",
+                title: $title,
                 url: $url
               }]
             }')
