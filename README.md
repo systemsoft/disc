@@ -93,6 +93,8 @@ disc status                            # Show instance status
 disc migrate                           # Generate and apply migrations
 disc shell                             # Interactive EdgeQL REPL
 disc codegen                           # Generate TypeScript types
+disc codegen --rust                    # Generate a Rust client crate (./dbschema/disc-client-rust)
+disc codegen --go                      # Generate a Go client package (./dbschema/disc-client-go)
 disc watch                             # Watch schema files and auto-migrate in dev
 disc serve                             # Start the Disc server
 disc ui                                # Open admin UI in browser
