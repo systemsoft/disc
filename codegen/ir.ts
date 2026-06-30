@@ -46,16 +46,20 @@ export interface Module {
 // ---------------------------------------------------------------------------
 
 /**
- * Result/field multiplicity, wire-complete (matches protocol/enums.ts). The
- * schema frontend only ever produces Empty/AtMostOne/One/Many; the future
- * descriptor frontend can also produce AtLeastOne (a set proven non-empty, e.g.
- * `assert_exists`). Emitter mapping is mechanical:
- *   One         -> T            (TS) / T         (Rust)
- *   AtMostOne   -> T | null     (TS) / Option<T> (Rust)
- *   Many        -> T[]          (TS) / Vec<T>    (Rust)
- *   AtLeastOne  -> T[]          (TS) / Vec<T>    (Rust)   [aliases Many until a
- *                  language refines it to a non-empty type]
- *   Empty where One expected    -> generation-time error
+ * Result/field multiplicity, wire-complete (matches protocol/enums.ts). It
+ * losslessly encodes the schema's (required x multi) cross-product, so a base
+ * object field needs nothing more than its cardinality:
+ *   One        = required single    -> `name: T`             / T
+ *   AtMostOne  = optional single    -> `name?: T | null`     / Option<T>
+ *   AtLeastOne = required multi      -> `name: T[]`           / Vec<T>
+ *   Many       = optional multi      -> `name?: T[] | null`  / Vec<T>
+ *   Empty      = result proven empty -> generation-time error where One expected
+ * (`?` present iff not required; `| null` iff not required; `[]` iff multi.)
+ * The future descriptor frontend also produces AtLeastOne for sets proven
+ * non-empty (e.g. `assert_exists`); a language may later refine it to a
+ * non-empty type. Denormalized shape fields drive optionality from their
+ * explicit `optional` flag instead (see ShapeField), using cardinality only for
+ * the `[]` decision.
  */
 export type Cardinality =
   | "Empty"
@@ -241,6 +245,12 @@ export interface ShapeField {
   cardinality: Cardinality;
   /** Emit as optional (`?` / `Option`). insert: defaulted or non-required; update: always. */
   optional: boolean;
+  /**
+   * True when this field is a link rendered by its uuid foreign key. Lets an
+   * emitter pick link-specific surface (e.g. a multi-link add/remove delta in
+   * update) without consulting the base object type.
+   */
+  isLink: boolean;
 }
 
 /**
