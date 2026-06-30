@@ -142,3 +142,33 @@ Deno.test("emitRust: includeQueryBuilders=false drops the query builders (keeps 
   if (await cargoAvailable())
     await assertCompiles(createMultiModuleTestSchema(), config);
 });
+
+Deno.test("emitRust: includeClient=false yields a types-only crate (no runtime, no builders)", async () => {
+  const config: CodegenConfig = { ...rustConfig(), includeClient: false };
+  const files = emitRust(schemaToIR(createMultiModuleTestSchema()), config);
+  const paths = files.map(f => f.path);
+  const lib = files.find(f => f.path.endsWith("src/lib.rs"))!.content;
+
+  assert(!paths.some(p => p.endsWith("disc_runtime.rs")), "no runtime file");
+  assert(!lib.includes("pub mod disc_runtime"), "no runtime module declaration");
+  assert(!lib.includes("QueryBuilder"), "builders need the client, so none emitted");
+  // Pure data types remain and must compile on their own.
+  assert(lib.includes("pub struct Merchant {"), "keeps the base struct");
+  if (await cargoAvailable())
+    await assertCompiles(createMultiModuleTestSchema(), config);
+});
+
+Deno.test("emitRust: includeMutations=false drops write methods, keeps reads", async () => {
+  const config: CodegenConfig = { ...rustConfig(), includeMutations: false };
+  const files = emitRust(schemaToIR(createMultiModuleTestSchema()), config);
+  const lib = files.find(f => f.path.endsWith("src/lib.rs"))!.content;
+
+  assert(lib.includes("pub fn select("), "keeps read methods");
+  assert(lib.includes("pub fn count("), "keeps count");
+  assert(!lib.includes("pub fn insert("), "drops insert method");
+  assert(!lib.includes("pub fn update("), "drops update method");
+  assert(!lib.includes("pub fn delete("), "drops delete method");
+
+  if (await cargoAvailable())
+    await assertCompiles(createMultiModuleTestSchema(), config);
+});

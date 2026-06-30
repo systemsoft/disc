@@ -182,11 +182,17 @@ class RustEmitter {
 
   generate(): Types.GeneratedFile[] {
     const base = this.config.outputDir;
-    return [
+    const files: Types.GeneratedFile[] = [
       { content: this.cargoToml(), path: `${base}/Cargo.toml`, type: "types" },
-      { content: this.libRs(), path: `${base}/src/lib.rs`, type: "types" },
-      { content: RUNTIME_RS, path: `${base}/src/disc_runtime.rs`, type: "client" }
+      { content: this.libRs(), path: `${base}/src/lib.rs`, type: "types" }
     ];
+
+    /*** The runtime is the Rust client; --no-client drops it (and, since the
+         query builders depend on it, them too — see emitModuleBody). ***/
+    if (this.config.includeClient)
+      files.push({ content: RUNTIME_RS, path: `${base}/src/disc_runtime.rs`, type: "client" });
+
+    return files;
   }
 
   // -- Type resolution ------------------------------------------------------
@@ -282,7 +288,8 @@ class RustEmitter {
     out += "#![allow(non_camel_case_types)]\n";
     out += "#![allow(unused_imports)]\n";
     out += "\n";
-    out += "pub mod disc_runtime;\n\n";
+    if (this.config.includeClient)
+      out += "pub mod disc_runtime;\n\n";
 
     for (const mod of this.ir.modules) {
       if (mod.name === "default") {
@@ -299,9 +306,9 @@ class RustEmitter {
 
   /** Emit one module's enums, structs, shapes and builders (crate-root or inside a `mod`). */
   private emitModuleBody(mod: Module): string {
-    const withBuilders = this.config.includeQueryBuilders;
+    // Builders depend on the runtime client, so they require both flags.
+    const withBuilders = this.config.includeQueryBuilders && this.config.includeClient;
     let out = "";
-    // Only the query builders reference the runtime client.
     if (withBuilders)
       out += "use crate::disc_runtime::{DiscClient, DiscError};\n\n";
 
@@ -440,9 +447,12 @@ class RustEmitter {
     out += "\n";
 
     out += this.emitSelectFns(name, etype);
-    out += this.emitInsertFn(name, etype);
-    out += this.emitUpdateFn(name, etype);
-    out += this.emitDeleteFn(name, etype);
+    // --no-mutations drops the write methods; reads (select/filter/count) stay.
+    if (this.config.includeMutations) {
+      out += this.emitInsertFn(name, etype);
+      out += this.emitUpdateFn(name, etype);
+      out += this.emitDeleteFn(name, etype);
+    }
     out += this.emitCountFn(etype);
 
     out += "}\n";
