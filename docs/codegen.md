@@ -726,8 +726,10 @@ schema --> schemaToIR() --> IR --> emitTypeScript()  (the output documented abov
                                                        builders, std-only HTTP/JSON client)
 ```
 
-`disc codegen` emits TypeScript. A **Rust** client is available programmatically
-via `emitRust(schemaToIR(schema), config)` (`codegen/emit-rust.ts`): it produces
-a self-contained Cargo crate whose structs derive `serde::Deserialize`, with
+`disc codegen` emits TypeScript; **`disc codegen --rust`** emits a Rust client
+crate instead (default output `./dbschema/disc-client-rust`). The same is
+available programmatically via `generateRust(schema, config)` /
+`emitRust(schemaToIR(schema), config)` (`codegen/emit-rust.ts`): it produces a
+self-contained Cargo crate whose structs derive `serde::Deserialize`, with
 `One -> T`, `AtMostOne -> Option<T>`, and `Many -> Vec<T>`, talking to the same
 HTTP `/query` endpoint as the TypeScript client.
