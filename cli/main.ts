@@ -129,7 +129,7 @@ const HELP_TEXT = dedent`
                                --unsafe, --backend-dsn
     shell/serve ${gray(".".repeat(14))} --backend-dsn; serve adds --jwt-secret, --enable-auth,
                                --enable-access-policies, --binary-port, --tls-cert, --tls-key
-    codegen ${gray(".".repeat(18))} --schema, --schema-dir, --output, --target, --rust, --no-queries,
+    codegen ${gray(".".repeat(18))} --schema, --schema-dir, --output, --target, --rust, --go, --no-queries,
                                --no-mutations, --no-client, --no-format, --js
     watch ${gray(".".repeat(20))} --schema, --output
     build ${gray(".".repeat(20))} --platform, --output, --lite
@@ -334,7 +334,7 @@ const COMMAND_HELP: Record<string, string> = {
   `,
 
   codegen: dedent`
-      Generate a typed client from your schema (TypeScript by default, Rust with --rust)
+      Generate a typed client from your schema (TypeScript by default, Rust with --rust, Go with --go)
 
     ${inverse("  USAGE ")}
 
@@ -347,6 +347,7 @@ const COMMAND_HELP: Record<string, string> = {
       --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Multi-file schema directory (default: ${bgBrightYellow("./dbschema")})
       -t, --target ${gray("<type>")} ${gray(".".repeat(6))} Output target: client | server | both
       --rust ${gray(".".repeat(19))} Emit a Rust client crate instead of TypeScript (default out: ${bgBrightYellow("./dbschema/disc-client-rust")})
+      --go ${gray(".".repeat(21))} Emit a Go client package instead of TypeScript (default out: ${bgBrightYellow("./dbschema/disc-client-go")})
       --no-client ${gray(".".repeat(14))} Skip client library generation
       --no-format ${gray(".".repeat(14))} Skip output formatting
       --no-mutations ${gray(".".repeat(11))} Skip mutation method generation
@@ -651,6 +652,7 @@ async function main() {
       "follow",
       "force",
       "foreground",
+      "go",
       "help",
       "js",
       "lite",

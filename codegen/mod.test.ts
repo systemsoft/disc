@@ -48,6 +48,20 @@ Deno.test("Codegen - generateRust emits a Cargo crate", () => {
   assertStringIncludes(paths[0], "disc-client-rust");
 });
 
+Deno.test("Codegen - generateGo emits a Go module", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateGo(schema);
+
+  assertExists(result);
+  assertEquals(result.errors.length, 0);
+
+  const paths = result.files.map(f => f.path);
+  assertEquals(paths.some(p => p.endsWith("/go.mod")), true);
+  assertEquals(paths.some(p => p.endsWith(".go")), true);
+  /*** Defaults to a Go-specific output dir so it never collides with the TS/Rust clients. ***/
+  assertStringIncludes(paths[0], "disc-client-go");
+});
+
 Deno.test("Codegen - generateTypeScript with custom config", () => {
   const schema = Context.createTestSchema();
 

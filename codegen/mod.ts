@@ -12,6 +12,7 @@ import * as Types from "./types.ts";
 
 import { getLogger } from "../lib/logger.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { emitGo } from "./emit-go.ts";
 import { emitRust } from "./emit-rust.ts";
 import { emitTypeScript } from "./emit-typescript.ts";
 import { schemaToIR } from "./schema-to-ir.ts";
@@ -28,6 +29,7 @@ export * from "./types.ts";
 export { schemaToIR } from "./schema-to-ir.ts";
 export { emitTypeScript } from "./emit-typescript.ts";
 export { emitRust } from "./emit-rust.ts";
+export { emitGo } from "./emit-go.ts";
 
 /**
  * Discover schema files in a directory.
@@ -123,6 +125,42 @@ export function generateRust(schema: Context.Schema, config: Partial<Types.Codeg
   try {
     result.files = emitRust(schemaToIR(schema), fullConfig);
     log.info("Rust files generated", { count: result.files.length });
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return result;
+}
+
+/**
+ * Generate a Go client package from the EdgeQL schema. Third emitter on the
+ * same IR (`schema -> IR -> emitGo`): produces a self-contained Go library
+ * package (structs, enums, query builders, stdlib-only HTTP/JSON client).
+ * Defaults to a separate output dir so it never collides with the TypeScript
+ * or Rust clients.
+ */
+export function generateGo(schema: Context.Schema, config: Partial<Types.CodegenConfig> = {}): Types.CodegenResult {
+  const fullConfig: Types.CodegenConfig = {
+    formatOutput: config.formatOutput !== false,
+    includeClient: config.includeClient !== false,
+    includeMutations: config.includeMutations !== false,
+    includeQueryBuilders: config.includeQueryBuilders !== false,
+    interfaceSuffix: config.interfaceSuffix || "",
+    outputDir: config.outputDir || "./dbschema/disc-client-go",
+    schemaSource: config.schemaSource || "./dbschema/default.disc",
+    target: config.target || "client",
+    typePrefix: config.typePrefix || ""
+  };
+
+  const result: Types.CodegenResult = {
+    errors: [],
+    files: [],
+    warnings: []
+  };
+
+  try {
+    result.files = emitGo(schemaToIR(schema), fullConfig);
+    log.info("Go files generated", { count: result.files.length });
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : "Unknown error");
   }

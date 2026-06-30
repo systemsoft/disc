@@ -722,14 +722,18 @@ analysis.
 
 ```
 schema --> schemaToIR() --> IR --> emitTypeScript()  (the output documented above)
-                                \-> emitRust()        (a Cargo crate: structs, query
-                                                       builders, std-only HTTP/JSON client)
+                                |-> emitRust()        (a Cargo crate: structs, query
+                                |                      builders, std-only HTTP/JSON client)
+                                \-> emitGo()          (a Go package: structs, query
+                                                       builders, stdlib HTTP/JSON client)
 ```
 
-`disc codegen` emits TypeScript; **`disc codegen --rust`** emits a Rust client
-crate instead (default output `./dbschema/disc-client-rust`). The same is
-available programmatically via `generateRust(schema, config)` /
-`emitRust(schemaToIR(schema), config)` (`codegen/emit-rust.ts`): it produces a
-self-contained Cargo crate whose structs derive `serde::Deserialize`, with
-`One -> T`, `AtMostOne -> Option<T>`, and `Many -> Vec<T>`, talking to the same
-HTTP `/query` endpoint as the TypeScript client.
+`disc codegen` emits TypeScript; **`--rust`** and **`--go`** emit a Rust client
+crate (`./dbschema/disc-client-rust`) or a Go client package
+(`./dbschema/disc-client-go`) instead. All three are available programmatically
+via `generateRust` / `generateGo` (and the lower-level `emitRust` / `emitGo`),
+each producing a self-contained, dependency-light client that maps cardinality
+faithfully (Rust `One -> T` / `AtMostOne -> Option<T>` / `Many -> Vec<T>`; Go
+`One -> T` / `AtMostOne -> *T` / `Many -> []T`) and talks to the same HTTP
+`/query` endpoint as the TypeScript client. The `--no-queries` / `--no-client` /
+`--no-mutations` toggles apply to every target.

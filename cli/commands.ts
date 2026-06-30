@@ -123,11 +123,16 @@ export class CLICommands {
   }
 
   async codegen(args: CLIArgs): Promise<void> {
-    getLogger("cli").info("Generating TypeScript types…");
-
+    /*** --rust wins over --go when both are passed; --go wins over the default TS path. ***/
     const rust = args.rust === true;
+    const go = args.go === true && !rust;
+    getLogger("cli").info(`Generating ${rust ? "Rust" : go ? "Go" : "TypeScript"} client…`);
     const outputDir = (args.output as string | undefined) ||
-      (rust ? "./dbschema/disc-client-rust" : "./dbschema/disc-client");
+      (rust ?
+        "./dbschema/disc-client-rust" :
+        go ?
+        "./dbschema/disc-client-go" :
+        "./dbschema/disc-client");
     const schemaDir = args["schema-dir"] || "./dbschema";
     const schemaFile = args.schema as string | undefined;
     const target = args.target || "client";
@@ -233,6 +238,28 @@ export class CLICommands {
         getLogger("cli").info(`Rust generation complete!`);
         getLogger("cli").info(`  Crate written to ${outputDir}/`);
         getLogger("cli").info(`  Build it with: cd ${outputDir} && cargo build`);
+        return;
+      }
+
+      if (go) {
+        const goResult = Codegen.generateGo(schema, config);
+
+        if (goResult.errors.length > 0) {
+          getLogger("cli").error(`Generation failed with errors:`);
+          goResult.errors.forEach(error => getLogger("cli").error(`  ${error}`));
+          return;
+        }
+
+        /*** No SDK extraction or `deno fmt` for Go — the emitted package is self-contained. ***/
+        getLogger("cli").info(`Writing ${goResult.files.length} file${goResult.files.length === 1 ? "" : "s"}…`);
+        await Codegen.writeGeneratedFiles(goResult, ".", { runFmt: false });
+
+        getLogger("cli").info(`Generation Summary:`);
+        getLogger("cli").info(`  Files generated: ${goResult.files.length}`);
+        getLogger("cli").info(`  Types generated: ${Array.from(schema.types.keys()).length}`);
+        getLogger("cli").info(`Go generation complete!`);
+        getLogger("cli").info(`  Package written to ${outputDir}/`);
+        getLogger("cli").info(`  Build it with: cd ${outputDir} && go build ./...`);
         return;
       }
 
