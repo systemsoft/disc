@@ -11,7 +11,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
+import { emitTypeScript } from "../codegen/emit-typescript.ts";
+import { schemaToIR } from "../codegen/schema-to-ir.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 import { describeSchema, describeType } from "./introspection.ts";
@@ -100,7 +101,7 @@ Deno.test({
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Generate TypeScript
-      const generator = new TypeScriptGenerator(schema, {
+      const files = emitTypeScript(schemaToIR(schema), {
         schemaSource: "",
         target: "client" as const,
         includeMutations: false,
@@ -110,12 +111,11 @@ Deno.test({
         includeClient: false
       });
 
-      const result = generator.generate();
       // The codegen tags the generated TypeScript file as `"types"` for
       // single-module schemas and `"interfaces"` once any type carries
       // an explicit `module` (which the SchemaManager always sets, even
       // to `"default"`). Accept either label.
-      const typesFile = result.files.find(
+      const typesFile = files.find(
         f => f.type === "types" || f.type === "interfaces"
       );
       assertExists(typesFile);

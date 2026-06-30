@@ -2,14 +2,14 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Language-neutral codegen IR (RFC 0001).
+ * Language-neutral codegen IR.
  *
  * This is the single contract between frontends (Schema -> IR, and later
  * Parse/Describe -> IR) and emitters (TypeScript, Rust, Go, Python). Adding a
  * target language must mean "write one more emitter" and never "touch a
  * frontend." Everything here is pure data: no language assumptions, no logic.
  *
- * Phase 1 of the effort = these declarations only. See docs/rfcs/0001-codegen-ir.md.
+ * Phase 1 of the effort = these declarations only. See codegen/README.md (Architecture).
  *
  * Three ratified design decisions shape the model:
  *   1. Denormalized shape variants. The frontend pre-derives insert/update/

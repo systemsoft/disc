@@ -2,14 +2,14 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * TypeScript emitter on the codegen IR (RFC 0001, Phase 3).
+ * TypeScript emitter on the codegen IR.
  *
- * Consumes the language-neutral IR (`codegen/ir.ts`) and produces TypeScript
- * output byte-identical to what `TypeScriptGenerator` emits today. The existing
- * generator is the correctness oracle; this emitter mirrors its emission
- * method-by-method, reading only IR nodes (plus the shared scalar/cast helpers
- * in `types.ts`). It never re-derives schema semantics — insert/update/filter
- * inclusion and optionality come from the IR's denormalized shapes.
+ * Consumes the language-neutral IR (`codegen/ir.ts`) and produces the
+ * production TypeScript client output. It reads only IR nodes (plus the shared
+ * scalar/cast helpers in `types.ts`) and never re-derives schema semantics —
+ * insert/update/filter inclusion and optionality come from the IR's
+ * denormalized shapes. Output is regression-guarded by the golden snapshots in
+ * `codegen/emit-typescript.test.ts`.
  */
 
 /*** IMPORT ------------------------------------------- ***/
@@ -33,7 +33,7 @@ import type {
 
 /*** EXPORT ------------------------------------------- ***/
 
-/** Emit the TypeScript client files from the IR, mirroring TypeScriptGenerator.generate(). */
+/** Emit the TypeScript client files from the IR. */
 export function emitTypeScript(ir: CodegenIR, config: Types.CodegenConfig): Types.GeneratedFile[] {
   return new TypeScriptEmitter(ir, config).generate();
 }

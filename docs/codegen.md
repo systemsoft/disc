@@ -709,3 +709,25 @@ A typical workflow:
 4. Commit all three: the schema file, migration state, and generated types.
 
 If you use `disc watch` during development, both migrations and codegen can run automatically when schema files change.
+
+
+## Architecture & Language Targets
+
+Codegen runs on a language-neutral **intermediate representation (IR)**. The
+schema is transformed once into the IR, and one emitter per target language turns
+the IR into source — so everything above (interfaces, insert/update/filter types,
+query builders, the typed client) is produced by the TypeScript emitter consuming
+that IR. Adding a language is "write one emitter," no change to the schema
+analysis.
+
+```
+schema --> schemaToIR() --> IR --> emitTypeScript()  (the output documented above)
+                                \-> emitRust()        (a Cargo crate: structs, query
+                                                       builders, std-only HTTP/JSON client)
+```
+
+`disc codegen` emits TypeScript. A **Rust** client is available programmatically
+via `emitRust(schemaToIR(schema), config)` (`codegen/emit-rust.ts`): it produces
+a self-contained Cargo crate whose structs derive `serde::Deserialize`, with
+`One -> T`, `AtMostOne -> Option<T>`, and `Many -> Vec<T>`, talking to the same
+HTTP `/query` endpoint as the TypeScript client.

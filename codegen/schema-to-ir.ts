@@ -2,7 +2,7 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Schema frontend: compiler `Schema` -> codegen IR (RFC 0001, Phase 2).
+ * Schema frontend: compiler `Schema` -> codegen IR.
  *
  * Produces the language-neutral IR that every emitter consumes. The
  * denormalized insert/update/filter/filterVars shapes are derived here, once,

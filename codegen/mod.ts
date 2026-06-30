@@ -22,7 +22,6 @@ const log = getLogger("codegen");
 /*** EXPORT ------------------------------------------- ***/
 
 export * from "./types.ts";
-export * from "./typescript-generator.ts";
 
 /**
  * Discover schema files in a directory.
@@ -71,9 +70,9 @@ export function generateTypeScript(schema: Context.Schema, config: Partial<Types
     typePrefix: config.typePrefix || ""
   };
 
-  /*** Route through the language-neutral IR (RFC 0001): schema -> IR -> emit.
-       The legacy TypeScriptGenerator is retained as the byte-identical oracle
-       (codegen/emit-typescript.test.ts) but no longer drives production output. ***/
+  /*** Route through the language-neutral IR: schema -> IR -> emit.
+       The emitter is regression-guarded by golden snapshots
+       (codegen/emit-typescript.test.ts) captured from the original output. ***/
   const result: Types.CodegenResult = {
     errors: [],
     files: [],

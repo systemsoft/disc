@@ -2,7 +2,7 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Schema -> IR frontend tests (RFC 0001, Phase 2). Golden assertions over a
+ * Schema -> IR frontend tests. Golden assertions over a
  * known schema, covering the acceptance gate: cardinalities (One/AtMostOne/
  * AtLeastOne/Many), links, enums, exclusive/default/readonly/computed flags,
  * the gnarly scalars (decimal/bigint/uuid/datetime), collections (array/tuple/

@@ -11,7 +11,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
+import { emitTypeScript } from "../codegen/emit-typescript.ts";
+import { schemaToIR } from "../codegen/schema-to-ir.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
@@ -182,7 +183,7 @@ Deno.test("Stage 39 - codegen: type-level @description in interface JSDoc", () =
     })
   ]);
 
-  const generator = new TypeScriptGenerator(schema, {
+  const files = emitTypeScript(schemaToIR(schema), {
     schemaSource: "",
     target: "client" as const,
     includeMutations: false,
@@ -192,8 +193,7 @@ Deno.test("Stage 39 - codegen: type-level @description in interface JSDoc", () =
     includeClient: false
   });
 
-  const result = generator.generate();
-  const typesFile = result.files.find(f => f.type === "types");
+  const typesFile = files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   // The JSDoc should include the description
@@ -227,7 +227,7 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
 
   const schema = makeSchema([makeType("User", { properties })]);
 
-  const generator = new TypeScriptGenerator(schema, {
+  const files = emitTypeScript(schemaToIR(schema), {
     schemaSource: "",
     target: "client" as const,
     includeMutations: false,
@@ -237,8 +237,7 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
     includeClient: false
   });
 
-  const result = generator.generate();
-  const typesFile = result.files.find(f => f.type === "types");
+  const typesFile = files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
   assertEquals(
     typesFile!.content.includes("@description Primary email address"),
@@ -249,7 +248,7 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
 Deno.test("Stage 39 - codegen: no @description when no annotations", () => {
   const schema = makeSchema([makeType("User")]);
 
-  const generator = new TypeScriptGenerator(schema, {
+  const files = emitTypeScript(schemaToIR(schema), {
     schemaSource: "",
     target: "client" as const,
     includeMutations: false,
@@ -259,8 +258,7 @@ Deno.test("Stage 39 - codegen: no @description when no annotations", () => {
     includeClient: false
   });
 
-  const result = generator.generate();
-  const typesFile = result.files.find(f => f.type === "types");
+  const typesFile = files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
   assertEquals(typesFile!.content.includes("@description"), false);
 });

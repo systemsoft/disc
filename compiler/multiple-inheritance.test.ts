@@ -10,7 +10,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
+import { emitTypeScript } from "../codegen/emit-typescript.ts";
+import { schemaToIR } from "../codegen/schema-to-ir.ts";
 import { DDLGenerator } from "../migration/ddl.ts";
 import { SchemaDiffer } from "../migration/differ.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
@@ -437,7 +438,7 @@ Deno.test("multiple inheritance - codegen generates interface with multiple exte
     functions: getBuiltinFunctions()
   };
 
-  const generator = new TypeScriptGenerator(schema, {
+  const files = emitTypeScript(schemaToIR(schema), {
     outputDir: "/tmp/test",
     schemaSource: "",
     target: "both",
@@ -447,11 +448,8 @@ Deno.test("multiple inheritance - codegen generates interface with multiple exte
     formatOutput: true
   });
 
-  const result = generator.generate();
-  assertEquals(result.errors.length, 0, "Codegen should produce no errors");
-
   // Find the types file
-  const typesFile = result.files.find(f => f.type === "types");
+  const typesFile = files.find(f => f.type === "types");
   assertExists(typesFile, "Types file should be generated");
 
   // Verify the extends clause

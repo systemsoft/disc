@@ -2,7 +2,7 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Compiles gate for the IR-driven Rust emitter (RFC 0001, Phase 4).
+ * Compiles gate for the IR-driven Rust emitter.
  *
  * The proof that the language-neutral IR generalizes beyond TypeScript: build
  * the IR from a fixture schema, run `emitRust`, write the result into a temp dir

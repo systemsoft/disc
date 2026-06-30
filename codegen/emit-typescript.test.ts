@@ -2,18 +2,22 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Diff oracle for the IR-driven TypeScript emitter (RFC 0001, Phase 3).
+ * Golden-snapshot regression oracle for the IR-driven TypeScript emitter
+ *.
  *
- * The existing TypeScriptGenerator is the correctness oracle. For each fixture
- * schema we generate today's output and the IR-driven output with the SAME
- * config, then assert file-by-file byte-identical content. The ONLY permitted
- * normalization is masking the single non-deterministic `Generated at:` line
- * (the ISO timestamp), applied identically to both sides.
+ * For each fixture schema we generate the IR-driven output and assert each
+ * emitted file's content against a committed snapshot. The snapshots ARE the
+ * oracle: they captured the byte-for-byte output of the original
+ * direct-from-schema generator (now retired). The ONLY normalization is masking
+ * the single non-deterministic `Generated at:` line (the ISO timestamp).
+ *
+ * Regenerate snapshots with:
+ *   deno test --allow-read --allow-write --allow-env -- --update
  */
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assertEquals } from "@std/assert";
+import { assertSnapshot } from "@std/testing/snapshot";
 
 /*** UTILITY ------------------------------------------ ***/
 
@@ -25,7 +29,6 @@ import type { CodegenConfig } from "./types.ts";
 
 import { emitTypeScript } from "./emit-typescript.ts";
 import { schemaToIR } from "./schema-to-ir.ts";
-import { TypeScriptGenerator } from "./typescript-generator.ts";
 
 // --- helpers ---------------------------------------------------------------
 
@@ -49,27 +52,15 @@ function maskTimestamp(content: string): string {
   return content.replace(/^( *\* Generated at: ).*$/m, "$1<MASKED>");
 }
 
-function assertByteIdentical(schema: Schema, config: CodegenConfig): void {
-  const current = new TypeScriptGenerator(schema, config).generate();
-  const fromIR = emitTypeScript(schemaToIR(schema), config);
+/** Emit from the IR and snapshot each file (path + timestamp-masked content). */
+async function assertEmittedSnapshot(t: Deno.TestContext, schema: Schema, config: CodegenConfig): Promise<void> {
+  const files = emitTypeScript(schemaToIR(schema), config);
 
-  assertEquals(
-    fromIR.length,
-    current.files.length,
-    `file count: IR emitted ${fromIR.length}, oracle emitted ${current.files.length}`
-  );
-
-  for (let i = 0; i < current.files.length; i++) {
-    assertEquals(
-      fromIR[i].path,
-      current.files[i].path,
-      `file[${i}] path mismatch`
-    );
-
-    assertEquals(
-      maskTimestamp(fromIR[i].content),
-      maskTimestamp(current.files[i].content),
-      `file[${i}] (${current.files[i].path}) content mismatch`
+  for (const file of files) {
+    await assertSnapshot(
+      t,
+      { content: maskTimestamp(file.content), path: file.path },
+      { name: file.path }
     );
   }
 }
@@ -274,18 +265,18 @@ function createQualifiedTargetSchema(): Schema {
 
 // --- tests -----------------------------------------------------------------
 
-Deno.test("emitTypeScript reproduces generator output byte-identical (flat schema)", () => {
-  assertByteIdentical(createTestSchema(), clientConfig());
+Deno.test("emitTypeScript matches golden snapshot (flat schema)", async (t) => {
+  await assertEmittedSnapshot(t, createTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript reproduces generator output byte-identical (multi-module schema)", () => {
-  assertByteIdentical(createMultiModuleTestSchema(), clientConfig());
+Deno.test("emitTypeScript matches golden snapshot (multi-module schema)", async (t) => {
+  await assertEmittedSnapshot(t, createMultiModuleTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript reproduces generator output byte-identical (computed + collection schema)", () => {
-  assertByteIdentical(createCollectionTestSchema(), clientConfig());
+Deno.test("emitTypeScript matches golden snapshot (computed + collection schema)", async (t) => {
+  await assertEmittedSnapshot(t, createCollectionTestSchema(), clientConfig());
 });
 
-Deno.test("emitTypeScript reproduces generator output byte-identical (module-qualified link target)", () => {
-  assertByteIdentical(createQualifiedTargetSchema(), clientConfig());
+Deno.test("emitTypeScript matches golden snapshot (module-qualified link target)", async (t) => {
+  await assertEmittedSnapshot(t, createQualifiedTargetSchema(), clientConfig());
 });

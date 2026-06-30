@@ -1,6 +1,6 @@
 # Codegen
 
-TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed interfaces, insert/update types, enum types, query builders, and a typed client. Run via `disc codegen` or programmatically.
+Schema-driven client generator for Disc. Reads the EdgeQL schema and produces typed interfaces, insert/update types, enum types, query builders, and a typed client. Built on a language-neutral intermediate representation (IR) so the same pipeline targets multiple languages (TypeScript today, Rust). Run via `disc codegen` or programmatically.
 
 ## Import
 
@@ -8,7 +8,6 @@ TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed i
 import {
   DEFAULT_CONFIGS,
   generateTypeScript,
-  TypeScriptGenerator,
   writeGeneratedFiles
 } from "disc/codegen/mod.ts";
 
@@ -295,16 +294,24 @@ EdgeQL types are mapped to TypeScript types:
 
 SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 
-## TypeScriptGenerator
+## Architecture
 
-The core generator class. Normally used through `generateTypeScript()` but can be instantiated directly for fine-grained control:
+Codegen is built on a language-neutral **intermediate representation (IR)**. A
+frontend transforms the schema into the IR; emitters turn the IR into source for
+a target language. Adding a language is "write one emitter" -- no frontend change.
 
-```typescript
-import { TypeScriptGenerator } from "disc/codegen/mod.ts";
-
-const generator = new TypeScriptGenerator(schema, config);
-const result = generator.generate();
-// result.files: GeneratedFile[]
-// result.warnings: string[]
-// result.errors: string[]
 ```
+schema (Context.Schema)
+   |  schemaToIR()        codegen/schema-to-ir.ts
+   v
+  IR (CodegenIR)          codegen/ir.ts
+   |  emitTypeScript()    codegen/emit-typescript.ts  -> interfaces.ts / queries.ts / client.ts / index.ts
+   +- emitRust()          codegen/emit-rust.ts        -> a Cargo crate (structs, builders, std-only HTTP/JSON client)
+```
+
+`generateTypeScript()` is the production entry point and runs schema -> IR ->
+TypeScript. The IR carries denormalized insert/update/filter shapes, first-class
+module namespaces, and wire-complete cardinality, so emitters are near-mechanical
+pretty-printers. The TypeScript output is regression-guarded by golden snapshots
+(`codegen/emit-typescript.test.ts`); the Rust emitter by an offline `cargo build`
+gate (`codegen/emit-rust.test.ts`).
