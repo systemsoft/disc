@@ -16,6 +16,7 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           COMMIT_URL: ${{ github.event.head_commit.url }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REPO: ${{ github.repository }}
           SENDER_AVATAR: ${{ github.event.sender.avatar_url }}
         run: |
           if [ -n "$COMMIT_AUTHOR_USERNAME" ]; then
@@ -23,7 +24,7 @@ jobs:
           else
             avatar="$SENDER_AVATAR"
           fi
-          title=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          title="[${REPO}] $(printf '%s' "$COMMIT_MESSAGE" | head -n1)"
           if [ ${#title} -gt 256 ]; then
             title="${title:0:255}…"
           fi
