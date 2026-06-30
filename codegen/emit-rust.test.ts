@@ -46,10 +46,10 @@ function rustConfig(): CodegenConfig {
 }
 
 /** Emit the crate into a fresh temp dir and `cargo build --offline` it. */
-async function assertCompiles(schema: Schema): Promise<void> {
+async function assertCompiles(schema: Schema, config: CodegenConfig = rustConfig()): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "disc_rust_" });
   try {
-    const files = emitRust(schemaToIR(schema), rustConfig());
+    const files = emitRust(schemaToIR(schema), config);
 
     for (const file of files) {
       const full = `${dir}/${file.path}`;
@@ -126,4 +126,19 @@ Deno.test("emitRust: produces a Cargo crate skeleton", () => {
   assert(paths.some(p => p.endsWith("Cargo.toml")), "emits Cargo.toml");
   assert(paths.some(p => p.endsWith("src/lib.rs")), "emits src/lib.rs");
   assert(paths.some(p => p.endsWith("src/disc_runtime.rs")), "emits src/disc_runtime.rs");
+});
+
+Deno.test("emitRust: includeQueryBuilders=false drops the query builders (keeps data types)", async () => {
+  const config: CodegenConfig = { ...rustConfig(), includeQueryBuilders: false };
+  const files = emitRust(schemaToIR(createMultiModuleTestSchema()), config);
+  const lib = files.find(f => f.path.endsWith("src/lib.rs"))!.content;
+
+  assert(!lib.includes("QueryBuilder"), "no query builder structs/impls");
+  // Data types are still emitted regardless of --no-queries.
+  assert(lib.includes("pub struct Merchant {"), "keeps the base struct");
+  assert(lib.includes("pub struct MerchantInsert {"), "keeps the insert shape");
+
+  // And the trimmed crate still compiles.
+  if (await cargoAvailable())
+    await assertCompiles(createMultiModuleTestSchema(), config);
 });

@@ -299,8 +299,11 @@ class RustEmitter {
 
   /** Emit one module's enums, structs, shapes and builders (crate-root or inside a `mod`). */
   private emitModuleBody(mod: Module): string {
+    const withBuilders = this.config.includeQueryBuilders;
     let out = "";
-    out += "use crate::disc_runtime::{DiscClient, DiscError};\n\n";
+    // Only the query builders reference the runtime client.
+    if (withBuilders)
+      out += "use crate::disc_runtime::{DiscClient, DiscError};\n\n";
 
     // A schema may key a type under both its bare and qualified name, so the
     // same definition can appear twice in a module; emit each name only once.
@@ -324,8 +327,10 @@ class RustEmitter {
       out += "\n";
       out += this.emitUpdate(obj);
       out += "\n";
-      out += this.emitBuilder(obj);
-      out += "\n";
+      if (withBuilders) {
+        out += this.emitBuilder(obj);
+        out += "\n";
+      }
     }
 
     return out;
