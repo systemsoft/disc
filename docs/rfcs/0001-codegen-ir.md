@@ -169,7 +169,7 @@ plus a regenerate-and-diff check against a captured baseline (e.g. the
 **Why this is the oracle:** if the IR-driven emitter reproduces today's shipping
 output, the IR is proven lossless before any other language depends on it.
 
-### Phase 4 — Rust emitter — `[~]` (4a compiles ✅, 4b round-trip pending)
+### Phase 4 — Rust emitter — `[x]` (4a compiles ✅, 4b round-trip ✅)
 Second IR consumer: `codegen/emit-rust.ts` emits a Rust schema-driven query
 builder — structs (`serde::Deserialize`), enums, insert/update shapes, per-object
 query builders, and a std-only blocking HTTP/JSON `DiscClient` over
@@ -180,8 +180,14 @@ table above; scalars → JSON-friendly Rust types (uuid/datetime/decimal/bigint 
 **4a gate met:** real `cargo build --offline` passes for the multi-module fixture
 **and** the real 30-type Nickel schema (`codegen/emit-rust.test.ts`).
 
-**4b gate (pending):** generated Rust round-trips against a live Disc instance
-(run a generated `select`/`insert`, get typed results back).
+**4b gate met:** generated Rust round-trips against a live Disc instance.
+Verified manually (server setup is too heavy for CI, like the cross-repo Nickel
+check): `disc init` a one-type project, migrate, `disc serve`, emit the Rust
+client, and a `cargo run --offline` binary that calls the generated
+`insert(WidgetInsert{...})` and `select()` — both return typed structs from the
+live `/query` endpoint (`i32`, `Option<bool>`, etc.), assertions pass. The
+committed automated proof is the `cargo build --offline` compiles gate
+(`emit-rust.test.ts`); the round-trip is documented manual verification.
 
 **What Rust revealed about the IR (the point of a second emitter):** the IR's
 honest One→`T` object-link cardinality produces by-value reference cycles
