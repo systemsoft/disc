@@ -12,7 +12,8 @@ import * as Types from "./types.ts";
 
 import { getLogger } from "../lib/logger.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { TypeScriptGenerator } from "./typescript-generator.ts";
+import { emitTypeScript } from "./emit-typescript.ts";
+import { schemaToIR } from "./schema-to-ir.ts";
 
 import type { Module } from "../schema/converter.ts";
 
@@ -70,8 +71,23 @@ export function generateTypeScript(schema: Context.Schema, config: Partial<Types
     typePrefix: config.typePrefix || ""
   };
 
-  const generator = new TypeScriptGenerator(schema, fullConfig);
-  return generator.generate();
+  /*** Route through the language-neutral IR (RFC 0001): schema -> IR -> emit.
+       The legacy TypeScriptGenerator is retained as the byte-identical oracle
+       (codegen/emit-typescript.test.ts) but no longer drives production output. ***/
+  const result: Types.CodegenResult = {
+    errors: [],
+    files: [],
+    warnings: []
+  };
+
+  try {
+    result.files = emitTypeScript(schemaToIR(schema), fullConfig);
+    log.info("TypeScript files generated", { count: result.files.length });
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return result;
 }
 
 /**

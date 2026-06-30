@@ -223,6 +223,25 @@ contract was extended additively (no existing consumer breaks):
 - `Field`: `constraints: { name, args }[]` (full set, e.g. `max_length(255)`;
   `isExclusive` retained as a derived convenience flag), `description?`.
 
-Deferred (not exercised by the Phase 3 fixtures): preserving the raw
-`edgeqlType` display spelling (e.g. `cal::local_datetime`) — tracked as a TODO,
-to be reconstructed by the emitter or carried explicitly when a fixture needs it.
+Closing the swap surfaced three more lossy spots (caught by the computed/
+collection fixture and a byte-for-byte run against the real Nickel schema):
+
+- `Field.sourceType` — the raw `edgeqlType` spelling (e.g. `array<tuple<...>>`,
+  `cal::local_datetime`, `auto`), echoed verbatim in JSDoc docType. (Closes the
+  deferred item above.)
+- `Field.computedExpr` — the computed property's EdgeQL source, fed to
+  `inferComputedTupleFields` to rebuild typed computed-tuple filters and
+  `_typeInfo.computed`.
+- `CodegenIR.multiModule` — whether any type declares a module (even `default`);
+  distinguishes a single explicit `default` module (namespaced `interfaces.ts`)
+  from no modules (flat `types.ts`). The earlier emitter reconstructed this from
+  module count and got it wrong for an all-`default` schema.
+
+### Phase 3 complete (2026-06-30)
+
+The production codegen path (`codegen/mod.ts` `generateTypeScript`) now routes
+schema → IR → emit (`schemaToIR` + `emitTypeScript`); `TypeScriptGenerator` is
+retained only as the byte-identical oracle. Proven byte-identical on three
+in-repo fixtures (flat, multi-module, computed+collection, module-qualified
+target) **and** on the real 30-type Nickel schema. Full codegen suite: 137
+green.

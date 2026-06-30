@@ -19,11 +19,11 @@ import { default as dedent } from "@netopwibby/dedent";
 /*** UTILITY ------------------------------------------ ***/
 
 import * as Types from "./types.ts";
+import { inferComputedTupleFields } from "./computed-tuple-inference.ts";
 import type {
   CodegenIR,
   EnumType,
   Field,
-  FilterField,
   ObjectType,
   QualifiedName,
   ScalarKind,
@@ -157,8 +157,7 @@ class TypeScriptEmitter {
   }
 
   private isMultiModule(): boolean {
-    const mods = this.ir.modules;
-    return mods.length > 1 || (mods.length === 1 && mods[0].name !== "default");
+    return this.ir.multiModule;
   }
 
   /** IR analogue of resolveTypeReference: namespace-qualify a target out of currentModule. */
@@ -317,7 +316,7 @@ class TypeScriptEmitter {
   private generatePropertyDefinition(field: Field, indent: string = ""): string {
     let content = "";
 
-    const typeForMapping = typeRefToEdgeQL(field.type);
+    const typeForMapping = field.sourceType;
     const docType = typeForMapping === "auto" ? "(computed)" : typeForMapping;
     const required = isRequired(field.cardinality);
     const multi = isMulti(field.cardinality);
@@ -370,7 +369,9 @@ class TypeScriptEmitter {
     const multi = isMulti(field.cardinality);
 
     const relationshipType = multi ? "many" : "one";
-    content += `${indent}  /** Link to ${qualifiedToTarget(target)} (${relationshipType}${required ? ", required" : ""}) */\n`;
+    // Echo the raw link target spelling (e.g. "default::Customer"), as the
+    // generator does, rather than a canonicalized bare name.
+    content += `${indent}  /** Link to ${field.sourceType} (${relationshipType}${required ? ", required" : ""}) */\n`;
 
     const targetType = this.targetRef(target, currentModule);
     let tsType = targetType;
@@ -399,7 +400,9 @@ class TypeScriptEmitter {
         continue;
       }
 
-      const tsType = Types.mapEdgeQLTypeToTypeScript(typeRefToEdgeQL(sf.type), true, isMulti(sf.cardinality));
+      const base = this.fieldByName(obj, sf.name);
+      const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
+      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, isMulti(sf.cardinality));
       const optional = sf.optional ? "?" : "";
       content += `${indent}  ${sf.name}${optional}: ${tsType};\n`;
     }
@@ -420,7 +423,7 @@ class TypeScriptEmitter {
       return content;
     }
 
-    content += `${indent}  /** UUID of the linked ${qualifiedToTarget(target)} */\n`;
+    content += `${indent}  /** UUID of the linked ${base ? base.sourceType : qualifiedToTarget(target)} */\n`;
     content += `${indent}  ${sf.name}${optional}: string;\n`;
     return content;
   }
@@ -435,7 +438,9 @@ class TypeScriptEmitter {
         continue;
       }
 
-      const tsType = Types.mapEdgeQLTypeToTypeScript(typeRefToEdgeQL(sf.type), true, isMulti(sf.cardinality));
+      const base = this.fieldByName(obj, sf.name);
+      const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
+      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, isMulti(sf.cardinality));
       content += `${indent}  ${sf.name}?: ${tsType};\n`;
     }
 
@@ -454,7 +459,7 @@ class TypeScriptEmitter {
       return content;
     }
 
-    content += `${indent}  /** UUID of the linked ${qualifiedToTarget(target)} */\n`;
+    content += `${indent}  /** UUID of the linked ${base ? base.sourceType : qualifiedToTarget(target)} */\n`;
     content += `${indent}  ${sf.name}?: string;\n`;
     return content;
   }
@@ -468,7 +473,8 @@ class TypeScriptEmitter {
     for (const fv of obj.shapes.filterVars.fields) {
       const base = this.fieldByName(obj, fv.name);
       const multi = base ? isMulti(base.cardinality) : false;
-      const tsType = Types.mapEdgeQLTypeToTypeScript(typeRefToEdgeQL(fv.type), true, multi);
+      const src = base ? base.sourceType : typeRefToEdgeQL(fv.type);
+      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, multi);
       content += `${indent}  ${fv.name}?: ${tsType};\n`;
     }
 
@@ -483,18 +489,44 @@ class TypeScriptEmitter {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Filter {\n`;
 
-    for (const ff of obj.shapes.filter.fields as FilterField[]) {
-      if (ff.isLink) {
-        const target = ff.operand.kind === "object" ? ff.operand.name : { module: "default", name: "unknown" };
-        const targetTs = this.targetRef(target, currentModule);
-        content += `${indent}  ${ff.name}?: ${targetTs}Filter;\n`;
+    for (const field of obj.fields) {
+      if (field.isLink)
+        continue;
+
+      // Computed named-tuple property (e.g. `counts := (videos := count(...))`):
+      // emit a typed nested filter `counts?: { videos?: number | Op<…> }`.
+      // Computed props we can't infer are omitted (rather than emitting a
+      // broken `unknown | Op<unknown>` field).
+      if (field.isComputed) {
+        const inferred = field.computedExpr ?
+          inferComputedTupleFields(field.computedExpr) :
+          null;
+        if (!inferred)
+          continue;
+        const inner = Object
+          .entries(inferred)
+          .map(([name, edgeqlType]) => {
+            const ts = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, false);
+            const op = this.getOperatorHelperFor(edgeqlType, ts);
+            return `${name}?: ${ts} | ${op}`;
+          })
+          .join("; ");
+        content += `${indent}  ${field.name}?: { ${inner} };\n`;
         continue;
       }
 
-      const edgeqlType = typeRefToEdgeQL(ff.operand);
-      const tsType = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, isMulti(ff.cardinality));
+      const edgeqlType = field.sourceType;
+      const tsType = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, isMulti(field.cardinality));
       const opHelper = this.getOperatorHelperFor(edgeqlType, tsType);
-      content += `${indent}  ${ff.name}?: ${tsType} | ${opHelper};\n`;
+      content += `${indent}  ${field.name}?: ${tsType} | ${opHelper};\n`;
+    }
+
+    for (const field of obj.fields) {
+      if (!field.isLink)
+        continue;
+      const target = field.type.kind === "object" ? field.type.name : { module: "default", name: "unknown" };
+      const targetTs = this.targetRef(target, currentModule);
+      content += `${indent}  ${field.name}?: ${targetTs}Filter;\n`;
     }
 
     content += `${indent}  select?: ${tsTypeName}Select;\n`;
@@ -685,7 +717,7 @@ class TypeScriptEmitter {
     for (const field of obj.fields) {
       if (field.isLink || field.isComputed || field.name === "id")
         continue;
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(typeRefToEdgeQL(field.type));
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
       typeCastEntries.push(`    ${field.name}: "${cast}"`);
     }
 
@@ -703,13 +735,27 @@ class TypeScriptEmitter {
     }
 
     const typeInfoCastEntries: string[] = [];
+    // Computed named-tuple props the filter compiler can recurse into:
+    // `counts: { videos: "<int64>", … }`.
+    const typeInfoComputedEntries: string[] = [];
 
     for (const field of obj.fields) {
       if (field.isLink)
         continue;
-      if (field.isComputed)
+      if (field.isComputed) {
+        const inferred = field.computedExpr ?
+          inferComputedTupleFields(field.computedExpr) :
+          null;
+        if (inferred) {
+          const casts = Object
+            .entries(inferred)
+            .map(([name, edgeqlType]) => `${name}: "${Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType)}"`)
+            .join(", ");
+          typeInfoComputedEntries.push(`      ${field.name}: { ${casts} }`);
+        }
         continue;
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(typeRefToEdgeQL(field.type));
+      }
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
       typeInfoCastEntries.push(`      ${field.name}: "${cast}"`);
     }
 
@@ -761,6 +807,12 @@ class TypeScriptEmitter {
       content += ",\n";
 
     content += `    }`;
+
+    if (typeInfoComputedEntries.length > 0) {
+      content += `,\n    computed: {\n`;
+      content += typeInfoComputedEntries.join(",\n");
+      content += `\n    }`;
+    }
 
     content += `\n  };\n\n`;
     content += `  constructor(private client: DiscClient) {}\n\n`;

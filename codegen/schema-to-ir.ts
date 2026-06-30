@@ -65,6 +65,9 @@ type NameResolver = (name: string) => TypeDef | undefined;
 /** Transform a compiler Schema into the codegen IR. */
 export function schemaToIR(schema: Schema): CodegenIR {
   const resolve = makeResolver(schema);
+  // Mirrors the generator's isMultiModule: namespace mode if any type declares a
+  // module at all, even "default".
+  const multiModule = [...schema.types.values()].some((t) => Boolean(t.module));
   const byModule = new Map<string, { enums: EnumType[]; objects: ObjectType[] }>();
 
   for (const typeDef of schema.types.values()) {
@@ -84,7 +87,7 @@ export function schemaToIR(schema: Schema): CodegenIR {
     objects: byModule.get(name)!.objects,
   }));
 
-  return { version: IR_VERSION, modules };
+  return { version: IR_VERSION, multiModule, modules };
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +152,8 @@ function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
     constraints,
     hasDefault: prop.hasDefault ?? false,
     readonly: prop.readonly ?? false,
+    sourceType: prop.edgeqlType ?? prop.type,
+    computedExpr: prop.computedExpr,
     description: prop.annotations?.["description"],
   };
 }
@@ -164,6 +169,8 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
     constraints: [],
     hasDefault: false,
     readonly: false,
+    sourceType: link.target,
+    computedExpr: link.computedExpr,
     description: link.annotations?.["description"],
   };
 }

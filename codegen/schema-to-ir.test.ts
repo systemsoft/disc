@@ -49,6 +49,17 @@ Deno.test("schemaToIR - module grouping and ordering", () => {
   const ir = schemaToIR(createMultiModuleTestSchema());
   assertEquals(ir.version, IR_VERSION);
   assertEquals(ir.modules.map((m) => m.name), ["default", "api", "payment"]);
+  assertEquals(ir.multiModule, true);
+});
+
+Deno.test("schemaToIR - multiModule is false when no type declares a module", () => {
+  const schema: Schema = {
+    types: new Map<string, TypeDef>([
+      ["Thing", { name: "Thing", kind: "object", tableName: "things", properties: new Map(), links: new Map() }],
+    ]),
+    functions: new Map(),
+  };
+  assertEquals(schemaToIR(schema).multiModule, false);
 });
 
 Deno.test("schemaToIR - enums land in their module with members", () => {

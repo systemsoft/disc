@@ -30,6 +30,15 @@
 export interface CodegenIR {
   /** IR schema version, for forward-compatible evolution of this contract. */
   version: number;
+  /**
+   * Whether the source schema uses explicit module declarations — true iff any
+   * type carries a module, even when that module is "default". This is a
+   * distinct signal from `modules.length`: a schema with a single explicit
+   * `default` module differs from one with no modules at all. A TS emitter uses
+   * it to choose namespaced emission (`interfaces.ts` + `namespace`) vs flat
+   * (`types.ts`); other emitters may nest modules accordingly.
+   */
+  multiModule: boolean;
   /** First-class module namespaces (e.g. "default", "api", "logger"). */
   modules: Module[];
 }
@@ -229,6 +238,19 @@ export interface Field {
   constraints: FieldConstraint[];
   hasDefault: boolean;
   readonly: boolean;
+  /**
+   * The original EdgeQL type expression as written (e.g. `array<tuple<...>>`,
+   * `cal::local_datetime`, or `auto` for a computed prop). `type` is the
+   * structured, language-neutral form; `sourceType` preserves the exact
+   * spelling a TS emitter echoes in doc comments. Other emitters can ignore it.
+   */
+  sourceType: string;
+  /**
+   * For a computed property, the EdgeQL expression source. Lets an emitter
+   * recover named-tuple field shapes (via inferComputedTupleFields) for typed
+   * computed filters and runtime type info. Absent on non-computed fields.
+   */
+  computedExpr?: string;
   /** Optional doc description (from the schema annotation). */
   description?: string;
 }
