@@ -79,6 +79,7 @@ const STD_IMPORTS: ReadonlyArray<{ path: string; selector: string; }> = [
   { path: "encoding/json", selector: "json." },
   { path: "fmt", selector: "fmt." },
   { path: "net/http", selector: "http." },
+  { path: "sort", selector: "sort." },
   { path: "strings", selector: "strings." }
 ];
 
@@ -451,7 +452,14 @@ class GoEmitter {
     out += "\tif err := json.Unmarshal(raw, &obj); err != nil {\n\t\treturn zero, err\n\t}\n";
     out += "\tassignments := make([]string, 0, len(obj))\n";
     out += "\tvariables := make(map[string]any, len(obj))\n";
-    out += "\tfor key, val := range obj {\n";
+    // Iterate keys in sorted order: the server binds params positionally, and
+    // Go's json.Marshal emits the variables map with sorted keys — so the
+    // assignment order must match (map-iteration order is non-deterministic).
+    out += "\tkeys := make([]string, 0, len(obj))\n";
+    out += "\tfor key := range obj {\n\t\tkeys = append(keys, key)\n\t}\n";
+    out += "\tsort.Strings(keys)\n";
+    out += "\tfor _, key := range keys {\n";
+    out += "\t\tval := obj[key]\n";
     out += "\t\tvariables[key] = val\n";
     out += "\t\tif target, ok := b.multiLinkTarget(key); ok {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := (select %s filter .id in array_unpack(<array<uuid>>$%s))\", key, target, key))\n";
@@ -475,7 +483,14 @@ class GoEmitter {
     out += "\tif err := json.Unmarshal(raw, &obj); err != nil {\n\t\treturn zero, err\n\t}\n";
     out += "\tassignments := make([]string, 0, len(obj))\n";
     out += "\tvariables := map[string]any{\"id\": id}\n";
-    out += "\tfor key, val := range obj {\n";
+    // Iterate keys in sorted order: the server binds params positionally, and
+    // Go's json.Marshal emits the variables map with sorted keys — so the
+    // assignment order must match (map-iteration order is non-deterministic).
+    out += "\tkeys := make([]string, 0, len(obj))\n";
+    out += "\tfor key := range obj {\n\t\tkeys = append(keys, key)\n\t}\n";
+    out += "\tsort.Strings(keys)\n";
+    out += "\tfor _, key := range keys {\n";
+    out += "\t\tval := obj[key]\n";
     out += "\t\tvariables[key] = val\n";
     out += "\t\tif target, ok := b.multiLinkTarget(key); ok {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := (select %s filter .id in array_unpack(<array<uuid>>$%s))\", key, target, key))\n";
