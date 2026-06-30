@@ -169,15 +169,29 @@ plus a regenerate-and-diff check against a captured baseline (e.g. the
 **Why this is the oracle:** if the IR-driven emitter reproduces today's shipping
 output, the IR is proven lossless before any other language depends on it.
 
-### Phase 4 — Rust emitter — `[ ]`
-Second IR consumer: emit a Rust schema-driven query builder. Structs with a
-`Queryable`-style derive; cardinality mapping per the table above; scalars → native
-Rust types; client methods call the **HTTP/JSON `/query` endpoint** (mirroring
-the TS builder's transport — no binary codec layer this phase).
-**Gate:** generated Rust **compiles** and round-trips against a live Disc
-instance (run a generated `select`/`insert`, get typed results back).
-**Why this is the proof:** one emitter doesn't show the IR generalizes; the
-second one does.
+### Phase 4 — Rust emitter — `[~]` (4a compiles ✅, 4b round-trip pending)
+Second IR consumer: `codegen/emit-rust.ts` emits a Rust schema-driven query
+builder — structs (`serde::Deserialize`), enums, insert/update shapes, per-object
+query builders, and a std-only blocking HTTP/JSON `DiscClient` over
+`std::net::TcpStream` (no reqwest/tokio — builds offline). Cardinality per the
+table above; scalars → JSON-friendly Rust types (uuid/datetime/decimal/bigint →
+`String`, json → `serde_json::Value`); modules → Rust `mod`s.
+
+**4a gate met:** real `cargo build --offline` passes for the multi-module fixture
+**and** the real 30-type Nickel schema (`codegen/emit-rust.test.ts`).
+
+**4b gate (pending):** generated Rust round-trips against a live Disc instance
+(run a generated `select`/`insert`, get typed results back).
+
+**What Rust revealed about the IR (the point of a second emitter):** the IR's
+honest One→`T` object-link cardinality produces by-value reference cycles
+(`Channel`↔`Customer`) that are infinite-sized in Rust. TS never hits this
+(structural typing). The fix — `Box<T>` for single object links — is the
+emitter's job, not an IR gap; it's the clearest evidence the IR faithfully
+encodes cardinality rather than papering over it. Also surfaced: the source
+`Schema` multi-keys types (bare + qualified), so a module can list a type twice
+in the IR — consumers must dedupe (handled in the emitter, not the frozen
+frontend).
 
 ### Future (not this effort)
 - **Descriptor frontend** (`Parse/Describe → IR`) for typed **query-file** SDKs;
