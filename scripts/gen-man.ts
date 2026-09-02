@@ -2,12 +2,24 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Generate man pages from the Markdown guides in `docs/` using pandoc.
+ * Generate man pages from the published documentation using pandoc.
  *
- * `docs/cli.md` becomes the canonical `disc(1)` page; every other guide
+ * The user-facing guides live in the documentation site repo
+ * (github.com/systemsoft/disc.md, rendered at https://disc.md) and are
+ * vendored here as a git submodule at `vendor/disc.md`, pinned to a commit.
+ * That keeps a single source of truth for prose while still letting a release
+ * ship man pages that match a known documentation revision — and keeps
+ * generation hermetic and offline-capable, unlike fetching at build time.
+ *
+ * `documents/cli.md` becomes the canonical `disc(1)` page; every other guide
  * becomes a section-7 `disc-<name>(7)` overview page. Output lands in
  * `build/man/man1` and `build/man/man7`, ready to be packaged (`just man`)
  * and installed to the system man location by `install.sh`.
+ *
+ * Note `docs/` in this repo is NOT the source: it retains only
+ * maintainer-internal material (e.g. `future-triage.md`, referenced by
+ * `tests/gel-divergence-pins.test.ts` and `migration/gel-issues.test.ts`)
+ * which is deliberately not published.
  *
  * Requires `pandoc` on PATH. Invoked by `deno task man` / `just man`, which
  * `just release` runs after the binary build.
@@ -16,15 +28,14 @@
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 
-const DOCS_DIR = "docs";
+const DOCS_DIR = "vendor/disc.md/documents";
 const OUT_DIR = "build/man";
 
 /**
- * Maintainer-internal guides that are not user-facing reference — skipped.
- * Everything else under `docs/` is rendered to a man page.
+ * Published guides that are not user-facing command reference — skipped.
+ * Everything else under `DOCS_DIR` is rendered to a man page.
  */
 const SKIP = new Set([
-  "future-triage.md", // upstream Gel issue triage, not user docs
   "releasing.md" // maintainer release process
 ]);
 
@@ -91,6 +102,33 @@ if (!(await pandocExists())) {
   info(
     "[ERROR] pandoc is required to generate man pages but was not found on PATH.\n" +
       "        Install it (e.g. `brew install pandoc`, `apt install pandoc`) and retry."
+  );
+  Deno.exit(1);
+}
+
+/**
+ * A fresh `git clone` without `--recursive` leaves `vendor/disc.md` present
+ * but empty, which would otherwise render zero man pages and ship a release
+ * with an empty `disc-man.tar.gz`. Fail loudly with the fix instead.
+ */
+async function docsAvailable(): Promise<boolean> {
+  try {
+    for await (const entry of Deno.readDir(DOCS_DIR)) {
+      if (entry.isFile && entry.name.endsWith(".md")) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+if (!(await docsAvailable())) {
+  info(
+    `[ERROR] No Markdown guides found in ${DOCS_DIR}.\n` +
+      "        Documentation lives in the disc.md submodule. Initialize it:\n" +
+      "          git submodule update --init vendor/disc.md"
   );
   Deno.exit(1);
 }

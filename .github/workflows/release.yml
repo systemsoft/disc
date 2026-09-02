@@ -137,6 +137,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Man pages are rendered from the pinned disc.md documentation
+          # submodule below. Without this the checkout leaves
+          # vendor/disc.md empty and `deno task man` fails the job — which is
+          # the intended behaviour, but only because gen-man.ts checks: a
+          # silent empty `disc-man.tar.gz` would break `install.sh` for every
+          # user instead.
+          submodules: true
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2.0.4
@@ -150,7 +158,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y pandoc
 
       # Man pages aren't a build artifact — `deno task man` renders them from
-      # docs/ via pandoc here, then packages them as `disc-man.tar.gz` so the
+      # the disc.md submodule via pandoc here, then packages them as
+      # `disc-man.tar.gz` so the
       # publish step ships them alongside the binaries. `install.sh` fetches
       # this archive from the release assets; without it, every install hits
       # the "man-page archive unavailable" skip path.

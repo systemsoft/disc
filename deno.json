@@ -11,7 +11,7 @@
     "strictNullChecks": true,
     "strictPropertyInitialization": true
   },
-  "exclude": ["tests/gel-compat/node/"],
+  "exclude": ["tests/gel-compat/node/", "vendor/"],
   "exports": {
     ".": "./mod.ts",
     "./cli": "./cli/mod.ts",
@@ -68,7 +68,7 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "lint": "deno lint",
-    "man": "deno run --allow-read=docs,version.txt,build --allow-write=build --allow-run=pandoc scripts/gen-man.ts",
+    "man": "deno run --allow-read=vendor/disc.md/documents,version.txt,build --allow-write=build --allow-run=pandoc scripts/gen-man.ts",
     "prep": "deno run --allow-read --allow-write cli/prep.ts",
     "serve": "deno task prep && deno run --allow-net --allow-read --allow-env server/server.ts",
     "test": "deno task prep && deno test --allow-env --allow-net --allow-read --allow-write --allow-run --no-check",

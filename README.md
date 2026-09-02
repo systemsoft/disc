@@ -16,7 +16,7 @@ A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel
 curl -fsSL https://disc.sh/install | sh
 ```
 
-This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](docs/getting-started.md#install-disc).
+This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](https://disc.md/getting-started.md#install-disc:~:text=deno%20%2D%2Dversion-,Install%20Disc,-Pick%20whichever%20path).
 
 Disc is also [available on Homebrew](https://github.com/systemsoft/homebrew-disc)!
 
@@ -213,7 +213,7 @@ disc deploy --format compose        # Generate docker-compose.yml
 disc deploy --format docker         # Generate Dockerfile
 ```
 
-See [Production Deployment Guide](docs/production-deployment.md) for full details including TLS setup, connection pool tuning, health checks, monitoring, and more.
+See [Production Deployment Guide](https://disc.md/production-deployment.md) for full details including TLS setup, connection pool tuning, health checks, monitoring, and more.
 
 ## Development
 

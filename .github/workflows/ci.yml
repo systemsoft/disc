@@ -24,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Documentation lives in the pinned disc.md submodule; the
+          # docs-coverage pins in tests/gel-divergence-pins.test.ts read
+          # from it, so an empty vendor/ fails the suite.
+          submodules: true
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2.0.4
@@ -106,6 +111,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Documentation lives in the pinned disc.md submodule; the
+          # docs-coverage pins in tests/gel-divergence-pins.test.ts read
+          # from it, so an empty vendor/ fails the suite.
+          submodules: true
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2.0.4
@@ -170,6 +180,11 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-pg-tests')
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Documentation lives in the pinned disc.md submodule; the
+          # docs-coverage pins in tests/gel-divergence-pins.test.ts read
+          # from it, so an empty vendor/ fails the suite.
+          submodules: true
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2.0.4
@@ -189,6 +204,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Documentation lives in the pinned disc.md submodule; the
+          # docs-coverage pins in tests/gel-divergence-pins.test.ts read
+          # from it, so an empty vendor/ fails the suite.
+          submodules: true
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2.0.4

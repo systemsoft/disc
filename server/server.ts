@@ -1159,8 +1159,8 @@ export function buildEnvOptions(
     config.corsOrigins = corsOriginsEnv.split(",").map(origin => origin.trim());
   }
 
-  // Shutdown drain timeout. Documented in `docs/production-deployment.md`
-  // and `docs/server.md`; without this branch the env var was inert and
+  // Shutdown drain timeout. Documented in the published guides
+  // (disc.md: production-deployment, server); without this branch the env var was inert and
   // the only way to set the drain window was the programmatic surface
   // (`DiscServerOptions.shutdownDrainTimeout`). Closes Bundle G follow-up
   // (gh/geldata#5234, #7563).
@@ -1174,7 +1174,7 @@ export function buildEnvOptions(
 
   // Boolean knobs previously gated on disc.toml's `[server]` section.
   // Adding env-var equivalents completes the matrix documented in
-  // `docs/server.md#disc-toml-keys-vs-env-vars-vs-cli-flags`.
+  // disc.md: server#disc-toml-keys-vs-env-vars-vs-cli-flags.
   // (gh/geldata#5234, #7563).
   const requireAuth = parseBoolEnv("DISC_REQUIRE_AUTH");
   if (requireAuth !== undefined) {

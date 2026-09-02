@@ -70,8 +70,8 @@ export function generateTypeScript(schema: Context.Schema, config: Partial<Types
     includeQueryBuilders: config.includeQueryBuilders !== false,
     interfaceSuffix: config.interfaceSuffix || "",
     /*** Default matches the CLI default (./dbschema/disc-client) so calling generateTypeScript()
-         with no config produces output in the same place as `disc codegen`. docs/codegen.md and
-         docs/getting-started.md both document this path. ***/
+         with no config produces output in the same place as `disc codegen`. The published codegen and
+         getting-started guides both document this path. ***/
     outputDir: config.outputDir || "./dbschema/disc-client",
     schemaSource: config.schemaSource || "./dbschema/default.disc",
     target: config.target || "client",

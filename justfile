@@ -38,9 +38,20 @@ dev:
 format:
   deno task format
 
-# generate man pages from docs/ and package them (requires pandoc on PATH)
+# initialize/update the documentation submodule (github.com/systemsoft/disc.md).
+# `docs-sync` fast-forwards the pin to the site's latest primary; committing the
+# resulting submodule bump is what makes a release ship those docs.
+docs-init:
+  git submodule update --init vendor/disc.md
+
+docs-sync:
+  git submodule update --init --remote vendor/disc.md
+  @echo "[INFO] Pin moved — commit vendor/disc.md to record it."
+
+# generate man pages from the disc.md submodule and package them
+# (requires pandoc on PATH; run `just docs-sync` if the submodule is empty)
 man:
-  @echo "[INFO] Generating man pages from docs/…"
+  @echo "[INFO] Generating man pages from vendor/disc.md/documents…"
   @deno task man
   @echo "[INFO] Packaging man pages → build/disc-man.tar.gz"
   tar -czf build/disc-man.tar.gz -C build/man .

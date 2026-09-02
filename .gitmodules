@@ -1,0 +1,3 @@
+[submodule "vendor/disc.md"]
+	path = vendor/disc.md
+	url = https://github.com/systemsoft/disc.md.git

@@ -16,6 +16,46 @@
 
 import { assert, assertEquals } from "@std/assert";
 
+/**
+ * Read a published guide from the documentation submodule.
+ *
+ * User-facing docs live in github.com/systemsoft/disc.md (rendered at
+ * https://disc.md) and are vendored at `vendor/disc.md`, pinned to a commit;
+ * `docs/` in this repo keeps only maintainer-internal material. The pins below
+ * assert documentation *coverage* for specific upstream Gel issues, so they
+ * read through here rather than from a path that no longer exists.
+ *
+ * A clone without `--recursive` leaves the submodule empty, which would
+ * otherwise surface as several unrelated-looking assertion failures. Translate
+ * that into one actionable message instead.
+ */
+async function readPublishedDoc(name: string): Promise<string> {
+  const url = new URL(`../vendor/disc.md/documents/${name}`, import.meta.url);
+  try {
+    return await Deno.readTextFile(url);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      throw new Error(
+        `Documentation submodule not initialized — cannot read ${name}.\n` +
+          "Run: git submodule update --init vendor/disc.md"
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Normalize typographic punctuation before matching documentation prose.
+ * The published docs use curly quotes/dashes (e.g. "branch’s"), so a pin that
+ * matched a straight apostrophe would break on a purely cosmetic edit.
+ */
+function normalizeProse(text: string): string {
+  return text
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, "\"")
+    .replace(/ /g, " ");
+}
+
 // ---------------------------------------------------------------------------
 // gh/geldata#4408 — pre-commit framework integration. Closed-not_planned
 // upstream (maintainers viewed existing CI as sufficient; redundancy with
@@ -1276,7 +1316,7 @@ Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREA
 // stays in place — a future refactor that drops one of these op
 // kinds (regressing an RFC 1000 capability) trips here.
 //
-// Cross-reference: docs/migrations.md "Migration Operations" section
+// Cross-reference: the published migrations guide, "Migration Operations"
 // + the Bundle TT branch-workflow recipes use these op kinds in the
 // recipes they describe.
 // ---------------------------------------------------------------------------
@@ -1331,7 +1371,7 @@ Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exist
 
 // ---------------------------------------------------------------------------
 // gh/geldata#6083 — advanced migration workflows. Documentation-only
-// upstream issue. Bundle TT extended `docs/migrations.md` with three
+// upstream issue. Bundle TT extended the migrations guide with three
 // recipes:
 //   - Rapid prototyping with `disc db push`
 //   - Feature branch with schema changes
@@ -1339,16 +1379,16 @@ Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exist
 //   - Rolling back a feature branch's migrations
 // (The "Resolving Merge Conflicts" section pre-dated this work.)
 //
-// This pin asserts the section anchor stays in `docs/migrations.md`
+// This pin asserts the section anchor stays in `migrations.md`
 // so a docs reorg doesn't drop the workflow recipes.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", async () => {
-  const src = await Deno.readTextFile(
-    new URL("../docs/migrations.md", import.meta.url)
-  );
+Deno.test("Gel #6083: migrations.md carries the branch-workflow recipes", async () => {
+  const src = normalizeProse(await readPublishedDoc("migrations.md"));
+  // The issue reference may be plain text or a Markdown link — the site
+  // hyperlinks upstream issues — so match the heading, not its formatting.
   assert(
-    /## Branch Workflows \(gh\/geldata#6083\)/.test(src),
-    "docs/migrations.md must keep the 'Branch Workflows' section heading (Gel #6083 pin)."
+    /## Branch Workflows \(\[?gh\/geldata#6083/.test(src),
+    "migrations.md must keep the 'Branch Workflows' section heading (Gel #6083 pin)."
   );
   // Each recipe heading should be present — they're the contract
   // the README + cross-references assume.
@@ -1362,7 +1402,7 @@ Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", a
   ) {
     assert(
       src.includes(heading),
-      `docs/migrations.md must keep '${heading}' recipe (Gel #6083 pin).`
+      `migrations.md must keep '${heading}' recipe (Gel #6083 pin).`
     );
   }
 });
@@ -1869,16 +1909,14 @@ Deno.test("Gel #1634: connection pool pre-warms minConnections + reuses idle on 
 
 // ---------------------------------------------------------------------------
 // gh/geldata#6127 — "test guide" docs ask. Bundle WW shipped
-// `docs/testing.md` covering the unit/PG-integration split, the
+// the published `testing.md` covering the unit/PG-integration split, the
 // `EnvMock` discipline, and how to author new tests against the real
 // command surface (rather than the deprecated module-local
 // `mock<Command>` helpers from earlier sessions). The pin asserts the
 // guide stays in place + cross-links to `tests/TESTING.md`.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () => {
-  const src = await Deno.readTextFile(
-    new URL("../docs/testing.md", import.meta.url)
-  );
+Deno.test("Gel #6127: testing.md carries the test-author guide", async () => {
+  const src = normalizeProse(await readPublishedDoc("testing.md"));
   for (
     const heading of [
       "# Testing",
@@ -1891,19 +1929,19 @@ Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () =
   ) {
     assert(
       src.includes(heading),
-      `docs/testing.md must keep '${heading}' section (Gel #6127 pin).`
+      `testing.md must keep '${heading}' section (Gel #6127 pin).`
     );
   }
   // Cross-link to the in-repo notes doc must stay in place.
   assert(
     src.includes("tests/TESTING.md"),
-    "docs/testing.md must cross-link to tests/TESTING.md (Gel #6127 pin)."
+    "testing.md must cross-link to tests/TESTING.md (Gel #6127 pin)."
   );
 });
 
 // ---------------------------------------------------------------------------
 // gh/geldata#6119 + #5820 + #5819 — "Document UI / UI button visibility"
-// ask. Bundle WW extends `docs/admin-ui.md` to cover every nav entry
+// ask. Bundle WW extends `admin-ui.md` to cover every nav entry
 // shipped in `ui/src/routes/+layout.svelte` (Dashboard, Schema, Diff,
 // Data, Query, Builder, Disc, REPL, Migrations, Config). The pin walks
 // the layout file, extracts the labels, and asserts each one has a
@@ -1913,9 +1951,7 @@ Deno.test("Gel #6119/#5820/#5819: every UI nav entry is documented in admin-ui.m
   const layoutSrc = await Deno.readTextFile(
     new URL("../ui/src/routes/+layout.svelte", import.meta.url)
   );
-  const docSrc = await Deno.readTextFile(
-    new URL("../docs/admin-ui.md", import.meta.url)
-  );
+  const docSrc = normalizeProse(await readPublishedDoc("admin-ui.md"));
   // Pull every nav `label: '...'` from the layout. Order in the
   // layout determines reading order in the doc — but the pin only
   // asserts presence (each label should be a top-level `## ` or
@@ -1936,42 +1972,50 @@ Deno.test("Gel #6119/#5820/#5819: every UI nav entry is documented in admin-ui.m
     );
     assert(
       headingRegex.test(docSrc),
-      `docs/admin-ui.md must document the '${label}' nav entry (Gel #6119/#5820/#5819 pin).`
+      `admin-ui.md must document the '${label}' nav entry (Gel #6119/#5820/#5819 pin).`
     );
   }
 });
 
 // ---------------------------------------------------------------------------
-// gh/geldata#7382 — "improved docs search" ask. Disc maintains its own
-// docs at `/docs/` as plain Markdown, served via GitHub's blob/raw
-// browser. There's no docs site infrastructure to plug a search index
-// into — `docs/index.md` is the table-of-contents entry point and the
-// search story rides on file-grep + the `Quick Links` table at the top
-// of `docs/index.md`. Bundle WW documents this explicitly so a future
-// session doesn't waste cycles trying to wire up Algolia/Lunr.
+// gh/geldata#7382 — "improved docs search" ask. This pin used to record that
+// Disc had no docs site to plug a search index into, so discovery rode on
+// browser ⌘F + `grep` over a flat `docs/` tree. That premise is obsolete:
+// the guides now ship as a real site (https://disc.md, source in the
+// vendored disc.md repo) and `docs/` retains only maintainer-internal notes.
 //
-// The pin asserts `docs/index.md` carries a "Searching" section that
-// names the actual search affordances (browser ⌘F, GitHub repo
-// search, `grep` over the `docs/` tree).
+// The durable property behind the upstream ask is that a reader can *find*
+// the right page without a search engine. The site's index carries that
+// contract: a Quick Links cross-reference plus a full table of contents that
+// reaches every published guide. Pin the contract, not the old workaround —
+// so a reorg that drops the index's navigation trips here.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #7382: docs/index.md carries a Searching section", async () => {
-  const src = await Deno.readTextFile(
-    new URL("../docs/index.md", import.meta.url)
-  );
-  assert(
-    /## Searching/.test(src),
-    "docs/index.md must keep the 'Searching' section (Gel #7382 pin)."
-  );
-  // The three search affordances callers actually have:
-  for (
-    const phrase of [
-      "GitHub",
-      "grep"
-    ]
-  ) {
+Deno.test("Gel #7382: the docs index stays navigable without a search engine", async () => {
+  const src = normalizeProse(await readPublishedDoc("index.md"));
+
+  for (const heading of ["## Quick Links", "## Full Table of Contents"]) {
     assert(
-      src.toLowerCase().includes(phrase.toLowerCase()),
-      `docs/index.md Searching section must mention '${phrase}' (Gel #7382 pin).`
+      src.includes(heading),
+      `index.md must keep the '${heading}' navigation section (Gel #7382 pin).`
     );
   }
+
+  // Every published guide must be reachable from the index — that is what
+  // replaces a search box. Anything added to the site without an index entry
+  // is effectively undiscoverable.
+  const dir = new URL("../vendor/disc.md/documents/", import.meta.url);
+  const guides: string[] = [];
+  for await (const entry of Deno.readDir(dir)) {
+    if (entry.isFile && entry.name.endsWith(".md") && entry.name !== "index.md") {
+      guides.push(entry.name);
+    }
+  }
+  assert(guides.length > 0, "no published guides found (Gel #7382 pin).");
+
+  const unlinked = guides.filter(guide => !src.includes(`(${guide})`));
+  assertEquals(
+    unlinked,
+    [],
+    `index.md must link every published guide (Gel #7382 pin) — missing: ${unlinked.join(", ")}`
+  );
 });
