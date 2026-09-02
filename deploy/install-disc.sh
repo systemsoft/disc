@@ -147,7 +147,12 @@ ${SUDO} systemctl daemon-reload
 ${SUDO} systemd-analyze verify /etc/systemd/system/disc.service || \
   echo "WARNING: systemd-analyze flagged the unit; review the output above." >&2
 
-${SUDO} systemctl enable --now disc
+# `enable --now` only *starts* an inactive unit, so on a re-run against a
+# running service it is a no-op and the old binary keeps serving. Enable and
+# restart separately: restart covers the upgrade case and starts the unit from
+# cold on a first install, so one call is correct either way.
+${SUDO} systemctl enable disc
+${SUDO} systemctl restart disc
 
 # 5. Verify it came up as the disc user, not root.
 ${SUDO} systemctl status disc --no-pager
