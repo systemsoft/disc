@@ -22,10 +22,10 @@ const RUN_PG = canRunPgTests();
 
 function makePool(dsn: string): ConnectionPool {
   return new ConnectionPool({
+    cleanupInterval: 0,
     connectionString: dsn,
-    minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0
+    minConnections: 1
   });
 }
 
@@ -109,10 +109,66 @@ Deno.test({
       // the live value stays at the old setting.
       const before = (await handler.getConfigValues(["shared_buffers"]))
         .get("shared_buffers");
-      const result = await handler.setConfigValue("shared_buffers", "256MB");
+      // Target a value that differs from what is live right now: ALTER SYSTEM
+      // only leaves a restart pending when it actually changes something, so a
+      // hardcoded target would be vacuous against an instance already serving
+      // it (e.g. a persistent DISC_PG_TEST_URL server).
+      const target = before === "256MB" ? "512MB" : "256MB";
+      const result = await handler.setConfigValue("shared_buffers", target);
       assertEquals(result.pendingRestart, true);
       // Live value unchanged until restart.
       assertEquals(result.value, before);
+    } finally {
+      await resetSetting(pool, "shared_buffers");
+      await pool.close();
+    }
+  }
+});
+
+/**
+ * Regression: `pg_reload_conf()` only signals the postmaster and returns
+ * before the config is re-read, so sampling `pg_settings` straight after it
+ * could observe the pre-reload state — reporting `pendingRestart: false` for a
+ * restart-class setting, i.e. telling an admin no restart is needed when one
+ * is. It surfaced as an intermittent failure of the test above under load
+ * (measured: `pending_restart` was still false immediately after the reload
+ * and flipped true ~5ms later).
+ *
+ * `setConfigValue` now waits for the reload to be observably applied. This
+ * pins that: repeat the write enough to have caught the old race, and after
+ * each one verify an INDEPENDENT read agrees with what the handler reported —
+ * which can only hold if it waited rather than sampling early.
+ */
+Deno.test({
+  name: "PG /config write: pendingRestart is not sampled before the reload lands",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+    const handler = new SimpleEdgeQLProtocolHandler({ connectionPool: pool });
+
+    try {
+      for (let i = 0; i < 12; i++) {
+        // Alternate the target so every iteration is a real change (ALTER
+        // SYSTEM leaves nothing pending when the value is already set).
+        const target = i % 2 === 0 ? "256MB" : "512MB";
+        const result = await handler.setConfigValue("shared_buffers", target);
+        assertEquals(
+          result.pendingRestart,
+          true,
+          `iteration ${i}: restart-class write must report pendingRestart`
+        );
+
+        const live = await pool.query(
+          "SELECT pending_restart FROM pg_settings WHERE name = 'shared_buffers'"
+        );
+        assertEquals(
+          live.rows[0]?.pending_restart,
+          true,
+          `iteration ${i}: handler returned before the reload was applied`
+        );
+      }
     } finally {
       await resetSetting(pool, "shared_buffers");
       await pool.close();

@@ -30,6 +30,15 @@ import type { HealthStatus } from "./types.ts";
 
 const log = getLogger("simple-edgeql-protocol");
 
+/**
+ * How long `setConfigValue` waits for `pg_reload_conf()` to be applied before
+ * reporting the resulting state. A local SIGHUP lands in single-digit
+ * milliseconds; the budget covers a loaded server without making a config
+ * write that changes nothing feel slow.
+ */
+const CONFIG_RELOAD_TIMEOUT_MS = 500;
+const CONFIG_RELOAD_POLL_MS = 5;
+
 export interface SimpleEdgeQLOptions {
   schema?: Context.Schema;
   enableExplain?: boolean;
@@ -811,11 +820,35 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       throw new Error(`Invalid configuration key: ${pgName}`);
     }
 
+    const before = await this.readSetting(pgName);
+
     const escaped = value.replace(/'/g, "''");
     await this.pool.query(`ALTER SYSTEM SET ${pgName} = '${escaped}'`);
     await this.pool.query("SELECT pg_reload_conf()");
 
-    const result = await this.pool.query(
+    // `pg_reload_conf()` only signals the postmaster — it returns before the
+    // config files have actually been re-read, so sampling `pg_settings`
+    // straight after it can observe the pre-reload state. For a SIGHUP-class
+    // setting that reads back as the old value; for a restart-class one it
+    // reads back `pending_restart = false`, which tells the caller no restart
+    // is needed when one is. Wait for the reload to land before answering.
+    //
+    // The reload is observable as exactly one of: the live value changed
+    // (SIGHUP class), or `pending_restart` flipped on (restart class). A write
+    // that changes nothing produces neither, so it falls through the bounded
+    // wait and returns the already-correct state.
+    const settled = await this.awaitConfigReload(pgName, before);
+    return {
+      value: settled.value,
+      pendingRestart: settled.pendingRestart
+    };
+  }
+
+  /** Read one GUC's live value plus its pending-restart flag. */
+  private async readSetting(
+    pgName: string
+  ): Promise<{ value: string | null; pendingRestart: boolean; }> {
+    const result = await this.pool!.query(
       "SELECT current_setting($1) AS value, " +
         "(SELECT pending_restart FROM pg_settings WHERE name = $1) " +
         "AS pending_restart",
@@ -826,6 +859,32 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       value: (row.value ?? null) as string | null,
       pendingRestart: row.pending_restart === true
     };
+  }
+
+  /**
+   * Poll a GUC until a pending `pg_reload_conf()` is observably applied, or
+   * the budget expires. Returns the last state read either way — on timeout
+   * the write changed nothing observable, so that state is already the answer.
+   *
+   * The budget is generous relative to a local SIGHUP (which lands in single
+   * -digit milliseconds) but short enough that a no-op write stays snappy.
+   */
+  private async awaitConfigReload(
+    pgName: string,
+    before: { value: string | null; pendingRestart: boolean; }
+  ): Promise<{ value: string | null; pendingRestart: boolean; }> {
+    const deadline = Date.now() + CONFIG_RELOAD_TIMEOUT_MS;
+    let latest = before;
+    for (;;) {
+      latest = await this.readSetting(pgName);
+      if (latest.value !== before.value || latest.pendingRestart) {
+        return latest;
+      }
+      if (Date.now() >= deadline) {
+        return latest;
+      }
+      await new Promise(resolve => setTimeout(resolve, CONFIG_RELOAD_POLL_MS));
+    }
   }
 
   /**
