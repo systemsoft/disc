@@ -544,6 +544,11 @@ class TypeScriptEmitter {
     content += `${indent}export interface ${tsTypeName}Select {\n`;
 
     content += `${indent}  "*"?: boolean;\n`;
+    // `filter` / `order_by` narrow and order the *linked set* this Select
+    // shapes. Both are consumed by the parent link key; at the top level they
+    // have no parent link and are ignored (root narrowing/ordering use the
+    // Filter object's own fields and its sibling `order_by`).
+    content += `${indent}  filter?: ${tsTypeName}Filter;\n`;
     content += `${indent}  order_by?: string | string[];\n`;
 
     for (const field of obj.fields) {

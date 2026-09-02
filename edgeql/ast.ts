@@ -176,6 +176,14 @@ export interface ShapeElement extends EdgeQLNode {
   operator?: ":=" | "+=" | "-=";
   shape?: Shape;
   /**
+   * Sub-shape predicate for a link element: `link: { ... } filter .active`.
+   * Narrows the linked set before aggregation — compiles to an extra `AND`
+   * on the link subquery's `WHERE`, so only matching rows reach
+   * `jsonb_agg(...)`. Paths inside resolve against the *target* type
+   * (`.active` is the target's property). Only meaningful when `shape` is set.
+   */
+  filter?: Expression;
+  /**
    * Sub-shape ordering for a link element: `link: { ... } order by .field desc`.
    * Applied to the linked set before aggregation — compiles to an `ORDER BY`
    * inside the link's `jsonb_agg(...)`. Only meaningful when `shape` is set.
@@ -562,6 +570,7 @@ export function createShapeElement(
     cardinality?: Cardinality;
     operator?: ":=" | "+=" | "-=";
     shape?: Shape;
+    filter?: Expression;
     orderBy?: OrderByClause[];
   }
 ): ShapeElement {

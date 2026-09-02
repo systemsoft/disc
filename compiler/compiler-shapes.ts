@@ -814,7 +814,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
             link,
             element.shape,
             tableAlias,
-            element.orderBy
+            element.orderBy,
+            element.filter
           );
         } else {
           // Try as a property reference
@@ -1047,7 +1048,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     link: Context.LinkDef,
     shape: EdgeQLAST.Shape,
     parentAlias: string,
-    orderBy?: EdgeQLAST.OrderByClause[]
+    orderBy?: EdgeQLAST.OrderByClause[],
+    filter?: EdgeQLAST.Expression
   ): SQL.SQLExpression {
     // Generate a subquery for the linked type with the given shape.
     // Use `resolveTypeName` (not `getTypeDef`) so a link target like
@@ -1082,10 +1084,16 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         type: targetTypeDef.name
       }
     );
-    // Compile the optional sub-shape ordering inside the pushed scope so its
-    // path expressions (e.g. `.created`) resolve to the target table's columns,
-    // not the outer query's.
+    // Compile the optional sub-shape predicate and ordering inside the pushed
+    // scope so their path expressions (e.g. `.created`) resolve to the target
+    // table's columns, not the outer query's.
+    //
+    // Compilation order is textual order — fields, then `filter`, then
+    // `order by` — because named query parameters are assigned their PG
+    // positional index on first compile, and the wire-level variables map is
+    // ordered the same way by the SDK's filter compiler.
     let aggOrderBy: SQL.OrderByItem[] | undefined;
+    let filterCondition: SQL.SQLExpression | undefined;
     try {
       for (const element of elements) {
         const field = this.compileShapeElement(
@@ -1096,6 +1104,9 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         if (field) {
           jsonFields.push(field);
         }
+      }
+      if (filter) {
+        filterCondition = this.compileExpression(filter);
       }
       if (orderBy && orderBy.length > 0) {
         aggOrderBy = orderBy.map(item => ({
@@ -1177,11 +1188,19 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       ]);
     }
 
-    // Build the subquery
+    // Build the subquery. A sub-shape `filter` narrows the linked set by
+    // ANDing onto the join condition, so only matching rows reach jsonb_agg
+    // — the parent row itself is still returned (with an empty array when
+    // nothing matches), unlike a top-level `.link.prop = …` predicate which
+    // filters the parent.
+    const whereCondition = filterCondition ?
+      SQL.createBinaryExpression("AND", joinCondition, filterCondition) :
+      joinCondition;
+
     const subquery: SQL.SelectStatement = SQL.createSelectStatement({
       select: SQL.createSelectClause([SQL.createSelectItem(jsonAgg)]),
       from: fromClause,
-      where: SQL.createWhereClause(joinCondition)
+      where: SQL.createWhereClause(whereCondition)
     });
 
     const subqueryExpr = SQL.createSubqueryExpression(subquery);

@@ -575,3 +575,206 @@ Deno.test("Stage E — in coexists with other ops on the same field", () => {
   );
   assertEquals(result.variables, { p0: 100, p1: [100, 200, 300] });
 });
+
+// --- Stage F: `filter` on a link sub-shape (narrows the linked set) ---
+
+/**
+ * A sibling link key in the Filter object constrains the *parent*
+ * (`.videos.isDraft = …` → EXISTS); `filter` inside that link's `select`
+ * sub-shape constrains the *linked set* itself. These pin the distinction,
+ * plus the parameter ordering that lets the server bind both in one query.
+ */
+
+const videoInfo: TypeInfo = {
+  casts: {
+    id: "<uuid>",
+    title: "<str>",
+    isDraft: "<int64>",
+    created: "<datetime>"
+  },
+  links: {}
+};
+
+const ownerInfo: TypeInfo = {
+  casts: { id: "<uuid>", name: "<str>" },
+  links: {}
+};
+
+const chanInfo: TypeInfo = {
+  casts: { id: "<uuid>", slug: "<str>" },
+  links: {
+    videos: () => videoInfo,
+    owners: () => ownerInfo
+  }
+};
+
+Deno.test("Stage F — select link `filter` narrows that link's set", () => {
+  const result = compileFilter(
+    "Channel",
+    { select: { "*": true, videos: { "*": true, filter: { isDraft: 0n } } } },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ *, videos: { * } filter .isDraft = <int64>$p0 }"
+  );
+  assertEquals(result.variables, { p0: 0n });
+  // The predicate stays inside the shape — it must not constrain the parent.
+  assertEquals(result.clause, "");
+});
+
+Deno.test("Stage F — select link `filter` paths are relative to the target type", () => {
+  // `.isDraft`, not `.videos.isDraft` — inside the sub-shape the scope is the
+  // linked type, so the path prefix resets.
+  const result = compileFilter(
+    "Channel",
+    { select: { videos: { title: true, filter: { isDraft: 0n } } } },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { title } filter .isDraft = <int64>$p0 }"
+  );
+});
+
+Deno.test("Stage F — select link `filter` supports operators and implicit AND", () => {
+  const result = compileFilter(
+    "Channel",
+    {
+      select: {
+        videos: {
+          "*": true,
+          filter: { isDraft: 0n, title: { ilike: "%hi%" } }
+        }
+      }
+    },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { * } filter .isDraft = <int64>$p0 and .title ilike <str>$p1 }"
+  );
+  assertEquals(result.variables, { p0: 0n, p1: "%hi%" });
+});
+
+Deno.test("Stage F — select link `filter` accepts combinators", () => {
+  const result = compileFilter(
+    "Channel",
+    {
+      select: {
+        videos: { "*": true, filter: or({ isDraft: 0n }, { title: "pinned" }) }
+      }
+    },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { * } filter (.isDraft = <int64>$p0) or (.title = <str>$p1) }"
+  );
+});
+
+Deno.test("Stage F — select link `filter` precedes order_by in clause order", () => {
+  const result = compileFilter(
+    "Channel",
+    {
+      select: {
+        videos: { "*": true, filter: { isDraft: 0n }, order_by: ["-created"] }
+      }
+    },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { * } filter .isDraft = <int64>$p0 order by .created desc }"
+  );
+});
+
+Deno.test("Stage F — sub-shape `filter` params are bound before where-clause params", () => {
+  // The server binds Object.values(variables) positionally and the compiler
+  // numbers parameters as it meets them — shape first, then where. If these
+  // two orders ever diverge, every parameter binds to the wrong slot.
+  const result = compileFilter(
+    "Channel",
+    {
+      slug: "music",
+      select: { "*": true, videos: { "*": true, filter: { isDraft: 0n } } }
+    },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ *, videos: { * } filter .isDraft = <int64>$p0 }"
+  );
+  assertEquals(result.clause, ".slug = <str>$p1");
+  assertEquals(Object.keys(result.variables), ["p0", "p1"]);
+});
+
+Deno.test("Stage F — sub-shape `filter` coexists with a sibling link predicate", () => {
+  // `videos:` at the root still filters Channels (EXISTS); the one in `select`
+  // filters the returned videos. Both can appear in the same query.
+  const result = compileFilter(
+    "Channel",
+    {
+      videos: { isDraft: 0n },
+      select: { "*": true, videos: { "*": true, filter: { isDraft: 0n } } }
+    },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ *, videos: { * } filter .isDraft = <int64>$p0 }"
+  );
+  assertEquals(result.clause, "(.videos.isDraft = <int64>$p1)");
+  assertEquals(Object.keys(result.variables), ["p0", "p1"]);
+});
+
+Deno.test("Stage F — link sub-shape with only a `filter` falls back to { * }", () => {
+  const result = compileFilter(
+    "Channel",
+    { select: { videos: { filter: { isDraft: 0n } } } },
+    chanInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { * } filter .isDraft = <int64>$p0 }"
+  );
+});
+
+Deno.test("Stage F — nested links each carry their own `filter`", () => {
+  const nestedInfo: TypeInfo = {
+    casts: { id: "<uuid>", slug: "<str>" },
+    links: { videos: () => ({ ...videoInfo, links: { owners: () => ownerInfo } }) }
+  };
+  const result = compileFilter(
+    "Channel",
+    {
+      select: {
+        videos: {
+          "*": true,
+          filter: { isDraft: 0n },
+          owners: { name: true, filter: { name: "ada" } }
+        }
+      }
+    },
+    nestedInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ videos: { *, owners: { name } filter .name = <str>$p0 } " +
+      "filter .isDraft = <int64>$p1 }"
+  );
+  assertEquals(Object.keys(result.variables), ["p0", "p1"]);
+});
+
+Deno.test("Stage F — `filter` at the top level of select is ignored", () => {
+  // Root narrowing uses the Filter object's own fields; a `filter` buried in
+  // the select shape has no parent link to attach to.
+  const result = compileFilter(
+    "Channel",
+    { select: { "*": true, filter: { slug: "music" } } },
+    chanInfo
+  );
+  assertEquals(result.selectShape, "{ * }");
+  assertEquals(result.clause, "");
+  assertEquals(result.variables, {});
+});

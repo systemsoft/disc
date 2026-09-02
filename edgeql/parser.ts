@@ -678,14 +678,28 @@ export class EdgeQLParser {
    * `posts: { title } order by .created desc`. Only valid when the element
    * carried a nested shape; returns `undefined` when no `order by` follows.
    */
-  private parseShapeOrderBy(
+  /**
+   * Trailing modifiers on a link sub-shape: `link: { ... } filter <expr>
+   * order by <expr> [desc]`. Both are optional and must appear in that
+   * order, matching the statement-level clause order. Only a shape element
+   * that actually has a sub-shape can carry them — a bare property is
+   * followed by `,` or `}`, so the `shape` guard keeps a statement-level
+   * `filter` from being swallowed by the last element of an outer shape.
+   */
+  private parseShapeModifiers(
     shape: AST.Shape | undefined
-  ): AST.OrderByClause[] | undefined {
-    if (!shape || !this.match(TokenType.ORDER)) {
-      return undefined;
+  ): { filter?: AST.Expression; orderBy?: AST.OrderByClause[]; } {
+    if (!shape) {
+      return {};
+    }
+    const filter = this.match(TokenType.FILTER) ?
+      this.parseExpression() :
+      undefined;
+    if (!this.match(TokenType.ORDER)) {
+      return { filter };
     }
     this.consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
-    return this.parseOrderByList();
+    return { filter, orderBy: this.parseOrderByList() };
   }
 
   private parseShapeElement(): AST.ShapeElement {
@@ -822,7 +836,7 @@ export class EdgeQLParser {
           computable: false,
           cardinality,
           shape,
-          orderBy: this.parseShapeOrderBy(shape)
+          ...this.parseShapeModifiers(shape)
         });
       } else {
         // Reset if not a computed or aliased property
@@ -842,7 +856,7 @@ export class EdgeQLParser {
     return AST.createShapeElement(expr, {
       cardinality,
       shape,
-      orderBy: this.parseShapeOrderBy(shape)
+      ...this.parseShapeModifiers(shape)
     });
   }
 

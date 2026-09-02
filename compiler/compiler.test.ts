@@ -1918,6 +1918,89 @@ Deno.test("SQL Compiler - link sub-shape without order by is unchanged", () => {
   assertEquals(/ORDER BY/i.test(sql), false, `unexpected ORDER BY: ${sql}`);
 });
 
+// --- Link sub-shape filtering (narrows the aggregated set) ---
+
+Deno.test("SQL Compiler - link sub-shape filter ANDs onto the join condition", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { name, posts: { title } filter .title = 'hi' }"
+  );
+  assertEquals(sql.includes("jsonb_agg("), true, `expected jsonb_agg: ${sql}`);
+  // The link's own join predicate survives, with the sub-shape filter ANDed on.
+  assertEquals(
+    /\(posts\.author_id = \w+\.id\) AND \(posts\.title = 'hi'\)/.test(sql),
+    true,
+    `expected join AND sub-filter: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape filter does not filter the parent row", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { name, posts: { title } filter .title = 'hi' }"
+  );
+  // The predicate belongs to the link subquery only — the outer statement has
+  // no WHERE, so every User still comes back (with an empty posts array when
+  // nothing matches). Exactly one WHERE in the whole statement: the link's.
+  assertEquals(
+    sql.match(/\bWHERE\b/gi)?.length,
+    1,
+    `sub-shape filter leaked to the outer query: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape filter combines with order by", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { posts: { title } filter .title = 'hi' order by .title desc }"
+  );
+  assertEquals(
+    sql.includes("posts.title = 'hi'"),
+    true,
+    `expected sub-filter: ${sql}`
+  );
+  assertEquals(
+    sql.includes("ORDER BY posts.title DESC"),
+    true,
+    `expected ordered jsonb_agg: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape filter round-trips the SDK's emitted form", () => {
+  // Exactly what sdk/filter-compiler.ts emits for
+  // `{ slug: …, select: { "*": true, posts: { "*": true, filter: {…},
+  // order_by: ["-title"] } } }` — splat sub-shape, then filter, then order by,
+  // with named parameters on both the sub-shape and the outer where.
+  const sql = compileEdgeQL(
+    "select User { *, posts: { * } filter .title = <str>$p0 order by .title desc } " +
+      "filter .name = <str>$p1 limit 1"
+  );
+  // Sub-shape parameter is met first, so it takes the lower PG position.
+  assertEquals(
+    sql.includes("posts.title = CAST($1 AS text)"),
+    true,
+    `expected sub-shape param as $1: ${sql}`
+  );
+  assertEquals(
+    /\.name = CAST\(\$2 AS text\)/.test(sql),
+    true,
+    `expected where param as $2: ${sql}`
+  );
+  assertEquals(
+    sql.includes("ORDER BY posts.title DESC"),
+    true,
+    `expected ordered jsonb_agg: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - link sub-shape filter accepts and/or predicates", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { posts: { title } filter .title = 'hi' and .body = 'yo' }"
+  );
+  assertEquals(
+    sql.includes("((posts.title = 'hi') AND (posts.body = 'yo'))"),
+    true,
+    `expected conjunction: ${sql}`
+  );
+});
+
 // --- Showcase #4: two multi-link hops (nested EXISTS) ---
 
 /**

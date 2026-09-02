@@ -137,9 +137,15 @@ export function compileFilter<T extends Record<string, unknown>>(
   if (!isExpr(filter) && isPlainObject(filter)) {
     const root = filter as Record<string, unknown>;
     if (root.select !== undefined) {
+      // Compiled before the where clause below so that any parameters bound by
+      // a link sub-shape `filter` are inserted into `ctx.vars` ahead of the
+      // where clause's — the server binds `Object.values(variables)`
+      // positionally, and the compiler numbers parameters in the order it
+      // meets them, which is shape-then-where.
       selectShape = compileSelectShape(
         root.select as Record<string, unknown>,
-        typeInfo
+        typeInfo,
+        ctx
       );
     }
     if (root.order_by !== undefined) {
@@ -161,15 +167,17 @@ const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function compileSelectShape(
   select: Record<string, unknown>,
-  info: TypeInfo
+  info: TypeInfo,
+  ctx: Ctx
 ): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(select)) {
-    // `order_by` inside a link's select object is consumed by the parent link
-    // (it orders that link's set, emitted as `link: { ... } order by ...`), so
-    // it's not a field of this shape. At the top level it has no parent link
-    // and is simply ignored — top-level ordering uses the sibling `order_by`.
-    if (key === "order_by") {
+    // `filter` and `order_by` inside a link's select object are consumed by the
+    // parent link (they narrow and order that link's set, emitted as
+    // `link: { ... } filter ... order by ...`), so they're not fields of this
+    // shape. At the top level they have no parent link and are simply ignored —
+    // top-level narrowing and ordering use the sibling filter keys/`order_by`.
+    if (key === "filter" || key === "order_by") {
       continue;
     }
     if (key === "*") {
@@ -211,12 +219,41 @@ function compileSelectShape(
         throw new Error(`select: unknown link ${JSON.stringify(key)}`);
       }
       const linkSelect = value as Record<string, unknown>;
-      const inner = compileSelectShape(linkSelect, linkThunk());
-      // Order the linked set: `link: { ... } order by .field [desc]`.
-      const order = linkSelect.order_by !== undefined ?
-        ` ${compileOrderBy(linkSelect.order_by as string | string[])}` :
-        "";
-      parts.push(`${escapeEdgeQLIdent(key)}: ${inner}${order}`);
+      const targetInfo = linkThunk();
+      // A sub-object carrying only modifiers (`{ filter: … }`) names no fields,
+      // and an empty `{ }` shape is not valid EdgeQL — fall back to the same
+      // `{ * }` a bare `link: true` would produce.
+      const shaped = compileSelectShape(linkSelect, targetInfo, ctx);
+      const inner = shaped === "{  }" ? "{ * }" : shaped;
+
+      // Trailing modifiers on the linked set, emitted in EdgeQL clause order:
+      // `link: { ... } filter … order by .field [desc]`.
+      const modifiers: string[] = [];
+
+      // Narrow the linked set: the predicate reads against the *target* type,
+      // so it compiles with an empty path prefix (`.isDraft`, not
+      // `.videos.isDraft`) — unlike a sibling link key in the filter object,
+      // which constrains the parent via EXISTS.
+      if (linkSelect.filter !== undefined) {
+        const savedPrefix = ctx.pathPrefix;
+        ctx.pathPrefix = "";
+        const predicate = compileArg(
+          linkSelect.filter as FilterArg,
+          targetInfo,
+          ctx
+        );
+        ctx.pathPrefix = savedPrefix;
+        if (predicate.length > 0) {
+          modifiers.push(`filter ${predicate}`);
+        }
+      }
+
+      if (linkSelect.order_by !== undefined) {
+        modifiers.push(compileOrderBy(linkSelect.order_by as string | string[]));
+      }
+
+      const suffix = modifiers.length > 0 ? ` ${modifiers.join(" ")}` : "";
+      parts.push(`${escapeEdgeQLIdent(key)}: ${inner}${suffix}`);
       continue;
     }
     throw new Error(

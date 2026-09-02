@@ -156,6 +156,7 @@ export interface UserFilter {
 
 export interface UserSelect {
   "*"?: boolean;
+  filter?: UserFilter;
   order_by?: string | string[];
   id?: boolean;
   name?: boolean;
@@ -203,6 +204,7 @@ export interface PostFilter {
 
 export interface PostSelect {
   "*"?: boolean;
+  filter?: PostFilter;
   order_by?: string | string[];
   id?: boolean;
   title?: boolean;
@@ -606,6 +608,7 @@ export namespace \$default {
 
   export interface MerchantSelect {
     "*"?: boolean;
+    filter?: MerchantFilter;
     order_by?: string | string[];
     id?: boolean;
     name?: boolean;
@@ -672,6 +675,7 @@ export namespace api {
 
   export interface ApiKeySelect {
     "*"?: boolean;
+    filter?: ApiKeyFilter;
     order_by?: string | string[];
     id?: boolean;
     key?: boolean;
@@ -742,6 +746,7 @@ export namespace payment {
 
   export interface PaymentSelect {
     "*"?: boolean;
+    filter?: PaymentFilter;
     order_by?: string | string[];
     id?: boolean;
     amount?: boolean;
@@ -1360,6 +1365,7 @@ export interface PersonFilter {
 
 export interface PersonSelect {
   "*"?: boolean;
+  filter?: PersonFilter;
   order_by?: string | string[];
   id?: boolean;
   name?: boolean;
@@ -1426,6 +1432,7 @@ export interface PlaceFilter {
 
 export interface PlaceSelect {
   "*"?: boolean;
+  filter?: PlaceFilter;
   order_by?: string | string[];
   id?: boolean;
   name?: boolean;
@@ -1807,6 +1814,7 @@ export namespace \$default {
 
   export interface PersonSelect {
     "*"?: boolean;
+    filter?: PersonFilter;
     order_by?: string | string[];
     id?: boolean;
   }
@@ -1855,6 +1863,7 @@ export namespace \$default {
 
   export interface PetSelect {
     "*"?: boolean;
+    filter?: PetFilter;
     order_by?: string | string[];
     id?: boolean;
     owner?: boolean | PersonSelect;
