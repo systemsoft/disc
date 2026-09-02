@@ -530,38 +530,98 @@ Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injec
 // `std::*` implemented as a stored procedure that reads tables
 // directly bypasses access policies.
 //
-// Disc's stdlib (`lib/stdlib-sql.ts`) declares only IMMUTABLE crypto +
-// encoding wrappers (md5/sha1/hex/base64) — none of them touch user
-// tables. Aggregates like `count()`, `sum()` are compiled inline by
+// Disc's stdlib (`lib/stdlib-sql.ts`) declares crypto + encoding wrappers
+// (md5/sha1/hex/base64) plus the `disc_uuidv7()` id generator — none of them
+// touch user tables. Aggregates like `count()`, `sum()` are compiled inline by
 // `compiler/compiler.ts` against a SELECT subquery that goes through
 // `applyAccessControl`, so policies still apply.
 //
-// This pin asserts: every function in `stdlib-sql.ts` is `IMMUTABLE`
-// and contains no FROM clause referencing a real table.
+// The security property this pins is **no table reads**. Volatility is a
+// secondary purity signal: the scalar wrappers are all IMMUTABLE, and the one
+// VOLATILE function is allowlisted below with its reason, so a new volatile
+// function can't slip in unnoticed.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #8811: stdlib SQL only declares pure scalar wrappers (no table reads)", async () => {
+
+/**
+ * Stdlib functions that are deliberately not IMMUTABLE, with the reason.
+ * Everything else must be IMMUTABLE.
+ *
+ * `disc_uuidv7` is an id generator, not a scalar wrapper: it reads
+ * `clock_timestamp()` and `gen_random_bytes()`. Marking it IMMUTABLE would let
+ * PostgreSQL fold it to a single value per statement, so a multi-row INSERT
+ * would hand every row the same primary key.
+ */
+const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_uuidv7"]);
+
+Deno.test("Gel #8811: stdlib SQL declares no table reads", async () => {
   const src = await Deno.readTextFile(
     new URL("../lib/stdlib-sql.ts", import.meta.url)
   );
-  // Every CREATE OR REPLACE FUNCTION block must be marked IMMUTABLE.
+
+  // Split on the dollar-quoted body + trailing `LANGUAGE <lang> <attrs>;`, so
+  // plpgsql and SQL functions both terminate a block. An earlier version of
+  // this pin closed only on `LANGUAGE SQL`, which let a plpgsql function
+  // swallow the next block whole — the merged text inherited the *next*
+  // function's IMMUTABLE and the check silently passed over both.
   const funcBlocks = src.match(
-    /CREATE OR REPLACE FUNCTION [\s\S]+?LANGUAGE SQL[^;]*;/g
+    /CREATE OR REPLACE FUNCTION[\s\S]+?\$\$[\s\S]*?\$\$\s*LANGUAGE\s+\w+[^;]*;/g
   ) ?? [];
   assert(
     funcBlocks.length > 0,
     "stdlib-sql.ts should declare at least one wrapper function (Gel #8811 pin)."
   );
+  // Every declaration must land in exactly one block — guards against the
+  // merge bug above making this pin vacuous again.
+  const declCount = (src.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length;
+  assertEquals(
+    funcBlocks.length,
+    declCount,
+    "every stdlib function must be captured as its own block (Gel #8811 pin)."
+  );
+
   for (const block of funcBlocks) {
-    assert(
-      /IMMUTABLE/.test(block),
-      `stdlib function block must be marked IMMUTABLE: ${block.split("\n")[0]} (Gel #8811 pin).`
+    const name = block.match(/FUNCTION\s+(\w+)/)?.[1] ?? "<unnamed>";
+
+    if (!STDLIB_VOLATILE_ALLOWLIST.has(name)) {
+      assert(
+        /IMMUTABLE/.test(block),
+        `stdlib function '${name}' must be IMMUTABLE, or added to ` +
+          `STDLIB_VOLATILE_ALLOWLIST with a reason (Gel #8811 pin).`
+      );
+    }
+
+    // No FROM clause referencing a real table. SELECT-with-no-FROM is fine
+    // ("SELECT decode(...)") — this catches `SELECT ... FROM users` or any
+    // other table read inside a stdlib function.
+    //
+    // `EXTRACT(field FROM source)` and friends use FROM as a keyword-argument
+    // separator rather than a table reference, so strip those call forms
+    // first — otherwise `extract(epoch FROM clock_timestamp())` reads as a
+    // table access and the pin fails on a function that touches nothing.
+    const scannable = block.replace(
+      /\b(extract|substring|trim|overlay|position)\s*\([\s\S]*?\)/gi,
+      ""
     );
-    // No FROM clause referencing a real table. SELECT-with-no-FROM is
-    // fine ("SELECT decode(...)") — this catches `SELECT ... FROM users`
-    // or any other table read inside a stdlib function.
     assert(
-      !/FROM\s+(?!\(|VALUES)\w+/i.test(block),
-      `stdlib function must not read tables: ${block.split("\n")[0]} (Gel #8811 pin).`
+      !/FROM\s+(?!\(|VALUES)\w+/i.test(scannable),
+      `stdlib function '${name}' must not read tables (Gel #8811 pin).`
+    );
+  }
+});
+
+// Companion to the pin above: the allowlist must not outlive the function it
+// exempts. A rename or removal in stdlib-sql.ts should force the allowlist to
+// be revisited rather than leaving a stale entry that silently exempts nothing
+// — or worse, silently exempts a future function that reuses the name.
+Deno.test("Gel #8811: stdlib volatile allowlist has no stale entries", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/stdlib-sql.ts", import.meta.url)
+  );
+  for (const name of STDLIB_VOLATILE_ALLOWLIST) {
+    assert(
+      new RegExp(`CREATE OR REPLACE FUNCTION\\s+${name}\\b`).test(src),
+      `STDLIB_VOLATILE_ALLOWLIST names '${name}', which stdlib-sql.ts no ` +
+        `longer declares — drop the entry (Gel #8811 pin).`
     );
   }
 });
