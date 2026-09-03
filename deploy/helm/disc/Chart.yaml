@@ -3,7 +3,7 @@ name: disc
 description: Disc — TypeScript-native, schema-first database (Gel/EdgeDB fork on Deno + Postgres)
 type: application
 version: 0.1.0
-appVersion: "2026.09.01"
+appVersion: "2026.09.03"
 home: https://github.com/systemsoft/disc
 sources:
   - https://github.com/systemsoft/disc

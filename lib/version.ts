@@ -10,4 +10,4 @@
  * separate — that tracks the user's project, not Disc itself.
  */
 
-export const DISC_VERSION = "2026.09.01";
+export const DISC_VERSION = "2026.09.03";
