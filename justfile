@@ -56,7 +56,7 @@ man:
   @echo "[INFO] Packaging man pages → build/disc-man.tar.gz"
   tar -czf build/disc-man.tar.gz -C build/man .
 
-release: version clean build man
+release: version clean build docs-sync man
   @echo "[INFO] Release versioned, built, and man pages generated"
 
 # generate version.txt and update everywhere
