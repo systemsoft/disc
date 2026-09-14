@@ -261,6 +261,11 @@ export class BuildCommand {
          --lite, skip the UI entirely — produces a smaller binary for headless deployments. ***/
     args.push("--include", "version.txt");
 
+    /*** The bcrypt worker is reached via `new Worker(new URL(…))`, which never enters the static
+         module graph — without this the compiled binary throws "Module not found" on the first
+         password hash. Applies to `--lite` too: auth is not a UI feature. ***/
+    args.push("--include", "auth/bcrypt-worker.ts");
+
     if (!options.lite)
       args.push("--include", "ui/build");
 

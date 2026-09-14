@@ -288,6 +288,19 @@ Deno.test("BuildCommand.buildCompileArgs - --lite skips ui/build but PG paths st
   assertEquals(args.includes("/pg/bin/postgres"), true);
 });
 
+/*** The bcrypt worker is loaded through `new Worker(new URL(…))`, so nothing in the static module
+     graph references it. Drop this --include and every compiled binary throws "Module not found"
+     on the first password hash — a failure only reproducible in release builds. ***/
+Deno.test("BuildCommand.buildCompileArgs - embeds the bcrypt worker", () => {
+  const command = new BuildCommand();
+  assertEquals(command.buildCompileArgs({}).includes("auth/bcrypt-worker.ts"), true);
+});
+
+Deno.test("BuildCommand.buildCompileArgs - embeds the bcrypt worker in --lite builds too", () => {
+  const command = new BuildCommand();
+  assertEquals(command.buildCompileArgs({ lite: true }).includes("auth/bcrypt-worker.ts"), true);
+});
+
 Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslashed inputs", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-ui-manifest-sort-" });
 

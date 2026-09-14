@@ -7,7 +7,7 @@
 
 /*** IMPORT ------------------------------------------- ***/
 
-import * as bcrypt from "@da/bcrypt";
+import * as bcrypt from "./bcrypt.ts";
 import { create, verify } from "@zaubrik/djwt";
 
 /*** UTILITY ------------------------------------------ ***/
