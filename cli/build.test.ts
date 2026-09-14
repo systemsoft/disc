@@ -4,7 +4,7 @@
 /*** NATIVE ------------------------------------------- ***/
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { join } from "@std/path";
+import { fromFileUrl, join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
@@ -112,6 +112,44 @@ Deno.test("generateUiManifest - emits manifest from build dir contents", async (
     assertStringIncludes(generated, "UI_ASSET_SET");
   } finally {
     await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+// `ui/build/` is gitignored and rebuilt from source in CI, but the
+// manifest derived from it is checked in — so a UI change that isn't
+// followed by a manifest regen leaves the two describing different
+// files. Every asset name is content-hashed, so the symptom is that
+// the handler 404s paths whose bytes are sitting right there on disk.
+//
+// Skips when `ui/build/` is absent (fresh checkout — same probe as
+// `server/ui-assets.test.ts`); CI builds the UI before `deno test`,
+// which is exactly where the staleness needs to surface.
+const UI_BUILD_DIR = fromFileUrl(new URL("../ui/build", import.meta.url));
+const UI_BUILD_AVAILABLE = await (async () => {
+  try {
+    await Deno.stat(join(UI_BUILD_DIR, "index.html"));
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+Deno.test({
+  name: "generateUiManifest - checked-in manifest matches the current ui/build",
+  ignore: !UI_BUILD_AVAILABLE,
+  fn: async () => {
+    const expected = await generateUiManifest(UI_BUILD_DIR);
+    const actual = await Deno.readTextFile(
+      fromFileUrl(new URL("../server/ui-asset-manifest.ts", import.meta.url))
+    );
+
+    assertEquals(
+      actual,
+      expected,
+      "server/ui-asset-manifest.ts is stale — the UI was rebuilt without " +
+        "regenerating it. Refresh with `bash ui/build.sh && deno task cli build` " +
+        "and commit the result."
+    );
   }
 });
 
