@@ -119,6 +119,69 @@ if [ ! -d "$bin_dir" ]; then
     mkdir -p "$bin_dir"
 fi
 
+# Report the PIDs of processes currently executing "$1", one per line.
+#
+# Matches on file identity rather than process name. A machine can carry
+# several `disc` binaries at once — a Homebrew build, a from-source dev build,
+# this release install — and only processes running the binary being replaced
+# belong in the warning below; flagging the others would train people to ignore
+# it. Process name can't make that distinction: something started as
+# `disc serve` through a PATH lookup reports a bare `disc` to `ps -o comm=`,
+# with no trace of the directory it was loaded from.
+#
+# Linux reads /proc directly so the check holds in a minimal container with no
+# lsof. Elsewhere lsof is the portable way to ask "who has this file open", and
+# its absence degrades to silence — the warning is advisory, so a missing tool
+# must not fail an otherwise good install.
+running_disc_pids() {
+    _target="$1"
+    [ -e "$_target" ] || return 0
+
+    if [ -d /proc ]; then
+        for _entry in /proc/[0-9]*; do
+            if [ "$(readlink "$_entry/exe" 2>/dev/null)" = "$_target" ]; then
+                echo "${_entry#/proc/}"
+            fi
+        done
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -t -- "$_target" 2>/dev/null || true
+    fi
+
+    # Never propagate a non-zero status: no matches is the common case, and
+    # `set -e` would turn it into a failed install.
+    return 0
+}
+
+# Name the processes still running the superseded binary.
+#
+# Advisory, not a blocker. The rename below already makes the upgrade safe to
+# perform while Disc is running, but a live `disc serve` holds its original
+# mapping until it exits, so it keeps serving the old version — which reads as
+# "the upgrade didn't take" unless we say so. Silent on the common path.
+warn_running_instances() {
+    _pids="$1"
+    [ -n "$_pids" ] || return 0
+
+    echo 1>&2
+    echo "Warning: these processes are still running the previous binary:" 1>&2
+    # Deliberately unquoted: "$_pids" is a whitespace-separated PID list.
+    for _pid in $_pids; do
+        _cmd="$(ps -p "$_pid" -o args= 2>/dev/null || true)"
+        if [ -n "$_cmd" ]; then
+            echo "  pid $_pid  $_cmd" 1>&2
+        else
+            echo "  pid $_pid" 1>&2
+        fi
+    done
+    echo "Restart them to pick up the new version." 1>&2
+
+    return 0
+}
+
+# Capture before the rename — afterwards "$exe" names a different file and
+# these processes can no longer be attributed to it.
+running_before="$(running_disc_pids "$exe")"
+
 # Download beside the target, then rename into place. Writing straight to
 # "$exe" truncates the existing install in place, reusing its inode. When any
 # process launched from the old binary is still alive (`disc serve` is the
@@ -176,6 +239,8 @@ mv -f "$exe_tmp" "$exe"
 trap - EXIT
 
 echo "Disc was installed successfully to $exe"
+
+warn_running_instances "$running_before"
 
 # Append a MANPATH entry for a user-local man root (idempotent), mirroring the
 # PATH handling below. Only needed when man pages land outside the default
