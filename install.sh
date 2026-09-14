@@ -119,7 +119,27 @@ if [ ! -d "$bin_dir" ]; then
     mkdir -p "$bin_dir"
 fi
 
-curl --fail --location --progress-bar --output "$exe" "$asset_url"
+# Download beside the target, then rename into place. Writing straight to
+# "$exe" truncates the existing install in place, reusing its inode. When any
+# process launched from the old binary is still alive (`disc serve` is the
+# common case — upgrading without stopping the server first), the kernel still
+# has that inode mapped as executable text. Rewriting those pages underneath it
+# invalidates the code-signature pages for the vnode, and macOS then SIGKILLs
+# every subsequent exec with "Taskgated Invalid Signature" — even though the
+# downloaded bytes are correct and `codesign --verify --strict` passes on the
+# file. Reproduced on macOS 27 (arm64); the symptom is a bare `killed  disc`.
+#
+# rename(2) publishes a new inode instead: running processes keep their old
+# mapping until they exit, and new execs get clean bytes. It also makes the
+# upgrade atomic — an interrupted download leaves the previous binary intact
+# rather than a truncated one.
+#
+# The temp file must live in "$bin_dir" — a cross-filesystem `mv` degrades to
+# copy-onto-destination, which reintroduces the in-place truncation it exists
+# to avoid.
+exe_tmp="$exe.tmp.$$"
+trap 'rm -f "$exe_tmp"' EXIT
+curl --fail --location --progress-bar --output "$exe_tmp" "$asset_url"
 
 # Best-effort SHA-256 verification against the published `<asset>.sha256`.
 # A missing checksum file or sha tool downgrades to a warning rather than
@@ -129,9 +149,9 @@ if curl --fail --location --silent --output "$sum_file" "${asset_url}.sha256"; t
     expected="$(awk '{print $1}' "$sum_file")"
     actual=""
     if command -v sha256sum >/dev/null; then
-        actual="$(sha256sum "$exe" | awk '{print $1}')"
+        actual="$(sha256sum "$exe_tmp" | awk '{print $1}')"
     elif command -v shasum >/dev/null; then
-        actual="$(shasum -a 256 "$exe" | awk '{print $1}')"
+        actual="$(shasum -a 256 "$exe_tmp" | awk '{print $1}')"
     fi
 
     if [ -n "$actual" ] && [ -n "$expected" ]; then
@@ -139,7 +159,7 @@ if curl --fail --location --silent --output "$sum_file" "${asset_url}.sha256"; t
             echo "Error: checksum mismatch for ${asset}" 1>&2
             echo "  expected: $expected" 1>&2
             echo "  actual:   $actual" 1>&2
-            rm -f "$exe" "$sum_file"
+            rm -f "$exe_tmp" "$sum_file"
             exit 1
         fi
         echo "Checksum verified (${asset})"
@@ -151,7 +171,9 @@ else
 fi
 rm -f "$sum_file"
 
-chmod +x "$exe"
+chmod +x "$exe_tmp"
+mv -f "$exe_tmp" "$exe"
+trap - EXIT
 
 echo "Disc was installed successfully to $exe"
 
