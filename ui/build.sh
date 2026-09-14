@@ -2,6 +2,11 @@
 
 # Build script for Disc UI
 
+# Everything below assumes ui/ is the working directory (bun resolves
+# package.json from cwd), but the script is documented as
+# `bash ui/build.sh` and invoked from the repo root by `just ui-build`.
+cd "$(dirname "$0")" || exit 1
+
 echo "🎨 Building Disc Admin UI…"
 
 # Check if npm is installed

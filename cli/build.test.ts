@@ -147,7 +147,7 @@ Deno.test({
       actual,
       expected,
       "server/ui-asset-manifest.ts is stale — the UI was rebuilt without " +
-        "regenerating it. Refresh with `bash ui/build.sh && deno task cli build` " +
+        "regenerating it. Refresh with `bash ui/build.sh && deno task ui:manifest` " +
         "and commit the result."
     );
   }

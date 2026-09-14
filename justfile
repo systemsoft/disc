@@ -56,8 +56,17 @@ man:
   @echo "[INFO] Packaging man pages → build/disc-man.tar.gz"
   tar -czf build/disc-man.tar.gz -C build/man .
 
-release: version clean build docs-sync man
+release: version clean ui-build build docs-sync man
   @echo "[INFO] Release versioned, built, and man pages generated"
+
+# build the admin UI and refresh the checked-in asset manifest.
+# Runs before `build`: the binaries embed the manifest, so regenerating
+# it afterwards would ship artifacts built against the previous one.
+ui-build:
+  @echo "[INFO] Building admin UI…"
+  @bash ui/build.sh
+  @echo "[INFO] Regenerating UI asset manifest"
+  @deno task ui:manifest
 
 # generate version.txt and update everywhere
 version:
