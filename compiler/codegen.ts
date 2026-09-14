@@ -6,43 +6,10 @@
  * Converts SQL AST to PostgreSQL string representation
  */
 
+import { isReservedPgKeyword } from "../lib/identifiers.ts";
 import * as SQL from "./sql.ts";
 
 export class SQLCodeGenerator {
-  private static readonly RESERVED_KEYWORDS = new Set([
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "JOIN",
-    "INNER",
-    "LEFT",
-    "RIGHT",
-    "FULL",
-    "ON",
-    "AS",
-    "AND",
-    "OR",
-    "NOT",
-    "ORDER",
-    "BY",
-    "GROUP",
-    "HAVING",
-    "LIMIT",
-    "OFFSET",
-    "DISTINCT",
-    "CASE",
-    "WHEN",
-    "THEN",
-    "ELSE",
-    "END",
-    "NULL",
-    "TRUE",
-    "FALSE"
-  ]);
-
   private indentLevel = 0;
   private readonly indentSize = 2;
 
@@ -579,10 +546,13 @@ export class SQLCodeGenerator {
     if (identifier === "*") {
       return "*";
     }
-    // Simple identifier escaping - in production, this should be more robust
+    // Reserved words must be quoted or Postgres rejects the statement —
+    // `INSERT INTO user` is a syntax error. DDL quotes the same set when
+    // creating the table (`lib/identifiers.ts`), so the quoted form is
+    // exactly the relation name on disk.
     if (
       /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier) &&
-      !this.isReservedKeyword(identifier)
+      !isReservedPgKeyword(identifier)
     ) {
       return identifier;
     }
@@ -591,10 +561,6 @@ export class SQLCodeGenerator {
 
   private escapeString(str: string): string {
     return str.replace(/'/g, "''");
-  }
-
-  private isReservedKeyword(word: string): boolean {
-    return SQLCodeGenerator.RESERVED_KEYWORDS.has(word.toUpperCase());
   }
 
   private indent(): string {

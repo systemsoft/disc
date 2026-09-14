@@ -156,7 +156,7 @@ export class AccessSQLInjector {
       /*** Return a query that returns no results ***/
       return {
         params: [],
-        text: `SELECT * FROM ${tableName} WHERE FALSE`
+        text: `SELECT * FROM "${tableName.replace(/"/g, "\"\"")}" WHERE FALSE`
       };
     }
 
