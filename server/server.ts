@@ -483,6 +483,18 @@ export class DiscServer {
         logger.debug("DatabaseRegistry initialized for multi-database support");
       }
 
+      // Enabling auth without a secret used to be a silent no-op: the server
+      // came up looking healthy, /auth/* 404'd, and nothing explained why.
+      // Only an *explicit* opt-in is an error — leaving enableAuth undefined
+      // keeps the "auth follows the secret" default below.
+      if (this.config.enableAuth === true && !this.config.jwtSecret) {
+        throw new Error(
+          "Authentication is enabled but no JWT secret was provided. " +
+            "Pass --jwt-secret <secret> or set DISC_JWT_SECRET (at least 32 bytes), " +
+            "or drop --enable-auth / DISC_ENABLE_AUTH to start without auth."
+        );
+      }
+
       // Initialize auth if jwtSecret is set and enableAuth is not explicitly false
       if (this.config.jwtSecret && this.config.enableAuth !== false)
         await this.initializeAuth();

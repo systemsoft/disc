@@ -28,6 +28,8 @@ import { default as dedent } from "@netopwibby/dedent";
 
 import { adminCommand } from "./admin.ts";
 import { CLIArgs, commands } from "./commands.ts";
+import { findProjectRoot } from "../lib/project-context.ts";
+import { loadProjectEnv } from "../lib/env-file.ts";
 import { runStdio as runLspStdio } from "../lsp/server.ts";
 import { VERSION } from "../mod.ts";
 
@@ -735,6 +737,15 @@ async function main() {
   }
 
   const command = String(args._[0]);
+
+  /*** Load the project's `.env.local` / `.env` before dispatching. Every
+       config path downstream reads `Deno.env`, so this has to happen before a
+       command touches `buildEnvOptions` or `resolveProjectContext`. Already-set
+       variables win, keeping `DISC_FOO=x disc serve` and CLI flags
+       authoritative over the files. ***/
+  const projectRoot = findProjectRoot(Deno.cwd());
+  if (projectRoot)
+    loadProjectEnv(projectRoot);
 
   /*** `disc <command> --help` prints command-specific help instead of
        the global help text. Falls back to global when no per-command entry. ***/

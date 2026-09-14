@@ -108,6 +108,36 @@ export function applySecurityToggleEnvVars(options: Pick<ServeOptions, "readOnly
     Deno.env.set("DISC_TRUST_PROXY", "true");
 }
 
+/**
+ * Reject `--enable-auth` / `DISC_ENABLE_AUTH` with no JWT secret.
+ *
+ * `server.start()` enforces the same rule, but only after PostgreSQL has been
+ * started and the schema loaded — by which point the failure reads as a server
+ * crash. Checking here fails in milliseconds with an actionable message.
+ * Exported so the rule is testable without spinning up `serve`.
+ *
+ * Mirrors `buildEnvOptions`: any `DISC_ENABLE_AUTH` value other than `"false"`
+ * counts as enabled.
+ */
+export function assertAuthSecretPresent(options: Pick<ServeOptions, "enableAuth" | "jwtSecret">): void {
+  const envEnable = Deno.env.get("DISC_ENABLE_AUTH");
+  const enabled = options.enableAuth === true ||
+    (envEnable !== undefined && envEnable !== "false");
+
+  if (!enabled)
+    return;
+
+  if (options.jwtSecret || Deno.env.get("DISC_JWT_SECRET"))
+    return;
+
+  throw new Error(
+    "Authentication is enabled but no JWT secret was provided.\n" +
+      "  Pass --jwt-secret <secret> or set DISC_JWT_SECRET (at least 32 bytes).\n" +
+      "  A project .env / .env.local is read automatically; secrets containing \"!\"\n" +
+      "  must be single-quoted in zsh, which expands \"!\" inside double quotes."
+  );
+}
+
 export class CLICommands {
   private postgresManager: PostgresManager;
 
@@ -764,6 +794,10 @@ export class CLICommands {
    */
   async serve(options: ServeOptions): Promise<void> {
     getLogger("cli").debug("Starting Disc Database Server…");
+
+    /*** Pre-flight before any PostgreSQL work, and outside the try below so the
+         "Try 'disc start'" hint doesn't attach to a config error. ***/
+    assertAuthSecretPresent(options);
 
     try {
       const ctx = resolveProjectContext();

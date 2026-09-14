@@ -7,7 +7,7 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
@@ -432,6 +432,74 @@ Deno.test("applySecurityToggleEnvVars — combines multiple flags", async () => 
     assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), "true");
     assertEquals(Deno.env.get("DISC_READ_ONLY"), "true");
     assertEquals(Deno.env.get("DISC_TRUST_PROXY"), "true");
+  } finally {
+    env.restore();
+  }
+});
+
+/*** --- Auth pre-flight --- ***/
+
+Deno.test("assertAuthSecretPresent — throws when --enable-auth has no secret", async () => {
+  const { assertAuthSecretPresent } = await import("./commands.ts");
+  const env = new EnvMock();
+
+  try {
+    env.clear("DISC_ENABLE_AUTH");
+    env.clear("DISC_JWT_SECRET");
+
+    assertThrows(
+      () => assertAuthSecretPresent({ enableAuth: true }),
+      Error,
+      "no JWT secret"
+    );
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("assertAuthSecretPresent — throws when DISC_ENABLE_AUTH is set with no secret", async () => {
+  const { assertAuthSecretPresent } = await import("./commands.ts");
+  const env = new EnvMock();
+
+  try {
+    env.set("DISC_ENABLE_AUTH", "true");
+    env.clear("DISC_JWT_SECRET");
+
+    assertThrows(() => assertAuthSecretPresent({}), Error, "no JWT secret");
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("assertAuthSecretPresent — accepts a secret from either the flag or the env", async () => {
+  const { assertAuthSecretPresent } = await import("./commands.ts");
+  const env = new EnvMock();
+
+  try {
+    env.clear("DISC_ENABLE_AUTH");
+    env.clear("DISC_JWT_SECRET");
+
+    assertAuthSecretPresent({ enableAuth: true, jwtSecret: "s".repeat(32) });
+
+    env.set("DISC_JWT_SECRET", "s".repeat(32));
+    assertAuthSecretPresent({ enableAuth: true });
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("assertAuthSecretPresent — no-op when auth is off or explicitly disabled", async () => {
+  const { assertAuthSecretPresent } = await import("./commands.ts");
+  const env = new EnvMock();
+
+  try {
+    env.clear("DISC_ENABLE_AUTH");
+    env.clear("DISC_JWT_SECRET");
+
+    assertAuthSecretPresent({});
+
+    env.set("DISC_ENABLE_AUTH", "false");
+    assertAuthSecretPresent({});
   } finally {
     env.restore();
   }

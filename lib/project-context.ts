@@ -404,8 +404,12 @@ export function discHome(): string {
  * Walk up the directory tree starting from `startDir` looking for a
  * disc.toml file. Returns the directory that contains disc.toml, or null
  * if none was found before reaching the filesystem root.
+ *
+ * Exported so the CLI can locate the project root for `.env` loading without
+ * building a full context — env files must load before anything reads config,
+ * and a malformed disc.toml shouldn't turn that into a parse error.
  */
-function findProjectRoot(startDir: string): string | null {
+export function findProjectRoot(startDir: string): string | null {
   let current = startDir;
 
   while (true) {
