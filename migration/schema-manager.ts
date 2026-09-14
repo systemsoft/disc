@@ -1398,6 +1398,52 @@ export class SchemaManager {
   }
 
   /**
+   * Report whether `rawModules` has drifted from the applied baseline.
+   *
+   * Read-only twin of the checks at the top of `applyModules()`: no DDL, no
+   * history rows, nothing written. `disc serve` uses it to decide whether
+   * "run disc migrate" is worth saying — before this existed, callers could
+   * only ask "are there applied migrations?", which is true forever once the
+   * first one lands and says nothing about whether the SDL still matches.
+   *
+   * Mirrors `applyModules`' baseline fallback: when the latest applied row
+   * pre-dates stored schema snapshots, `currentModules` is null and diffing
+   * against it would report "create everything". Comparing schema hashes
+   * still answers the only question asked here — same or different.
+   */
+  hasPendingChanges(rawModules: Module[]): Result<boolean, MigrationError> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before hasPendingChanges()."
+        )
+      );
+    }
+
+    const newModules = normalizeModules(rawModules);
+
+    if (
+      this.currentModules === null &&
+      this.engine.appliedMigrationCount() > 0
+    ) {
+      const latestHash = this.engine.getLatestAppliedSchemaHash();
+      if (latestHash !== null) {
+        return Ok(latestHash !== this.engine.hashSchemaForBaseline(newModules));
+      }
+    }
+
+    const planResult = this.engine.planMigration(
+      this.currentModules,
+      newModules
+    );
+    if (!planResult.ok) {
+      return planResult;
+    }
+
+    return Ok(planResult.value.operationsCount > 0);
+  }
+
+  /**
    * Plan a migration from pre-parsed Module[] without executing.
    *
    * Multi-file twin of `planSchema()`. Used by `disc migrate --create

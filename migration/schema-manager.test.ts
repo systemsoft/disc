@@ -721,6 +721,116 @@ Deno.test({
   }
 });
 
+// ---------------------------------------------------------------------------
+// hasPendingChanges — the read-only drift probe `disc serve` uses to decide
+// whether "run disc migrate" is worth saying. The case that matters is a
+// *fresh* SchemaManager against a database that already has history: that is
+// what every `disc serve` boot after the first one looks like.
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "SchemaManager - hasPendingChanges tracks drift across manager instances",
+  ignore: !canRunPgTests(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+
+    const pool = new ConnectionPool({
+      connectionString: dsn,
+      applicationName: "disc-test-pending"
+    });
+    await pool.initialize();
+
+    const sdl = `
+      type Widget {
+        required name: str;
+      }
+    `;
+
+    const changedSdl = `
+      type Widget {
+        required name: str;
+        count: int64;
+      }
+    `;
+
+    try {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+
+      const mgr1 = new SchemaManager({ pool });
+      await mgr1.initialize();
+
+      const parsed = mgr1.parseSDL(sdl);
+      assertEquals(parsed.ok, true);
+      if (!parsed.ok)
+        return;
+
+      // Empty database: everything in the SDL is pending.
+      const beforeApply = mgr1.hasPendingChanges(parsed.value);
+      assertEquals(beforeApply.ok, true);
+      if (beforeApply.ok)
+        assertEquals(beforeApply.value, true, "unapplied schema must read as pending");
+
+      assertEquals((await mgr1.applyModules(parsed.value)).ok, true);
+
+      const afterApply = mgr1.hasPendingChanges(parsed.value);
+      assertEquals(afterApply.ok, true);
+      if (afterApply.ok)
+        assertEquals(afterApply.value, false, "just-applied schema must not read as pending");
+
+      await mgr1.close();
+
+      // A new manager priming its baseline from disc_migrations — the state
+      // every subsequent `disc serve` starts in. Reporting `true` here is the
+      // bug that made serve nag about changes that didn't exist.
+      const mgr2 = new SchemaManager({ pool });
+      await mgr2.initialize();
+
+      const unchanged = mgr2.hasPendingChanges(parsed.value);
+      assertEquals(unchanged.ok, true);
+      if (unchanged.ok)
+        assertEquals(unchanged.value, false, "unchanged schema must not read as pending on a fresh manager");
+
+      const edited = mgr2.parseSDL(changedSdl);
+      assertEquals(edited.ok, true);
+      if (!edited.ok)
+        return;
+
+      const drifted = mgr2.hasPendingChanges(edited.value);
+      assertEquals(drifted.ok, true);
+      if (drifted.ok)
+        assertEquals(drifted.value, true, "an added property must read as pending");
+
+      // Read-only: the probe must not have recorded anything.
+      const migrationCount = await pool.query(
+        "SELECT COUNT(*)::int AS c FROM disc_migrations"
+      );
+      assertEquals(
+        (migrationCount.rows[0] as { c: number; }).c,
+        1,
+        "hasPendingChanges must not write migration history"
+      );
+
+      await mgr2.close();
+    } finally {
+      await pool.query("DROP TABLE IF EXISTS widget CASCADE");
+      await pool.close();
+      await cleanupTestTables(dsn);
+    }
+  }
+});
+
+Deno.test("SchemaManager - hasPendingChanges before initialize() is an error", () => {
+  const manager = new SchemaManager({});
+  const result = manager.hasPendingChanges([]);
+
+  assertEquals(result.ok, false);
+  if (!result.ok)
+    assert(result.error.message.includes("not initialized"));
+});
+
 Deno.test("SchemaManager - parseSDL rejects semantically invalid schema", () => {
   const mgr = new SchemaManager({ dryRun: true });
   // `Bogus` is never declared — semantic validation should reject it.

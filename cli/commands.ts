@@ -1240,8 +1240,10 @@ export class CLICommands {
    * migrations recorded. This is the "first-run convenience" path: it
    * makes a fresh `disc init` → `disc serve` pair produce a working
    * server with tables ready to query. Subsequent schema changes go
-   * through `disc migrate` as normal, since the migrator can’t cheaply
-   * reconstruct prior schema state from `disc_migrations` here.
+   * through `disc migrate` as normal — applying DDL to a database with
+   * history is an explicit operator decision, not a side effect of boot.
+   * Once history exists this only reports whether the SDL has drifted
+   * (`hasPendingChanges`), and says nothing when it hasn’t.
    *
    * Logs a warning and continues — never blocks serve startup — because
    * a missing-table situation is recoverable but a server that refuses
@@ -1264,7 +1266,21 @@ export class CLICommands {
       const status = await manager.getMigrationStatus();
 
       if (status.ok && status.value.applied > 0) {
-        getLogger("cli").info(`Existing migrations detected — run "disc migrate" to apply schema changes.`);
+        /*** A database with migration history is not serve's to migrate — that stays an explicit
+             `disc migrate`. But only say so when the SDL has actually drifted from the applied
+             baseline. This used to fire on every boot once the first migration landed, nagging
+             about changes that didn't exist. ***/
+        const pending = manager.hasPendingChanges(modules);
+
+        if (!pending.ok) {
+          getLogger("cli").warn(`Could not compare the schema to the applied baseline: ${pending.error.message}`);
+          getLogger("cli").info(`Run "disc migrate" if your schema has changed.`);
+        } else if (pending.value) {
+          getLogger("cli").info(`Schema changes detected — run "disc migrate" to apply them.`);
+        } else {
+          getLogger("cli").debug("Schema up to date");
+        }
+
         return;
       }
 

@@ -260,14 +260,17 @@ export async function writeGeneratedFiles(result: Types.CodegenResult, basePath:
     log.info("Generated file", { path: fullPath });
   }
 
-  /*** Run `deno task format` over the written files so generated code matches the project’s
+  /*** Run `deno fmt` over the files we just wrote so generated code matches the project’s
        formatting conventions instead of just stripping blank lines. Best-effort — if deno isn’t on
-       PATH or format fails, log and continue; the content is still written. ***/
+       PATH or fmt fails, log and continue; the content is still written.
+
+       Scoped to `writtenPaths` on purpose. This runs inside the *user's* project, so a bare
+       `deno task format` would (a) name a task that only exists in the Disc repo and (b) reformat
+       their entire codebase as a side effect of `disc codegen`. ***/
   if (runFmt && writtenPaths.length > 0) {
     try {
       const cmd = new Deno.Command("deno", {
-        // args: ["fmt", "--quiet", ...writtenPaths],
-        args: ["task", "format"],
+        args: ["fmt", "--quiet", ...writtenPaths],
         stderr: "piped",
         stdout: "null"
       });
@@ -276,10 +279,10 @@ export async function writeGeneratedFiles(result: Types.CodegenResult, basePath:
 
       if (!output.success) {
         const stderr = new TextDecoder().decode(output.stderr).trim();
-        log.warn("deno task format reported issues (generated files still written)", { stderr });
+        log.warn("deno fmt reported issues (generated files still written)", { stderr });
       }
     } catch (error) {
-      log.warn("deno task format not available — generated files unformatted", {
+      log.warn("deno fmt not available — generated files unformatted", {
         error: error instanceof Error ? error.message : String(error)
       });
     }
