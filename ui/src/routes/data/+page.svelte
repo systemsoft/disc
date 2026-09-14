@@ -1034,7 +1034,8 @@
         }
       }
 
-      input {
+      input,
+      select {
         border-color: var(--uchu-gray-2);
         flex: 1;
         padding: calc(var(--grid-unit) / 2 - 2px) var(--grid-unit);
@@ -1452,6 +1453,7 @@
               {#if prop && prop.type === "bool"}
                 <select
                   bind:value={filters[col]}
+                  name={`filter-${prop.name}`}
                   onchange={loadRows}>
                   <option value="">—</option>
                   <option value="true">true</option>

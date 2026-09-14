@@ -266,6 +266,7 @@
 
       <span>
         <a href="https://disc.sh" target="_blank">homepage</a> /
+        <a href="https://disc.md" target="_blank">documentation</a> /
         <a href="https://github.com/systemsoft/disc" target="_blank">code</a>
       </span>
     </div>
