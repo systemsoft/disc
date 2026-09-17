@@ -1153,14 +1153,32 @@ Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches 
   // version.txt must carry a ChronVer-shaped date, not a semver-major.
   // (This repo has no CHANGELOG.md; version.txt is the authoritative
   // release-shape anchor.)
+  //
+  // ChronVer is `YYYY.MM.DD[.CHANGESET][-FEATURE|-break]` (chronver.org).
+  // CHANGESET distinguishes several releases cut on one date — `2026.09.14.1`
+  // is the first same-day follow-up, not a semver patch. `scripts/version.ts`
+  // only ever writes the bare date, so a changeset is set by hand when a
+  // second release lands the same day.
+  const CHRONVER = /^\d{4}\.\d{2}\.\d{2}(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?$/;
+
   const versionRaw = await Deno.readTextFile(
     new URL("../version.txt", import.meta.url)
   );
   const version = versionRaw.trim();
   assert(
-    /^\d{4}\.\d{2}\.\d{2}$/.test(version),
-    `version.txt must be ChronVer (YYYY.MM.DD); got "${version}" (Gel #5190 pin).`
+    CHRONVER.test(version),
+    `version.txt must be ChronVer (YYYY.MM.DD[.CHANGESET][-FEATURE]); ` +
+      `got "${version}" (Gel #5190 pin).`
   );
+
+  // The pin's real subject is the *absence* of a semver-major release model,
+  // so the pattern has to keep rejecting one however the date shape grows.
+  for (const semver of ["3.0", "2.1.0", "1.0.0-beta", "v3.0.0"]) {
+    assert(
+      !CHRONVER.test(semver),
+      `ChronVer pattern must reject the semver-major shape "${semver}".`
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
