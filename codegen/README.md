@@ -175,7 +175,7 @@ export interface UserUpdate {
 
 ### FilterVars Types
 
-Typed filter variables for query builder `filter()` and `count()` methods. All fields are optional with an index signature for flexibility.
+Typed variables for the query builder's `count()` method, which still takes a raw EdgeQL condition string. All fields are optional with an index signature for flexibility. `filter()` does not use these -- it takes a structured `Filter` object (below).
 
 ```typescript
 export interface UserFilterVars {
@@ -185,6 +185,71 @@ export interface UserFilterVars {
   name?: string;
   status?: Status;
   [key: string]: unknown;
+}
+```
+
+### Filter and Select Types
+
+`Filter` is the argument type for the query builder's `filter()` method. Every scalar property accepts either a bare value (compiled to `=`) or an operator object; every link accepts the target type's own `Filter`, which compiles to a path traversal. The reserved keys `select`, `order_by`, `limit`, and `offset` shape and bound the result set.
+
+```typescript
+export interface UserFilter {
+  id?: string | Op<string>;
+  created_at?: Date | OrdOp<Date>;
+  email?: string | StrOp;
+  name?: string | StrOp;
+  status?: Status | Op<Status>;
+  posts?: PostFilter;
+  select?: UserSelect;
+  order_by?: string | string[];
+  limit?: number;
+  offset?: number;
+}
+```
+
+`Select` is the shape descriptor. Scalars are booleans; links take either a boolean or the target's own `Select` for nested shaping, with an optional `filter` / `order_by` that narrows and orders _that link’s_ set.
+
+```typescript
+export interface UserSelect {
+  "*"?: boolean;
+  filter?: UserFilter;
+  order_by?: string | string[];
+  id?: boolean;
+  created_at?: boolean;
+  email?: boolean;
+  name?: boolean;
+  status?: boolean;
+  posts?: boolean | PostSelect;
+}
+```
+
+Computed properties appear in `Select` and `FilterVars`, but in `Filter` only when their type can be inferred -- computed named tuples become a nested operator object (`counts?: { videos?: number | OrdOp<number> }`); anything else is omitted rather than emitted as an unusable `unknown` field.
+
+### Operator Helpers
+
+Three shared helpers are emitted once per `types.ts`. Which one a property gets is driven by its EdgeQL type: `str` gets `StrOp`, ordered scalars (`int*`, `float*`, `decimal`, `bigint`, `datetime`, `duration`, `cal::*`) get `OrdOp<T>`, everything else gets `Op<T>`.
+
+```typescript
+/** Equality + set operators — available on every scalar field */
+export interface Op<T> {
+  eq?: T;
+  ne?: T;
+  in?: T[];
+  not_in?: T[];
+}
+
+/** Ordered operators — numbers, dates, durations */
+export interface OrdOp<T> extends Op<T> {
+  gt?: T;
+  gte?: T;
+  lt?: T;
+  lte?: T;
+}
+
+/** String operators — adds pattern matching to ordered string ops */
+export interface StrOp extends OrdOp<string> {
+  like?: string;
+  ilike?: string;
 }
 ```
 
@@ -213,17 +278,42 @@ class UserQueryBuilder {
 
   async count(condition?: string, variables?: UserFilterVars): Promise<number>;
   async delete(id: string): Promise<User>;
-  async filter(
-    condition: string,
-    variables?: UserFilterVars,
-    shape?: string
-  ): Promise<User[]>;
+  async filter(filter: FilterArg<UserFilter>): Promise<User[]>;
   async insert(data: UserInsert): Promise<User>;
   async select(shape?: string): Promise<User[]>;
   async selectById(id: string, shape?: string): Promise<User | null>;
   async update(id: string, data: UserUpdate): Promise<User>;
 }
 ```
+
+`filter()` takes a structured object, not an EdgeQL condition string. `FilterArg<T>` is `Expr | T` -- either the type's `Filter` object or an expression built with the `and` / `or` / `not` combinators re-exported from the generated `index.ts`. The object is compiled to EdgeQL by `compileFilter()` from the SDK, with every value bound as a query parameter:
+
+```typescript
+// Bare values compile to `=`; operator objects to their operator
+await client.user.filter({ email: "ada@example.com" });
+await client.user.filter({
+  name: { ilike: "%ada%" },
+  status: { in: ["Active"] }
+});
+
+// Links traverse: compiles to `filter .author.name = <str>$p0`
+await client.post.filter({ author: { name: "Ada" } });
+
+// select / order_by / limit / offset shape and bound the result set
+await client.user.filter({
+  status: "Active",
+  select: { name: true, email: true, posts: { title: true } },
+  order_by: ["-created_at", "name"],
+  limit: 20,
+  offset: 40
+});
+
+// Combinators for anything the object shape can't express
+import { or } from "./dbschema/disc-client/index.ts";
+await client.user.filter(or({ name: "Ada" }, { email: "ada@example.com" }));
+```
+
+Omitting `select` defaults the shape to `{ * }`, which covers stored properties only -- computed properties are opt-in and must be named explicitly.
 
 Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.
 
