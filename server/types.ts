@@ -217,6 +217,13 @@ export interface Transaction {
   readOnly: boolean;
   startedAt: Date;
   statements: string[];
+  /**
+   * User that opened the transaction, when the request was authenticated.
+   * The id itself is a bearer capability over HTTP; this pins it to one
+   * caller so a leaked id can't be replayed by a different user. Undefined
+   * when auth is not configured — then the token alone is the capability.
+   */
+  ownerUserId?: string;
 }
 
 export interface SubscriptionRequest {
@@ -303,6 +310,14 @@ export interface QueryContext {
   auth: AuthContext;
   requestId: string;
   startedAt: Date;
+  /**
+   * Connection held by the explicit transaction this query belongs to,
+   * resolved by the HTTP layer from the `X-Transaction-ID` header. When set,
+   * SQL must run on this connection rather than a pooled one — a pooled
+   * connection is a different PostgreSQL session and would not see the
+   * open transaction's uncommitted state.
+   */
+  transactionConnection?: import("../lib/database.ts").DatabaseConnection;
   clientInfo?: {
     name: string;
     version: string;

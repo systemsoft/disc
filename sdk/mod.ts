@@ -125,5 +125,6 @@ export type {
   SubscriptionHandle,
   SubscriptionMessage,
   SubscriptionRequest,
+  TransactionOptions,
   TransactionState
 } from "./types.ts";

@@ -624,18 +624,29 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       };
     }
 
-    // Resolve the correct pool (registry-aware or default)
-    const pool = this.resolvePool(context);
+    // An explicit transaction pins this query to the connection holding its
+    // open PostgreSQL transaction; anything else resolves a pool (registry-
+    // aware or default). A pooled connection is a different PG session and
+    // would not see the transaction's uncommitted state.
+    const transactionConnection = context.transactionConnection;
+    const pool = transactionConnection ? undefined : this.resolvePool(context);
 
-    // Use connection pool if available
-    if (pool) {
+    // Use the transaction's connection, or the pool if one is available
+    if (transactionConnection || pool) {
       try {
         const params = this.prepareParameters(variables, sqlStatement);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
-        const result = timeoutMs > 0 ?
-          await pool.queryWithTimeout(sql, params, timeoutMs) :
-          await pool.query(sql, params);
+        // `queryWithTimeout` is pool-only; a transactional query relies on
+        // the HTTP-level timeout in `handle_query` instead.
+        let result;
+        if (transactionConnection) {
+          result = await transactionConnection.query(sql, params);
+        } else if (timeoutMs > 0) {
+          result = await pool!.queryWithTimeout(sql, params, timeoutMs);
+        } else {
+          result = await pool!.query(sql, params);
+        }
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();

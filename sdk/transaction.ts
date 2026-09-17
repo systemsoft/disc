@@ -78,7 +78,11 @@ export class Transaction {
   async commit(): Promise<void> {
     this.assertActive();
 
-    await this.client.fetch(`/transaction/${this.id}/commit`, {
+    // The id is a bearer capability: it authorizes anything done to this
+    // transaction. Send it as a header rather than in the path so it stays
+    // out of access logs, proxy logs, and Referer headers.
+    await this.client.fetch("/transaction/commit", {
+      headers: { "X-Transaction-ID": this.id },
       method: "POST"
     });
 
@@ -89,7 +93,8 @@ export class Transaction {
   async rollback(): Promise<void> {
     this.assertActive();
 
-    await this.client.fetch(`/transaction/${this.id}/rollback`, {
+    await this.client.fetch("/transaction/rollback", {
+      headers: { "X-Transaction-ID": this.id },
       method: "POST"
     });
 

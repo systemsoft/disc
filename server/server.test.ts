@@ -242,3 +242,53 @@ Deno.test("Protocol Handler - Error Handling", async () => {
   assertEquals(Array.isArray(response.errors), true);
   assertEquals(response.errors!.length > 0, true);
 });
+
+// --- Transaction identity (HTTP transaction routes, stage 1) ---
+
+Deno.test("Transaction Manager - ids are unguessable", () => {
+  const manager = new TransactionManager();
+  const ids = new Set<string>();
+
+  for (let i = 0; i < 200; i++) {
+    const { id } = manager.beginTransaction("session_001");
+    // `txn_<epoch>_<Math.random>` leaked wall-clock time and was trivially
+    // guessable; the id is a bearer token over HTTP now.
+    assertEquals(/^txn_\d+_/.test(id), false);
+    assertEquals(id.startsWith("txn_"), true);
+    ids.add(id);
+  }
+
+  assertEquals(ids.size, 200);
+});
+
+Deno.test("Transaction Manager - records the owning user when given one", () => {
+  const manager = new TransactionManager();
+
+  const owned = manager.beginTransaction("session_001", { ownerUserId: "user_42" });
+  assertEquals(owned.ownerUserId, "user_42");
+
+  // Auth disabled: no owner recorded, the token alone is the capability.
+  const anonymous = manager.beginTransaction("session_001");
+  assertEquals(anonymous.ownerUserId, undefined);
+});
+
+Deno.test("Transaction Manager - ensureBegun resolves without a pool", async () => {
+  const manager = new TransactionManager();
+  const transaction = manager.beginTransaction("session_001");
+
+  await manager.ensureBegun(transaction.id);
+  assertEquals(manager.getTransaction(transaction.id) !== null, true);
+});
+
+Deno.test("Transaction Manager - ensureBegun rejects an unknown id", async () => {
+  const manager = new TransactionManager();
+  let threw = false;
+
+  try {
+    await manager.ensureBegun("txn_does_not_exist");
+  } catch {
+    threw = true;
+  }
+
+  assertEquals(threw, true);
+});

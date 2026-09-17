@@ -263,6 +263,17 @@ export type IsolationLevel =
   | "repeatable_read"
   | "serializable";
 
+/** Options for `client.transaction()`, sent as the `/transaction/begin` body. */
+export interface TransactionOptions {
+  /**
+   * PostgreSQL isolation level for the transaction.
+   * Defaults to `read_committed`, matching PostgreSQL's own default.
+   */
+  isolationLevel?: IsolationLevel;
+  /** Open the transaction as `READ ONLY`. Default: false. */
+  readOnly?: boolean;
+}
+
 export type TransactionState = "active" | "committed" | "rolled_back";
 
 // --- Subscription Types ---

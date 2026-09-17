@@ -515,3 +515,86 @@ Deno.test("client - transaction rolls back on error", async () => {
     restore();
   }
 });
+
+// --- Transaction wire protocol (HTTP transaction routes) ---
+
+Deno.test("client - transaction options travel in the begin body", async () => {
+  let beginBody: string | undefined;
+  const restore = mockFetch((url, init) => {
+    if (url.endsWith("/transaction/begin")) {
+      beginBody = init?.body as string | undefined;
+      return new Response(JSON.stringify({ transactionId: "tx-3" }));
+    }
+    if (url.endsWith("/query")) {
+      return new Response(JSON.stringify({ data: 1 }));
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    const client = new DiscClient();
+    await client.transaction(
+      async tx => await tx.query<number>("select 1"),
+      { isolationLevel: "serializable", readOnly: true }
+    );
+
+    assertEquals(
+      JSON.parse(beginBody ?? "{}"),
+      { isolationLevel: "serializable", readOnly: true }
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - transaction without options sends no begin body", async () => {
+  let beginBody: string | undefined | null = "unset";
+  const restore = mockFetch((url, init) => {
+    if (url.endsWith("/transaction/begin")) {
+      beginBody = (init?.body as string | undefined) ?? null;
+      return new Response(JSON.stringify({ transactionId: "tx-4" }));
+    }
+    if (url.endsWith("/query")) {
+      return new Response(JSON.stringify({ data: 1 }));
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    const client = new DiscClient();
+    await client.transaction(async tx => await tx.query<number>("select 1"));
+    assertEquals(beginBody, null);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - commit sends the transaction id as a header, not in the URL", async () => {
+  let commitUrl: string | undefined;
+  let commitTxId: string | null = null;
+
+  const restore = mockFetch((url, init) => {
+    if (url.endsWith("/transaction/begin")) {
+      return new Response(JSON.stringify({ transactionId: "tx-secret" }));
+    }
+    if (url.endsWith("/query")) {
+      return new Response(JSON.stringify({ data: 1 }));
+    }
+    commitUrl = url;
+    commitTxId = new Headers(init?.headers).get("X-Transaction-ID");
+    return new Response(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    const client = new DiscClient();
+    await client.transaction(async tx => await tx.query<number>("select 1"));
+
+    assertEquals(commitUrl?.endsWith("/transaction/commit"), true);
+    assertEquals(commitTxId, "tx-secret");
+    // The id authorizes the transaction — keep it out of URLs, which end up
+    // in access logs, proxy logs, and Referer headers.
+    assertEquals(commitUrl?.includes("tx-secret"), false);
+  } finally {
+    restore();
+  }
+});

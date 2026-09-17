@@ -22,7 +22,8 @@ import type {
   QueryOptions,
   QueryResponse,
   QueryValidator,
-  ServerStats
+  ServerStats,
+  TransactionOptions
 } from "./types.ts";
 import { applyValidator } from "./validation.ts";
 
@@ -330,12 +331,19 @@ export class DiscClient {
   /**
    * Execute a callback within a transaction.
    * Automatically commits on success and rolls back on error.
+   *
+   * `options` chooses the isolation level and read-only flag the server
+   * opens the transaction with; omit it for PostgreSQL's `read_committed`
+   * default. Every query issued through the `tx` handle carries the
+   * transaction id, so they all run on one PostgreSQL session.
    */
   async transaction<T>(
-    fn: (tx: Transaction) => Promise<T>
+    fn: (tx: Transaction) => Promise<T>,
+    options?: TransactionOptions
   ): Promise<T> {
     // Begin transaction
     const beginResponse = await this.fetch("/transaction/begin", {
+      body: options ? JSON.stringify(options) : undefined,
       method: "POST"
     });
     const { transactionId } = await beginResponse.json() as {

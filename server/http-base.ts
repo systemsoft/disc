@@ -79,6 +79,14 @@ export interface HttpServerOptions {
   schemaProvider?: SchemaProvider;
   migrationsProvider?: MigrationsProvider;
   /**
+   * Pool the `/transaction/*` routes acquire their held connections from.
+   * Normally the protocol handler's own pool, so explicit transactions and
+   * ordinary queries share one set of connections. Omitted → BEGIN/COMMIT/
+   * ROLLBACK are bookkeeping-only and never reach PostgreSQL, which is the
+   * right behavior for dry-run and mock-handler setups.
+   */
+  transactionPool?: import("../lib/connection-pool.ts").ConnectionPool;
+  /**
    * Schema-drift detection for `/query` (Stage 2). When set, the query
    * handler reads the client's `X-Disc-Expected-Schema` header and sets
    * `X-Disc-Schema-Version` / `X-Disc-Schema-Mismatch` response headers.
@@ -176,6 +184,9 @@ export abstract class HttpServerBase {
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
+    if (options.transactionPool) {
+      this.transaction_manager.setPool(options.transactionPool);
+    }
     this.subscription_handler = new SubscriptionHandler();
     this.uiAssetHandler = createUiAssetHandler();
     this.startTime = new Date();

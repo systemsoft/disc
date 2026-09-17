@@ -44,6 +44,13 @@ import * as Types from "./types.ts";
 
 const log = getLogger("http");
 
+/** Isolation levels `POST /transaction/begin` accepts, mirroring `Types.Transaction`. */
+const ISOLATION_LEVELS: ReadonlyArray<Types.Transaction["isolationLevel"]> = [
+  "read_committed",
+  "repeatable_read",
+  "serializable"
+];
+
 /*** EXPORT ------------------------------------------- ***/
 
 export abstract class HttpRouteHandlers extends HttpServerBase {
@@ -287,6 +294,33 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         }
       }
 
+      // Explicit transaction (`DiscClient.transaction()`): the client sends
+      // the id it got from `/transaction/begin`. Resolve it to the held
+      // connection so this query runs inside that PostgreSQL session rather
+      // than on an unrelated pooled one.
+      const transactionId = request.headers.get("X-Transaction-ID");
+      let transactionConnection;
+
+      if (transactionId) {
+        const access = this.authorize_transaction(
+          transactionId,
+          authContext.userId
+        );
+
+        if (!access.ok) {
+          return this.create_error_response(
+            access.message,
+            access.status,
+            request
+          );
+        }
+
+        connection.session.transactionId = transactionId;
+        transactionConnection = this
+          .transaction_manager
+          .get_transaction_connection(transactionId);
+      }
+
       // Create query context
       const context: Types.QueryContext = {
         session: connection.session,
@@ -295,7 +329,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         startedAt: new Date(),
         clientInfo: this.parse_client_info(request),
         bypassAccessPolicies,
-        disabledPolicies
+        disabledPolicies,
+        transactionConnection
       };
 
       // Execute query with optional HTTP-level timeout safety net
@@ -1136,6 +1171,233 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       migrationsProvider: this.migrationsProvider,
       defaultHeaders: () => this.get_default_headers("application/json")
     });
+  }
+
+  /**
+   * Resolve the authenticated caller, if any. `handle_query` builds a full
+   * `AuthContext`; the transaction routes only need the user id to enforce
+   * ownership, so this is the narrow version. Returns undefined when no auth
+   * middleware is configured or the request is anonymous.
+   */
+  protected async resolve_caller_user_id(
+    request: Request
+  ): Promise<string | undefined> {
+    if (!this.authMiddleware) {
+      return undefined;
+    }
+
+    const authResult = await this.authMiddleware.authenticate(request);
+    return authResult?.userId;
+  }
+
+  /**
+   * Look up a transaction and check the caller may drive it.
+   *
+   * The id is a bearer capability, so possession is the baseline check. When
+   * the transaction was opened by an authenticated user we additionally pin
+   * it to that user: a leaked id replayed by someone else is a 403, not a
+   * successful hijack. Transactions opened anonymously (auth not configured)
+   * carry no owner and the token alone suffices.
+   */
+  protected authorize_transaction(
+    transactionId: string,
+    callerUserId: string | undefined
+  ):
+    | { ok: true; transaction: Types.Transaction; }
+    | { ok: false; message: string; status: number; } {
+    const transaction = this.transaction_manager.getTransaction(transactionId);
+
+    if (!transaction) {
+      return {
+        message: `Unknown transaction: "${transactionId}"`,
+        ok: false,
+        status: 404
+      };
+    }
+
+    if (transaction.ownerUserId && transaction.ownerUserId !== callerUserId) {
+      return {
+        message: "Transaction belongs to another user",
+        ok: false,
+        status: 403
+      };
+    }
+
+    return { ok: true, transaction };
+  }
+
+  /**
+   * `POST /transaction/{begin,commit,rollback}` — the wire protocol behind
+   * `DiscClient.transaction()`. Queries join a transaction by sending its id
+   * in the `X-Transaction-ID` header on `/query`; see `handle_query`.
+   *
+   * Transaction state lives in this process, so a deployment running several
+   * server replicas must pin a client's transaction requests to one replica.
+   */
+  protected async handle_transaction(
+    request: Request,
+    url: URL
+  ): Promise<Response> {
+    if (request.method !== "POST") {
+      return this.create_error_response("Method Not Allowed", 405, request);
+    }
+
+    const action = url.pathname.slice("/transaction/".length);
+    const callerUserId = await this.resolve_caller_user_id(request);
+
+    if (action === "begin") {
+      return await this.handle_transaction_begin(request, callerUserId);
+    }
+
+    if (action !== "commit" && action !== "rollback") {
+      return this.create_error_response("Not Found", 404, request);
+    }
+
+    const transactionId = await this.read_transaction_id(request);
+    if (!transactionId) {
+      return this.create_error_response(
+        "Missing transaction id: send it as the X-Transaction-ID header",
+        400,
+        request
+      );
+    }
+
+    const access = this.authorize_transaction(transactionId, callerUserId);
+    if (!access.ok) {
+      return this.create_error_response(access.message, access.status, request);
+    }
+
+    try {
+      if (action === "commit") {
+        await this.transaction_manager.commitTransaction(transactionId);
+      } else {
+        await this.transaction_manager.rollbackTransaction(transactionId);
+      }
+    } catch (error) {
+      log.error(`Transaction ${action} failed`, {
+        error: error instanceof Error ? error.message : String(error),
+        transactionId
+      });
+      return this.create_error_response(
+        `Transaction ${action} failed: ${error instanceof Error ? error.message : String(error)}`,
+        500,
+        request
+      );
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: this.get_default_headers("application/json")
+    });
+  }
+
+  private async handle_transaction_begin(
+    request: Request,
+    callerUserId: string | undefined
+  ): Promise<Response> {
+    let options: { isolationLevel?: unknown; readOnly?: unknown; } = {};
+
+    const body = await request.text();
+    if (body.trim().length > 0) {
+      try {
+        options = JSON.parse(body);
+      } catch {
+        return this.create_error_response("Invalid JSON", 400, request);
+      }
+    }
+
+    const { isolationLevel, readOnly } = options;
+
+    if (
+      isolationLevel !== undefined &&
+      !ISOLATION_LEVELS.includes(isolationLevel as Types.Transaction["isolationLevel"])
+    ) {
+      return this.create_error_response(
+        `Invalid isolation level: ${JSON.stringify(isolationLevel)}. ` +
+          `Expected one of ${ISOLATION_LEVELS.join(", ")}`,
+        400,
+        request
+      );
+    }
+
+    if (readOnly !== undefined && typeof readOnly !== "boolean") {
+      return this.create_error_response(
+        "readOnly must be a boolean",
+        400,
+        request
+      );
+    }
+
+    // Over HTTP every request is its own connection, so there is no
+    // long-lived session to attach to — the transaction id is what ties
+    // subsequent requests together. Record a synthetic session id so the
+    // field stays meaningful for logging and abandoned-transaction sweeps.
+    const transaction = this.transaction_manager.beginTransaction(
+      `http:${crypto.randomUUID()}`,
+      {
+        isolationLevel: isolationLevel as
+          | Types.Transaction["isolationLevel"]
+          | undefined,
+        ownerUserId: callerUserId,
+        readOnly: readOnly as boolean | undefined
+      }
+    );
+
+    // `beginTransaction` returns while BEGIN is still in flight. Await it so
+    // the held connection exists before the client can send queries against
+    // this id, and so a failed BEGIN surfaces here rather than as a confusing
+    // error on the first query.
+    try {
+      await this.transaction_manager.ensureBegun(transaction.id);
+    } catch (error) {
+      await this
+        .transaction_manager
+        .rollbackTransaction(transaction.id)
+        .catch(() => {
+          // Already unwound by the failed BEGIN; nothing left to release.
+        });
+
+      log.error("Transaction begin failed", {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return this.create_error_response(
+        `Failed to begin transaction: ${error instanceof Error ? error.message : String(error)}`,
+        500,
+        request
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ transactionId: transaction.id }),
+      { headers: this.get_default_headers("application/json") }
+    );
+  }
+
+  /**
+   * Pull the transaction id off a commit/rollback request. The header is the
+   * canonical location (it is what `/query` uses too); a JSON body is also
+   * accepted so the endpoints are usable from a plain `curl`.
+   */
+  private async read_transaction_id(
+    request: Request
+  ): Promise<string | undefined> {
+    const fromHeader = request.headers.get("X-Transaction-ID");
+    if (fromHeader) {
+      return fromHeader;
+    }
+
+    const body = await request.text();
+    if (body.trim().length === 0) {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(body) as { transactionId?: unknown; };
+      return typeof parsed.transactionId === "string" ?
+        parsed.transactionId :
+        undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

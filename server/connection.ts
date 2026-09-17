@@ -204,7 +204,8 @@ export class TransactionManager implements Types.TransactionManager {
       isolationLevel: options.isolationLevel || "read_committed",
       readOnly: options.readOnly || false,
       startedAt: new Date(),
-      statements: []
+      statements: [],
+      ownerUserId: options.ownerUserId
     };
 
     this.transactions.set(transactionId, transaction);
@@ -221,6 +222,26 @@ export class TransactionManager implements Types.TransactionManager {
 
   getTransaction(id: string): Types.Transaction | null {
     return this.transactions.get(id) || null;
+  }
+
+  /**
+   * Await the BEGIN issued by `beginTransaction()`. `beginTransaction` is
+   * synchronous — it returns the transaction while BEGIN is still in flight —
+   * so callers that need the held connection to exist (the HTTP begin route,
+   * any query routed into the transaction) must await this first. Resolves
+   * immediately when no pool is attached; throws if the id is unknown, and
+   * propagates a failed BEGIN.
+   */
+  async ensureBegun(id: string): Promise<void> {
+    if (!this.transactions.has(id)) {
+      throw new Error(`Transaction ${id} not found`);
+    }
+
+    const pendingBegin = this.pending_begins.get(id);
+    if (pendingBegin) {
+      await pendingBegin;
+      this.pending_begins.delete(id);
+    }
   }
 
   /**
@@ -389,7 +410,15 @@ export class TransactionManager implements Types.TransactionManager {
     }
   }
 
+  /**
+   * Transaction ids travel to clients over HTTP and authorize every
+   * subsequent request against the transaction, so they are bearer tokens.
+   * The previous `txn_<epoch>_<Math.random>` form leaked the start time and
+   * came from a non-cryptographic PRNG — guessable enough that a third party
+   * could hijack an in-flight transaction. `crypto.randomUUID()` is the same
+   * source the auth module uses for session ids.
+   */
   private generate_transaction_id(): string {
-    return `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `txn_${crypto.randomUUID()}`;
   }
 }

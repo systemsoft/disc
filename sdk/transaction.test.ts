@@ -108,21 +108,23 @@ Deno.test("transaction - query throws DiscQueryError on server errors", async ()
   }
 });
 
-Deno.test("transaction - commit sends POST to /transaction/{id}/commit", async () => {
+Deno.test("transaction - commit sends POST to /transaction/commit", async () => {
   let capturedUrl = "";
+  let capturedTxId: string | null = null;
   const restore = mockFetch((url, init) => {
     if ((init?.method ?? "GET") === "POST") {
       capturedUrl = url;
+      capturedTxId = new Headers(init?.headers).get("X-Transaction-ID");
     }
     return new Response(JSON.stringify({ ok: true }));
   });
   try {
     const tx = makeTransaction("tx-123");
     await tx.commit();
-    assertEquals(
-      capturedUrl,
-      "http://localhost:5656/transaction/tx-123/commit"
-    );
+    assertEquals(capturedUrl, "http://localhost:5656/transaction/commit");
+    // The id travels in a header, not the path: it authorizes the
+    // transaction, and URLs end up in access and proxy logs.
+    assertEquals(capturedTxId, "tx-123");
   } finally {
     restore();
   }
@@ -139,21 +141,23 @@ Deno.test("transaction - commit changes state to committed", async () => {
   }
 });
 
-Deno.test("transaction - rollback sends POST to /transaction/{id}/rollback", async () => {
+Deno.test("transaction - rollback sends POST to /transaction/rollback", async () => {
   let capturedUrl = "";
+  let capturedTxId: string | null = null;
   const restore = mockFetch((url, init) => {
     if ((init?.method ?? "GET") === "POST") {
       capturedUrl = url;
+      capturedTxId = new Headers(init?.headers).get("X-Transaction-ID");
     }
     return new Response(JSON.stringify({ ok: true }));
   });
   try {
     const tx = makeTransaction("tx-123");
     await tx.rollback();
-    assertEquals(
-      capturedUrl,
-      "http://localhost:5656/transaction/tx-123/rollback"
-    );
+    assertEquals(capturedUrl, "http://localhost:5656/transaction/rollback");
+    // The id travels in a header, not the path: it authorizes the
+    // transaction, and URLs end up in access and proxy logs.
+    assertEquals(capturedTxId, "tx-123");
   } finally {
     restore();
   }

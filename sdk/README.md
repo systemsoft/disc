@@ -383,6 +383,38 @@ const result = await client.transaction(async tx => {
 });
 ```
 
+### Isolation and Read-Only
+
+Pass options to choose how the server opens the transaction. Omit them for PostgreSQL's own `read_committed` default.
+
+```typescript
+await client.transaction(
+  async tx => {
+    return await tx.query("select Account { balance } filter .id = <uuid>$id", {
+      id
+    });
+  },
+  { isolationLevel: "serializable", readOnly: true }
+);
+```
+
+`isolationLevel` is one of `read_committed`, `repeatable_read`, or `serializable`; the server rejects anything else with a 400.
+
+### Wire Protocol
+
+Useful if you're driving transactions from something other than this SDK:
+
+| Request                                        | Result                               |
+| ---------------------------------------------- | ------------------------------------ |
+| `POST /transaction/begin` + optional JSON body | `{ transactionId }`                  |
+| `POST /query` + `X-Transaction-ID` header      | Runs inside that transaction         |
+| `POST /transaction/commit` + the header        | `{ ok: true }`, transaction consumed |
+| `POST /transaction/rollback` + the header      | `{ ok: true }`, transaction consumed |
+
+The transaction id is a bearer capability — anyone holding it can query, commit, or roll back — so it travels in a header rather than the URL, keeping it out of access and proxy logs. When the server has auth configured, the transaction is additionally pinned to the user that opened it and a mismatched caller gets a 403. An unknown or already-finished id is a 404.
+
+Two operational notes. Transaction state lives in the server process, so a deployment running multiple replicas must route a client's transaction requests to the same replica. And each open transaction holds a connection from the pool for its lifetime; the server reaps transactions idle past its transaction timeout and releases them.
+
 ### Transaction State Machine
 
 A `Transaction` moves through these states:
@@ -491,31 +523,32 @@ try {
 
 Key type exports from `sdk/types.ts`:
 
-| Type                       | Description                                                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `DiscClientConfig`         | Client constructor options                                                                                                        |
-| `QueryRequest`             | Query payload (query, variables, operationName)                                                                                   |
-| `QueryResponse<T>`         | Response envelope (data, errors, extensions)                                                                                      |
-| `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)                                                                                       |
-| `HealthStatus`             | Server health (status, database, pool)                                                                                            |
-| `ServerStats`              | Connections, queries, transactions, memory, cache                                                                                 |
-| `AuthTokens`               | JWT token and optional refresh token                                                                                              |
-| `AuthUser`                 | User profile (id, email, username, metadata)                                                                                      |
-| `AuthResponse`             | Login/register response (user, session, token)                                                                                    |
-| `LoginCredentials`         | Email/username + password                                                                                                         |
-| `RegisterData`             | Email, password, optional username/metadata                                                                                       |
-| `TransactionState`         | "active", "committed", "rolled_back"                                                                                              |
-| `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                                                                                              |
-| `SubscriptionHandle`       | Subscription id + unsubscribe function                                                                                            |
-| `IsolationLevel`           | "read_committed", "repeatable_read", "serializable" -- exported but not yet consumed; `transaction()` takes no isolation argument |
-| `QueryOptions<T>`          | Per-query `validate` / `revive` options                                                                                           |
-| `QueryValidator<T>`        | A `(data) => T` function or any Standard Schema                                                                                   |
-| `StandardSchemaV1`         | Minimal Standard Schema v1 surface the SDK accepts                                                                                |
-| `StandardSchemaIssue`      | One validation failure, as carried on `DiscValidationError.issues`                                                                |
-| `QueryError`               | A single server-reported query error                                                                                              |
-| `CacheStats`               | Cache section of `ServerStats`                                                                                                    |
-| `AuthManagerOptions`       | autoRefresh, refreshBuffer                                                                                                        |
-| `SubscriptionClientConfig` | autoReconnect, maxReconnectAttempts, reconnectDelay                                                                               |
+| Type                       | Description                                                            |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `DiscClientConfig`         | Client constructor options                                             |
+| `QueryRequest`             | Query payload (query, variables, operationName)                        |
+| `QueryResponse<T>`         | Response envelope (data, errors, extensions)                           |
+| `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)                            |
+| `HealthStatus`             | Server health (status, database, pool)                                 |
+| `ServerStats`              | Connections, queries, transactions, memory, cache                      |
+| `AuthTokens`               | JWT token and optional refresh token                                   |
+| `AuthUser`                 | User profile (id, email, username, metadata)                           |
+| `AuthResponse`             | Login/register response (user, session, token)                         |
+| `LoginCredentials`         | Email/username + password                                              |
+| `RegisterData`             | Email, password, optional username/metadata                            |
+| `TransactionState`         | "active", "committed", "rolled_back"                                   |
+| `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                                   |
+| `SubscriptionHandle`       | Subscription id + unsubscribe function                                 |
+| `IsolationLevel`           | "read_committed", "repeatable_read", "serializable"                    |
+| `TransactionOptions`       | isolationLevel, readOnly -- the `client.transaction()` second argument |
+| `QueryOptions<T>`          | Per-query `validate` / `revive` options                                |
+| `QueryValidator<T>`        | A `(data) => T` function or any Standard Schema                        |
+| `StandardSchemaV1`         | Minimal Standard Schema v1 surface the SDK accepts                     |
+| `StandardSchemaIssue`      | One validation failure, as carried on `DiscValidationError.issues`     |
+| `QueryError`               | A single server-reported query error                                   |
+| `CacheStats`               | Cache section of `ServerStats`                                         |
+| `AuthManagerOptions`       | autoRefresh, refreshBuffer                                             |
+| `SubscriptionClientConfig` | autoReconnect, maxReconnectAttempts, reconnectDelay                    |
 
 From `sdk/codecs.ts`, `sdk/query-builder.ts`, `sdk/schema-types.ts`, and `sdk/filter-compiler.ts`:
 

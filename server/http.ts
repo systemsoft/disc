@@ -186,6 +186,13 @@ export class HttpServer extends HttpRouteHandlers {
         }
       }
 
+      // Explicit transactions (`DiscClient.transaction()`): begin/commit/
+      // rollback. Queries join a transaction via the `X-Transaction-ID`
+      // header on `/query`, handled inside handle_query.
+      if (url.pathname.startsWith("/transaction/")) {
+        return await this.handle_transaction(request, url);
+      }
+
       // Route handling
       switch (url.pathname) {
         case "/":

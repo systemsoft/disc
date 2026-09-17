@@ -600,6 +600,11 @@ export class DiscServer {
           undefined,
         databaseRegistry: this.databaseRegistry,
         schemaDriftProvider: this.schemaDriftProvider,
+        /*** Explicit transactions hold a connection from the protocol handler’s pool for the
+             life of the transaction, so `/transaction/*` and `/query` share one set of
+             connections. Undefined for dry-run/mock handlers — then BEGIN/COMMIT/ROLLBACK stay
+             in-memory bookkeeping and never reach PostgreSQL. ***/
+        transactionPool: (this.protocolHandler as { pool?: ConnectionPool; }).pool,
         /*** Live-schema-diff. When the CLI passed a schema source, HttpServer mounts
              `/admin/schema-watch` and `/admin/schema-apply`; otherwise both 404. ***/
         adminSchemaWatch: this.schemaWatchSource ?
