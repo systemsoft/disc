@@ -25,13 +25,22 @@ The core HTTP client for querying a Disc server. Handles request timeouts, retri
 import type { DiscClientConfig } from "disc/sdk/mod.ts";
 
 const client = createClient({
-  baseUrl: "http://localhost:5656", // default
+  baseUrl: "http://localhost:5656", // see resolution order below
   timeout: 30000, // request timeout in ms (default: 30000)
   headers: { "X-Custom": "value" }, // custom headers on every request
   retries: 3, // retry count on network/server errors (default: 0)
   retryDelay: 1000 // base delay between retries in ms (default: 1000)
 });
 ```
+
+`baseUrl` is resolved in this order, first hit wins:
+
+1. `config.baseUrl`
+2. The `DISC_SERVER_URL` environment variable -- works on any runtime, and the robust choice for deployed servers where cwd and filesystem permissions are unpredictable
+3. A `disc.toml` walked up from the cwd, deriving the URL from its `[server]` host/port. Deno-only (needs sync filesystem access) and requires `--allow-read`; a permission failure is reported through `config.logger.warn` rather than swallowed, since a silent fallback to localhost is the hard case to diagnose
+4. `http://localhost:5656`
+
+In a project with a `disc.toml`, `createClient()` with no arguments connects to that project's server.
 
 ### Querying
 
@@ -226,7 +235,7 @@ const sub = createSubscriptionClient(
   }
 );
 
-await sub.connect();
+await sub.connect(); // optional arg: connect timeout in ms (default: 30000)
 ```
 
 ### Subscribing
@@ -270,6 +279,9 @@ All SDK errors extend `DiscClientError`, which carries a `code` from `DiscErrorC
 | `DiscTransactionError` | `TRANSACTION_ERROR` | Operation on non-active transaction    |
 | `DiscProtocolError`    | `PROTOCOL_ERROR`    | Unexpected response format             |
 | `DiscServerError`      | `SERVER_ERROR`      | 5xx response from server               |
+| `DiscValidationError`  | `VALIDATION_ERROR`  | `options.validate` rejected the data   |
+
+`DiscValidationError` carries an `issues` array (`StandardSchemaIssue[]`) describing what failed, and an optional `cause` when the validator threw.
 
 ```typescript
 import { DiscErrorCode, DiscQueryError } from "disc/sdk/mod.ts";
@@ -286,28 +298,29 @@ try {
 
 ### Retry Behavior
 
-- `DiscServerError` (5xx) and network errors are retried up to `retries` times with linear backoff.
+- `DiscServerError` (5xx) and connection failures (`DiscConnectionError`, raised when `fetch` itself throws) are retried up to `retries` times with exponential backoff and ±25% jitter: `retryDelay * 2^attempt`, multiplied by a random factor in [0.75, 1.25]. The jitter prevents a thundering herd when many clients retry in lockstep after a shared outage.
 - `DiscAuthError`, `DiscQueryError`, and `DiscProtocolError` are never retried.
 - `DiscTimeoutError` is thrown immediately without retry.
+- Unclassified failures become `DiscNetworkError` and are retried with linear backoff (`retryDelay * (attempt + 1)`).
 
 ## Types
 
 Key type exports from `sdk/types.ts`:
 
-| Type                       | Description                                         |
-| -------------------------- | --------------------------------------------------- |
-| `DiscClientConfig`         | Client constructor options                          |
-| `QueryRequest`             | Query payload (query, variables, operationName)     |
-| `QueryResponse<T>`         | Response envelope (data, errors, extensions)        |
-| `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)         |
-| `HealthStatus`             | Server health (status, database, pool)              |
-| `ServerStats`              | Connections, queries, transactions, memory, cache   |
-| `AuthTokens`               | JWT token and optional refresh token                |
-| `AuthUser`                 | User profile (id, email, username, metadata)        |
-| `AuthResponse`             | Login/register response (user, session, token)      |
-| `LoginCredentials`         | Email/username + password                           |
-| `RegisterData`             | Email, password, optional username/metadata         |
-| `TransactionState`         | "active", "committed", "rolled_back"                |
-| `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                |
-| `SubscriptionHandle`       | Subscription id + unsubscribe function              |
-| `IsolationLevel`           | "read_committed", "repeatable_read", "serializable" |
+| Type                       | Description                                                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `DiscClientConfig`         | Client constructor options                                                                                                        |
+| `QueryRequest`             | Query payload (query, variables, operationName)                                                                                   |
+| `QueryResponse<T>`         | Response envelope (data, errors, extensions)                                                                                      |
+| `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)                                                                                       |
+| `HealthStatus`             | Server health (status, database, pool)                                                                                            |
+| `ServerStats`              | Connections, queries, transactions, memory, cache                                                                                 |
+| `AuthTokens`               | JWT token and optional refresh token                                                                                              |
+| `AuthUser`                 | User profile (id, email, username, metadata)                                                                                      |
+| `AuthResponse`             | Login/register response (user, session, token)                                                                                    |
+| `LoginCredentials`         | Email/username + password                                                                                                         |
+| `RegisterData`             | Email, password, optional username/metadata                                                                                       |
+| `TransactionState`         | "active", "committed", "rolled_back"                                                                                              |
+| `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                                                                                              |
+| `SubscriptionHandle`       | Subscription id + unsubscribe function                                                                                            |
+| `IsolationLevel`           | "read_committed", "repeatable_read", "serializable" -- exported but not yet consumed; `transaction()` takes no isolation argument |

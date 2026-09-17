@@ -8,7 +8,11 @@
 // --- Client Configuration ---
 
 export interface DiscClientConfig {
-  /** Base URL of the Disc server (default: "http://localhost:5656") */
+  /**
+   * Base URL of the Disc server. When omitted, the client resolves it from
+   * `DISC_SERVER_URL`, then a `disc.toml` walked up from the cwd, then falls
+   * back to "http://localhost:5656".
+   */
   baseUrl?: string;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
