@@ -75,7 +75,7 @@
     "test:pg": "deno task prep && DISC_PG_AUTO=1 deno test --allow-all --no-check",
     "typecheck": "deno task prep && deno check access/ auth/ benchmarks/ cli/ codegen/ compiler/ deploy/ edgeql/ ext-custom-functions/ ext-fts/ ext-graphql/ ext-oauth/ ext-vector/ extensions/ lib/ lsp/ migration/ postgres/ protocol/ schema/ scripts/ sdk/ server/ smtp/ tests/ mod.ts",
     "ui:manifest": "deno task prep && deno run --allow-read=ui/build --allow-write=server/ui-asset-manifest.ts scripts/gen-ui-manifest.ts",
-    "version:bump": "deno run --allow-read=deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml --allow-write=version.txt,deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml scripts/version.ts"
+    "version:bump": "deno run --allow-read=version.txt,deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml --allow-write=version.txt,deno.json,lib/version.ts,deploy/helm/disc/Chart.yaml scripts/version.ts"
   },
   "test": {
     "exclude": ["reference-gel/**", "ui/**"],
