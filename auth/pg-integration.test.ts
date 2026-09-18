@@ -348,3 +348,209 @@ async function cleanupAuthTables(dsn: string): Promise<void> {
     await client.end();
   }
 }
+
+/*** Email identity — the case-insensitive unique index. The unit tests in
+     `email-normalization.test.ts` run against the in-memory fake, which can
+     only prove the provider asks the right questions. These prove PostgreSQL
+     itself refuses the duplicate, which is the actual guarantee: a bug or a
+     future code path that bypasses `register()` still cannot create a second
+     account for one address. ***/
+
+Deno.test({
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider(
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
+        adapter
+      );
+      await provider.initialize();
+
+      const indexes = await conn.query(
+        `SELECT indexname FROM pg_indexes
+          WHERE tablename = 'users'
+            AND indexname IN ('users_email_lower_key', 'users_username_lower_key')
+          ORDER BY indexname`
+      );
+      assertEquals(
+        indexes.rows.map(r => r.indexname),
+        ["users_email_lower_key", "users_username_lower_key"]
+      );
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+  ignore: !canRunPgTests(),
+  name: "PG Auth: initialize() creates the case-insensitive identity indexes",
+  sanitizeOps: false,
+  sanitizeResources: false
+});
+
+Deno.test({
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider(
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
+        adapter
+      );
+      await provider.initialize();
+      await provider.register({
+        email: "ada@example.com",
+        password: "correct-horse-battery"
+      });
+
+      /*** Straight past the provider: even a raw INSERT cannot land a
+           case-variant of an address that already exists. ***/
+      await assertRejects(
+        () =>
+          conn.execute(
+            "INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)",
+            ["raw-1", "Ada@Example.com", "x"]
+          ),
+        Error
+      );
+
+      /*** A genuinely different address is still fine. ***/
+      await conn.execute(
+        "INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)",
+        ["raw-2", "a.da@example.com", "x"]
+      );
+
+      const count = await conn.query("SELECT COUNT(*)::int AS cnt FROM users");
+      assertEquals(count.rows[0].cnt, 2);
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+  ignore: !canRunPgTests(),
+  name: "PG Auth: the database rejects a case-variant duplicate email",
+  sanitizeOps: false,
+  sanitizeResources: false
+});
+
+Deno.test({
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider(
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
+        adapter
+      );
+      await provider.initialize();
+
+      /*** Registering with one casing and logging in with another has to work
+           end-to-end against real PostgreSQL, or the index would simply lock
+           people out instead of unifying their account. ***/
+      await provider.register({
+        email: "Ada.Lovelace@Example.com",
+        password: "correct-horse-battery"
+      });
+
+      const login = requireAuthResponse(
+        await provider.login({
+          email: "  ada.lovelace@example.com  ",
+          password: "correct-horse-battery"
+        })
+      );
+      assertExists(login.token);
+
+      /*** The casing the user typed survives for display and delivery. ***/
+      const stored = await conn.query("SELECT email FROM users");
+      assertEquals(stored.rows[0].email, "Ada.Lovelace@Example.com");
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+  ignore: !canRunPgTests(),
+  name: "PG Auth: login folds case and whitespace while stored casing survives",
+  sanitizeOps: false,
+  sanitizeResources: false
+});
+
+Deno.test({
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider(
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
+        adapter
+      );
+      await provider.initialize();
+      await provider.register({
+        email: "ada@example.com",
+        password: "correct-horse-battery",
+        username: "AdaLovelace"
+      });
+
+      /*** Past the provider entirely: PostgreSQL itself refuses a
+           case-variant of a username somebody already holds. ***/
+      await assertRejects(
+        () =>
+          conn.execute(
+            "INSERT INTO users (id, email, username, password_hash) VALUES ($1, $2, $3, $4)",
+            ["raw-1", "billie@example.com", "adalovelace", "x"]
+          ),
+        Error
+      );
+
+      /*** Nullable column: many accounts may hold no username at once, since
+           a unique index treats NULLs as distinct. ***/
+      await conn.execute(
+        "INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)",
+        ["raw-2", "cher@example.com", "x"]
+      );
+      await conn.execute(
+        "INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)",
+        ["raw-3", "dana@example.com", "x"]
+      );
+
+      const login = requireAuthResponse(
+        await provider.login({
+          password: "correct-horse-battery",
+          username: "  adalovelace  "
+        })
+      );
+      assertExists(login.token);
+
+      const stored = await conn.query(
+        "SELECT username FROM users WHERE id != 'raw-2' AND id != 'raw-3'"
+      );
+      assertEquals(stored.rows[0].username, "AdaLovelace");
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+  ignore: !canRunPgTests(),
+  name: "PG Auth: usernames are case-insensitive but still nullable",
+  sanitizeOps: false,
+  sanitizeResources: false
+});

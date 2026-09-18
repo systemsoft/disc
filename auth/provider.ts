@@ -183,7 +183,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
       throw new AuthError(passwordValidation.errors.join(", "), AuthErrorCode.PASSWORD_TOO_WEAK, 400);
 
     /*** Look up by id or email (email is unique) ***/
-    const lookup = await this.db.query("SELECT id FROM users WHERE id = ? OR email = ?", [userIdOrEmail, userIdOrEmail]);
+    const lookup = await this.db.query(
+      `SELECT id FROM users WHERE id = ? OR ${this.emailMatches}`,
+      [userIdOrEmail, this.normalizeEmail(userIdOrEmail)]
+    );
 
     if (lookup.rows.length === 0)
       throw new AuthError(`User not found: ${userIdOrEmail}`, AuthErrorCode.USER_NOT_FOUND, 404);
@@ -364,10 +367,12 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
   async login(credentials: LoginCredentials): Promise<LoginResult> {
     /*** Find user by email or username ***/
     const query = credentials.email ?
-      "SELECT * FROM users WHERE email = ?" :
-      "SELECT * FROM users WHERE username = ?";
+      `SELECT * FROM users WHERE ${this.emailMatches}` :
+      `SELECT * FROM users WHERE ${this.usernameMatches}`;
 
-    const param = credentials.email || credentials.username;
+    const param = credentials.email ?
+      this.normalizeEmail(credentials.email) :
+      this.normalizeUsername(credentials.username);
     const result = await this.db.query(query, [param]);
 
     if (result.rows.length === 0) {
@@ -570,10 +575,16 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     if (!passwordValidation.valid)
       throw new AuthError(passwordValidation.errors.join(", "), AuthErrorCode.PASSWORD_TOO_WEAK, 400);
 
+    /*** Trim before both the duplicate check and the insert, so a pasted
+         address with surrounding whitespace can't become a second account
+         for someone who already has one. ***/
+    const email = this.normalizeEmail(data.email);
+    const username = this.normalizeUsername(data.username);
+
     /*** Check if user exists ***/
     const existing = await this.db.query(
-      "SELECT id FROM users WHERE email = ? OR (username = ? AND username IS NOT NULL)",
-      [data.email, data.username || null]
+      `SELECT id FROM users WHERE ${this.emailMatches} OR (${this.usernameMatches} AND username IS NOT NULL)`,
+      [email, username]
     );
 
     if (existing.rows.length > 0)
@@ -604,8 +615,8 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     `,
       [
         userId,
-        data.email,
-        data.username || null,
+        email,
+        username,
         passwordHash,
         !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
@@ -695,7 +706,11 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
    */
   async requestMagicLink(email: string, meta?: RequestMeta): Promise<string> {
     const plaintext = this.generateToken();
-    const result = await this.db.query("SELECT id, active, is_anonymous FROM users WHERE email = ?", [email]);
+    const normalizedEmail = this.normalizeEmail(email);
+    const result = await this.db.query(
+      `SELECT id, active, is_anonymous FROM users WHERE ${this.emailMatches}`,
+      [normalizedEmail]
+    );
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); /*** 15 min ***/
 
     if (result.rows.length > 0 && result.rows[0].active && !result.rows[0].is_anonymous) {
@@ -732,7 +747,7 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
          VALUES (?, ?, ?, ?)`,
         [
           tokenHash,
-          email,
+          normalizedEmail,
           expiresAt.toISOString(),
           meta?.ipAddress ?? null
         ]
@@ -770,7 +785,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
    * `register()`); the DB only ever stores the hash.
    */
   async resendVerification(email: string): Promise<string | null> {
-    const result = await this.db.query("SELECT id, email_verified FROM users WHERE email = ?", [email]);
+    const result = await this.db.query(
+      `SELECT id, email_verified FROM users WHERE ${this.emailMatches}`,
+      [this.normalizeEmail(email)]
+    );
 
     if (result.rows.length === 0)
       return null;
@@ -841,7 +859,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
   }
 
   async resetPasswordRequest(email: string): Promise<string> {
-    const result = await this.db.query("SELECT id, email_verified FROM users WHERE email = ?", [email]);
+    const result = await this.db.query(
+      `SELECT id, email_verified FROM users WHERE ${this.emailMatches}`,
+      [this.normalizeEmail(email)]
+    );
 
     if (result.rows.length === 0) {
       /*** P1-35: don’t leak whether the email is registered. Return a non-plaintext sentinel —
@@ -893,7 +914,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
    * user-supplied selectors (often email) into the row id.
    */
   async resolveUserId(userIdOrEmail: string): Promise<string | null> {
-    const result = await this.db.query("SELECT id FROM users WHERE id = ? OR email = ?", [userIdOrEmail, userIdOrEmail]);
+    const result = await this.db.query(
+      `SELECT id FROM users WHERE id = ? OR ${this.emailMatches}`,
+      [userIdOrEmail, this.normalizeEmail(userIdOrEmail)]
+    );
 
     if (result.rows.length === 0)
       return null;
@@ -976,10 +1000,16 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     if (!lookup.rows[0].is_anonymous)
       throw new AuthError("User is not an anonymous identity", AuthErrorCode.INVALID_OPERATION, 400);
 
+    /*** Same trim-then-check ordering as `register()`: the conflict check and
+         the write must agree on the address, or the check passes and the
+         write collides with the unique index. ***/
+    const upgradedEmail = this.normalizeEmail(data.email);
+    const upgradedUsername = this.normalizeUsername(data.username);
+
     /*** Refuse if the target email is already taken by someone else. ***/
     const existing = await this.db.query(
-      "SELECT id FROM users WHERE (email = ? OR (username = ? AND username IS NOT NULL)) AND id != ?",
-      [data.email, data.username || null, anonymousUserId]
+      `SELECT id FROM users WHERE (${this.emailMatches} OR (${this.usernameMatches} AND username IS NOT NULL)) AND id != ?`,
+      [upgradedEmail, upgradedUsername, anonymousUserId]
     );
 
     if (existing.rows.length > 0)
@@ -1005,8 +1035,8 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
        WHERE id = ?
     `,
       [
-        data.email,
-        data.username || null,
+        upgradedEmail,
+        upgradedUsername,
         passwordHash,
         !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
@@ -1103,7 +1133,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
    */
   async verifyMagicCode(email: string, code: string, meta?: RequestMeta): Promise<LoginResult> {
     const tokenHash = await this.hashToken(code);
-    const userResult = await this.db.query("SELECT id, active, is_anonymous FROM users WHERE email = ?", [email]);
+    const userResult = await this.db.query(
+      `SELECT id, active, is_anonymous FROM users WHERE ${this.emailMatches}`,
+      [this.normalizeEmail(email)]
+    );
 
     /*** Anti-enumeration: do a dummy hash for unknown emails so the wall-clock posture matches the
          happy path. Same rationale as `runDummyCompare` for password login
@@ -1340,7 +1373,10 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     /*** It’s possible the user registered via another path between requestMagicLink and consume —
          if so, fall through to login on the existing record rather than failing
          the redemption. ***/
-    const existing = await this.db.query("SELECT id, active, is_anonymous FROM users WHERE email = ?", [row.pending_email]);
+    const existing = await this.db.query(
+      `SELECT id, active, is_anonymous FROM users WHERE ${this.emailMatches}`,
+      [this.normalizeEmail(row.pending_email)]
+    );
     let userId: string;
 
     if (existing.rows.length > 0 && existing.rows[0].active && !existing.rows[0].is_anonymous) {
@@ -1350,7 +1386,7 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
       await this.db.execute(
         `INSERT INTO users (id, email, password_hash, email_verified, active)
          VALUES (?, ?, ?, ?, ?)`,
-        [userId, row.pending_email, "", true, true]
+        [userId, this.normalizeEmail(row.pending_email), "", true, true]
       );
 
       this.auditEvent("identity_created", userId, { ipAddress: meta?.ipAddress, via: "magic_link_signup" });
@@ -1467,6 +1503,42 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     } catch {
       /*** pre-existing column, or backend doesn’t support IF NOT EXISTS for ADD COLUMN; either case
            is fine here. ***/
+    }
+
+    /*** Case-insensitive email identity. The inline `email TEXT UNIQUE` above
+         is byte-exact, so on its own it lets `ada@example.com` and
+         `Ada@example.com` coexist as separate accounts while `login()` can
+         only ever find one of them. This index is what makes "one address =
+         one account" true; `emailMatches` keeps every lookup using the same
+         notion of identity (and this index).
+
+         Deliberately not fatal. An instance that already holds case-variant
+         duplicates cannot build the index, and refusing to boot over it would
+         take a running deployment down on upgrade. Log loudly instead and
+         leave the weaker byte-exact constraint in place; the duplicates need a
+         human decision about which account survives, which is not something to
+         infer at startup. ***/
+    for (
+      const { column, index } of [
+        { column: "email", index: "users_email_lower_key" },
+        { column: "username", index: "users_username_lower_key" }
+      ]
+    ) {
+      try {
+        await this.db.execute(
+          `CREATE UNIQUE INDEX IF NOT EXISTS ${index} ON users (lower(${column}))`
+        );
+      } catch (error) {
+        authLogger.error(
+          `Could not create the case-insensitive ${column} index (${index}). ` +
+            "Existing rows most likely differ only by case or whitespace, which " +
+            `this index would forbid. ${column} uniqueness stays byte-exact ` +
+            "until they are reconciled — find them with: " +
+            `SELECT lower(${column}), count(*) FROM users ` +
+            `WHERE ${column} IS NOT NULL GROUP BY 1 HAVING count(*) > 1. ` +
+            `Cause: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
     /*** Sessions table ***/
@@ -1804,7 +1876,11 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
    */
   async requestMagicCode(email: string, meta?: RequestMeta): Promise<string> {
     const code = this.generateNumericCode(6);
-    const result = await this.db.query("SELECT id, active, is_anonymous FROM users WHERE email = ?", [email]);
+    const normalizedEmail = this.normalizeEmail(email);
+    const result = await this.db.query(
+      `SELECT id, active, is_anonymous FROM users WHERE ${this.emailMatches}`,
+      [normalizedEmail]
+    );
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); /*** 10 min ***/
 
     if (result.rows.length > 0 && result.rows[0].active && !result.rows[0].is_anonymous) {
@@ -1864,6 +1940,52 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
     return typeof row.email === "string" && row.email.length > 0 ?
       row.email :
       null;
+  }
+
+  /**
+   * Normalize an address before it is stored or compared.
+   *
+   * Trimming only: surrounding whitespace is never meaningful and is almost
+   * always a paste artifact, but it makes `ada@example.com ` a second account
+   * under a byte-exact UNIQUE constraint. Casing is deliberately preserved —
+   * the local part is case-sensitive per RFC 5321, so what the user typed is
+   * kept for display and delivery while *identity* comparisons fold case via
+   * `lower(email)` in SQL (see `emailMatches`).
+   */
+  private normalizeEmail(email: string): string {
+    return email.trim();
+  }
+
+  /**
+   * SQL fragment matching `users.email` case-insensitively. Pairs with the
+   * `users_email_lower_key` unique index so lookups use the same notion of
+   * identity the constraint enforces — and can use that index.
+   */
+  private get emailMatches(): string {
+    return "lower(email) = lower(?)";
+  }
+
+  /**
+   * Normalize a username before it is stored or compared. Same trim-only rule
+   * as `normalizeEmail`, but the column is nullable: a blank or whitespace-only
+   * username is an absent one, not an empty string, so it collapses to null
+   * rather than becoming a value that one account could hold and others
+   * couldn't.
+   */
+  private normalizeUsername(username: string | null | undefined): string | null {
+    const trimmed = username?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  /**
+   * SQL fragment matching `users.username` case-insensitively, mirroring
+   * `emailMatches` against the `users_username_lower_key` index. Callers that
+   * may bind null must keep their own `username IS NOT NULL` guard: SQL null
+   * never equals null, and an account without a username is not a match for
+   * another account without one.
+   */
+  private get usernameMatches(): string {
+    return "lower(username) = lower(?)";
   }
 
   private rowToUser(row: any): User {

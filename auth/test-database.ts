@@ -163,9 +163,26 @@ export class TestDatabase implements DatabaseInterface {
     /*** Handle equality: "column = value" ***/
     if (trimmed.includes("=")) {
       const eqPos = trimmed.indexOf("=");
-      const col = trimmed.substring(0, eqPos).trim();
-      const valuePart = trimmed.substring(eqPos + 1).trim();
+      let col = trimmed.substring(0, eqPos).trim();
+      let valuePart = trimmed.substring(eqPos + 1).trim();
       let expectedValue: any;
+
+      /*** Unwrap `lower(...)` on either side. Email identity comparisons are
+           case-insensitive (`lower(email) = lower(?)`) so that one address
+           can't become several accounts; without this the left side would be
+           read as a column literally named "lower(email)" and never match. ***/
+      const unwrapLower = (expr: string): { caseInsensitive: boolean; inner: string; } => {
+        const match = /^lower\s*\((.*)\)$/i.exec(expr);
+        return match ?
+          { caseInsensitive: true, inner: match[1].trim() } :
+          { caseInsensitive: false, inner: expr };
+      };
+
+      const left = unwrapLower(col);
+      const right = unwrapLower(valuePart);
+      const caseInsensitive = left.caseInsensitive || right.caseInsensitive;
+      col = left.inner;
+      valuePart = right.inner;
 
       if (valuePart === "?") {
         expectedValue = params[paramRef.index++];
@@ -184,6 +201,14 @@ export class TestDatabase implements DatabaseInterface {
 
       if (typeof expectedValue === "boolean")
         return Boolean(rowVal) === expectedValue;
+
+      if (caseInsensitive) {
+        if (rowVal === null || rowVal === undefined)
+          return expectedValue === null || expectedValue === undefined;
+
+        return String(rowVal).toLowerCase() ===
+          String(expectedValue).toLowerCase();
+      }
 
       /*** Loose equality for string/number coercion ***/
       // deno-lint-ignore eqeqeq
