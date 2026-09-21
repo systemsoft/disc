@@ -103,6 +103,40 @@ Deno.test("client - query serializes bigint variables as numeric strings", async
   }
 });
 
+Deno.test("client - query sends Uint8Array variables as base64, not as an index map", async () => {
+  let capturedBody = "";
+  const restore = mockFetch((_url, init) => {
+    capturedBody = init?.body as string;
+    return new Response(JSON.stringify({ data: null }));
+  });
+  try {
+    const client = new DiscClient();
+    await client.query("insert GitObject { content := <bytes>$content, chunks := <array<bytes>>$chunks }", {
+      chunks: [new Uint8Array([1, 2]), new Uint8Array(0)],
+      content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff])
+    });
+    assertEquals(capturedBody.includes("\"0\":"), false, capturedBody);
+    assertEquals(JSON.parse(capturedBody).variables, { chunks: ["AQI=", ""], content: "H4sA/w==" });
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - query revives the bytes paths it is given", async () => {
+  const restore = mockFetch(() => new Response(JSON.stringify({ data: [{ content: "H4sA/w==", object_id: "H4sA" }] })));
+  try {
+    const client = new DiscClient();
+    const rows = await client.query<Array<{ content: Uint8Array; object_id: string; }>>(
+      "select GitObject { object_id, content }",
+      undefined,
+      { revive: { bytes: ["content"] } }
+    );
+    assertEquals(rows, [{ content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff]), object_id: "H4sA" }]);
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("client - resolves baseUrl from disc.toml [server] port", () => {
   const tmp = Deno.makeTempDirSync();
   const cwd = Deno.cwd();

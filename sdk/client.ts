@@ -231,7 +231,9 @@ export class DiscClient {
    * `Date` and `bigint` (conservative — only ISO-8601 with a time component
    * and numbers outside `Number.MAX_SAFE_INTEGER`), or import per-field
    * helpers from `disc/sdk/codecs.ts` (`parseDateTime`, `parseInt64`,
-   * `parseBytes`). Validators see revived values when both options are set.
+   * `parseBytes`). `bytes` fields are revived only where named:
+   * `{ revive: { bytes: ["content"] } }`. Outbound, a `Uint8Array` variable
+   * is sent as base64. Validators see revived values when both options are set.
    */
   async query<T = unknown>(
     query: string,

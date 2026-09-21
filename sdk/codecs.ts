@@ -39,9 +39,16 @@
  *      transform — the most explicit and type-safe option.
  */
 
+import type { TypeInfo } from "./filter-compiler.ts";
+
 const ISO_DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
 const NUMERIC_STRING_REGEX = /^-?\d+$/;
+
+const HEX_BYTES_REGEX = /^\\x((?:[0-9a-fA-F]{2})*)$/;
+
+/*** Bytes per `btoa` call in `encodeBytes`. A multiple of 3, so no chunk but the last ends in padding. ***/
+const ENCODE_CHUNK_BYTES = 32766;
 
 /**
  * Parse an ISO-8601 datetime string into a `Date`.
@@ -71,10 +78,22 @@ export function parseInt64(value: string): bigint | undefined {
 }
 
 /**
- * Decode a base64 string into a `Uint8Array`.
- * Returns `undefined` on malformed input.
+ * Decode a `bytes` wire string into a `Uint8Array`: base64 (what the server
+ * sends), or PostgreSQL hex (`\x1f8b…`, what servers before the base64 wire
+ * format sent). Returns `undefined` on malformed input.
  */
 export function parseBytes(value: string): Uint8Array | undefined {
+  if (value.startsWith("\\x")) {
+    const hex = HEX_BYTES_REGEX.exec(value)?.[1];
+    if (hex === undefined) {
+      return undefined;
+    }
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  }
   try {
     const binary = atob(value);
     const bytes = new Uint8Array(binary.length);
@@ -96,9 +115,20 @@ export function parseBytes(value: string): Uint8Array | undefined {
  * Numeric strings are the same wire form `int64` arrives in on responses (see
  * `parseInt64`), and the Disc server binds string params to `int8` columns
  * without precision loss — so the round-trip is lossless even past 2^53.
+ *
+ * `Uint8Array` values (`bytes`) go out as base64, wherever they sit in the
+ * variables; plain `JSON.stringify` would write `{"0":31,"1":139,…}`. A Node
+ * `Buffer` is a `Uint8Array` with a `toJSON`, which runs before the replacer
+ * and hands it `{ type: "Buffer", data: […] }` — so the original value is read
+ * from the holder (`this[key]`), which also leaves alone a plain object that
+ * merely has that shape.
  */
-export function jsonReplacer(_key: string, value: unknown): unknown {
-  return typeof value === "bigint" ? value.toString() : value;
+export function jsonReplacer(this: unknown, key: string, value: unknown): unknown {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  const original = value instanceof Uint8Array ? value : (this as Record<string, unknown> | undefined)?.[key];
+  return original instanceof Uint8Array ? encodeBytes(original) : value;
 }
 
 /**
@@ -106,11 +136,11 @@ export function jsonReplacer(_key: string, value: unknown): unknown {
  * (e.g. variables in `client.query(eql, { blob: encodeBytes(buf) })`).
  */
 export function encodeBytes(value: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < value.length; i++) {
-    binary += String.fromCharCode(value[i]);
+  const parts: string[] = [];
+  for (let i = 0; i < value.length; i += ENCODE_CHUNK_BYTES) {
+    parts.push(btoa(String.fromCharCode(...value.subarray(i, i + ENCODE_CHUNK_BYTES))));
   }
-  return btoa(binary);
+  return parts.join("");
 }
 
 export interface ReviveOptions {
@@ -118,6 +148,13 @@ export interface ReviveOptions {
   dates?: boolean;
   /** Convert numeric strings exceeding `Number.MAX_SAFE_INTEGER` to `bigint`. Default: true. */
   bigints?: boolean;
+  /**
+   * Dot paths of `bytes` fields to decode into `Uint8Array`, relative to a
+   * result row: `["content", "obj.content"]`. Arrays are transparent, so the
+   * same path covers a list of rows, a link's rows and an `array<bytes>` field.
+   * Default: none — base64 cannot be told from text by looking at it.
+   */
+  bytes?: string[];
 }
 
 /**
@@ -125,7 +162,8 @@ export interface ReviveOptions {
  * known wire format. Returns a new structure — input is not mutated.
  *
  * Auto-revival deliberately avoids `bytes`: base64 strings collide with
- * arbitrary text too often. Use `parseBytes()` at the call site instead.
+ * arbitrary text too often. Name the fields in `options.bytes`, or use
+ * `parseBytes()` at the call site.
  */
 export function reviveResponse<T = unknown>(
   value: unknown,
@@ -133,11 +171,69 @@ export function reviveResponse<T = unknown>(
 ): T {
   const dates = options.dates ?? true;
   const bigints = options.bigints ?? true;
-  return walk(value, dates, bigints) as T;
+  // Bytes first: a base64 string can also look like a big integer, and the
+  // walk below leaves a `Uint8Array` alone.
+  const withBytes = (options.bytes ?? []).reduce((acc, path) => reviveBytesAt(acc, path.split(".")), value);
+  return walk(withBytes, dates, bigints) as T;
+}
+
+/**
+ * Revive a typed query builder's result from its `TypeInfo`: every field cast
+ * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, recursing through
+ * `links`. A single link arrives as a one-element array of rows today, a multi
+ * link as a longer one; a plain object works too. Returns a new structure —
+ * input is not mutated. Other wire strings (datetime, big int64) are left to
+ * `reviveResponse`, as before.
+ */
+export function reviveTyped<T>(data: T, typeInfo: TypeInfo): T {
+  return reviveTypedValue(data, typeInfo) as T;
+}
+
+function reviveTypedValue(value: unknown, typeInfo: TypeInfo): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => reviveTypedValue(item, typeInfo));
+  }
+  if (value === null || typeof value !== "object" || value instanceof Uint8Array) {
+    return value;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    const cast = typeInfo.casts[key];
+    const link = typeInfo.links[key];
+    if (cast === "<bytes>" || cast === "<array<bytes>>") {
+      out[key] = reviveBytes(field);
+    } else if (link) {
+      out[key] = reviveTypedValue(field, link());
+    } else {
+      out[key] = field;
+    }
+  }
+  return out;
+}
+
+/*** A bytes wire string, or an array of them (`array<bytes>`, or the same field across rows). Anything else is returned as is. ***/
+function reviveBytes(value: unknown): unknown {
+  if (typeof value === "string") {
+    return parseBytes(value) ?? value;
+  }
+  return Array.isArray(value) ? value.map(reviveBytes) : value;
+}
+
+function reviveBytesAt(value: unknown, path: string[]): unknown {
+  if (path.length === 0) {
+    return reviveBytes(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => reviveBytesAt(item, path));
+  }
+  if (value === null || typeof value !== "object" || value instanceof Uint8Array || !Object.hasOwn(value, path[0])) {
+    return value;
+  }
+  return { ...value, [path[0]]: reviveBytesAt((value as Record<string, unknown>)[path[0]], path.slice(1)) };
 }
 
 function walk(value: unknown, dates: boolean, bigints: boolean): unknown {
-  if (value === null || value === undefined) {
+  if (value === null || value === undefined || value instanceof Uint8Array) {
     return value;
   }
   if (typeof value === "string") {

@@ -136,7 +136,7 @@ const rows = await client.query("select Post { created }", undefined, {
 });
 ```
 
-Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so decode those at the call site.
+Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so name the fields instead: `{ revive: { bytes: ["content", "obj.content"] } }` (dot paths relative to a result row; arrays are transparent). Generated query builders revive `bytes` fields on their own.
 
 `revive` runs _before_ `validate`, so validators see real `Date` and `bigint` values.
 
@@ -154,9 +154,9 @@ parseDateTime("2026-09-16T12:00:00Z"); // Date | undefined
 parseInt64("9007199254740993"); // bigint | undefined
 parseBytes("aGVsbG8="); // Uint8Array | undefined
 
-// Outbound: encode binary for a query variable
+// Outbound: a Uint8Array variable is sent as base64 for you
 await client.query("insert Blob { data := <bytes>$data }", {
-  data: encodeBytes(buffer)
+  data: new Uint8Array([1, 2, 3])
 });
 ```
 

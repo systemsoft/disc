@@ -5,6 +5,8 @@
  * EdgeQL Protocol Handler with Real Compiler Integration
  */
 
+import { decodeBase64 } from "@std/encoding/base64";
+import { encodeHex } from "@std/encoding/hex";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
@@ -60,6 +62,45 @@ interface CachedCompilation {
   resultInfo: Compiler.ResultInfo;
   sqlAST: SQL.SQLStatement;
   sqlString: string;
+}
+
+/*** Longest string value written to the debug log in full; longer ones are cut to this many characters. ***/
+const LOGGED_VARIABLE_CHARS = 256;
+
+/*** The variables as the debug log shows them. Long strings are cut: a `bytes` variable is megabytes of base64,
+     and this runs for every query whatever the log level. ***/
+function summarizeVariables(variables: Record<string, any>): string {
+  return JSON.stringify(
+    variables,
+    (_key, value) =>
+      typeof value === "string" && value.length > LOGGED_VARIABLE_CHARS ?
+        `${value.slice(0, LOGGED_VARIABLE_CHARS)}… (${value.length} characters)` :
+        value
+  );
+}
+
+/**
+ * One `bytes` variable (or one element of an `array<bytes>`) as the driver
+ * binds it: base64 (RFC 4648) decoded to a `Uint8Array`; a string starting
+ * with `\x` is PostgreSQL's hex input format and goes through as it is, so
+ * PostgreSQL validates it. Anything else is the caller's mistake and names the
+ * variable — never a silent store of the wrong bytes.
+ */
+function decodeBytesVariable(value: unknown, name: string | undefined): unknown {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value.startsWith("\\x")) {
+      return value;
+    }
+    try {
+      return decodeBase64(value);
+    } catch {
+      // Fall through to the error below.
+    }
+  }
+  throw new ValidationError(`Invalid bytes value for $${name}: expected a base64 string (RFC 4648), or PostgreSQL hex input starting with \\x`);
 }
 
 export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -644,7 +685,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     log.debug("Query variables", {
       sessionId: context.session.sessionId,
-      variables: JSON.stringify(variables)
+      variables: summarizeVariables(variables)
     });
 
     if (this.options.dryRun) {
@@ -841,8 +882,25 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return Array.from(parameterNames, (name, i) => {
       const value = name === undefined ? undefined : variables[name];
       // `parameterNames[i]` is the parameter at 1-indexed position i + 1.
-      if (typeMap.get(i + 1) === "jsonb" && value !== undefined) {
+      const pgType = typeMap.get(i + 1);
+      if (pgType === "jsonb" && value !== undefined) {
         return JSON.stringify(value);
+      }
+      // `bytes` travels as base64 in JSON. Bound as that string, PostgreSQL
+      // would store the base64 text's ASCII characters and report success.
+      if (pgType === "bytea") {
+        return decodeBytesVariable(value, name);
+      }
+      if (pgType === "bytea[]" && value !== undefined && value !== null) {
+        if (!Array.isArray(value)) {
+          throw new ValidationError(`Invalid value for $${name}: array<bytes> expects an array of base64 strings`);
+        }
+        // deno-postgres cannot bind an array of Uint8Array ("Can't encode array
+        // of buffers"); a `\\x…` string element is PostgreSQL's bytea input.
+        return value.map(element => {
+          const bytes = decodeBytesVariable(element, name);
+          return bytes instanceof Uint8Array ? `\\x${encodeHex(bytes)}` : bytes;
+        });
       }
       return value;
     });

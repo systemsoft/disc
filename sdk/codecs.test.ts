@@ -5,13 +5,18 @@ import {
   assert,
   assertEquals
 } from "@std/assert";
+import { encodeBase64 } from "@std/encoding/base64";
+import { Buffer } from "node:buffer";
 import {
   encodeBytes,
+  jsonReplacer,
   parseBytes,
   parseDateTime,
   parseInt64,
-  reviveResponse
+  reviveResponse,
+  reviveTyped
 } from "./codecs.ts";
+import type { TypeInfo } from "./filter-compiler.ts";
 
 // ── parseDateTime ────────────────────────────────────────────────────
 
@@ -83,7 +88,166 @@ Deno.test("parseBytes - rejects malformed base64", () => {
   assertEquals(parseBytes("!!!not-base64!!!"), undefined);
 });
 
+Deno.test("parseBytes - accepts PostgreSQL hex (\\x…), the pre-base64 wire form", () => {
+  assertEquals(parseBytes("\\x1f8b00ff"), new Uint8Array([0x1f, 0x8b, 0x00, 0xff]));
+  assertEquals(parseBytes("\\x1F8B"), new Uint8Array([0x1f, 0x8b]));
+  assertEquals(parseBytes("\\x"), new Uint8Array(0));
+});
+
+Deno.test("parseBytes - rejects malformed hex", () => {
+  assertEquals(parseBytes("\\x1f8"), undefined);
+  assertEquals(parseBytes("\\xzz"), undefined);
+});
+
+Deno.test("parseBytes - empty string is zero bytes", () => {
+  assertEquals(parseBytes(""), new Uint8Array(0));
+});
+
+Deno.test("encodeBytes - 8 MiB encodes in chunks and matches the reference encoder", () => {
+  const big = new Uint8Array(8 * 1024 * 1024);
+  for (let i = 0; i < big.length; i++) {
+    big[i] = (i * 31 + (i >> 8)) & 0xff;
+  }
+  const started = performance.now();
+  const encoded = encodeBytes(big);
+  const elapsed = performance.now() - started;
+  assertEquals(encoded.length, Math.ceil(big.length / 3) * 4);
+  assert(encoded === encodeBase64(big), "chunked output must equal one-shot base64 (no padding inside the string)");
+  assert(elapsed < 5000, `8 MiB took ${elapsed} ms`);
+});
+
+Deno.test("encodeBytes - lengths around the chunk boundary carry no inner padding", () => {
+  for (const length of [0, 1, 2, 3, 32765, 32766, 32767, 65532, 65533]) {
+    const bytes = Uint8Array.from({ length }, (_, i) => i & 0xff);
+    assertEquals(encodeBytes(bytes), encodeBase64(bytes), `length ${length}`);
+  }
+});
+
+// ── jsonReplacer ─────────────────────────────────────────────────────
+
+Deno.test("jsonReplacer - Uint8Array at the top level of the variables", () => {
+  const body = JSON.stringify({ content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff]) }, jsonReplacer);
+  assertEquals(body, "{\"content\":\"H4sA/w==\"}");
+});
+
+Deno.test("jsonReplacer - nested Uint8Array and arrays of them", () => {
+  const body = JSON.stringify({
+    rows: [{ content: new Uint8Array([1]) }, { content: new Uint8Array(0) }],
+    chunks: [new Uint8Array([1, 2]), new Uint8Array([3])]
+  }, jsonReplacer);
+  assertEquals(JSON.parse(body), { chunks: ["AQI=", "Aw=="], rows: [{ content: "AQ==" }, { content: "" }] });
+});
+
+Deno.test("jsonReplacer - a Node Buffer (whose toJSON runs first) is encoded like any Uint8Array", () => {
+  const body = JSON.stringify({ content: Buffer.from([0x1f, 0x8b, 0x00, 0xff]), list: [Buffer.from([1])] }, jsonReplacer);
+  assertEquals(JSON.parse(body), { content: "H4sA/w==", list: ["AQ=="] });
+});
+
+Deno.test("jsonReplacer - a plain object that merely looks like Buffer.toJSON() is left alone", () => {
+  const lookalike = { data: [1, 2], type: "Buffer" };
+  assertEquals(JSON.parse(JSON.stringify({ v: lookalike }, jsonReplacer)), { v: lookalike });
+});
+
+Deno.test("jsonReplacer - bigint still goes out as a numeric string", () => {
+  assertEquals(JSON.stringify({ n: 9007199254740993n }, jsonReplacer), "{\"n\":\"9007199254740993\"}");
+});
+
+// ── reviveTyped ──────────────────────────────────────────────────────
+
+const PROGRAM_INFO: TypeInfo = { casts: { name: "<str>" }, links: {} };
+const OBJECT_INFO: TypeInfo = {
+  casts: { chunks: "<array<bytes>>", content: "<bytes>", object_id: "<str>", size: "<int64>" },
+  links: { parent: () => OBJECT_INFO, program: () => PROGRAM_INFO }
+};
+
+/*** A wire value, typed as the builders see it: not yet known to hold strings where the result holds bytes. ***/
+function wire(value: unknown): unknown {
+  return value;
+}
+
+Deno.test("reviveTyped - <bytes> fields become Uint8Array, everything else is untouched", () => {
+  const out = reviveTyped(wire([{ content: "H4sA/w==", object_id: "AQID", size: 4 }]), OBJECT_INFO) as Array<Record<string, unknown>>;
+  assertEquals(out[0].content, new Uint8Array([0x1f, 0x8b, 0x00, 0xff]));
+  assertEquals(out[0].object_id, "AQID");
+  assertEquals(out[0].size, 4);
+});
+
+Deno.test("reviveTyped - a single object, null bytes, an absent field", () => {
+  assertEquals(reviveTyped({ content: null, object_id: "x" }, OBJECT_INFO), { content: null, object_id: "x" });
+  assertEquals(reviveTyped({ object_id: "x" }, OBJECT_INFO), { object_id: "x" });
+  assertEquals(reviveTyped(null, OBJECT_INFO), null);
+});
+
+Deno.test("reviveTyped - <array<bytes>> is revived element-wise", () => {
+  const out = reviveTyped(wire({ chunks: ["AQI=", null, ""] }), OBJECT_INFO) as { chunks: unknown[]; };
+  assertEquals(out.chunks, [new Uint8Array([1, 2]), null, new Uint8Array(0)]);
+});
+
+Deno.test("reviveTyped - recurses through links, as a one-element array or a plain object", () => {
+  const wrapped = reviveTyped(wire({ parent: [{ content: "AQ==", parent: [{ content: "Ag==" }] }] }), OBJECT_INFO) as {
+    parent: Array<{ content: Uint8Array; parent: Array<{ content: Uint8Array; }>; }>;
+  };
+  assertEquals(wrapped.parent[0].content, new Uint8Array([1]));
+  assertEquals(wrapped.parent[0].parent[0].content, new Uint8Array([2]));
+
+  const plain = reviveTyped(wire({ parent: { content: "AQ==" }, program: { name: "AQ==" } }), OBJECT_INFO) as {
+    parent: { content: Uint8Array; };
+    program: { name: string; };
+  };
+  assertEquals(plain.parent.content, new Uint8Array([1]));
+  assertEquals(plain.program.name, "AQ==");
+});
+
+Deno.test("reviveTyped - accepts the hex form an older server sends", () => {
+  assertEquals(reviveTyped(wire({ content: "\\x0102" }), OBJECT_INFO), { content: new Uint8Array([1, 2]) });
+});
+
+Deno.test("reviveTyped - does not mutate its input", () => {
+  const input = { content: "AQ==" };
+  reviveTyped(input, OBJECT_INFO);
+  assertEquals(input.content, "AQ==");
+});
+
 // ── reviveResponse ───────────────────────────────────────────────────
+
+Deno.test("reviveResponse - bytes paths revive base64 at those paths only", () => {
+  const out = reviveResponse<Array<{ content: Uint8Array; object_id: string; }>>(
+    [{ content: "H4sA/w==", object_id: "H4sA/w==" }],
+    { bytes: ["content"] }
+  );
+  assertEquals(out[0].content, new Uint8Array([0x1f, 0x8b, 0x00, 0xff]));
+  assertEquals(out[0].object_id, "H4sA/w==");
+});
+
+Deno.test("reviveResponse - bytes dot paths cross nested objects and arrays", () => {
+  const out = reviveResponse<{ obj: Array<{ chunks: Uint8Array[]; content: Uint8Array; }>; }>(
+    { obj: [{ chunks: ["AQ==", "Ag=="], content: "Aw==" }] },
+    { bytes: ["obj.content", "obj.chunks"] }
+  );
+  assertEquals(out.obj[0].content, new Uint8Array([3]));
+  assertEquals(out.obj[0].chunks, [new Uint8Array([1]), new Uint8Array([2])]);
+});
+
+Deno.test("reviveResponse - a bytes path wins over date/bigint revival of the same string", () => {
+  // Valid base64 that is also a numeric string beyond 2^53.
+  const out = reviveResponse<{ content: Uint8Array; n: bigint; }>(
+    { content: "12345678901234567890", n: "12345678901234567890" },
+    { bytes: ["content"] }
+  );
+  assert(out.content instanceof Uint8Array);
+  assertEquals(out.n, 12345678901234567890n);
+});
+
+Deno.test("reviveResponse - without bytes paths base64 stays a string", () => {
+  assertEquals(reviveResponse({ content: "H4sA/w==" }), { content: "H4sA/w==" });
+});
+
+Deno.test("reviveResponse - an already revived Uint8Array passes through intact", () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const out = reviveResponse<{ content: Uint8Array; }>({ content: bytes });
+  assert(out.content instanceof Uint8Array);
+  assertEquals(out.content, bytes);
+});
 
 Deno.test("reviveResponse - revives ISO-8601 dates in a flat object", () => {
   const out = reviveResponse<{ created_at: Date; name: string; }>({

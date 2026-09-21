@@ -133,6 +133,29 @@ Deno.test({
 });
 
 Deno.test({
+  name: "std_base64_encode emits no line breaks (S9), and an older function body is replaced on bootstrap",
+  ignore: !RUN_PG,
+  fn: () =>
+    withPool(async pool => {
+      // What a database bootstrapped before the fix holds.
+      await pool.execute(
+        `CREATE OR REPLACE FUNCTION std_base64_encode(data bytea) RETURNS text AS $$ SELECT encode(data, 'base64'); $$ LANGUAGE SQL IMMUTABLE STRICT;`
+      );
+      const before = await pool.query(`SELECT std_base64_encode(decode(repeat('00', 300), 'hex')) AS b64`);
+      assertEquals((before.rows[0].b64 as string).includes("\n"), true, "PostgreSQL's encode() breaks lines every 76 characters");
+
+      await bootstrapStdlib(pool);
+
+      const after = await pool.query(
+        `SELECT std_base64_encode(decode(repeat('00', 300), 'hex')) AS b64,
+                std_base64_decode(std_base64_encode(decode(repeat('ab', 300), 'hex'))) = decode(repeat('ab', 300), 'hex') AS roundtrip`
+      );
+      assertEquals(after.rows[0].b64, "A".repeat(400));
+      assertEquals(after.rows[0].roundtrip, true);
+    })
+});
+
+Deno.test({
   name: "bootstrapStdlib is idempotent (re-run is a no-op)",
   ignore: !RUN_PG,
   fn: () =>

@@ -17,7 +17,8 @@ export {
   parseBytes,
   parseDateTime,
   parseInt64,
-  reviveResponse
+  reviveResponse,
+  reviveTyped
 } from "./codecs.ts";
 export type { ReviveOptions } from "./codecs.ts";
 

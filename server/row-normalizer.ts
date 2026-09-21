@@ -20,7 +20,15 @@
  * shape's `jsonb_build_object` yields), a numeric string beyond ±(2^53 − 1)
  * (what the SDK's `parseInt64` / `reviveResponse` turn back into a `bigint`).
  * A large value is never rounded into a number.
+ *
+ * bytes (D9): deno-postgres decodes `bytea` as `Uint8Array`, which
+ * `JSON.stringify` writes as `{"0":31,"1":139,…}`. The wire form is base64
+ * (RFC 4648, no line breaks) — the same one a shape renders in SQL and the one
+ * the SDK's `parseBytes` decodes. Unshaped rows only: `RETURNING *`, a bare
+ * path select, `select <bytes>$p`.
  */
+
+import { encodeBase64 } from "@std/encoding/base64";
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
@@ -30,6 +38,9 @@ const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
 function normalizeValue(value: unknown): unknown {
   if (typeof value === "bigint") {
     return value >= MIN_SAFE && value <= MAX_SAFE ? Number(value) : value.toString();
+  }
+  if (value instanceof Uint8Array) {
+    return encodeBase64(value);
   }
   if (Array.isArray(value)) {
     return value.map(normalizeValue);

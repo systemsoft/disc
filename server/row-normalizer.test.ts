@@ -14,8 +14,9 @@
  */
 
 import { assertEquals, assertStrictEquals } from "@std/assert";
+import { encodeBase64 } from "@std/encoding/base64";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { reviveResponse } from "../sdk/codecs.ts";
+import { parseBytes, reviveResponse } from "../sdk/codecs.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { normalizeRows } from "./row-normalizer.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
@@ -55,6 +56,26 @@ Deno.test("normalizeRows - everything else passes through untouched", () => {
   assertStrictEquals(row.created, created);
   assertStrictEquals(row.json, json);
   assertEquals(normalizeRows([]), []);
+});
+
+Deno.test("normalizeRows - bytea (Uint8Array) becomes base64 without line breaks", () => {
+  const long = Uint8Array.from({ length: 300 }, (_, i) => i & 0xff);
+  const [row] = normalizeRows([{ content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff]), empty: new Uint8Array(0), long }]);
+
+  assertEquals(row.content, "H4sA/w==");
+  assertEquals(row.empty, "");
+  assertEquals(row.long, encodeBase64(long));
+  assertEquals((row.long as string).includes("\n"), false);
+});
+
+Deno.test("normalizeRows - bytea[] is converted element-wise, nulls kept", () => {
+  assertEquals(normalizeRows([{ chunks: [new Uint8Array([1, 2]), null, new Uint8Array(0)] }]), [{ chunks: ["AQI=", null, ""] }]);
+});
+
+Deno.test("normalizeRows - the bytes form is the one the SDK decodes back to the same bytes", () => {
+  const bytes = Uint8Array.from({ length: 256 }, (_, i) => i);
+  const wire = JSON.parse(JSON.stringify(normalizeRows([{ content: bytes }])));
+  assertEquals(parseBytes(wire[0].content), bytes);
 });
 
 // --- Both protocol handlers, on a cache miss and on a cache hit ---
@@ -114,5 +135,41 @@ Deno.test("SimpleEdgeQLProtocolHandler - a bigint in a driver row is JSON-serial
 
     const wire = JSON.parse(JSON.stringify(response)).data;
     assertEquals((Array.isArray(wire) ? wire[0] : wire).size, 42, query);
+  }
+});
+
+/*** A pool whose every query returns one driver-shaped row carrying a `bytea` value. ***/
+function makeBytesPool(): ConnectionPool {
+  return {
+    close: () => Promise.resolve(),
+    initialize: () => Promise.resolve(),
+    query: () => Promise.resolve({ rowCount: 1, rows: [{ content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff]), id: "01234567-89ab-cdef-0123-456789abcdef" }] })
+  } as unknown as ConnectionPool;
+}
+
+Deno.test("EdgeQLProtocolHandler - bytea in a driver row leaves as base64, on a cache miss and on a cache hit", async () => {
+  const handler = new EdgeQLProtocolHandler({ connectionPool: makeBytesPool() });
+
+  for (const query of [...QUERIES.slice(0, 2), "select <bytes>$b"]) {
+    for (const round of ["cache miss", "cache hit"]) {
+      const response = await handler.handleRequest({ query, variables: query.includes("$b") ? { b: "AA==" } : undefined }, makeContext());
+      assertEquals(response.errors, undefined, `${query} (${round})`);
+      assertEquals(response.extensions?.cacheHit, round === "cache hit", `${query} (${round})`);
+
+      const wire = JSON.parse(JSON.stringify(response)).data;
+      assertEquals((Array.isArray(wire) ? wire[0] : wire).content, "H4sA/w==", `${query} (${round})`);
+    }
+  }
+});
+
+Deno.test("SimpleEdgeQLProtocolHandler - bytea in a driver row leaves as base64", async () => {
+  const handler = new SimpleEdgeQLProtocolHandler({ connectionPool: makeBytesPool() });
+
+  for (const query of QUERIES.slice(0, 2)) {
+    const response = await handler.handleRequest({ query }, makeContext());
+    assertEquals(response.errors, undefined, query);
+
+    const wire = JSON.parse(JSON.stringify(response)).data;
+    assertEquals((Array.isArray(wire) ? wire[0] : wire).content, "H4sA/w==", query);
   }
 });

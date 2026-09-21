@@ -228,7 +228,7 @@ snapshot[`./generated/queries.ts 1`] = `
   */
 import * as Types from "./types.ts";
 import { DiscClient } from "./client.ts";
-import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
+import { compileFilter, escapeEdgeQLIdent, reviveTyped, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
 
 /**
  * Query builder for User
@@ -267,7 +267,7 @@ export class UserQueryBuilder {
     const query = shape 
       ? \`select User \${shape}\`
       : \`select User { * }\`;
-    return await this.client.query<Types.User[]>(query);
+    return reviveTyped(await this.client.query<Types.User[]>(query), UserQueryBuilder._typeInfo);
   }
 
   /** Select User by ID */
@@ -275,7 +275,7 @@ export class UserQueryBuilder {
     const query = shape
       ? \`select User \${shape} filter .id = <uuid>\$id\`
       : \`select User { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.User[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.User[]>(query, { id }), UserQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -288,7 +288,7 @@ export class UserQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.User[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.User[]>(parts.join(" "), compiled.variables), UserQueryBuilder._typeInfo);
   }
 
   /** Insert new User */
@@ -304,7 +304,7 @@ export class UserQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${UserQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert User { \${assignments} }\`;
-    return await this.client.query<Types.User>(query, variables);
+    return reviveTyped(await this.client.query<Types.User>(query, variables), UserQueryBuilder._typeInfo);
   }
 
   /** Update User by ID */
@@ -334,7 +334,7 @@ export class UserQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${UserQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update User filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.User>(query, variables);
+    return reviveTyped(await this.client.query<Types.User>(query, variables), UserQueryBuilder._typeInfo);
   }
 
   /** Delete User by ID */
@@ -385,7 +385,7 @@ export class PostQueryBuilder {
     const query = shape 
       ? \`select Post \${shape}\`
       : \`select Post { * }\`;
-    return await this.client.query<Types.Post[]>(query);
+    return reviveTyped(await this.client.query<Types.Post[]>(query), PostQueryBuilder._typeInfo);
   }
 
   /** Select Post by ID */
@@ -393,7 +393,7 @@ export class PostQueryBuilder {
     const query = shape
       ? \`select Post \${shape} filter .id = <uuid>\$id\`
       : \`select Post { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.Post[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.Post[]>(query, { id }), PostQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -406,7 +406,7 @@ export class PostQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.Post[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.Post[]>(parts.join(" "), compiled.variables), PostQueryBuilder._typeInfo);
   }
 
   /** Insert new Post */
@@ -422,7 +422,7 @@ export class PostQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PostQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Post { \${assignments} }\`;
-    return await this.client.query<Types.Post>(query, variables);
+    return reviveTyped(await this.client.query<Types.Post>(query, variables), PostQueryBuilder._typeInfo);
   }
 
   /** Update Post by ID */
@@ -452,7 +452,7 @@ export class PostQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PostQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Post filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.Post>(query, variables);
+    return reviveTyped(await this.client.query<Types.Post>(query, variables), PostQueryBuilder._typeInfo);
   }
 
   /** Delete Post by ID */
@@ -816,7 +816,7 @@ snapshot[`./generated/queries.ts 2`] = `
   */
 import * as Types from "./interfaces.ts";
 import { DiscClient } from "./client.ts";
-import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
+import { compileFilter, escapeEdgeQLIdent, reviveTyped, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
 
 /**
  * Query builder for Merchant
@@ -851,7 +851,7 @@ export class MerchantQueryBuilder {
     const query = shape 
       ? \`select Merchant \${shape}\`
       : \`select Merchant { * }\`;
-    return await this.client.query<Types.\$default.Merchant[]>(query);
+    return reviveTyped(await this.client.query<Types.\$default.Merchant[]>(query), MerchantQueryBuilder._typeInfo);
   }
 
   /** Select Merchant by ID */
@@ -859,7 +859,7 @@ export class MerchantQueryBuilder {
     const query = shape
       ? \`select Merchant \${shape} filter .id = <uuid>\$id\`
       : \`select Merchant { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.\$default.Merchant[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.\$default.Merchant[]>(query, { id }), MerchantQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -872,7 +872,7 @@ export class MerchantQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.\$default.Merchant[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.\$default.Merchant[]>(parts.join(" "), compiled.variables), MerchantQueryBuilder._typeInfo);
   }
 
   /** Insert new Merchant */
@@ -888,7 +888,7 @@ export class MerchantQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${MerchantQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Merchant { \${assignments} }\`;
-    return await this.client.query<Types.\$default.Merchant>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Merchant>(query, variables), MerchantQueryBuilder._typeInfo);
   }
 
   /** Update Merchant by ID */
@@ -918,7 +918,7 @@ export class MerchantQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${MerchantQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Merchant filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.\$default.Merchant>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Merchant>(query, variables), MerchantQueryBuilder._typeInfo);
   }
 
   /** Delete Merchant by ID */
@@ -967,7 +967,7 @@ export class ApiKeyQueryBuilder {
     const query = shape 
       ? \`select api::ApiKey \${shape}\`
       : \`select api::ApiKey { * }\`;
-    return await this.client.query<Types.api.ApiKey[]>(query);
+    return reviveTyped(await this.client.query<Types.api.ApiKey[]>(query), ApiKeyQueryBuilder._typeInfo);
   }
 
   /** Select ApiKey by ID */
@@ -975,7 +975,7 @@ export class ApiKeyQueryBuilder {
     const query = shape
       ? \`select api::ApiKey \${shape} filter .id = <uuid>\$id\`
       : \`select api::ApiKey { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.api.ApiKey[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.api.ApiKey[]>(query, { id }), ApiKeyQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -988,7 +988,7 @@ export class ApiKeyQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.api.ApiKey[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.api.ApiKey[]>(parts.join(" "), compiled.variables), ApiKeyQueryBuilder._typeInfo);
   }
 
   /** Insert new ApiKey */
@@ -1004,7 +1004,7 @@ export class ApiKeyQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${ApiKeyQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert api::ApiKey { \${assignments} }\`;
-    return await this.client.query<Types.api.ApiKey>(query, variables);
+    return reviveTyped(await this.client.query<Types.api.ApiKey>(query, variables), ApiKeyQueryBuilder._typeInfo);
   }
 
   /** Update ApiKey by ID */
@@ -1034,7 +1034,7 @@ export class ApiKeyQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${ApiKeyQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update api::ApiKey filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.api.ApiKey>(query, variables);
+    return reviveTyped(await this.client.query<Types.api.ApiKey>(query, variables), ApiKeyQueryBuilder._typeInfo);
   }
 
   /** Delete ApiKey by ID */
@@ -1085,7 +1085,7 @@ export class PaymentQueryBuilder {
     const query = shape 
       ? \`select payment::Payment \${shape}\`
       : \`select payment::Payment { * }\`;
-    return await this.client.query<Types.payment.Payment[]>(query);
+    return reviveTyped(await this.client.query<Types.payment.Payment[]>(query), PaymentQueryBuilder._typeInfo);
   }
 
   /** Select Payment by ID */
@@ -1093,7 +1093,7 @@ export class PaymentQueryBuilder {
     const query = shape
       ? \`select payment::Payment \${shape} filter .id = <uuid>\$id\`
       : \`select payment::Payment { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.payment.Payment[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.payment.Payment[]>(query, { id }), PaymentQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -1106,7 +1106,7 @@ export class PaymentQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.payment.Payment[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.payment.Payment[]>(parts.join(" "), compiled.variables), PaymentQueryBuilder._typeInfo);
   }
 
   /** Insert new Payment */
@@ -1122,7 +1122,7 @@ export class PaymentQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PaymentQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert payment::Payment { \${assignments} }\`;
-    return await this.client.query<Types.payment.Payment>(query, variables);
+    return reviveTyped(await this.client.query<Types.payment.Payment>(query, variables), PaymentQueryBuilder._typeInfo);
   }
 
   /** Update Payment by ID */
@@ -1152,7 +1152,7 @@ export class PaymentQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PaymentQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update payment::Payment filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.payment.Payment>(query, variables);
+    return reviveTyped(await this.client.query<Types.payment.Payment>(query, variables), PaymentQueryBuilder._typeInfo);
   }
 
   /** Delete Payment by ID */
@@ -1462,7 +1462,7 @@ snapshot[`./generated/queries.ts 3`] = `
   */
 import * as Types from "./types.ts";
 import { DiscClient } from "./client.ts";
-import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
+import { compileFilter, escapeEdgeQLIdent, reviveTyped, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
 
 /**
  * Query builder for Person
@@ -1491,7 +1491,7 @@ export class PersonQueryBuilder {
     const query = shape 
       ? \`select Person \${shape}\`
       : \`select Person { * }\`;
-    return await this.client.query<Types.Person[]>(query);
+    return reviveTyped(await this.client.query<Types.Person[]>(query), PersonQueryBuilder._typeInfo);
   }
 
   /** Select Person by ID */
@@ -1499,7 +1499,7 @@ export class PersonQueryBuilder {
     const query = shape
       ? \`select Person \${shape} filter .id = <uuid>\$id\`
       : \`select Person { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.Person[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.Person[]>(query, { id }), PersonQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -1512,7 +1512,7 @@ export class PersonQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.Person[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Insert new Person */
@@ -1528,7 +1528,7 @@ export class PersonQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Person { \${assignments} }\`;
-    return await this.client.query<Types.Person>(query, variables);
+    return reviveTyped(await this.client.query<Types.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Update Person by ID */
@@ -1558,7 +1558,7 @@ export class PersonQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Person filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.Person>(query, variables);
+    return reviveTyped(await this.client.query<Types.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Delete Person by ID */
@@ -1622,7 +1622,7 @@ export class PlaceQueryBuilder {
     const query = shape 
       ? \`select Place \${shape}\`
       : \`select Place { * }\`;
-    return await this.client.query<Types.Place[]>(query);
+    return reviveTyped(await this.client.query<Types.Place[]>(query), PlaceQueryBuilder._typeInfo);
   }
 
   /** Select Place by ID */
@@ -1630,7 +1630,7 @@ export class PlaceQueryBuilder {
     const query = shape
       ? \`select Place \${shape} filter .id = <uuid>\$id\`
       : \`select Place { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.Place[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.Place[]>(query, { id }), PlaceQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -1643,7 +1643,7 @@ export class PlaceQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.Place[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.Place[]>(parts.join(" "), compiled.variables), PlaceQueryBuilder._typeInfo);
   }
 
   /** Insert new Place */
@@ -1659,7 +1659,7 @@ export class PlaceQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PlaceQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Place { \${assignments} }\`;
-    return await this.client.query<Types.Place>(query, variables);
+    return reviveTyped(await this.client.query<Types.Place>(query, variables), PlaceQueryBuilder._typeInfo);
   }
 
   /** Update Place by ID */
@@ -1689,7 +1689,7 @@ export class PlaceQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PlaceQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Place filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.Place>(query, variables);
+    return reviveTyped(await this.client.query<Types.Place>(query, variables), PlaceQueryBuilder._typeInfo);
   }
 
   /** Delete Place by ID */
@@ -1931,7 +1931,7 @@ snapshot[`./generated/queries.ts 4`] = `
   */
 import * as Types from "./interfaces.ts";
 import { DiscClient } from "./client.ts";
-import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
+import { compileFilter, escapeEdgeQLIdent, reviveTyped, type FilterArg, type TypeInfo } from "./sdk/mod.ts";
 
 /**
  * Query builder for Person
@@ -1958,7 +1958,7 @@ export class PersonQueryBuilder {
     const query = shape 
       ? \`select Person \${shape}\`
       : \`select Person { * }\`;
-    return await this.client.query<Types.\$default.Person[]>(query);
+    return reviveTyped(await this.client.query<Types.\$default.Person[]>(query), PersonQueryBuilder._typeInfo);
   }
 
   /** Select Person by ID */
@@ -1966,7 +1966,7 @@ export class PersonQueryBuilder {
     const query = shape
       ? \`select Person \${shape} filter .id = <uuid>\$id\`
       : \`select Person { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.\$default.Person[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.\$default.Person[]>(query, { id }), PersonQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -1979,7 +1979,7 @@ export class PersonQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.\$default.Person[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.\$default.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Insert new Person */
@@ -1995,7 +1995,7 @@ export class PersonQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Person { \${assignments} }\`;
-    return await this.client.query<Types.\$default.Person>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Update Person by ID */
@@ -2025,7 +2025,7 @@ export class PersonQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Person filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.\$default.Person>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Delete Person by ID */
@@ -2072,7 +2072,7 @@ export class PetQueryBuilder {
     const query = shape 
       ? \`select Pet \${shape}\`
       : \`select Pet { * }\`;
-    return await this.client.query<Types.\$default.Pet[]>(query);
+    return reviveTyped(await this.client.query<Types.\$default.Pet[]>(query), PetQueryBuilder._typeInfo);
   }
 
   /** Select Pet by ID */
@@ -2080,7 +2080,7 @@ export class PetQueryBuilder {
     const query = shape
       ? \`select Pet \${shape} filter .id = <uuid>\$id\`
       : \`select Pet { * } filter .id = <uuid>\$id\`;
-    const results = await this.client.query<Types.\$default.Pet[]>(query, { id });
+    const results = reviveTyped(await this.client.query<Types.\$default.Pet[]>(query, { id }), PetQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
@@ -2093,7 +2093,7 @@ export class PetQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return await this.client.query<Types.\$default.Pet[]>(parts.join(" "), compiled.variables);
+    return reviveTyped(await this.client.query<Types.\$default.Pet[]>(parts.join(" "), compiled.variables), PetQueryBuilder._typeInfo);
   }
 
   /** Insert new Pet */
@@ -2109,7 +2109,7 @@ export class PetQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PetQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Pet { \${assignments} }\`;
-    return await this.client.query<Types.\$default.Pet>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Pet>(query, variables), PetQueryBuilder._typeInfo);
   }
 
   /** Update Pet by ID */
@@ -2139,7 +2139,7 @@ export class PetQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PetQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Pet filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return await this.client.query<Types.\$default.Pet>(query, variables);
+    return reviveTyped(await this.client.query<Types.\$default.Pet>(query, variables), PetQueryBuilder._typeInfo);
   }
 
   /** Delete Pet by ID */

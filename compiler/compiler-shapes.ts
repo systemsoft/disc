@@ -11,7 +11,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
-import { backlinkIntersectionName, edgeqlTypeToPgType, isMutationQuery } from "./compiler-base.ts";
+import { backlinkIntersectionName, edgeqlTypeToPgType, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
@@ -792,13 +792,89 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
    * expression (`PropertyDef.computedExpr`) and compile that in place, so
    * `select X { computedThing }` doesn't reference a non-existent column.
    */
-  private compilePropertyReference(property: Context.PropertyDef, tableAlias: string): SQL.SQLExpression {
+  private compilePropertyReference(property: Context.PropertyDef, tableAlias: string, typeName: string): SQL.SQLExpression {
     if (property.computed && property.computedExpr) {
       const parser = new EdgeQLParser(property.computedExpr);
       const expr = parser.parseExpressionOnly();
-      return this.compileExpression(expr);
+      return this.bytesAsBase64(this.compileExpression(expr), this.bytesTypeOf(expr, typeName));
     }
-    return SQL.createColumnReference(property.columnName, tableAlias);
+    return this.bytesAsBase64(SQL.createColumnReference(property.columnName, tableAlias), this.bytesTypeOfProperty(property, typeName));
+  }
+
+  /**
+   * The wire form of `bytes` inside a shape. `jsonb_build_object` would render
+   * a bytea as PostgreSQL hex text (`"\\x1f8b…"`); JSON carries `bytes` as
+   * base64 (RFC 4648), and `encode` breaks lines every 76 characters, hence the
+   * `translate`. An `array<bytes>` is encoded element by element, in order;
+   * NULL stays NULL and `{}` stays `[]`.
+   *
+   * The value stays a SQL AST node (for the array, in the `IS NULL` test) so
+   * that a parameter inside it — `x := <bytes>$p` — is still found by
+   * `buildParameterTypeMap`, which is how the server knows to decode it.
+   */
+  private bytesAsBase64(value: SQL.SQLExpression, bytesType: "bytea" | "bytea[]" | null): SQL.SQLExpression {
+    const newline: SQL.RawSQLExpression = { kind: "RawSQLExpression", sql: "E'\\n'" };
+    const encoded = (bytes: SQL.SQLExpression): SQL.SQLExpression =>
+      SQL.createFunctionCall("translate", [
+        SQL.createFunctionCall("encode", [bytes, SQL.createLiteral("string", "base64")]),
+        newline,
+        SQL.createLiteral("string", "")
+      ]);
+
+    if (bytesType === "bytea") {
+      return encoded(value);
+    }
+    if (bytesType === "bytea[]") {
+      const elements = `ARRAY(SELECT ${this.renderSqlExpr(encoded(SQL.createColumnReference("b")))} FROM unnest(${
+        this.renderSqlExpr(value)
+      }) WITH ORDINALITY AS u(b, ord) ORDER BY ord)`;
+      return SQL.createCaseExpression(
+        [SQL.createWhenClause(SQL.createBinaryExpression("IS", value, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
+        { kind: "RawSQLExpression", sql: elements }
+      );
+    }
+    return value;
+  }
+
+  private bytesTypeOfProperty(property: Context.PropertyDef, typeName: string): "bytea" | "bytea[]" | null {
+    if (property.computed && property.computedExpr) {
+      return this.bytesTypeOf(new EdgeQLParser(property.computedExpr).parseExpressionOnly(), typeName);
+    }
+    return property.type === "bytea" || property.type === "bytea[]" ? property.type : null;
+  }
+
+  /**
+   * `"bytea"` / `"bytea[]"` when a shape element's expression yields `bytes` /
+   * `array<bytes>`, else null. There is no expression type inference in the
+   * compiler; this reads the forms whose type is stated: a path ending in a
+   * property, a cast, a bytes literal, a call to a function registered as
+   * returning bytes. Anything else (`.a ++ .b`, `.a if … else .b`) is not
+   * recognized and ships as PostgreSQL renders it.
+   */
+  private bytesTypeOf(expr: EdgeQLAST.Expression, typeName: string): "bytea" | "bytea[]" | null {
+    let pgType: string | undefined;
+
+    if (expr.kind === "TypeCast") {
+      pgType = edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type));
+    } else if (expr.kind === "Literal") {
+      pgType = expr.type === "bytes" ? "bytea" : undefined;
+    } else if (expr.kind === "FunctionCall") {
+      const parts = expr.name.parts;
+      const funcDef = this.ctx.schema.functions.get(parts.join("_")) ??
+        this.ctx.schema.functions.get(parts.join("::")) ??
+        this.ctx.schema.functions.get(`std::${parts.join("::")}`);
+      pgType = funcDef?.returnType ? edgeqlTypeToPgType(funcDef.returnType) : undefined;
+    } else if (expr.kind === "Path") {
+      let owner: string | undefined = typeName;
+      for (const step of expr.steps.slice(0, -1)) {
+        owner = step.type === "backlink" || !owner ? undefined : Context.getLink(this.ctx, owner, step.name)?.target;
+      }
+      const last = expr.steps.at(-1);
+      const property = owner && last && last.type !== "backlink" ? Context.getProperty(this.ctx, owner, last.name) : undefined;
+      return property && owner ? this.bytesTypeOfProperty(property, owner) : null;
+    }
+
+    return pgType === "bytea" || pgType === "bytea[]" ? pgType : null;
   }
 
   /**
@@ -850,7 +926,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       key = element.name.name;
       if (element.computable) {
         // Computed property: name := expression
-        value = this.compileExpression(element.expr);
+        value = this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName));
       } else if (element.shape) {
         // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
@@ -879,7 +955,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         const propName = element.name.name;
         const property = Context.getProperty(this.ctx, typeName, propName);
         if (property) {
-          value = this.compilePropertyReference(property, tableAlias);
+          value = this.compilePropertyReference(property, tableAlias, typeName);
         } else {
           // Fall back to compiling the expression
           value = this.compileExpression(element.expr);
@@ -892,7 +968,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
 
       const property = Context.getProperty(this.ctx, typeName, propName);
       if (property) {
-        value = this.compilePropertyReference(property, tableAlias);
+        value = this.compilePropertyReference(property, tableAlias, typeName);
       } else {
         const link = Context.getLink(this.ctx, typeName, propName);
         if (link) {
@@ -989,7 +1065,10 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     // For single-FK link: `tableAlias.<fk_column>` (returns the
     // target's id; clients can drill in via a follow-up SELECT).
     const targetColumn = property ? property.columnName : link!.columnName!;
-    const columnRef = SQL.createColumnReference(targetColumn, tableAlias);
+    const columnRef = this.bytesAsBase64(
+      SQL.createColumnReference(targetColumn, tableAlias),
+      property ? this.bytesTypeOfProperty(property, filterTypeDef.name) : null
+    );
     const caseExpr = SQL.createCaseExpression(
       [SQL.createWhenClause(condition, columnRef)],
       SQL.createLiteral("null", null)
@@ -1012,7 +1091,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       if (property.computed) {
         continue;
       }
-      const value = SQL.createColumnReference(property.columnName, tableAlias);
+      const value = this.compilePropertyReference(property, tableAlias, typeDef.name);
       fields.push(SQL.createJsonField(name, value));
     }
 

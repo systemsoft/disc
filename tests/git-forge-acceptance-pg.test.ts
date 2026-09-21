@@ -48,8 +48,6 @@ const PENDING = new Set<string>(
   Deno.env.get("GIT_FORGE_ALL") === "1" ? [] : [
     "Q4", // Phase 5 (D7, D8, D12), needs Phase 2 (D1) and Phase 3 (D5, D6)
     "Q5", // Phase 5 (D7, D8, D12), needs Phase 2 (D1) and Phase 3 (D5, D6)
-    "Q6", // Phase 4 (D9): bytes leave the server as hex, not base64
-    "Q8", // Phase 4 (D9): bytes have no wire format in either direction
     "Q9", // Phase 7 (S3, S11): a failed commit is reported as success
     "Q10" // Phase 6 (D10): no service credential; nested mutations skip policies until Phase 1 (S10)
   ]

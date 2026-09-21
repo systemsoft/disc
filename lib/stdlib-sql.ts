@@ -78,8 +78,11 @@ const STDLIB_SQL = [
      SELECT decode(data, 'hex');
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
 
+  // encode(…, 'base64') breaks lines every 76 characters (MIME style); Gel's
+  // base64_encode, RFC 4648 and Disc's `bytes` wire format have none.
+  // std_base64_decode needs no counterpart: decode() ignores whitespace.
   `CREATE OR REPLACE FUNCTION std_base64_encode(data bytea) RETURNS text AS $$
-     SELECT encode(data, 'base64');
+     SELECT translate(encode(data, 'base64'), E'\\n', '');
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
 
   `CREATE OR REPLACE FUNCTION std_base64_decode(data text) RETURNS bytea AS $$

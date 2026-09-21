@@ -687,7 +687,7 @@ class TypeScriptEmitter {
     const sdkBase = this.config.sdkImportBase ?? "./sdk/mod.ts";
     content += `import * as Types from "${typesImport}";\n`;
     content += `import { DiscClient } from "./client.ts";\n`;
-    content += `import { compileFilter, escapeEdgeQLIdent, type FilterArg, type TypeInfo } from "${sdkBase}";\n\n`;
+    content += `import { compileFilter, escapeEdgeQLIdent, reviveTyped, type FilterArg, type TypeInfo } from "${sdkBase}";\n\n`;
 
     for (const obj of this.allObjects()) {
       content += this.generateQueryBuilder(obj, multiModule);
@@ -827,7 +827,7 @@ class TypeScriptEmitter {
     content += `    const query = shape \n`;
     content += `      ? \`select ${edgeqlTypeName} \${shape}\`\n`;
     content += `      : \`select ${edgeqlTypeName} { * }\`;\n`;
-    content += `    return await this.client.query<${typeRef}[]>(query);\n`;
+    content += `    return reviveTyped(await this.client.query<${typeRef}[]>(query), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Select ${typeName} by ID */\n`;
@@ -835,7 +835,7 @@ class TypeScriptEmitter {
     content += `    const query = shape\n`;
     content += `      ? \`select ${edgeqlTypeName} \${shape} filter .id = <uuid>$id\`\n`;
     content += `      : \`select ${edgeqlTypeName} { * } filter .id = <uuid>$id\`;\n`;
-    content += `    const results = await this.client.query<${typeRef}[]>(query, { id });\n`;
+    content += `    const results = reviveTyped(await this.client.query<${typeRef}[]>(query, { id }), ${builderName}._typeInfo);\n`;
     content += `    return results[0] || null;\n`;
     content += `  }\n\n`;
 
@@ -848,7 +848,7 @@ class TypeScriptEmitter {
     content += `    if (compiled.orderBy) parts.push(compiled.orderBy);\n`;
     content += `    if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);\n`;
     content += `    if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);\n`;
-    content += `    return await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables);\n`;
+    content += `    return reviveTyped(await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Insert new ${typeName} */\n`;
@@ -864,7 +864,7 @@ class TypeScriptEmitter {
     content += `      return \`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
     content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
-    content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
+    content += `    return reviveTyped(await this.client.query<${typeRef}>(query, variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Update ${typeName} by ID */\n`;
@@ -895,7 +895,7 @@ class TypeScriptEmitter {
     content += `      assignments.push(\`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
     content += `    }\n`;
     content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;
-    content += `    return await this.client.query<${typeRef}>(query, variables);\n`;
+    content += `    return reviveTyped(await this.client.query<${typeRef}>(query, variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Delete ${typeName} by ID */\n`;

@@ -200,9 +200,15 @@ Deno.test("select over mutation - both spellings compile to the same statement a
 });
 
 Deno.test("select over mutation - content is shipped when the shape asks for it", async () => {
-  const sql = await sqlOf(`select (${UPDATE_OBJECT}) { object_id, content }`);
+  const parts = cteParts(await sqlOf(`select (${UPDATE_OBJECT}) { object_id, content }`));
+  const alias = /FROM m AS (m_\d+)/.exec(parts.outer)?.[1];
 
-  assertProjects(cteParts(sql), ["object_id", "content"], ["git_object"]);
+  // `bytes` leaves a shape as base64 (compiler/bytes-shape.test.ts); over a CTE it reads the CTE's column.
+  assertEquals(
+    parts.outer,
+    `SELECT jsonb_build_object('object_id', ${alias}.object_id, 'content', translate(encode(${alias}.content, 'base64'), E'\\n', '')) FROM m AS ${alias}`
+  );
+  assert(!parts.outer.includes("git_object"), parts.outer);
 });
 
 Deno.test("select over mutation - a nested link in the shape is resolved from the CTE row's FK column", async () => {
