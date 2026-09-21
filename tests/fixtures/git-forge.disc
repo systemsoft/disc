@@ -1,0 +1,68 @@
+# Contract schema of the first real Disc consumer: a git forge that stores git
+# objects and refs in Disc. Exercised end to end by
+# tests/git-forge-acceptance-pg.test.ts.
+#
+# `Locked` and `Doc` are not part of the consumer's schema. They exist for the
+# access rows of the acceptance test: `Locked` is closed to everyone but the
+# service credential (Q10); `Doc` is owner-scoped on a plain property, so a
+# nested mutation that skips the policy is visible as a cross-user write.
+
+module default {
+  type Program {
+    required name: str;
+  }
+
+  type GitObject {
+    content: bytes;
+    required object_id: str {
+      constraint regexp("^[a-f0-9]{40}$");
+    }
+    required object_type: str {
+      constraint one_of("commit", "tree", "blob", "tag");
+    }
+    required size: int64;
+    required link program -> Program {
+      on target delete cascade;
+    }
+    constraint exclusive on ((.program, .object_id));
+  }
+
+  type GitCommit {
+    required commit_time: int64;
+    generation: int32;
+    required object_id: str;
+    required parents: array<str>;
+    required link program -> Program {
+      on target delete cascade;
+    }
+    required tree_id: str;
+    constraint exclusive on ((.program, .object_id));
+  }
+
+  type GitRef {
+    required name: str;
+    peeled: str;
+    required link program -> Program {
+      on target delete cascade;
+    }
+    required target: str;
+    constraint exclusive on ((.program, .name));
+  }
+
+  type Locked {
+    required name: str;
+    access policy nobody {
+      allow all;
+      using (false);
+    }
+  }
+
+  type Doc {
+    required owner_id: str;
+    required title: str;
+    access policy owner_only {
+      allow all;
+      using (.owner_id = global current_user);
+    }
+  }
+}
