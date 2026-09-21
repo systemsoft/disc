@@ -81,6 +81,80 @@ Deno.test("isWriteQuery - SET GLOBAL is a read (session-scoped)", () => {
   );
 });
 
+// Nested mutations: a write anywhere in the AST makes the query a write.
+
+Deno.test("isWriteQuery - with-bound UPDATE selected in the body is a write", () => {
+  assertEquals(
+    isWriteQuery(parse("WITH u := (UPDATE User SET { name := 'bob' }) SELECT u")),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - with-bound DELETE and INSERT are writes", () => {
+  assertEquals(isWriteQuery(parse("WITH d := (DELETE User) SELECT d")), true);
+  assertEquals(
+    isWriteQuery(parse("WITH i := (INSERT User { name := 'alice' }) SELECT i { id }")),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - SELECT over a mutation operand is a write", () => {
+  assertEquals(
+    isWriteQuery(parse("SELECT (UPDATE User SET { name := 'bob' }) { id }")),
+    true
+  );
+  assertEquals(isWriteQuery(parse("SELECT (DELETE User) { id }")), true);
+  assertEquals(
+    isWriteQuery(parse("SELECT (INSERT User { name := 'alice' }) { id }")),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - FOR with a mutation body is a write", () => {
+  assertEquals(
+    isWriteQuery(parse("FOR n IN {'a', 'b'} UNION (INSERT User { name := n })")),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - mutation nested in a with block inside a FOR body is a write", () => {
+  assertEquals(
+    isWriteQuery(
+      parse("FOR n IN {'a'} UNION (WITH i := (INSERT User { name := n }) SELECT i)")
+    ),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - with-bound SELECT stays a read", () => {
+  assertEquals(
+    isWriteQuery(parse("WITH u := (SELECT User FILTER .name = 'bob') SELECT u")),
+    false
+  );
+});
+
+Deno.test("isWriteQuery - FOR with a SELECT body stays a read", () => {
+  assertEquals(
+    isWriteQuery(parse("FOR n IN {'a', 'b'} UNION (SELECT User FILTER .name = n)")),
+    false
+  );
+});
+
+Deno.test("isWriteQuery - EXPLAIN ANALYZE of a mutation executes it, so it is a write", () => {
+  assertEquals(
+    isWriteQuery(parse("EXPLAIN ANALYZE UPDATE User SET { name := 'bob' }")),
+    true
+  );
+});
+
+Deno.test("isWriteQuery - plain EXPLAIN of a mutation only plans it, so it is a read", () => {
+  assertEquals(
+    isWriteQuery(parse("EXPLAIN UPDATE User SET { name := 'bob' }")),
+    false
+  );
+  assertEquals(isWriteQuery(parse("EXPLAIN ANALYZE SELECT User { name }")), false);
+});
+
 Deno.test("isWriteQuery - unknown kind defaults to write (fail closed)", () => {
   // Forge an AST with an unrecognized kind to lock in fail-closed semantics.
   const fakeAst = { kind: "BogusQuery" } as unknown as Query;

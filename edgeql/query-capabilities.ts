@@ -15,13 +15,7 @@
  * thread a separate capability mask through, so we evaluate per-query.
  */
 
-import type {
-  ConfigureQuery,
-  EdgeQLNode,
-  ForQuery,
-  Query,
-  WithBlock
-} from "./ast.ts";
+import type { ConfigureQuery, EdgeQLNode, ExplainQuery, Query } from "./ast.ts";
 
 /**
  * Returns `true` if executing the query would mutate database state.
@@ -29,11 +23,15 @@ import type {
  * Writes:
  *   - INSERT / UPDATE / DELETE
  *   - CONFIGURE DATABASE / INSTANCE / SYSTEM (persistent config)
- *   - WITH / FOR blocks whose body contains a write
+ *   - any query with an INSERT / UPDATE / DELETE nested anywhere inside it:
+ *     a `with` binding (`with u := (update …) select u`), a `select (…)`
+ *     operand, a `for … union (…)` body, a subquery in a filter or shape
+ *   - EXPLAIN ANALYZE of any of the above (ANALYZE executes the statement)
  *
  * Reads:
- *   - SELECT, GROUP, DESCRIBE TYPE/SCHEMA, EXPLAIN, SET GLOBAL,
- *     CONFIGURE SESSION (session-local — not persistent)
+ *   - SELECT, GROUP, DESCRIBE TYPE/SCHEMA, SET GLOBAL with no nested write,
+ *     plain EXPLAIN (plans only), CONFIGURE SESSION (session-local — not
+ *     persistent)
  *
  * SDL/DDL doesn't have its own AST node here — disc handles schema
  * mutation through the migration engine, not user-facing EdgeQL — so
@@ -49,18 +47,19 @@ export function isWriteQuery(ast: Query): boolean {
     case "ConfigureQuery":
       return isPersistentConfigure(ast as ConfigureQuery);
 
+    case "ExplainQuery":
+      return (ast as ExplainQuery).analyze === true &&
+        isWriteQuery((ast as ExplainQuery).query);
+
     case "WithBlock":
-      return isWriteQuery((ast as WithBlock).body);
-
     case "ForQuery":
-      return isWriteQuery((ast as ForQuery).body);
-
     case "SelectQuery":
     case "GroupQuery":
+    case "SetGlobalQuery":
+      return containsMutation(ast);
+
     case "DescribeType":
     case "DescribeSchema":
-    case "ExplainQuery":
-    case "SetGlobalQuery":
       return false;
 
     default:
@@ -68,6 +67,30 @@ export function isWriteQuery(ast: Query): boolean {
       // variant can't accidentally bypass the gate.
       return true;
   }
+}
+
+const MUTATION_KINDS = new Set(["InsertQuery", "UpdateQuery", "DeleteQuery"]);
+
+/**
+ * Walks every node under `node` looking for a mutation. The walk is generic
+ * (any object with a `kind`) rather than per-node-type so a new expression
+ * kind that can hold a subquery is covered without touching this file.
+ */
+function containsMutation(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(containsMutation);
+  }
+
+  const kind = (node as { kind?: unknown; }).kind;
+  if (typeof kind === "string" && MUTATION_KINDS.has(kind)) {
+    return true;
+  }
+
+  return Object.values(node).some(containsMutation);
 }
 
 /**

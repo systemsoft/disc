@@ -530,38 +530,52 @@ Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async
 // projects the conflict-target row through the access-policy filter
 // (which returns nothing → no conflict detected → duplicate insert).
 //
-// Disc's compiler (`compiler/compiler.ts:applyAccessControl`) treats
-// `InsertStatement` as binary: the access check either allows or
-// throws (`CompilationError`). It never injects a WHERE filter on the
-// INSERT path. The compiled SQL is plain
+// Disc's compiler treats an insert as binary: the access check either
+// allows or throws (`CompilationError`). It never injects a WHERE filter
+// on the INSERT path. The compiled SQL is plain
 // `INSERT INTO ... ON CONFLICT (col) DO ...`, so PG's unique index —
 // which is policy-blind by design — handles conflict detection.
 //
-// This pin asserts the structural property: `applyAccessControl` for
-// `InsertStatement` does not synthesize a WHERE clause.
+// The check lives in `compileInsertQuery` (via `mutationAccessCondition`),
+// not in the top-level `applyAccessControl`, so an insert nested in a
+// `with` binding or a `for` body gets it too.
+//
+// This pin asserts the structural property: `compileInsertQuery` runs the
+// check for its allow/deny effect only and does not synthesize a WHERE
+// clause from it.
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injection)", async () => {
   const src = await Deno.readTextFile(
     new URL("../compiler/compiler.ts", import.meta.url)
   );
-  // Locate the InsertStatement branch of applyAccessControl.
-  const insertBranch = src.match(
-    /case "InsertStatement": \{[\s\S]*?return statement;\s*\}/
+  // Locate compileInsertQuery and the shared mutation policy check.
+  const insertCompiler = src.match(
+    /private compileInsertQuery\([\s\S]*?\n {2}\}\n/
+  );
+  const policyCheck = src.match(
+    /private mutationAccessCondition\([\s\S]*?\n {2}\}\n/
   );
   assert(
-    insertBranch !== null,
-    "applyAccessControl must have an InsertStatement branch (Gel #5504 pin)."
+    insertCompiler !== null && policyCheck !== null,
+    "compileInsertQuery and mutationAccessCondition must exist (Gel #5504 pin)."
   );
-  const body = insertBranch![0];
-  // Branch must throw on denial (not silently filter) and must not
-  // build a WhereClause / mutate `statement.where`.
+  const body = insertCompiler![0];
+  // The insert check is a bare call: it runs for its throw-on-denial effect
+  // and the row predicate it returns is discarded.
   assert(
-    /CompilationError/.test(body),
+    /^\s*this\.mutationAccessCondition\(typeDef\.name, "insert"\);$/m.test(body),
+    "compileInsertQuery must run the insert policy check and discard its predicate (Gel #5504 pin)."
+  );
+  // Denial must throw (not silently filter) …
+  assert(
+    /throw new CompilationError/.test(policyCheck![0]),
     "INSERT access denial must throw CompilationError, not return a filtered statement (Gel #5504 pin)."
   );
+  // … and the insert path must not build a WhereClause from the policy.
   assert(
-    !/WhereClause/.test(body) && !/where: \{/.test(body),
-    "INSERT branch must not synthesize a WHERE clause — that would break UNLESS CONFLICT detection (Gel #5504 pin)."
+    !/WhereClause/.test(body) && !/where: \{/.test(body) &&
+      !/withAccessCondition/.test(body),
+    "INSERT path must not synthesize a WHERE clause — that would break UNLESS CONFLICT detection (Gel #5504 pin)."
   );
 });
 

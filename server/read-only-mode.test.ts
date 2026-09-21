@@ -7,6 +7,8 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import type { QueryContext } from "./types.ts";
 
@@ -105,6 +107,74 @@ Deno.test("readOnly=false — INSERT not rejected by the read-only gate (default
 
   // It may fail downstream for other reasons (no real DB in dryRun), but
   // not with the READ_ONLY_MODE code.
+  const hasReadOnlyError = (result.errors ?? []).some(
+    e => e.extensions?.code === "READ_ONLY_MODE"
+  );
+  assertEquals(hasReadOnlyError, false);
+});
+
+// Nested writes: a mutation bound in a `with` block (or wrapped in a select)
+// is still a write and must not pass the gate on either handler.
+
+const NESTED_WRITES = [
+  "WITH u := (UPDATE User SET { name := 'bob' }) SELECT u",
+  "WITH d := (DELETE User) SELECT d",
+  "WITH i := (INSERT User { name := 'alice' }) SELECT i",
+  "SELECT (UPDATE User SET { name := 'bob' }) { id }",
+  "FOR n IN {'a'} UNION (WITH i := (INSERT User { name := n }) SELECT i)"
+];
+
+Deno.test("readOnly=true — nested writes rejected by the simple handler", async () => {
+  const handler = new SimpleEdgeQLProtocolHandler({
+    readOnly: true,
+    dryRun: true
+  });
+
+  for (const query of NESTED_WRITES) {
+    const result = await handler.handleRequest({ query }, makeContext());
+    assertEquals(result.errors?.[0].extensions?.code, "READ_ONLY_MODE", query);
+  }
+});
+
+Deno.test("readOnly=true — nested writes rejected by the full handler", async () => {
+  const manager = new SchemaManager({ dryRun: true });
+  await manager.initialize();
+  const parsed = manager.parseSDL("type User { required name: str; }");
+  if (!parsed.ok) {
+    throw new Error(`Failed to parse SDL: ${parsed.error.message}`);
+  }
+
+  const handler = new EdgeQLProtocolHandler({
+    dryRun: true,
+    readOnly: true,
+    schema: manager.modulesToSchema(parsed.value)
+  });
+
+  for (const query of NESTED_WRITES) {
+    const result = await handler.handleRequest({ query }, makeContext());
+    assertEquals(result.errors?.[0].extensions?.code, "READ_ONLY_MODE", query);
+  }
+});
+
+Deno.test("readOnly=true — with-bound SELECT still proceeds on the full handler", async () => {
+  const manager = new SchemaManager({ dryRun: true });
+  await manager.initialize();
+  const parsed = manager.parseSDL("type User { required name: str; }");
+  if (!parsed.ok) {
+    throw new Error(`Failed to parse SDL: ${parsed.error.message}`);
+  }
+
+  const handler = new EdgeQLProtocolHandler({
+    dryRun: true,
+    readOnly: true,
+    schema: manager.modulesToSchema(parsed.value)
+  });
+
+  const result = await handler.handleRequest(
+    { query: "WITH u := (SELECT User FILTER .name = 'bob') SELECT u" },
+    makeContext()
+  );
+
   const hasReadOnlyError = (result.errors ?? []).some(
     e => e.extensions?.code === "READ_ONLY_MODE"
   );

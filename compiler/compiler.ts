@@ -149,123 +149,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         return statement;
       }
 
-      case "InsertStatement": {
-        // Check if INSERT is allowed
-        const decision = this.accessEvaluator.evaluate(
-          objectType,
-          "insert",
-          this.accessContext
-        );
-        if (!decision.allowed) {
-          throw new CompilationError(
-            decision.denialMessage ??
-              `INSERT not allowed on ${objectType}: ${decision.reason}`
-          );
-        }
-        return statement;
-      }
-
-      case "UpdateStatement": {
-        // Check if UPDATE is allowed and inject conditions
-        const decision = this.accessEvaluator.evaluate(
-          objectType,
-          "update",
-          this.accessContext
-        );
-        if (!decision.allowed) {
-          throw new CompilationError(
-            decision.denialMessage ??
-              `UPDATE not allowed on ${objectType}: ${decision.reason}`
-          );
-        }
-
-        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
-          const accessConditions = this.parseAccessConditions(
-            decision.sqlConditions
-          );
-          if (accessConditions) {
-            if (statement.where) {
-              // Combine with existing WHERE clause
-              const combinedCondition: SQL.BinaryExpression = {
-                kind: "BinaryExpression",
-                operator: "AND",
-                left: accessConditions,
-                right: statement.where.condition
-              };
-
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: combinedCondition
-                }
-              };
-            } else {
-              // Add new WHERE clause
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: accessConditions
-                }
-              };
-            }
-          }
-        }
-
-        return statement;
-      }
-
-      case "DeleteStatement": {
-        // Check if DELETE is allowed and inject conditions
-        const decision = this.accessEvaluator.evaluate(
-          objectType,
-          "delete",
-          this.accessContext
-        );
-        if (!decision.allowed) {
-          throw new CompilationError(
-            decision.denialMessage ??
-              `DELETE not allowed on ${objectType}: ${decision.reason}`
-          );
-        }
-
-        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
-          const accessConditions = this.parseAccessConditions(
-            decision.sqlConditions
-          );
-          if (accessConditions) {
-            if (statement.where) {
-              // Combine with existing WHERE clause
-              const combinedCondition: SQL.BinaryExpression = {
-                kind: "BinaryExpression",
-                operator: "AND",
-                left: accessConditions,
-                right: statement.where.condition
-              };
-
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: combinedCondition
-                }
-              };
-            } else {
-              // Add new WHERE clause
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: accessConditions
-                }
-              };
-            }
-          }
-        }
-
-        return statement;
-      }
+      // Mutations are not handled here: a mutation node can sit anywhere in
+      // the query (with binding, for body, explain, multi-link CTE), so
+      // compileInsertQuery / compileUpdateQuery / compileDeleteQuery apply
+      // their own policy via mutationAccessCondition().
 
       default:
         return statement;
@@ -318,6 +205,63 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       left: acc,
       right: cond
     }), conditions[0]);
+  }
+
+  /**
+   * Access policy for one mutation node. Called by the three mutation
+   * compilers, so the policy follows the node wherever it sits in the query
+   * instead of depending on the top-level query kind.
+   *
+   * Throws when the operation is denied. Returns the row predicate to AND
+   * into the mutation's WHERE, or undefined when there is none (access control
+   * off, bypass caller, or an unconditional allow).
+   *
+   * `objectType` must be `TypeDef.name`: policies are registered under it
+   * (see `adaptAccessPolicies`), whatever spelling the query used
+   * (`Doc`, `default::Doc`).
+   */
+  private mutationAccessCondition(
+    objectType: string,
+    operation: "insert" | "update" | "delete"
+  ): SQL.SQLExpression | undefined {
+    if (!this.enableAccessControl || !this.accessEvaluator || !this.accessInjector) {
+      return undefined;
+    }
+
+    // Per-request bypass (gh/geldata#6358), same gate as applyAccessControl.
+    if (this.accessContext.bypass) {
+      return undefined;
+    }
+
+    const decision = this.accessEvaluator.evaluate(
+      objectType,
+      operation,
+      this.accessContext
+    );
+    if (!decision.allowed) {
+      throw new CompilationError(
+        decision.denialMessage ??
+          `${operation.toUpperCase()} not allowed on ${objectType}: ${decision.reason}`
+      );
+    }
+
+    return this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+  }
+
+  // AND an access predicate into a (possibly absent) WHERE clause.
+  private withAccessCondition(
+    where: SQL.WhereClause | undefined,
+    accessCondition: SQL.SQLExpression | undefined
+  ): SQL.WhereClause | undefined {
+    if (!accessCondition) {
+      return where;
+    }
+
+    return SQL.createWhereClause(
+      where ?
+        SQL.createBinaryExpression("AND", accessCondition, where.condition) :
+        accessCondition
+    );
   }
 
   protected compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement {
@@ -433,6 +377,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
+
+    // Insert policies are allow/deny only (no row check), so there is no
+    // predicate to keep.
+    this.mutationAccessCondition(typeDef.name, "insert");
 
     const columns: string[] = [];
     const values: SQL.SQLExpression[] = [];
@@ -814,6 +762,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       whereClause = SQL.createWhereClause(condition);
     }
 
+    // The same WHERE drives both the plain UPDATE and the source CTE of a
+    // multi-link update (UPDATE or SELECT), so junction rows are only written
+    // for rows the caller may update.
+    whereClause = this.withAccessCondition(
+      whereClause,
+      this.mutationAccessCondition(typeDef.name, "update")
+    );
+
     if (multiLinkOps.length === 0) {
       return {
         kind: "UpdateStatement",
@@ -968,6 +924,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       const condition = this.compileExpression(query.filter);
       whereClause = SQL.createWhereClause(condition);
     }
+
+    whereClause = this.withAccessCondition(
+      whereClause,
+      this.mutationAccessCondition(typeDef.name, "delete")
+    );
 
     return {
       kind: "DeleteStatement",

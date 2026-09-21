@@ -170,6 +170,85 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
   );
 });
 
+// Nested mutations (S10): the policy follows the mutation node, so the
+// with-form gets the same treatment as the bare form — filtered or denied for
+// an ordinary caller, unfiltered for a bypass caller.
+
+const SDL_WITH_WRITE_POLICIES = `
+type Doc {
+  required owner_id: str;
+  required title: str;
+  access policy owner_only {
+    allow all;
+    using (.owner_id = global current_user);
+  }
+}
+type Locked {
+  required name: str;
+  access policy nobody {
+    allow all;
+    using (false);
+  }
+}
+`;
+
+Deno.test("EdgeQLProtocolHandler — with-form update is policy-filtered unless bypassed", async () => {
+  const schema = await schemaFromSDL(SDL_WITH_WRITE_POLICIES);
+  const handler = new EdgeQLProtocolHandler({
+    schema,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true
+  });
+
+  const request: QueryRequest = {
+    query: "with u := (update Doc filter .title = 'a' set { title := 'b' }) select u"
+  };
+
+  const sqlRegular = (await handler.handleRequest(request, makeContext({ userId: "u1" }, false)))
+    .extensions
+    ?.sql as string;
+  const sqlBypass = (await handler.handleRequest(request, makeContext({ userId: "u1", roles: ["admin"] }, true)))
+    .extensions
+    ?.sql as string;
+
+  assert(sqlRegular && sqlBypass);
+  assert(
+    sqlRegular.includes("owner_id = E'u1'"),
+    `with-form update must carry the owner predicate; got: ${sqlRegular}`
+  );
+  assert(
+    !sqlBypass.includes("owner_id = E'"),
+    `bypassed with-form update must be unfiltered; got: ${sqlBypass}`
+  );
+});
+
+Deno.test("EdgeQLProtocolHandler — with-form write on a using(false) type is denied unless bypassed", async () => {
+  const schema = await schemaFromSDL(SDL_WITH_WRITE_POLICIES);
+  const handler = new EdgeQLProtocolHandler({
+    schema,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true
+  });
+
+  const queries = [
+    "with m := (insert Locked { name := 'x' }) select m",
+    "with m := (update Locked set { name := 'x' }) select m",
+    "with m := (delete Locked) select m"
+  ];
+
+  for (const query of queries) {
+    const denied = await handler.handleRequest({ query }, makeContext({ userId: "u1" }, false));
+    assertEquals(denied.errors?.[0].extensions?.code, "COMPILATION_ERROR", query);
+    assert(/not allowed on Locked/.test(denied.errors?.[0].message ?? ""), `${query}: ${denied.errors?.[0].message}`);
+
+    const bypassed = await handler.handleRequest({ query }, makeContext({ userId: "u1", roles: ["admin"] }, true));
+    const sql = bypassed.extensions?.sql as string | undefined;
+    assert(sql && /locked/.test(sql), `${query}: bypass must compile; got: ${JSON.stringify(bypassed.errors)}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Per-policy disable (gh/geldata#6432 slice 3 — Bundle UU). The
 // `X-Disc-Disable-Policies` header carries qualified policy names
