@@ -38,7 +38,7 @@ interface PooledConnection {
 }
 
 interface WaitQueueEntry {
-  resolve: (conn: DatabaseConnection) => void;
+  resolve: (conn: DatabaseConnection | PromiseLike<DatabaseConnection>) => void;
   reject: (error: Error) => void;
   timeoutId?: ReturnType<typeof setTimeout>;
   /** Marked true when the entry times out; consumers skip it. (P2-28) */
@@ -66,6 +66,11 @@ export class ConnectionPool {
   private cleanupIntervalId?: ReturnType<typeof setInterval>;
   private closed = false;
   private activeCount = 0;
+  /*** Creations in flight. Each one holds a slot from before its first await until the connection
+       is registered or the attempt is given up (see createConnection), so at all times
+       connections.size + pendingCreates <= maxConnections — concurrent callers cannot all pass
+       the cap check before any of them has registered a connection. ***/
+  private pendingCreates = 0;
   private leakTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private stats: PoolStatistics = {
     totalConnections: 0,
@@ -112,6 +117,7 @@ export class ConnectionPool {
         this.createConnection().then(conn => {
           if (conn) {
             this.idleConnections.push(conn);
+            this.serveWaiters();
           }
         })
       );
@@ -160,7 +166,7 @@ export class ConnectionPool {
     }
 
     // Check if we can create a new connection
-    if (this.connections.size < this.config.maxConnections!) {
+    if (this.connections.size + this.pendingCreates < this.config.maxConnections!) {
       const pooled = await this.createConnection();
       if (pooled) {
         pooled.inUse = true;
@@ -172,6 +178,9 @@ export class ConnectionPool {
         this.updateStats();
         return pooled.connection;
       }
+
+      // Parking this caller would be pointless: nothing was attempted, so nothing will be.
+      throw new Error("Failed to create connection: no attempt was made (maxRetries < 1)");
     }
 
     // Check if wait queue is full
@@ -410,39 +419,46 @@ export class ConnectionPool {
     const baseDelay = this.config.retryDelay ?? 1000;
     const maxDelay = 30000; // Cap at 30 seconds
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const connection = new DatabaseConnection(this.config);
-        await connection.connect();
+    this.pendingCreates++;
 
-        const pooled: PooledConnection = {
-          connection,
-          id: this.generateConnectionId(),
-          createdAt: new Date(),
-          lastUsedAt: new Date(),
-          inUse: false
-        };
+    try {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const connection = new DatabaseConnection(this.config);
+          await connection.connect();
 
-        this.connections.set(pooled.id, pooled);
-        this.connectionToPooled.set(connection, pooled);
-        this.stats.totalCreated++;
-        this.updateStats();
+          const pooled: PooledConnection = {
+            connection,
+            id: this.generateConnectionId(),
+            createdAt: new Date(),
+            lastUsedAt: new Date(),
+            inUse: false
+          };
 
-        logger.debug(`Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`);
-        return pooled;
-      } catch (error) {
-        this.stats.totalErrors++;
-        const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
-        logger.debug(`Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`);
+          this.connections.set(pooled.id, pooled);
+          this.connectionToPooled.set(connection, pooled);
+          this.stats.totalCreated++;
+          this.updateStats();
 
-        if (attempt < maxRetries)
-          await new Promise(resolve => setTimeout(resolve, delay));
-        else
-          throw new Error(`Failed to create connection after ${maxRetries} attempts: ${error}`);
+          logger.debug(`Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`);
+          return pooled;
+        } catch (error) {
+          this.stats.totalErrors++;
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+          logger.debug(`Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`);
+
+          if (attempt < maxRetries)
+            await new Promise(resolve => setTimeout(resolve, delay));
+          else
+            throw new Error(`Failed to create connection after ${maxRetries} attempts: ${error}`);
+        }
       }
-    }
 
-    return null;
+      return null;
+    } finally {
+      this.pendingCreates--;
+      this.serveWaiters();
+    }
   }
 
   private async destroyConnection(pooled: PooledConnection): Promise<void> {
@@ -456,8 +472,42 @@ export class ConnectionPool {
     this.connectionToPooled.delete(pooled.connection);
     this.stats.totalDestroyed++;
     this.updateStats();
+    this.serveWaiters();
 
     logger.debug(`Destroyed connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`);
+  }
+
+  /*** Liveness: a caller is parked only while every slot is held by a connection in use or by a
+       creation in flight. A connection in use comes back through release(), which hands it to the
+       oldest live waiter. Every other way capacity appears has to end up here, or the waiters sit
+       until connectionTimeout: a creation that gave up (createConnection), a destroyed connection
+       (destroyConnection — idle cleanup, failed validation), connections that go idle without
+       passing through release() (initialize).
+
+       While there is an idle connection or a free slot, the oldest live waiter re-enters
+       acquire(). acquire() takes the idle connection or reserves the slot before its first await,
+       so each turn of the loop consumes what it found and the loop cannot wake more waiters than
+       there is capacity for. The waiter then shares the fate of any caller: it gets the
+       connection, or the creation error — whose give-up wakes the next waiter in turn. ***/
+  private serveWaiters(): void {
+    while (this.waitQueue.length > 0) {
+      const entry = this.waitQueue[0];
+      const hasCapacity = this.idleConnections.length > 0 ||
+        this.connections.size + this.pendingCreates < this.config.maxConnections!;
+
+      if (!entry.cancelled && !hasCapacity) {
+        return;
+      }
+
+      // Off the queue before acquire() runs: acquire() can come back here.
+      this.waitQueue.shift();
+      this.updateStats();
+
+      if (!entry.cancelled) {
+        clearTimeout(entry.timeoutId);
+        entry.resolve(this.acquire());
+      }
+    }
   }
 
   private async validateConnection(

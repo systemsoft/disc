@@ -456,3 +456,413 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
 
   await pool.close();
 });
+
+/*** S15 — the cap under concurrent acquire. A creation in flight holds a slot, so callers
+     beyond the cap queue; every event that frees capacity has to wake a queued caller. ***/
+
+interface PoolMocks {
+  connectCalls: number;
+  /** Highest number of connections open or being opened at the same time. */
+  peak: number;
+  restore: () => void;
+}
+
+/** `connect(call)` decides each attempt's fate; opened/closed connections are counted for `peak`. */
+function mockConnections(connect: (call: number) => Promise<void>, closeDelay = 0): PoolMocks {
+  const originalConnect = DatabaseConnection.prototype.connect;
+  const originalClose = DatabaseConnection.prototype.close;
+  let open = 0;
+  const mocks: PoolMocks = {
+    connectCalls: 0,
+    peak: 0,
+    restore: () => {
+      DatabaseConnection.prototype.connect = originalConnect;
+      DatabaseConnection.prototype.close = originalClose;
+    }
+  };
+
+  DatabaseConnection.prototype.connect = async function() {
+    mocks.connectCalls++;
+    open++;
+    mocks.peak = Math.max(mocks.peak, open);
+
+    try {
+      await connect(mocks.connectCalls);
+    } catch (error) {
+      open--;
+      throw error;
+    }
+  };
+
+  DatabaseConnection.prototype.close = async function() {
+    if (closeDelay > 0) {
+      await sleep(closeDelay);
+    }
+
+    open--;
+  };
+
+  return mocks;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Fails fast instead of waiting out `connectionTimeout` when a caller is stranded. */
+async function within<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timerId = setTimeout(() => reject(new Error(`${what} was not settled within ${ms}ms`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timerId);
+  }
+}
+
+/** Settles to the connection or to the error message, so a rejection is never unhandled. */
+function settled(promise: Promise<DatabaseConnection>): Promise<DatabaseConnection | string> {
+  return promise.then(conn => conn, (error: Error) => error.message);
+}
+
+Deno.test("ConnectionPool - concurrent acquires open exactly maxConnections; the rest are served FIFO by releases", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 3,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => sleep(10));
+
+  try {
+    const served: number[] = [];
+    const held: DatabaseConnection[] = [];
+    const acquires = Array.from({ length: 8 }, (_unused, index) =>
+      pool.acquire().then(conn => {
+        served.push(index);
+        held.push(conn);
+      }));
+
+    // Queued synchronously: the three creations in flight already hold every slot.
+    assertEquals(pool.getWaitQueueSize(), 5);
+
+    await sleep(50);
+    assertEquals(mocks.connectCalls, 3);
+    assertEquals(pool.getPoolSize(), 3);
+    assertEquals([...served].sort(), [0, 1, 2]);
+
+    for (let next = 3; next < 8; next++) {
+      pool.release(held.shift()!);
+      await sleep(1);
+      assertEquals(served.at(-1), next);
+    }
+
+    await within(Promise.all(acquires), 1000, "every acquire");
+    assertEquals(mocks.connectCalls, 3);
+    assertEquals(mocks.peak, 3);
+    assertEquals(pool.getStatistics().totalCreated, 3);
+
+    held.forEach(conn => pool.release(conn));
+    assertEquals(pool.getIdleConnections(), 3);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - a caller queued behind a creation in flight is served by release", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 1,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => sleep(20));
+
+  try {
+    const first = pool.acquire();
+    const second = pool.acquire();
+    assertEquals(pool.getWaitQueueSize(), 1);
+
+    const conn = await first;
+    pool.release(conn);
+
+    assertEquals(await within(second, 1000, "the queued caller"), conn);
+    assertEquals(mocks.connectCalls, 1);
+    assertEquals(pool.getActiveConnections(), 1);
+    pool.release(conn);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - a failed creation hands its slot to the next queued caller", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 1,
+    maxRetries: 1,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(async call => {
+    await sleep(20);
+
+    if (call === 1) {
+      throw new Error("Connection failed");
+    }
+  });
+
+  try {
+    const first = settled(pool.acquire());
+    const second = settled(pool.acquire());
+    assertEquals(pool.getWaitQueueSize(), 1);
+
+    assertEquals(await first, "Failed to create connection after 1 attempts: Error: Connection failed");
+
+    const conn = await within(second, 1000, "the queued caller");
+    assertEquals(typeof conn, "object");
+    assertEquals(mocks.connectCalls, 2);
+    assertEquals(mocks.peak, 1);
+    assertEquals(pool.getPoolSize(), 1);
+    pool.release(conn as DatabaseConnection);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - when every creation fails, each queued caller is rejected with the creation error", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 1,
+    maxRetries: 1,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(async () => {
+    await sleep(10);
+    throw new Error("Connection failed");
+  });
+
+  try {
+    const callers = [settled(pool.acquire()), settled(pool.acquire()), settled(pool.acquire())];
+    assertEquals(pool.getWaitQueueSize(), 2);
+
+    const outcomes = await within(Promise.all(callers), 1000, "every caller");
+    assertEquals(outcomes, Array(3).fill("Failed to create connection after 1 attempts: Error: Connection failed"));
+    assertEquals(mocks.peak, 1);
+    assertEquals(pool.getWaitQueueSize(), 0);
+    assertEquals(pool.getPoolSize(), 0);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - a creation that makes no attempt fails the caller instead of parking it", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 1,
+    maxRetries: 0,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => Promise.resolve());
+
+  try {
+    const callers = [settled(pool.acquire()), settled(pool.acquire())];
+    const outcomes = await within(Promise.all(callers), 1000, "every caller");
+
+    assertEquals(outcomes, Array(2).fill("Failed to create connection: no attempt was made (maxRetries < 1)"));
+    assertEquals(mocks.connectCalls, 0);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - idle cleanup that frees a slot serves a caller queued meanwhile", async () => {
+  const pool = new ConnectionPool({
+    cleanupInterval: 0,
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    idleTimeout: 10,
+    maxConnections: 1,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => Promise.resolve(), 30);
+
+  try {
+    const stale = await pool.acquire();
+    pool.release(stale);
+    await sleep(30);
+
+    // The stale connection holds the only slot until its close() finishes.
+    const cleanup = pool.cleanupIdleConnections();
+    const caller = pool.acquire();
+    assertEquals(pool.getWaitQueueSize(), 1);
+
+    await cleanup;
+    const conn = await within(caller, 1000, "the queued caller");
+    assertEquals(conn === stale, false);
+    assertEquals(mocks.connectCalls, 2);
+    assertEquals(mocks.peak, 1);
+    pool.release(conn);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - a connection destroyed by validation frees its slot without exceeding the cap", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 1,
+    minConnections: 0,
+    validateOnAcquire: true
+  });
+  const mocks = mockConnections(() => Promise.resolve());
+  const originalQuery = DatabaseConnection.prototype.query;
+  DatabaseConnection.prototype.query = async function() {
+    await sleep(20);
+    throw new Error("server closed the connection unexpectedly");
+  };
+
+  try {
+    const stale = await pool.acquire();
+    pool.release(stale);
+
+    const served: DatabaseConnection[] = [];
+    const take = (): Promise<void> =>
+      pool.acquire().then(conn => {
+        served.push(conn);
+        pool.release(conn);
+      });
+    const callers = [take(), take()];
+    assertEquals(pool.getWaitQueueSize(), 1);
+
+    await within(Promise.all(callers), 1000, "both callers");
+    assertEquals(served.includes(stale), false);
+    assertEquals(mocks.peak, 1);
+    assertEquals(pool.getPoolSize(), 1);
+  } finally {
+    DatabaseConnection.prototype.query = originalQuery;
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - a timed-out caller is skipped, by release and by a freed slot", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 200,
+    maxConnections: 1,
+    maxRetries: 1,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(async call => {
+    if (call === 1) {
+      await sleep(300);
+      throw new Error("Connection failed");
+    }
+  });
+
+  try {
+    // Freed slot: the first creation fails at 300ms; by then the caller queued at 0ms has timed out.
+    const failing = settled(pool.acquire());
+    const expired = settled(pool.acquire());
+    await sleep(150);
+    const live = settled(pool.acquire());
+
+    assertEquals(await expired, "Connection pool timeout");
+    assertEquals(await failing, "Failed to create connection after 1 attempts: Error: Connection failed");
+    const conn = await within(live, 1000, "the live caller") as DatabaseConnection;
+    assertEquals(typeof conn, "object");
+    assertEquals(mocks.connectCalls, 2);
+
+    // Release: same order of events, with the connection held instead of being created.
+    const expiredAgain = settled(pool.acquire());
+    await sleep(150);
+    const liveAgain = settled(pool.acquire());
+    assertEquals(await expiredAgain, "Connection pool timeout");
+
+    pool.release(conn);
+    assertEquals(await within(liveAgain, 1000, "the live caller"), conn);
+    assertEquals(mocks.connectCalls, 2);
+    pool.release(conn);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - acquire during initialize is served from the pool being opened, not a connection of its own", async () => {
+  const pool = new ConnectionPool({
+    cleanupInterval: 0,
+    connectionString: "postgresql://test@localhost/test",
+    connectionTimeout: 5000,
+    maxConnections: 2,
+    minConnections: 2,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => sleep(20));
+
+  try {
+    const initialized = pool.initialize();
+    const caller = pool.acquire();
+
+    await initialized;
+    const conn = await within(caller, 1000, "the caller queued during initialize");
+    assertEquals(mocks.connectCalls, 2);
+    assertEquals(mocks.peak, 2);
+    assertEquals(pool.getPoolSize(), 2);
+    pool.release(conn);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});
+
+Deno.test("ConnectionPool - an idle connection is reused before a new one is opened", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    maxConnections: 5,
+    minConnections: 0,
+    validateOnAcquire: false
+  });
+  const mocks = mockConnections(() => Promise.resolve());
+
+  try {
+    const first = await pool.acquire();
+    pool.release(first);
+
+    const again = await pool.acquire();
+    assertEquals(again, first);
+    assertEquals(mocks.connectCalls, 1);
+
+    // With the idle connection taken, a second caller opens its own; neither queues.
+    const other = await pool.acquire();
+    assertEquals(other === first, false);
+    assertEquals(pool.getWaitQueueSize(), 0);
+    assertEquals(pool.getStatistics().totalCreated, 2);
+
+    pool.release(again);
+    pool.release(other);
+    assertEquals(pool.getIdleConnections(), 2);
+  } finally {
+    mocks.restore();
+    await pool.close();
+  }
+});

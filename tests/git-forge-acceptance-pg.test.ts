@@ -46,9 +46,6 @@ const RUN_PG = canRunPgTests();
  */
 const PENDING = new Set<string>(
   Deno.env.get("GIT_FORGE_ALL") === "1" ? [] : [
-    "Q1", // Phase 3 (D2, D3, D4): link path in update filter; select over a mutation
-    "Q2", // Phase 3 (D2, D3, D4): link path in delete filter; select over a mutation
-    "Q3", // Phase 3 (D3, D5, D6), needs Phase 2 (D1) for the composite unique index
     "Q4", // Phase 5 (D7, D8, D12), needs Phase 2 (D1) and Phase 3 (D5, D6)
     "Q5", // Phase 5 (D7, D8, D12), needs Phase 2 (D1) and Phase 3 (D5, D6)
     "Q6", // Phase 4 (D9): bytes leave the server as hex, not base64
