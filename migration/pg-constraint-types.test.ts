@@ -12,14 +12,16 @@
  * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import { compileEdgeQL } from "../compiler/test-helpers.ts";
 import {
   canRunPgTests,
   dropTables,
   execSQL,
   getColumns,
   getTestDsn,
-  makePool
+  makePool,
+  resetTestDatabase
 } from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
@@ -644,6 +646,99 @@ Deno.test({
         "disc_migrations",
         "disc_migration_checkpoints"
       );
+      await pool.close();
+    }
+  }
+});
+
+// =========================================================================
+// Test 7: type-level `constraint exclusive on ((.link, .prop))` (D1)
+// =========================================================================
+
+const GIT_FORGE_FIXTURE = new URL("../tests/fixtures/git-forge.disc", import.meta.url);
+
+Deno.test({
+  name: "PG: type-level exclusive on ((.program, .object_id)) is enforced per program",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const pool = makePool(await getTestDsn());
+    await pool.initialize();
+
+    try {
+      await resetTestDatabase(pool);
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+
+      const result = await manager.applySchema(await Deno.readTextFile(GIT_FORGE_FIXTURE));
+      assertEquals(result.ok, true, `applySchema should succeed: ${result.ok ? "" : result.error.message}`);
+
+      const programs = await pool.query(`INSERT INTO program (name) VALUES ('a'), ('b') RETURNING id`);
+      const [first, second] = programs.rows.map(row => row.id as string);
+      const objectId = "a".repeat(40);
+      const insert = (program: string) =>
+        pool.query(`INSERT INTO git_object (program_id, object_id, object_type, size) VALUES ($1, $2, 'blob', 1)`, [program, objectId]);
+
+      await insert(first);
+      const duplicate = await assertRejects(() => insert(first));
+      assertStringIncludes(String(duplicate), "uk_git_object_program_id_object_id");
+
+      /*** The same object id under another program is a different key. ***/
+      await insert(second);
+      const count = await pool.query(`SELECT count(*)::int AS n FROM git_object`);
+      assertEquals(count.rows[0].n, 2);
+
+      await manager.close();
+    } finally {
+      await resetTestDatabase(pool);
+      await pool.close();
+    }
+  }
+});
+
+// =========================================================================
+// Test 8: the consumer's batch read (Q6) is served by that unique index
+// =========================================================================
+
+Deno.test({
+  name: "PG: EXPLAIN of the batch read by (program, object_id) uses the composite unique index",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const pool = makePool(await getTestDsn());
+    await pool.initialize();
+
+    try {
+      await resetTestDatabase(pool);
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+
+      const result = await manager.applySchema(await Deno.readTextFile(GIT_FORGE_FIXTURE));
+      assertEquals(result.ok, true, `applySchema should succeed: ${result.ok ? "" : result.error.message}`);
+
+      /*** Enough rows under one program that the planner's choice is about the index, not about a
+           table too small to be worth one: the FK index on program_id alone matches every row here. ***/
+      const program = (await pool.query(`INSERT INTO program (name) VALUES ('a') RETURNING id`)).rows[0].id as string;
+      await pool.query(
+        `INSERT INTO git_object (program_id, object_id, object_type, size)
+         SELECT $1, lpad(to_hex(n), 40, '0'), 'blob', n FROM generate_series(1, 5000) AS n`,
+        [program]
+      );
+      await pool.query(`ANALYZE git_object`);
+
+      const sql = compileEdgeQL(
+        "select GitObject { object_id, object_type, size, content } " +
+          "filter .program.id = <uuid>$p and .object_id in array_unpack(<array<str>>$ids)",
+        manager.getSchema()!
+      );
+      const ids = [1, 2, 77].map(n => n.toString(16).padStart(40, "0"));
+      const plan = await pool.query(`EXPLAIN ${sql}`, [program, ids]);
+      const text = plan.rows.map(row => row["QUERY PLAN"]).join("\n");
+
+      assertStringIncludes(text, "uk_git_object_program_id_object_id");
+      assertEquals(text.includes("Seq Scan"), false, text);
+
+      await manager.close();
+    } finally {
+      await resetTestDatabase(pool);
       await pool.close();
     }
   }

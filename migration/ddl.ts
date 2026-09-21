@@ -7,6 +7,7 @@
 
 import {
   isReservedPgKeyword,
+  linkColumnName,
   propNameToColumnName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
@@ -412,7 +413,7 @@ END $$;`,
         // Postgres' unquoted-identifier lowercasing round-trips through
         // EdgeQL→SQL compilation cleanly.
         columns.push({
-          name: `${propNameToColumnName(link.name)}_id`,
+          name: linkColumnName(link.name),
           type: "UUID",
           nullable: !link.required,
           primaryKey: false,
@@ -865,7 +866,7 @@ END $$;`,
       );
     } else {
       // Single-valued link - add foreign key column
-      const columnName = `${propNameToColumnName(link.name)}_id`;
+      const columnName = linkColumnName(link.name);
       const nullable = link.required ? "NOT NULL" : "NULL";
       const targetTable = typeNameToTableName(link.target);
 
@@ -1078,6 +1079,7 @@ END $$;`,
   private generateCreateIndex(operation: Types.CreateIndexOperation): string[] {
     const index = operation.index;
     const unique = index.unique ? "UNIQUE " : "";
+    const ifNotExists = operation.ifNotExists ? "IF NOT EXISTS " : "";
     const method = index.method ? ` USING ${index.method.toUpperCase()}` : "";
     const partial = index.partial ? ` WHERE ${index.partial}` : "";
     const columns = index.columns.map(col => this.escapeIdentifier(col)).join(
@@ -1085,7 +1087,7 @@ END $$;`,
     );
 
     return [
-      `CREATE ${unique}INDEX ${this.escapeIdentifier(index.name)} ON ${this.escapeIdentifier(index.table)}${method} (${columns})${partial};`
+      `CREATE ${unique}INDEX ${ifNotExists}${this.escapeIdentifier(index.name)} ON ${this.escapeIdentifier(index.table)}${method} (${columns})${partial};`
     ];
   }
 
@@ -1551,7 +1553,7 @@ END $$;`,
     }
 
     // Single-valued link: delete from target where id matches
-    const columnName = `${propNameToColumnName(link.name)}_id`;
+    const columnName = linkColumnName(link.name);
     return [
       `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(fnName)}() RETURNS TRIGGER AS $$ BEGIN DELETE FROM ${
         this.escapeIdentifier(targetTable)

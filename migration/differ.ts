@@ -5,7 +5,10 @@
  * Schema diff engine for generating migration operations
  */
 
+import { MigrationError } from "../lib/errors.ts";
 import {
+  fitIdentifier,
+  linkColumnName,
   propNameToColumnName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
@@ -82,6 +85,12 @@ export class SchemaDiffer {
              the CREATE op. Without this, a new concrete type that extends an abstract type ships to
              DDL missing every inherited column. ***/
         operations.push(this.createTypeOperation(typeDef, newTypes));
+
+        /*** `index on (…)` and type-level `constraint exclusive on (…)` are standalone CREATE INDEX
+             statements, not part of CREATE TABLE. Emitted right after the type so the table exists. ***/
+        for (const index of this.extractIndexes(typeDef, newTypes, true)) {
+          operations.push({ kind: "CreateIndex", index } as Types.CreateIndexOperation);
+        }
       }
     }
 
@@ -124,7 +133,7 @@ export class SchemaDiffer {
         // as top-level CreateIndex/DropIndex ops (not TypeOperations) so
         // they map straight onto PG's standalone CREATE INDEX/DROP INDEX
         // statements. A changed definition surfaces as drop + create.
-        operations.push(...this.diffIndexes(oldTypeDef, newTypeDef));
+        operations.push(...this.diffIndexes(oldTypeDef, newTypeDef, oldTypes, newTypes));
       }
     }
 
@@ -989,68 +998,206 @@ export class SchemaDiffer {
   }
 
   /**
-   * Extract index definitions from a type's own members. Indexes declared
-   * via SDL `index on (.foo)` / `index on ((.a, .b))` surface as
-   * `AST.Index` members. Each becomes a {@link Types.IndexDefinition}
-   * whose `columns` are the snake_cased property paths the `on`
-   * expression references.
+   * Extract index definitions from a type's own members: SDL `index on (…)`
+   * (`AST.Index`, a non-unique btree index) and type-level
+   * `constraint exclusive on (…)` (`AST.Constraint`, a unique index). Each
+   * becomes a {@link Types.IndexDefinition} whose `columns` are the columns
+   * the `on` expression references, in declaration order.
    *
-   * Disc's SDL `index` is always a non-unique btree index — uniqueness is
-   * expressed separately via `constraint exclusive`. So `unique` is always
-   * `false` here; the exclusive→UNIQUE-INDEX path lives in property diffing.
+   * Property-level `constraint exclusive` is not handled here; it lives in
+   * property diffing and CREATE TABLE emission.
+   *
+   * `strict` is for the schema being migrated **to**: declarations that cannot
+   * become a correct index throw. The stored baseline is read leniently, so a
+   * schema that was accepted before these checks existed can still be
+   * migrated away from.
    */
   private extractIndexes(
-    typeDef: AST.TypeDeclaration
+    typeDef: AST.TypeDeclaration,
+    allTypes: Map<string, AST.TypeDeclaration>,
+    strict: boolean
   ): Types.IndexDefinition[] {
     const tableName = typeNameToTableName(typeDef.name.value);
     const indexes: Types.IndexDefinition[] = [];
 
     for (const member of typeDef.members) {
-      if (member.kind === "Index") {
-        const columns = this.extractIndexColumns(member.on);
-        indexes.push({
-          name: member.name?.value ?? this.defaultIndexName(tableName, columns),
-          table: tableName,
-          columns,
-          unique: false
-        });
+      const unique = member.kind === "Constraint";
+
+      if (member.kind !== "Index" && !(member.kind === "Constraint" && member.name?.value === "exclusive" && member.on)) {
+        continue;
       }
+
+      const declaration = `${unique ? "constraint exclusive" : "index"} on ${this.describeIndexTarget(member.on!)}`;
+
+      if (strict) {
+        this.rejectIndexOnParentType(typeDef, allTypes, declaration);
+      }
+
+      const resolved = this.resolveIndexColumns(member.on!, typeDef, allTypes, strict ? declaration : null);
+      const columns = resolved.map(r => r.column);
+
+      if (resolved.length === 1) {
+        /*** A single link already gets `idx_<table>_<link>_id` with its FK; the same index again
+             would collide on that name. ***/
+        if (!unique && resolved[0].kind === "link") {
+          continue;
+        }
+
+        /*** The property-level constraint already owns this column's unique index. ***/
+        if (unique && resolved[0].kind === "exclusive-property") {
+          continue;
+        }
+      }
+
+      indexes.push({
+        name: unique ?
+          fitIdentifier(`uk_${tableName}_${columns.join("_")}`) :
+          member.name?.value ?? this.defaultIndexName(tableName, columns),
+        table: tableName,
+        columns,
+        unique,
+        typeName: typeDef.name.value,
+        declaration
+      });
     }
 
     return indexes;
   }
 
+  /** The `on` target as written in SDL: `(.email)` or `((.program, .name))`. */
+  private describeIndexTarget(expr: AST.Expression): string {
+    const describe = (e: AST.Expression): string =>
+      e.kind === "TupleExpression" ?
+        `(${e.elements.map(describe).join(", ")})` :
+        e.kind === "PathExpression" ?
+        `.${e.path.join(".").replace(/^\.+/, "")}` :
+        this.extractExpressionString(e);
+
+    return `(${describe(expr)})`;
+  }
+
   /**
-   * Resolve an index `on` expression to its snake_cased column list.
-   * A single path (`.email`) yields one column; a tuple (`(.a, .b)`)
-   * yields one per element, preserving order (PG composite-index column
-   * order is significant). Leading dots from EdgeQL path syntax are
-   * stripped before the camelCase→snake_case conversion.
+   * Every declared index of a schema — what the database should contain.
+   * Used by the index backfill (`reconcileDeclaredIndexes`), because the
+   * differ itself only ever sees changes between two schema snapshots.
    */
-  private extractIndexColumns(expr: AST.Expression): string[] {
+  declaredIndexes(schema: Module[]): Types.IndexDefinition[] {
+    const types = this.extractTypes(schema);
+
+    return [...types.values()].flatMap(typeDef => this.extractIndexes(typeDef, types, true));
+  }
+
+  /**
+   * Indexes are read from a type's own members and created on its own table
+   * only. On a type with subtypes that would silently leave every subtype
+   * table unindexed (and an `exclusive` unenforced there), so refuse it.
+   */
+  private rejectIndexOnParentType(
+    typeDef: AST.TypeDeclaration,
+    allTypes: Map<string, AST.TypeDeclaration>,
+    declaration: string
+  ): void {
+    const name = typeDef.name.value;
+    const subtypes = this.getCache(allTypes).subtypes;
+    const children = subtypes.get(name) ?? subtypes.get(`default::${name}`) ?? [];
+
+    if (children.length > 0) {
+      throw new MigrationError(
+        `Type '${name}' has subtypes (${
+          children.join(", ")
+        }): a type-level '${declaration}' is not applied to subtype tables and is not supported there yet. ` +
+          `Declare it on each concrete subtype instead.`
+      );
+    }
+  }
+
+  /**
+   * Find a property or link by name on a type or, failing that, on the types
+   * it extends (nearest first).
+   */
+  private findMember(
+    typeDef: AST.TypeDeclaration,
+    allTypes: Map<string, AST.TypeDeclaration>,
+    name: string
+  ): AST.PropertyDeclaration | AST.LinkDeclaration | undefined {
+    for (const member of typeDef.members) {
+      if ((member.kind === "PropertyDeclaration" || member.kind === "LinkDeclaration") && member.name.value === name) {
+        return member;
+      }
+    }
+
+    for (const baseRef of typeDef.extending ?? []) {
+      const base = this.resolveExtendsTarget(baseRef.name.parts.join("::"), allTypes);
+      const found = base && this.findMember(base, allTypes, name);
+
+      if (found) {
+        return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolve an index `on` expression to its column list. A single path
+   * (`.email`) yields one column; a tuple (`(.a, .b)`) yields one per
+   * element, preserving order (PG composite-index column order is
+   * significant). Each path is looked up on the type: a property maps to its
+   * snake_case column, a single link to its FK column (`linkColumnName`).
+   *
+   * Multi links (junction table) and computed members (no storage) have no
+   * column. With `declaration` set (used in the message) they are an
+   * error; with `null` they fall back to the bare name, as they always did.
+   */
+  private resolveIndexColumns(
+    expr: AST.Expression,
+    typeDef: AST.TypeDeclaration,
+    allTypes: Map<string, AST.TypeDeclaration>,
+    declaration: string | null
+  ): { column: string; kind: "exclusive-property" | "link" | "other"; }[] {
     if (expr.kind === "TupleExpression") {
-      return expr.elements.flatMap(el => this.extractIndexColumns(el));
+      return expr.elements.flatMap(el => this.resolveIndexColumns(el, typeDef, allTypes, declaration));
     }
+
     if (expr.kind === "PathExpression") {
-      // `.email` parses as path `[".email"]`; strip the EdgeQL leading dot
-      // and convert the bare property name to its snake_case column.
+      // `.email` parses as path `[".", "email"]`; strip the EdgeQL leading
+      // dot and convert the bare member name to its column.
       const leaf = expr.path.join(".").replace(/^\.+/, "");
-      return [propNameToColumnName(leaf)];
+      const member = this.findMember(typeDef, allTypes, leaf);
+      const unusable = member?.kind === "LinkDeclaration" && member.multi ?
+        `multi link '${leaf}' — a multi link is stored in a junction table, not in a column` :
+        member?.computed ?
+        `computed '${leaf}' — a computed member has no column` :
+        null;
+
+      if (unusable && declaration) {
+        throw new MigrationError(`Type '${typeDef.name.value}': '${declaration}' cannot use ${unusable}.`);
+      }
+
+      if (member?.kind === "LinkDeclaration" && !unusable) {
+        return [{ column: linkColumnName(leaf), kind: "link" }];
+      }
+
+      const exclusive = member?.kind === "PropertyDeclaration" && this.extractConstraints(member.constraints || []).includes("exclusive");
+
+      return [{ column: propNameToColumnName(leaf), kind: exclusive ? "exclusive-property" : "other" }];
     }
+
     // Fallback: stringify any other expression shape so a functional/
     // partial index still produces a stable, comparable key rather than
     // silently collapsing to an empty column list.
-    return [propNameToColumnName(this.extractExpressionString(expr))];
+    return [{ column: propNameToColumnName(this.extractExpressionString(expr)), kind: "other" }];
   }
 
   /**
    * Deterministic snake_case name for an unnamed SDL index, mirroring the
    * inline FK-index convention (`idx_<table>_<col>` in `ddl.ts`). Composite
    * indexes join their columns with `_` so two different column sets on the
-   * same table get distinct names.
+   * same table get distinct names. Names over PostgreSQL's 63-byte limit are
+   * shortened by `fitIdentifier`; names that fit are never changed.
    */
   private defaultIndexName(table: string, columns: string[]): string {
-    return `idx_${table}_${columns.join("_")}`;
+    return fitIdentifier(`idx_${table}_${columns.join("_")}`);
   }
 
   /**
@@ -1071,12 +1218,14 @@ export class SchemaDiffer {
    */
   private diffIndexes(
     oldType: AST.TypeDeclaration,
-    newType: AST.TypeDeclaration
+    newType: AST.TypeDeclaration,
+    oldTypes: Map<string, AST.TypeDeclaration>,
+    newTypes: Map<string, AST.TypeDeclaration>
   ): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
-    const oldIndexes = this.extractIndexes(oldType);
-    const newIndexes = this.extractIndexes(newType);
+    const oldIndexes = this.extractIndexes(oldType, oldTypes, false);
+    const newIndexes = this.extractIndexes(newType, newTypes, true);
 
     const oldByKey = new Map(oldIndexes.map(i => [this.indexKey(i), i]));
     const newByKey = new Map(newIndexes.map(i => [this.indexKey(i), i]));

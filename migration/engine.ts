@@ -16,6 +16,7 @@ import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import {
   reconcileCreateTables,
+  reconcileDeclaredIndexes,
   type ExistingColumn
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
@@ -204,6 +205,53 @@ export class MigrationEngine {
   }
 
   /**
+   * Add the index backfill to a plan: `CREATE … INDEX IF NOT EXISTS` for every
+   * index `newSchema` declares that the database lacks and the plan does not
+   * already create (see `reconcileDeclaredIndexes`). The backfill travels as
+   * ordinary operations of the plan, so preview, unsafe-op gating, execution,
+   * history and rollback treat it like any other change — and a plan whose
+   * diff is empty stops being a no-op exactly when there is something to fix.
+   *
+   * Returns the plan unchanged when there is no database to look at (dry-run)
+   * or nothing is missing, which is what makes a second `disc migrate` a no-op.
+   */
+  async withIndexBackfill(plan: Types.MigrationPlan, newSchema: Module[]): Promise<Types.MigrationPlan> {
+    if (!this.pool || this.config.dryRun || plan.migrations.length === 0)
+      return plan;
+
+    const backfill = await reconcileDeclaredIndexes(
+      this.differ.declaredIndexes(newSchema),
+      plan.migrations.flatMap(m => m.operations),
+      names => this.readExistingIndexNames(names)
+    );
+
+    if (backfill.length === 0)
+      return plan;
+
+    /*** `planMigration` always yields one migration; the backfill joins the last one so it runs
+         after every table and column the plan creates. ***/
+    const migrations = [...plan.migrations];
+    const last = migrations[migrations.length - 1];
+    const operations = [...last.operations, ...backfill];
+
+    migrations[migrations.length - 1] = {
+      ...last,
+      description: this.generateMigrationDescription(operations),
+      name: this.generateMigrationName(operations),
+      operations
+    };
+
+    const allOperations = migrations.flatMap(m => m.operations);
+
+    return {
+      ...plan,
+      estimatedDuration: this.estimateDuration(allOperations),
+      migrations,
+      operationsCount: allOperations.length
+    };
+  }
+
+  /**
    * Generate DDL statements from a migration plan
    */
   generateDDL(plan: Types.MigrationPlan): Result<string[], MigrationError> {
@@ -291,7 +339,7 @@ export class MigrationEngine {
         }
 
         // Execute DDL statements
-        await this.executeStatements(ddlStatements);
+        await this.executeStatements(ddlStatements, migration.operations);
 
         // Run matching data migration if one exists
         const dataMigrationName = await this.runDataMigrationForSchema(migration);
@@ -452,7 +500,7 @@ export class MigrationEngine {
           });
         }
 
-        await this.executeStatements(ddlStatements);
+        await this.executeStatements(ddlStatements, migration.operations);
 
         // Run matching data migration if one exists
         const dataMigrationName = await this.runDataMigrationForSchema(migration);
@@ -1287,7 +1335,55 @@ export class MigrationEngine {
     });
   }
 
-  private async executeStatements(statements: string[]): Promise<void> {
+  /**
+   * Names of the `pg_indexes` rows, among `indexNames`, that exist in the
+   * schema new tables are created in. Feeds the index backfill.
+   */
+  private async readExistingIndexNames(indexNames: string[]): Promise<Set<string>> {
+    const result = await this.pool!.query(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ANY($1::text[])`,
+      [indexNames]
+    );
+
+    return new Set(result.rows.map(row => (row as { indexname: string; }).indexname));
+  }
+
+  /**
+   * Turn a failed statement into the error to report. `operations` are the
+   * operations the statements were generated from; they let a failure be
+   * explained in schema terms instead of as a raw PostgreSQL message.
+   *
+   * Handled today: SQLSTATE 23505 while creating a unique index that came from
+   * a `CreateIndex` operation — existing rows violate the constraint. Anything
+   * else is returned as it was thrown.
+   */
+  private describeStatementFailure(error: unknown, statement: string, operations: Types.MigrationOperation[]): unknown {
+    const fields = (error as { fields?: { code?: string; detail?: string; }; })?.fields ??
+      (error as { cause?: { fields?: { code?: string; detail?: string; }; }; })?.cause?.fields;
+
+    if (fields?.code !== "23505")
+      return error;
+
+    const operation = operations.find((op): op is Types.CreateIndexOperation =>
+      op.kind === "CreateIndex" && this.ddlGenerator.generateDDL([op]).includes(statement)
+    );
+
+    if (!operation || !operation.index.unique)
+      return error;
+
+    const { columns, declaration, name, table, typeName } = operation.index;
+    const columnList = columns.join(", ");
+
+    return new MigrationError(
+      `Cannot create unique index "${name}": existing rows of type '${typeName ?? table}' violate ` +
+        `'${declaration ?? `unique (${columnList})`}'${fields.detail ? ` (${fields.detail})` : ""}. Find the duplicates with:\n` +
+        `  SELECT ${columnList}, count(*) FROM ${table} WHERE ${columns.map(c => `${c} IS NOT NULL`).join(" AND ")} ` +
+        `GROUP BY ${columnList} HAVING count(*) > 1;\n` +
+        `Remove or merge them, then re-run the migration. Nothing was applied.`
+    );
+  }
+
+  private async executeStatements(statements: string[], operations: Types.MigrationOperation[] = []): Promise<void> {
     // Filter out comment-only lines and empty lines
     const executableStatements = statements.filter(s => s.trim() && !s.trim().startsWith("--"));
 
@@ -1333,7 +1429,12 @@ export class MigrationEngine {
         }
         for (const stmt of executableStatements) {
           logger.debug(`Executing: ${stmt.split("\n")[0].substring(0, 100)}…`);
-          await conn.execute(stmt);
+
+          try {
+            await conn.execute(stmt);
+          } catch (error) {
+            throw this.describeStatementFailure(error, stmt, operations);
+          }
         }
       });
       return;
@@ -1355,7 +1456,12 @@ export class MigrationEngine {
       }
       for (const statement of executableStatements) {
         logger.debug(`Executing: ${statement.split("\n")[0].substring(0, 100)}…`);
-        await this.db!.execute(statement);
+
+        try {
+          await this.db!.execute(statement);
+        } catch (error) {
+          throw this.describeStatementFailure(error, statement, operations);
+        }
       }
     });
   }

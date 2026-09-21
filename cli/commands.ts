@@ -644,7 +644,7 @@ export class CLICommands {
       } else if (args.squash) {
         await this.handleSquash(manager, args);
       } else if (args.create) {
-        this.createMigration(manager, load!.modules);
+        await this.createMigration(manager, load!.modules);
       } else {
         await this.applyMigrations(
           manager,
@@ -1307,9 +1307,15 @@ export class CLICommands {
     }
   }
 
-  private createMigration(manager: SchemaManager, modules: Module[]): void {
+  private async createMigration(manager: SchemaManager, modules: Module[]): Promise<void> {
     getLogger("cli").debug("Creating new migration…");
-    const planResult = manager.planModules(modules);
+    const diffResult = manager.planModules(modules);
+
+    /*** `disc migrate` also creates declared indexes the database lacks (the schema diff cannot see
+         those), so the preview has to show them too. ***/
+    const planResult = diffResult.ok ?
+      await manager.withIndexBackfill(diffResult.value, modules) :
+      diffResult;
 
     if (!planResult.ok) {
       getLogger("cli").error(`Migration planning failed: ${planResult.error.message}`);

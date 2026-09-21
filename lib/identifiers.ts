@@ -52,6 +52,52 @@ export function propNameToColumnName(propName: string): string {
 }
 
 /**
+ * Column that stores a single link: `<snake_case link name>_id`, a uuid FK.
+ *
+ * Every place that turns a link into a column name must go through this one
+ * function — table DDL, index columns (`migration/differ.ts`) and
+ * `ON CONFLICT (…)` targets in the compiler. If a unique index and the
+ * conflict target that relies on it ever spell the column differently,
+ * Postgres rejects the insert with "no unique or exclusion constraint
+ * matching the ON CONFLICT specification".
+ */
+export function linkColumnName(linkName: string): string {
+  return `${propNameToColumnName(linkName)}_id`;
+}
+
+/** PostgreSQL truncates identifiers to `NAMEDATALEN - 1` bytes, silently. */
+export const PG_MAX_IDENTIFIER_BYTES = 63;
+
+/**
+ * Make a generated identifier fit PostgreSQL's 63-byte limit.
+ *
+ * A name that fits is returned unchanged, so existing indexes are never
+ * renamed. A longer name is cut and suffixed with `_<8 hex>` of a hash of the
+ * full name: left to Postgres, two long names sharing their first 63 bytes
+ * would collide. The hash (FNV-1a, 32-bit) is part of stored index names —
+ * never change it.
+ */
+export function fitIdentifier(name: string): string {
+  const encoder = new TextEncoder();
+
+  if (encoder.encode(name).length <= PG_MAX_IDENTIFIER_BYTES)
+    return name;
+
+  let hash = 0x811c9dc5;
+
+  for (const byte of encoder.encode(name))
+    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+
+  const suffix = `_${hash.toString(16).padStart(8, "0")}`;
+  let head = name;
+
+  while (encoder.encode(head).length > PG_MAX_IDENTIFIER_BYTES - suffix.length)
+    head = head.slice(0, -1);
+
+  return `${head}${suffix}`;
+}
+
+/**
  * PostgreSQL 16 reserved keywords that cannot appear unquoted as identifiers.
  * Source: https://www.postgresql.org/docs/16/sql-keywords-appendix.html
  * (columns marked "reserved" and "reserved (can be function or type)"). We use

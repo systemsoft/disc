@@ -291,6 +291,12 @@ export interface DropConstraintOperation extends TableOperation {
 export interface CreateIndexOperation extends MigrationOperation {
   kind: "CreateIndex";
   index: IndexDefinition;
+  /**
+   * Emit `CREATE … INDEX IF NOT EXISTS`. Set by the index backfill
+   * (`reconcileDeclaredIndexes`), which must be safe to run again; the differ
+   * leaves it unset so a name clash on a diffed index stays a loud error.
+   */
+  ifNotExists?: boolean;
 }
 
 export interface DropIndexOperation extends MigrationOperation {
@@ -390,6 +396,10 @@ export interface IndexDefinition {
   unique: boolean;
   partial?: string; // WHERE clause for partial indexes
   method?: "btree" | "hash" | "gist" | "gin" | "brin";
+  /** Schema origin of an SDL-declared index, for error messages: the declaring type… */
+  typeName?: string;
+  /** …and the declaration as written, e.g. `constraint exclusive on ((.program, .name))`. */
+  declaration?: string;
 }
 
 export interface ColumnChange {

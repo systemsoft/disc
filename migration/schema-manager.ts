@@ -28,6 +28,7 @@ import {
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
 import {
+  linkColumnName,
   propNameToColumnName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
@@ -739,7 +740,7 @@ export class SchemaManager {
               // multi links in a junction table (no inline column).
               columnName: isMultiLink ?
                 undefined :
-                `${propNameToColumnName(propName)}_id`,
+                linkColumnName(propName),
               computed: propDecl.computed !== undefined,
               annotations: linkAnnotations
             });
@@ -879,7 +880,7 @@ export class SchemaManager {
             // would lowercase to `payoutaddresses_id` and miss the column).
             columnName: isMulti ?
               undefined :
-              `${propNameToColumnName(linkName)}_id`,
+              linkColumnName(linkName),
             computed: linkDecl.computed ? true : undefined,
             annotations: linkAnnotations
           });
@@ -1150,9 +1151,10 @@ export class SchemaManager {
       }
     }
 
-    // Plan migration: diff currentModules vs newModules
-    const planResult = this.engine.planMigration(
-      this.currentModules,
+    // Plan migration: diff currentModules vs newModules, then add the index
+    // backfill (declared indexes the database lacks — see withIndexBackfill).
+    const planResult = await this.backfillIndexes(
+      this.engine.planMigration(this.currentModules, newModules),
       newModules
     );
     if (!planResult.ok) {
@@ -1327,8 +1329,8 @@ export class SchemaManager {
       }
     }
 
-    const planResult = this.engine.planMigration(
-      this.currentModules,
+    const planResult = await this.backfillIndexes(
+      this.engine.planMigration(this.currentModules, newModules),
       newModules
     );
     if (!planResult.ok) {
@@ -1462,6 +1464,39 @@ export class SchemaManager {
 
     const newModules = normalizeModules(rawModules);
     return this.engine.planMigration(this.currentModules, newModules);
+  }
+
+  /**
+   * Add the index backfill to a plan: `CREATE … INDEX IF NOT EXISTS` for every
+   * index the schema declares that the database lacks and the plan does not
+   * already create. The diff cannot see these — it compares two schema
+   * snapshots, never the database — so a constraint that was declared before
+   * Disc enforced it would otherwise never get its index.
+   *
+   * `applySchema()` / `applyModules()` do this themselves. Callers that only
+   * plan (`disc migrate --create`) call it to preview the same statements.
+   * Reads `pg_indexes`; a dry-run manager returns the plan unchanged.
+   */
+  withIndexBackfill(
+    plan: Types.MigrationPlan,
+    rawModules: Module[]
+  ): Promise<Result<Types.MigrationPlan, MigrationError>> {
+    return this.backfillIndexes(Ok(plan), normalizeModules(rawModules));
+  }
+
+  private async backfillIndexes(
+    planResult: Result<Types.MigrationPlan, MigrationError>,
+    newModules: Module[]
+  ): Promise<Result<Types.MigrationPlan, MigrationError>> {
+    if (!planResult.ok || !this.engine) {
+      return planResult;
+    }
+
+    try {
+      return Ok(await this.engine.withIndexBackfill(planResult.value, newModules));
+    } catch (error) {
+      return Err(new MigrationError(`Failed to plan the index backfill: ${error instanceof Error ? error.message : String(error)}`));
+    }
   }
 
   /**

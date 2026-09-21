@@ -24,6 +24,7 @@
  */
 
 import { MigrationError } from "../lib/errors.ts";
+import type { CreateIndexOperation, IndexDefinition, MigrationOperation } from "./types.ts";
 
 /** A column the database currently reports for an existing table. */
 export interface ExistingColumn {
@@ -305,4 +306,44 @@ function describeMismatch(
   }
 
   return null;
+}
+
+/**
+ * Reads which of the given index names exist in the database. Injected by the
+ * engine, like {@link ExistingColumnReader}.
+ */
+export type ExistingIndexReader = (indexNames: string[]) => Promise<Set<string>>;
+
+/**
+ * Backfill for indexes the schema declares but the database lacks.
+ *
+ * The differ compares the stored schema snapshot with the new one and never
+ * looks at the database. An index that both snapshots declare therefore diffs
+ * to nothing even when it was never created — which is the state of every
+ * type-level `constraint exclusive on (…)`, and every `index on (…)` of a type
+ * created with it, written before Disc emitted them.
+ *
+ * Returns `CREATE … INDEX IF NOT EXISTS` operations for the declared indexes
+ * that are neither created by the pending migration (`planned`) nor present in
+ * the database. Idempotent: once the indexes exist it returns nothing.
+ */
+export async function reconcileDeclaredIndexes(
+  declared: IndexDefinition[],
+  planned: MigrationOperation[],
+  readExisting: ExistingIndexReader
+): Promise<CreateIndexOperation[]> {
+  const plannedNames = new Set(
+    planned.filter((op): op is CreateIndexOperation => op.kind === "CreateIndex").map(op => op.index.name)
+  );
+  const candidates = declared.filter(index => !plannedNames.has(index.name));
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const existing = await readExisting(candidates.map(index => index.name));
+
+  return candidates
+    .filter(index => !existing.has(index.name))
+    .map(index => ({ ifNotExists: true, index, kind: "CreateIndex" }));
 }
