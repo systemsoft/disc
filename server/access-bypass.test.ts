@@ -170,6 +170,36 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
   );
 });
 
+Deno.test("EdgeQLProtocolHandler — compiled-query cache never serves one user's policy SQL to another (S1)", async () => {
+  // The evaluator inlines `global current_user` as a literal, so compiled SQL
+  // is per user. Same role, same query text: each caller must get their own id.
+  const schema = await schemaFromSDL(SDL_WITH_POLICY);
+  const handler = new EdgeQLProtocolHandler({
+    schema,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true
+  });
+
+  const request: QueryRequest = { query: "SELECT User { name, email }" };
+  const userA = "aaaaaaaa-0000-0000-0000-000000000001";
+  const userB = "bbbbbbbb-0000-0000-0000-000000000002";
+
+  const responseA = await handler.handleRequest(request, makeContext({ userId: userA, roles: ["member"] }));
+  const responseB = await handler.handleRequest(request, makeContext({ userId: userB, roles: ["member"] }));
+  const sqlA = responseA.extensions?.sql as string;
+  const sqlB = responseB.extensions?.sql as string;
+
+  assert(sqlA.includes(userA), `A's SQL must be scoped to A: ${sqlA}`);
+  assert(sqlB.includes(userB), `B's SQL must be scoped to B: ${sqlB}`);
+  assert(!sqlB.includes(userA), `B was served A's compiled policy SQL: ${sqlB}`);
+
+  // A single user's repeated query is still a cache hit.
+  const again = await handler.handleRequest(request, makeContext({ userId: userB, roles: ["member"] }));
+  assertEquals(again.extensions?.cacheHit, true);
+  assertEquals(again.extensions?.sql, sqlB);
+});
+
 // Nested mutations (S10): the policy follows the mutation node, so the
 // with-form gets the same treatment as the bare form — filtered or denied for
 // an ordinary caller, unfiltered for a bypass caller.

@@ -127,20 +127,24 @@ export function makeCompilationCacheKey(
 }
 
 /**
- * Hash an access context for compilation-cache keying.
+ * Key an access context for the compilation cache.
  *
- * P1-13: only `userRole` is included. Compiled SQL is parameterized on
- * `$user_id` / `$current_user`, so the *shape* of the plan depends on
- * which policies apply (a function of role), not on which concrete
- * user is running it. Including userId would make every user a separate
- * cache entry — cardinality explosion under any non-trivial multi-tenant
- * load. Role-keyed entries are reused across all users with that role.
+ * S1: both `userId` and `userRole` are part of the key. The policy evaluator
+ * inlines the caller's id into the compiled SQL as a literal
+ * (`owner_id = E'<userId>'`, see access/evaluator.ts), so a compiled plan
+ * belongs to exactly one user; keying by role alone (the old P1-13 behavior)
+ * served one user's row filter to every other user with that role.
  *
- * `userId` is accepted but ignored to keep call sites stable.
+ * The values are embedded verbatim, not run through `hashString`: that is a
+ * 32-bit hash, and two user ids that collide would share a plan again.
+ *
+ * The cost is one cache entry per (query, user). The long-term fix is to emit
+ * the policy's user id as a bind parameter, which makes the SQL user-neutral
+ * and lets the key go back to role only.
  */
 export function hashAccessContext(
-  _userId?: string,
+  userId?: string,
   userRole?: string
 ): string {
-  return hashString(userRole || "");
+  return JSON.stringify([userId ?? null, userRole ?? null]);
 }

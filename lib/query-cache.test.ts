@@ -146,13 +146,25 @@ Deno.test("hashAccessContext - deterministic", () => {
   assertEquals(a, b);
 });
 
-Deno.test("hashAccessContext - same role produces same hash regardless of user (P1-13)", () => {
-  // P1-13: userId must NOT contribute to the cache key — every user with
-  // the same role shares one compiled plan. Otherwise cardinality
-  // explodes under multi-tenant load.
+Deno.test("hashAccessContext - different users with the same role get different keys (S1)", () => {
+  // The policy evaluator inlines the caller's id into the compiled SQL as a
+  // literal, so a compiled plan belongs to one user. Sharing it by role
+  // (the old P1-13 behavior) served user A's row filter to user B.
   const a = hashAccessContext("user1", "admin");
   const b = hashAccessContext("user2", "admin");
-  assertEquals(a, b);
+  assertNotEquals(a, b);
+});
+
+Deno.test("hashAccessContext - user ids that collide under hashString still get different keys (S1)", () => {
+  // hashString is a 32-bit string hash; "Aa" and "BB" collide. A key that
+  // merely hashed the user id would hand one of these users the other's SQL.
+  assertEquals(hashString("Aa"), hashString("BB"));
+  assertNotEquals(hashAccessContext("Aa", "admin"), hashAccessContext("BB", "admin"));
+});
+
+Deno.test("hashAccessContext - user and role cannot be confused with each other (S1)", () => {
+  assertNotEquals(hashAccessContext("a", "b|c"), hashAccessContext("a|b", "c"));
+  assertNotEquals(hashAccessContext("admin", undefined), hashAccessContext(undefined, "admin"));
 });
 
 Deno.test("hashAccessContext - different roles produce different hashes (P1-13)", () => {

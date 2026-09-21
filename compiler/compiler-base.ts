@@ -144,6 +144,26 @@ export interface CompilerOptions {
   accessContext?: AccessContext;
 }
 
+/*** Calls `onParameter` with the bare name (no `$`) of every Parameter node under `node`, in AST-walk order. ***/
+function visitParameters(node: unknown, onParameter: (bare: string) => void): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const obj = node as { kind?: string; name?: string; };
+  if (obj.kind === "Parameter" && typeof obj.name === "string") {
+    onParameter(obj.name.startsWith("$") ? obj.name.slice(1) : obj.name);
+  }
+  for (const v of Object.values(obj as Record<string, unknown>)) {
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        visitParameters(item, onParameter);
+      }
+    } else if (v && typeof v === "object") {
+      visitParameters(v, onParameter);
+    }
+  }
+}
+
 /**
  * Walk a query AST and assign each named parameter a 1-indexed position
  * in first-seen order. Numeric parameters (`$0`, `$1`, ...) are skipped
@@ -153,31 +173,39 @@ export interface CompilerOptions {
 export function buildParameterIndex(node: unknown): Map<string, number> {
   const out = new Map<string, number>();
 
-  function visit(n: unknown): void {
-    if (!n || typeof n !== "object") {
-      return;
+  visitParameters(node, bare => {
+    // Numeric parameters keep their source-supplied index.
+    if (Number.isNaN(parseInt(bare, 10)) && !out.has(bare)) {
+      out.set(bare, out.size + 1);
     }
-    const obj = n as { kind?: string; name?: string; };
-    if (obj.kind === "Parameter" && typeof obj.name === "string") {
-      const bare = obj.name.startsWith("$") ? obj.name.slice(1) : obj.name;
-      // Numeric parameters keep their source-supplied index.
-      if (Number.isNaN(parseInt(bare, 10)) && !out.has(bare)) {
-        out.set(bare, out.size + 1);
-      }
-    }
-    for (const v of Object.values(obj as Record<string, unknown>)) {
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          visit(item);
-        }
-      } else if (v && typeof v === "object") {
-        visit(v);
-      }
-    }
+  });
+
+  return out;
+}
+
+/**
+ * Variable names in bind order: `names[i]` is the variable PostgreSQL's
+ * `$${i + 1}` refers to. `parameterIndex` is the map `compile()` was given
+ * (named parameters); numeric parameters sit at their own index (`$0` → `$1`),
+ * exactly as `compileParameter` emits them. The binding layer uses this to bind
+ * a request's variables by name, so it has to be stored with a cached
+ * compilation: the query AST is not available on a cache hit.
+ */
+export function parameterBindOrder(node: unknown, parameterIndex: Map<string, number>): string[] {
+  const names: string[] = [];
+
+  for (const [name, position] of parameterIndex) {
+    names[position - 1] = name;
   }
 
-  visit(node);
-  return out;
+  visitParameters(node, bare => {
+    const numeric = parseInt(bare, 10);
+    if (!Number.isNaN(numeric)) {
+      names[numeric] = bare;
+    }
+  });
+
+  return names;
 }
 
 /**

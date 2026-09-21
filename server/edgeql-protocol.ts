@@ -12,12 +12,13 @@ import * as SQL from "../compiler/sql.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
+import { DatabaseExecutionError, QueryError, QueryTimeoutError, ValidationError } from "../lib/errors.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
 import { DISC_VERSION } from "../lib/version.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
+import { normalizeRows } from "./row-normalizer.ts";
 import * as Types from "./types.ts";
 
 const log = getLogger("edgeql-protocol");
@@ -51,6 +52,9 @@ export interface EdgeQLExecutionOptions {
 }
 
 interface CachedCompilation {
+  /*** Variable names in bind order (`parameterNames[i]` binds to `$${i + 1}`). Kept with the SQL
+       because a cache hit has no query AST to derive it from, and variables bind by name. ***/
+  parameterNames: string[];
   sqlAST: SQL.SQLStatement;
   sqlString: string;
 }
@@ -149,6 +153,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       let cacheHit = false;
       let sqlString: string;
       let sqlStatement: SQL.SQLStatement;
+      let parameterNames: string[];
       let parsedAST: EdgeQL.Query | undefined;
       let parseMs = 0;
       let compileMs = 0;
@@ -191,6 +196,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       if (cached) {
         cacheHit = true;
+        parameterNames = cached.parameterNames;
         sqlString = cached.sqlString;
         sqlStatement = cached.sqlAST;
       } else {
@@ -259,8 +265,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         }
 
         // Compile EdgeQL to SQL
+        // The parameter map is built here and handed to the compiler, so the
+        // handler knows which variable each `$n` stands for (see
+        // prepareParameters) without reaching into the compiler.
         const compileStart = Date.now();
-        const compileResult = this.compiler.compile(ast);
+        const parameterIndex = Compiler.buildParameterIndex(ast);
+        const compileResult = this.compiler.compile(ast, {
+          parameterMap: parameterIndex
+        });
         compileMs = Date.now() - compileStart;
 
         if (!compileResult.ok) {
@@ -277,9 +289,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
         sqlStatement = compileResult.value;
         sqlString = this.generateSQLString(sqlStatement);
+        parameterNames = Compiler.parameterBindOrder(ast, parameterIndex);
 
         // Store in compilation cache
         this.compilationCache.set(compilationKey, {
+          parameterNames,
           sqlAST: sqlStatement,
           sqlString
         });
@@ -322,6 +336,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         globalsPrefix + sqlString,
         request.variables || {},
         context,
+        parameterNames,
         sqlStatement
       );
       const executeMs = Date.now() - executeStart;
@@ -402,6 +417,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return response;
     } catch (error) {
+      // The request's variables do not match the query's parameters: the
+      // caller's mistake, reported as such (HTTP 400) and never executed.
+      if (error instanceof ValidationError) {
+        return {
+          errors: [{
+            message: error.message,
+            extensions: { code: "VALIDATION_ERROR" }
+          }]
+        };
+      }
+
       log.error("Query execution error", {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -601,6 +627,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     variables: Record<string, any>,
     context: Types.QueryContext,
+    parameterNames: string[],
     sqlStatement?: SQL.SQLStatement
   ): Promise<{ data: any; warnings?: string[]; }> {
     log.debug("Executing SQL", {
@@ -633,8 +660,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     // Use the transaction's connection, or the pool if one is available
     if (transactionConnection || pool) {
+      // Outside the try: a variables mismatch is a ValidationError for the
+      // caller, not a database failure.
+      const params = this.prepareParameters(variables, parameterNames, sqlStatement);
+
       try {
-        const params = this.prepareParameters(variables, sqlStatement);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
         // `queryWithTimeout` is pool-only; a transactional query relies on
@@ -647,6 +677,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         } else {
           result = await pool!.query(sql, params);
         }
+
+        // Driver values with no JSON form (int64 → bigint) get their wire
+        // representation here, where rows become response data, so every
+        // response shape below — and every cache hit — is covered.
+        const rows = normalizeRows(result.rows);
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -662,23 +697,23 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             normalizedSQL.includes("update "));
 
         if (isCteWrite) {
-          return { data: result.rows[0] || { success: true } };
+          return { data: rows[0] || { success: true } };
         } else if (normalizedSQL.includes("select")) {
           // The compiler emits `SELECT jsonb_build_object(...)` for shape
           // expressions, which surfaces as rows of `{jsonb_build_object: {...}}`.
           // Unwrap that single-column wrapper so callers see clean object
           // shapes — UI/SDK consumers expect `row.id` to work directly.
-          return { data: this.unwrapJsonbRows(result.rows) };
+          return { data: this.unwrapJsonbRows(rows) };
         } else if (
           normalizedSQL.includes("insert") &&
           normalizedSQL.includes("returning")
         ) {
-          return { data: result.rows[0] || { success: true } };
+          return { data: rows[0] || { success: true } };
         } else if (
           normalizedSQL.includes("update") &&
           normalizedSQL.includes("returning")
         ) {
-          return { data: result.rows[0] || { updated: result.rowCount } };
+          return { data: rows[0] || { updated: result.rowCount } };
         } else if (normalizedSQL.includes("delete")) {
           return { data: { deleted: result.rowCount } };
         } else {
@@ -744,32 +779,49 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return parts.join("");
   }
 
+  /**
+   * Build PostgreSQL's positional bind array from the request's variables, BY
+   * NAME: `parameterNames[i]` is the variable `$${i + 1}` stands for. The
+   * client's key order means nothing — slots follow the compiler's AST walk,
+   * which is not even the textual order of the parameters.
+   *
+   * Throws a ValidationError naming the variable when one is missing, or when
+   * the request carries one the query does not use (a typo would otherwise
+   * surface as a PostgreSQL bind-count error, or not at all).
+   */
   private prepareParameters(
     variables: Record<string, any>,
+    parameterNames: string[],
     sqlStatement?: SQL.SQLStatement
   ): any[] {
-    // Convert variables object to array for PostgreSQL parameterized queries.
-    // Values are ordered by first-seen parameter position, which the compiler
-    // assigns in the same first-seen order the SDK/codegen builds `variables`
-    // in — so `Object.values` lines up with PG's `$1..$n`.
-    const values = Object.values(variables);
+    const expected = new Set(parameterNames);
+
+    for (const name of expected) {
+      if (name !== undefined && !Object.hasOwn(variables, name)) {
+        throw new ValidationError(`Missing variable: the query uses $${name}, but no value was provided for it`);
+      }
+    }
+    for (const name of Object.keys(variables)) {
+      if (!expected.has(name)) {
+        throw new ValidationError(`Unknown variable: $${name} was provided, but the query has no such parameter`);
+      }
+    }
 
     // Parameters cast to `jsonb` (tuples, array-of-tuple, json) must be bound as
     // JSON text. deno-postgres encodes a JS array as a PG array literal (`{a,b}`),
     // which a jsonb cast rejects with "invalid input syntax for type json"; an
     // explicit JSON.stringify makes every jsonb param bind uniformly. Native PG
     // arrays (`text[]`, etc.) and scalars are left for the driver to encode.
-    if (!sqlStatement) {
-      return values;
-    }
-    const typeMap = Compiler.buildParameterTypeMap(sqlStatement);
-    if (typeMap.size === 0) {
-      return values;
-    }
-    return values.map((value, i) => {
-      // `values[i]` corresponds to the parameter at 1-indexed position i + 1.
-      const pgType = typeMap.get(i + 1);
-      if (pgType === "jsonb" && value !== undefined) {
+    const typeMap = sqlStatement ?
+      Compiler.buildParameterTypeMap(sqlStatement) :
+      new Map<number, string>();
+
+    // Array.from, not map: a gap in numeric parameters (`$1` without `$0`)
+    // leaves a hole in parameterNames that must still occupy its slot.
+    return Array.from(parameterNames, (name, i) => {
+      const value = name === undefined ? undefined : variables[name];
+      // `parameterNames[i]` is the parameter at 1-indexed position i + 1.
+      if (typeMap.get(i + 1) === "jsonb" && value !== undefined) {
         return JSON.stringify(value);
       }
       return value;
@@ -972,7 +1024,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const parser = new EdgeQL.EdgeQLParser(commandText);
     const ast = parser.parse();
 
+    // Same read-only gate as handleRequest (gh/geldata#5524).
+    if (this.options.readOnly && isWriteQuery(ast)) {
+      throw new QueryError("the server is currently in read-only mode; this query would write to the database");
+    }
+
     const parameterIndex = Compiler.buildParameterIndex(ast);
+
+    // The compiler is shared with the HTTP path and keeps the access context
+    // of whoever compiled last — possibly a bypassing admin. This path has no
+    // Disc user of its own (the binary listener authenticates a connection),
+    // so it compiles as an anonymous caller, explicitly.
+    this.compiler.setAccessContext({});
 
     const compileResult = this.compiler.compile(ast, {
       parameterMap: parameterIndex

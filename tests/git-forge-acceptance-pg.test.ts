@@ -46,7 +46,6 @@ const RUN_PG = canRunPgTests();
  */
 const PENDING = new Set<string>(
   Deno.env.get("GIT_FORGE_ALL") === "1" ? [] : [
-    "by-name", // Phase 1 (S2): variables bind positionally
     "Q1", // Phase 3 (D2, D3, D4): link path in update filter; select over a mutation
     "Q2", // Phase 3 (D2, D3, D4): link path in delete filter; select over a mutation
     "Q3", // Phase 3 (D3, D5, D6), needs Phase 2 (D1) for the composite unique index

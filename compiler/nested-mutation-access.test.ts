@@ -35,6 +35,13 @@ module default {
     }
   }
 
+  type Journal {
+    required title: str;
+    access policy append_only {
+      allow select, insert;
+    }
+  }
+
   type Doc {
     required owner_id: str;
     required title: str;
@@ -167,6 +174,43 @@ Deno.test("nested mutation access - an allowed insert stays allow/deny only, wit
 });
 
 // ---------------------------------------------------------------------------
+// Upsert: `else (update …)` is an update, so it answers to the update policy
+// (S12). ON CONFLICT DO UPDATE cannot carry a row predicate yet, so a
+// row-level update policy fails closed instead of compiling unfiltered.
+// ---------------------------------------------------------------------------
+
+Deno.test("nested mutation access - upsert is denied when the update policy denies", async () => {
+  const compiled = await asUser("insert Journal { title := 't' } unless conflict on .title else (update Journal set { title := 'u' })");
+  assertEquals(compiled.sql, undefined, `expected a denial, got SQL: ${compiled.sql}`);
+  assertStringIncludes(compiled.error ?? "", "UPDATE not allowed on Journal");
+});
+
+Deno.test("nested mutation access - upsert on a type with a row-level update policy does not compile", async () => {
+  const compiled = await asUser(
+    "insert Doc { owner_id := 'me', title := 't' } unless conflict on .title else (update Doc set { owner_id := 'me' })"
+  );
+  assertEquals(compiled.sql, undefined, `an upsert must not overwrite rows the update policy hides: ${compiled.sql}`);
+  assertStringIncludes(compiled.error ?? "", "row-level update policy");
+  assertStringIncludes(compiled.error ?? "", "Doc");
+});
+
+Deno.test("nested mutation access - upsert compiles unchanged where update is allowed unconditionally", async () => {
+  const compiled = await asUser("insert Tag { name := 't' } unless conflict on .name else (update Tag set { name := 'u' })");
+  assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
+  assertStringIncludes(compiled.sql, "ON CONFLICT (name) DO UPDATE SET name = 'u'");
+});
+
+Deno.test("nested mutation access - upsert is unfiltered for a bypass caller", async () => {
+  const doc = await asBypass("insert Doc { owner_id := 'me', title := 't' } unless conflict on .title else (update Doc set { owner_id := 'me' })");
+  assert(doc.sql, `bypass must compile, got error: ${doc.error}`);
+  assertStringIncludes(doc.sql, "ON CONFLICT (title) DO UPDATE SET");
+
+  const journal = await asBypass("insert Journal { title := 't' } unless conflict on .title else (update Journal set { title := 'u' })");
+  assert(journal.sql, `bypass must compile, got error: ${journal.error}`);
+  assertStringIncludes(journal.sql, "ON CONFLICT (title) DO UPDATE SET");
+});
+
+// ---------------------------------------------------------------------------
 // with-form
 // ---------------------------------------------------------------------------
 
@@ -274,6 +318,23 @@ Deno.test("nested mutation access - top-level select policy behavior is unchange
   assertStringIncludes(locked.sql, "WHERE FALSE");
 
   const bypassed = await asBypass("select Doc { title }");
+  assert(bypassed.sql);
+  assertEquals(bypassed.sql.includes("WHERE"), false);
+});
+
+// S13: policies are registered under TypeDef.name, so the lookup must not use
+// the spelling from the query.
+Deno.test("nested mutation access - module-qualified select gets the same policy as the bare name", async () => {
+  const owned = await asUser("select default::Doc { title }");
+  assert(owned.sql, `expected SQL, got error: ${owned.error}`);
+  assertEquals(countOf(owned.sql, OWNER_PREDICATE), 1, `select default::Doc must be owner-scoped: ${owned.sql}`);
+  assertEquals(owned.sql, (await asUser("select Doc { title }")).sql);
+
+  const locked = await asUser("select default::Locked { name }");
+  assert(locked.sql, `expected SQL, got error: ${locked.error}`);
+  assertStringIncludes(locked.sql, "WHERE FALSE");
+
+  const bypassed = await asBypass("select default::Doc { title }");
   assert(bypassed.sql);
   assertEquals(bypassed.sql.includes("WHERE"), false);
 });

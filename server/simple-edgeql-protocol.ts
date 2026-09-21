@@ -25,6 +25,7 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError } from "../lib/errors.ts";
 import { getLogger } from "../lib/logger.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
+import { normalizeRows } from "./row-normalizer.ts";
 import * as Types from "./types.ts";
 import type { HealthStatus } from "./types.ts";
 
@@ -492,6 +493,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       try {
         // Execute the SQL using the pool
         const result = await pool.query(sql, this.prepareParameters(variables));
+        // Same wire representation as the full handler (a driver bigint is not JSON).
+        const rows = normalizeRows(result.rows);
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
 
@@ -504,19 +507,19 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
             normalizedSQL.includes("update "));
 
         if (isCteWrite) {
-          return { data: result.rows[0] || { success: true } };
+          return { data: rows[0] || { success: true } };
         } else if (normalizedSQL.includes("select")) {
-          return { data: result.rows };
+          return { data: rows };
         } else if (
           normalizedSQL.includes("insert") &&
           normalizedSQL.includes("returning")
         ) {
-          return { data: result.rows[0] || { success: true } };
+          return { data: rows[0] || { success: true } };
         } else if (
           normalizedSQL.includes("update") &&
           normalizedSQL.includes("returning")
         ) {
-          return { data: result.rows[0] || { updated: result.rowCount } };
+          return { data: rows[0] || { updated: result.rowCount } };
         } else if (normalizedSQL.includes("delete")) {
           return { data: { deleted: result.rowCount } };
         } else {

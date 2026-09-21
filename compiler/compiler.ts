@@ -19,7 +19,7 @@ import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
-export { buildParameterIndex, buildParameterTypeMap } from "./compiler-base.ts";
+export { buildParameterIndex, buildParameterTypeMap, parameterBindOrder } from "./compiler-base.ts";
 export type { CompilerOptions } from "./compiler-base.ts";
 
 export class EdgeQLCompiler extends ShapeCompilerLayer {
@@ -78,8 +78,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return statement; // No type identified, return as-is
     }
 
-    // Get the table name for the type
-    const typeDef = this.ctx.schema.types.get(objectType);
+    // Policies are registered under TypeDef.name (see adaptAccessPolicies),
+    // so resolve the query's spelling (`Doc`, `default::Doc`) to the type and
+    // look the policy up by that name, as mutationAccessCondition() does.
+    const typeDef = Context.resolveTypeName(this.ctx, objectType);
     if (!typeDef) {
       return statement; // Type not found in schema
     }
@@ -89,7 +91,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       case "SelectStatement": {
         // Check if access is allowed and inject conditions
         const decision = this.accessEvaluator.evaluate(
-          objectType,
+          typeDef.name,
           "select",
           this.accessContext
         );
@@ -164,7 +166,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       case "SelectQuery":
         // Extract type from the expression
         if (query.expr?.kind === "TypeName") {
-          return query.expr.name.parts.join(".");
+          return query.expr.name.parts.join("::");
         } else if (query.expr?.kind === "Path") {
           // Handle path expressions that start with a type
           const firstStep = query.expr.steps[0];
@@ -458,6 +460,18 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         if (!updateQuery) {
           throw new CompilationError(
             "UPSERT else clause must be an UpdateQuery"
+          );
+        }
+
+        // The else branch overwrites an existing row, so it answers to the
+        // update policy (throws when denied). ON CONFLICT … DO UPDATE cannot
+        // carry a row predicate yet — UpdateAction has no WHERE and policy
+        // predicates use unqualified columns, ambiguous there between the
+        // target row and `excluded` — so a row-level policy fails closed.
+        if (this.mutationAccessCondition(typeDef.name, "update")) {
+          throw new CompilationError(
+            `Upsert (unless conflict … else update) is not supported on '${typeDef.name}' because it has a row-level update policy. ` +
+              "Use a separate update, or the service credential."
           );
         }
 
