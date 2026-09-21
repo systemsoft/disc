@@ -19,6 +19,10 @@ import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
+function isUuidTypeName(typeName: string): boolean {
+  return typeName === "uuid" || typeName === "std::uuid";
+}
+
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   // Implemented by higher layers of the compiler inheritance chain.
   protected abstract compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement;
@@ -1028,7 +1032,22 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return SQL.createCastExpression(expr, Context.getEnumSqlType(typeName));
     }
 
+    // `<Program><uuid>$p` names an object by its id. A link column stores that
+    // uuid, so the cast is the uuid expression itself; there is no SQL type to
+    // cast to.
+    if (resolved?.kind === "object") {
+      return expr;
+    }
+
     const pgType = edgeqlTypeToPgType(typeName);
+
+    // `<Progam><uuid>$p`: the object-cast shape with a name that is neither a
+    // schema type nor a known scalar. Without this it reaches Postgres as
+    // `CAST(… AS Progam)`.
+    if (pgType === typeName && !isUuidTypeName(typeName) && cast.expr.kind === "TypeCast" && isUuidTypeName(renderEdgeQLTypeName(cast.expr.type))) {
+      throw new CompilationError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
+    }
+
     return SQL.createCastExpression(expr, pgType);
   }
 

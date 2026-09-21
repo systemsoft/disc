@@ -430,16 +430,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Handle conflict resolution
     let onConflict: SQL.OnConflictClause | undefined;
     if (query.unless) {
-      const target: string[] = [];
-      if (query.unless.on && query.unless.on.kind === "Path") {
-        const step = query.unless.on.steps[0];
-        if (step.name) {
-          const property = Context.getProperty(this.ctx, typeName, step.name);
-          if (property) {
-            target.push(property.columnName);
-          }
-        }
-      }
+      const target = this.compileConflictTarget(typeName, query.unless.on);
 
       if (query.unless.else) {
         // DO UPDATE - extract SET clauses from the else UpdateQuery
@@ -571,6 +562,47 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     });
 
     return SQL.withCTEs(ctes, this.selectAllFrom("ins"));
+  }
+
+  // Columns of an `unless conflict on …` target: one path, or a tuple of paths,
+  // each naming a stored property or a single link of the inserted type. A link
+  // is its FK column (`LinkDef.columnName`, built by `linkColumnName()`), the
+  // name the migration gives the unique index column, so the conflict target
+  // and the index cannot disagree. Anything else is an error: dropping the
+  // target would emit a bare ON CONFLICT, which swallows every unique
+  // violation, and is invalid SQL in front of DO UPDATE.
+  private compileConflictTarget(
+    typeName: string,
+    on: EdgeQLAST.Expression
+  ): string[] {
+    // A bare `unless conflict` reaches here as the parser's empty literal.
+    if (on.kind === "Literal" && on.type === "empty") {
+      return [];
+    }
+
+    const paths = on.kind === "TupleExpr" ? on.elements : [on];
+
+    return paths.map(path => {
+      if (path.kind !== "Path" || path.steps.length !== 1 || path.steps[0].type !== "property") {
+        throw new CompilationError(
+          `Unsupported conflict target on '${typeName}': expected a property or single link such as '.name', or a tuple of them`
+        );
+      }
+
+      const name = path.steps[0].name;
+      const property = Context.getProperty(this.ctx, typeName, name);
+      const column = property ?
+        (property.computed ? undefined : property.columnName) :
+        Context.getLink(this.ctx, typeName, name)?.columnName;
+
+      if (!column) {
+        throw new CompilationError(
+          `Conflict target '.${name}' is not a stored property or single link of '${typeName}'`
+        );
+      }
+
+      return column;
+    });
   }
 
   // Build a junction INSERT as a CTE row:
@@ -713,6 +745,29 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     });
   }
 
+  // Run `compile` in a scope where relative paths resolve against the mutated
+  // type, as they do in a select: `.name` → its column, `.link.id` → the FK
+  // column, deeper paths → a correlated subselect. UPDATE and DELETE name their
+  // table without an alias, so the table name itself is the qualifier.
+  private withMutationScope<T>(
+    typeName: string,
+    typeDef: Context.TypeDef,
+    compile: () => T
+  ): T {
+    Context.pushScope(this.ctx);
+    this.ctx.currentScope.aliases.set(typeName.toLowerCase(), {
+      alias: typeDef.tableName,
+      table: typeDef.tableName,
+      type: typeName
+    });
+
+    try {
+      return compile();
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
   private compileUpdateQuery(
     query: EdgeQLAST.UpdateQuery
   ): SQL.UpdateStatement | SQL.CTEStatement {
@@ -722,6 +777,16 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
 
+    return this.withMutationScope(typeName, typeDef, () => this.compileUpdateInScope(query, typeName, typeDef));
+  }
+
+  // The body of compileUpdateQuery: `set` and `filter` are compiled with the
+  // updated type in scope.
+  private compileUpdateInScope(
+    query: EdgeQLAST.UpdateQuery,
+    typeName: string,
+    typeDef: Context.TypeDef
+  ): SQL.UpdateStatement | SQL.CTEStatement {
     const setClauses: SQL.SetClause[] = [];
     // Multi-link ops carry their assignment operator so the CTE knows whether
     // to replace (`:=`), add (`+=`), or remove (`-=`) junction rows.
@@ -935,7 +1000,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Compile WHERE clause
     let whereClause: SQL.WhereClause | undefined;
     if (query.filter) {
-      const condition = this.compileExpression(query.filter);
+      const filter = query.filter;
+      const condition = this.withMutationScope(typeName, typeDef, () => this.compileExpression(filter));
       whereClause = SQL.createWhereClause(condition);
     }
 
