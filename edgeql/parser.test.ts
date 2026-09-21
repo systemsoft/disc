@@ -1109,3 +1109,36 @@ Deno.test("EdgeQL Parser - array of named tuple cast parses", () => {
     assertEquals(inner?.subtypes?.[1].fieldName, "url");
   }
 });
+
+// A nested `(select …)` must not change how the enclosing select's operand is
+// parsed: the shape after `select (insert … { link := (select …) })` belongs
+// to the outer select, exactly as it does without the nested select.
+Deno.test("EdgeQL Parser - shape after a mutation operand stays on the select when the mutation nests a select", () => {
+  const plain = new EdgeQLParser("select (insert GitRef { name := <str>$n }) { id }").parse();
+  const nested = new EdgeQLParser(
+    "select (insert GitRef { program := (select Program filter .id = <uuid>$p), name := <str>$n }) { id }"
+  )
+    .parse();
+
+  for (const ast of [plain, nested]) {
+    assertEquals(ast.kind, "SelectQuery");
+    if (ast.kind === "SelectQuery") {
+      assertEquals(ast.expr.kind, "Subquery");
+      assertEquals(ast.shape?.elements.length, 1);
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - a nested select still parses its own shape and trailing clauses", () => {
+  const ast = new EdgeQLParser("select (select User { name } filter .name = 'a') { name } limit 1").parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery" && ast.expr.kind === "Subquery" && ast.expr.query.kind === "SelectQuery") {
+    assertEquals(ast.expr.query.shape?.elements.length, 1);
+    assertEquals(ast.expr.query.filter?.kind, "BinaryOp");
+    assertEquals(ast.shape?.elements.length, 1);
+    assertEquals(ast.limit?.kind, "Literal");
+  } else {
+    throw new Error(`unexpected AST: ${JSON.stringify(ast)}`);
+  }
+});

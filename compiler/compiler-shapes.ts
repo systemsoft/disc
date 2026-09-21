@@ -11,10 +11,13 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
-import { backlinkIntersectionName, edgeqlTypeToPgType } from "./compiler-base.ts";
+import { backlinkIntersectionName, edgeqlTypeToPgType, isMutationQuery } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
+
+/*** CTE name for the anonymous binding of `select (insert|update|delete …) { shape }`. ***/
+const MUTATION_CTE_NAME = "m";
 
 export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
   // Implemented by the top compiler layer (compiler.ts).
@@ -28,6 +31,23 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     // Handle set operations (UNION, INTERSECT, EXCEPT) at the query level
     if (query.expr.kind === "BinaryOp" && this.isSetOperator(query.expr.op)) {
       return this.compileSetOperation(query.expr);
+    }
+
+    // `select (insert|update|delete …) { shape }` is the with-form with an
+    // anonymous binding: `with m := (…) select m { shape }`. One path, so both
+    // spellings get the same data-modifying CTE, the same shape projection over
+    // it, and the mutation is compiled by the mutation compilers (policy
+    // included) either way.
+    if (query.expr.kind === "Subquery" && isMutationQuery(query.expr.query)) {
+      return this.compileQuery({
+        kind: "WithBlock",
+        bindings: [{
+          kind: "WithBinding",
+          name: { kind: "Identifier", name: MUTATION_CTE_NAME },
+          value: query.expr
+        }],
+        body: { ...query, expr: { kind: "Identifier", name: MUTATION_CTE_NAME } }
+      });
     }
 
     Context.pushScope(this.ctx);
@@ -209,13 +229,17 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
 
         let selectItems: SQL.SelectItem[];
         if (shape && cteAlias.typeName && cteAlias.typeDef) {
-          // Use the underlying type's schema to compile the shape
+          // Use the underlying type's schema to compile the shape. The CTE's
+          // table alias registered above is the only alias in this select's
+          // scope, so the shape's paths (nested links included) resolve
+          // against the CTE row — for a select binding and a mutation binding
+          // (`RETURNING *`) alike.
           selectItems = this.compileShape(
             shape,
             cteAlias.typeName,
             tableAlias
           );
-        } else if (cteAlias.typeDef) {
+        } else if (cteAlias.typeDef && !cteAlias.mutation) {
           // No explicit shape — select all columns as JSON object
           selectItems = this.compileImplicitShape(cteAlias.typeDef, tableAlias);
         } else {
@@ -244,6 +268,15 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     }
 
     if (expr.kind === "Subquery") {
+      // A mutation operand never gets here (see compileSelectQuery). For any
+      // other subquery the shape would be dropped without a trace.
+      if (shape) {
+        throw new CompilationError(
+          "A shape on a parenthesized query is only supported for insert, update and delete. " +
+            "Put the shape inside the parentheses: select (select T { … } filter …)"
+        );
+      }
+
       // Handle subquery
       const subquery = this.compileQuery(expr.query) as SQL.SelectStatement;
       const selectItems = [SQL.createSelectItem({
@@ -280,6 +313,19 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       const compiledExpr = this.compileExpression(expr);
       const selectItems = [SQL.createSelectItem(compiledExpr)];
       return { selectItems, fromClause };
+    }
+
+    // `<Type><uuid>expr` compiles to the uuid (it stands for a link target), so
+    // there is no row to project a shape from; dropping the shape silently
+    // would answer with the wrong thing.
+    if (shape && expr.kind === "TypeCast") {
+      const castType = expr.type.name.parts.join("::");
+      if (Context.resolveTypeName(this.ctx, castType)?.kind === "object") {
+        throw new CompilationError(
+          `A shape cannot be applied to the object cast <${castType}>…: the cast is only the object's id. ` +
+            `Use: select ${castType} { … } filter .id = <uuid>…`
+        );
+      }
     }
 
     // For other expressions, compile directly

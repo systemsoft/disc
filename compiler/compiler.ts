@@ -12,15 +12,15 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { buildParameterIndex } from "./compiler-base.ts";
+import { buildParameterIndex, isMutationQuery } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
-export { buildParameterIndex, buildParameterTypeMap, parameterBindOrder } from "./compiler-base.ts";
-export type { CompilerOptions } from "./compiler-base.ts";
+export { buildParameterIndex, buildParameterTypeMap, describeResult, parameterBindOrder } from "./compiler-base.ts";
+export type { CompilerOptions, ResultInfo } from "./compiler-base.ts";
 
 export class EdgeQLCompiler extends ShapeCompilerLayer {
   compile(
@@ -1085,6 +1085,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       Context.addCTEAlias(this.ctx, cteName, {
         cteName,
+        mutation: binding.value.kind === "Subquery" && isMutationQuery(binding.value.query),
         typeName: underlyingTypeName,
         typeDef
       });
@@ -1195,6 +1196,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           }
         }
       }
+    }
+    // A mutation binding returns rows of the mutated type (`RETURNING *`), so
+    // the body can project a shape over it like over a select binding.
+    if (isMutationQuery(query)) {
+      return query.type.name.parts.join("::");
     }
     return undefined;
   }

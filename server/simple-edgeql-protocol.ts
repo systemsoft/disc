@@ -18,6 +18,7 @@
  * default modules.
  */
 
+import { describeResult, type ResultInfo } from "../compiler/compiler-base.ts";
 import * as Context from "../compiler/context.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
@@ -147,7 +148,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const executionResult = await this.executeQuery(
         compilationResult.sql,
         request.variables || {},
-        context
+        context,
+        describeResult(parseResult.ast).kind
       );
 
       const durationMs = Date.now() - startTime;
@@ -468,7 +470,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   private async executeQuery(
     sql: string,
     variables: Record<string, any>,
-    context: Types.QueryContext
+    context: Types.QueryContext,
+    resultKind: ResultInfo["kind"]
   ): Promise<{ data: any; warnings?: string[]; }> {
     log.debug("Executing SQL", { sql });
     log.debug("Query variables", { variables: JSON.stringify(variables) });
@@ -495,7 +498,14 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         const result = await pool.query(sql, this.prepareParameters(variables));
         // Same wire representation as the full handler (a driver bigint is not JSON).
         const rows = normalizeRows(result.rows);
-        // Format result based on query type
+
+        // Same rule as the full handler: a select answers with its row set,
+        // decided from the query and not from the SQL text.
+        if (resultKind === "rows") {
+          return { data: rows };
+        }
+
+        // Everything else keeps the bare-mutation response shapes.
         const normalizedSQL = sql.toLowerCase().trim();
 
         // Junction-backed multi-link writes compile to a data-modifying CTE

@@ -209,6 +209,51 @@ export function parameterBindOrder(node: unknown, parameterIndex: Map<string, nu
 }
 
 /**
+ * What a query's result is, as far as the response layer is concerned. Derived
+ * from the query AST, never from the SQL text: `select (update …) { id }` and a
+ * junction-backed multi-link write both emit `WITH … UPDATE … SELECT`, yet the
+ * first answers with a row set and the second with one mutated row. The AST is
+ * not available on a compiled-query cache hit, so this is stored with the
+ * cached compilation, like `parameterBindOrder`.
+ */
+export interface ResultInfo {
+  /**
+   * `"rows"`: the statement is a select (directly, or as the body of a `with`
+   * block) and answers with its row set as-is, `[]` when empty — including a
+   * select over a mutation. `"mutation"`: anything else; the response keeps the
+   * bare-mutation shapes (`{updated}`, `{deleted}`, `{success}`, or the row).
+   */
+  kind: "rows" | "mutation";
+  /**
+   * For a bare `insert`/`update`: the mutated type as the query spelled it. Its
+   * `RETURNING *` row carries column names, which the response layer maps back
+   * to property names through this type.
+   */
+  mutatedType?: string;
+}
+
+export function isMutationQuery(
+  query: EdgeQLAST.Query
+): query is EdgeQLAST.InsertQuery | EdgeQLAST.UpdateQuery | EdgeQLAST.DeleteQuery {
+  return query.kind === "InsertQuery" || query.kind === "UpdateQuery" || query.kind === "DeleteQuery";
+}
+
+export function describeResult(query: EdgeQLAST.Query): ResultInfo {
+  switch (query.kind) {
+    case "SelectQuery":
+      return { kind: "rows" };
+    case "WithBlock": {
+      return describeResult(query.body).kind === "rows" ? { kind: "rows" } : { kind: "mutation" };
+    }
+    case "InsertQuery":
+    case "UpdateQuery":
+      return { kind: "mutation", mutatedType: query.type.name.parts.join("::") };
+    default:
+      return { kind: "mutation" };
+  }
+}
+
+/**
  * Walk a compiled SQL AST and map each parameter's 1-indexed position to the
  * PostgreSQL type it is cast to (e.g. `1 -> "jsonb"`, `2 -> "text[]"`). Built
  * from `CastExpression` nodes wrapping a `ParameterReference`, which is how the

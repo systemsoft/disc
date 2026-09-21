@@ -57,6 +57,11 @@ export interface CTEAlias {
   typeName?: string;
   /** The resolved TypeDef for shape compilation, if available */
   typeDef?: TypeDef;
+  /**
+   * The CTE is an insert/update/delete (`RETURNING *`). Selecting it without a
+   * shape keeps returning its rows as they are (`SELECT alias.*`).
+   */
+  mutation?: boolean;
 }
 
 export interface AbstractAnnotationDef {

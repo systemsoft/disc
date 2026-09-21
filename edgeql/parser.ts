@@ -300,7 +300,12 @@ export class EdgeQLParser {
 
     const distinct = this.match(TokenType.DISTINCT);
 
-    // Save state to prevent shape consumption
+    // Save state to prevent shape consumption. The flag is restored on the way
+    // out (see the return below): a select nested in the operand of an
+    // enclosing select must not switch the enclosing select's flag off, or
+    // `select (insert T { l := (select …) }) { id }` loses its shape to a
+    // ShapeExpr.
+    const enclosingSkipShape = this.skipShapeInPostfix;
     this.skipShapeInPostfix = true;
     const expr = this.parseExpression();
     this.skipShapeInPostfix = false;
@@ -344,6 +349,8 @@ export class EdgeQLParser {
       }
       break;
     }
+
+    this.skipShapeInPostfix = enclosingSkipShape;
 
     return {
       kind: "SelectQuery",
