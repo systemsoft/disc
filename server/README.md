@@ -18,7 +18,7 @@ const server = new DiscServer({
   host: "localhost",
   port: 5656,
   databaseUrl: "postgresql://localhost:5432/disc",
-  protocol: "full", // "simple" (default) or "full" (real EdgeQL compiler)
+  protocol: "full", // "full" (default, real EdgeQL compiler) or "simple" (simulated; no access policies)
   enableAuth: true,
   jwtSecret: "my-secret"
 });
@@ -217,7 +217,7 @@ Connect via WebSocket upgrade on the server URL. Messages are JSON objects with 
 | `DISC_ENABLE_METRICS`         | `enableMetrics`                       |
 | `DISC_RATE_LIMIT_RPM`         | `rateLimitRpm`                        |
 | `DISC_RATE_LIMIT_BURST`       | `rateLimitBurst`                      |
-| `DISC_PROTOCOL`               | `protocol` ("simple"/"full")          |
+| `DISC_PROTOCOL`               | `protocol` ("full" default/"simple")  |
 | `DISC_LOG_LEVEL`              | Logging level (DEBUG/INFO/WARN/ERROR) |
 | `DISC_LOG_FORMAT`             | Logging format ("json"/"text")        |
 | `DISC_TLS_CERT`               | TLS certificate file path             |
@@ -248,8 +248,8 @@ SIGHUP is POSIX-only — Windows builds log a startup message that hot-reload is
 
 The server supports two protocol handler implementations:
 
-- **`SimpleEdgeQLProtocolHandler`** (default): Simulated compilation for development and testing.
-- **`EdgeQLProtocolHandler`**: Full EdgeQL parser, compiler, and SQL generation with real PostgreSQL execution. Includes parse and compilation caches, EXPLAIN plan caching, slow query logging, and query timeout enforcement.
+- **`EdgeQLProtocolHandler`** (default, `protocol: "full"`): Full EdgeQL parser, compiler, and SQL generation with real PostgreSQL execution. Includes parse and compilation caches, EXPLAIN plan caching, slow query logging, and query timeout enforcement. This is the only handler that enforces access policies.
+- **`SimpleEdgeQLProtocolHandler`** (`protocol: "simple"`, explicit opt-in): Simulated compilation for tests that assert against simulated SQL strings. It enforces no access policies and is not suitable for serving real queries.
 
 ## Rate Limiting
 

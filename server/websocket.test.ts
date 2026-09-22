@@ -485,7 +485,7 @@ Deno.test({
       client.send({
         type: "query",
         payload: {
-          query: "select User filter .id = <uuid>$userId { name, email }",
+          query: "select User { name, email } filter .id = <uuid>$userId",
           variables: {
             userId: "01234567-89ab-cdef-0123-456789abcdef"
           }

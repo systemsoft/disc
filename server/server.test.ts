@@ -5,7 +5,7 @@
  * Tests for Disc Server
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertInstanceOf, assertStringIncludes } from "@std/assert";
 import type { ConnectionPool } from "../lib/connection-pool.ts";
 import { EnvMock } from "../tests/test-utils.ts";
 import {
@@ -16,6 +16,7 @@ import {
 import { EdgeQLProtocolHandler as FullProtocolHandler } from "./edgeql-protocol.ts";
 import { EdgeQLProtocolHandler } from "./protocol.ts";
 import { buildEnvOptions, DiscServer } from "./server.ts";
+import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 
 Deno.test("Server Config - Default Values", () => {
   const server = new DiscServer();
@@ -322,6 +323,15 @@ Deno.test("Server Config - S6: a handler built on its own keeps its own default 
   const handler = new FullProtocolHandler({ databaseUrl: "postgresql://localhost:5432/never_connected" });
   // deno-lint-ignore no-explicit-any
   assertEquals(((handler as any).pool as ConnectionPool).getMaxConnections(), 10);
+});
+
+Deno.test("Server Config - the protocol defaults to the full compiler; \"simple\" is an explicit opt-in", () => {
+  // The simple handler enforces no access policies, so an undefined `protocol`
+  // must not select it. This matches the env path (`DISC_PROTOCOL` unset → full).
+  assertInstanceOf(new DiscServer({}).getProtocolHandler(), FullProtocolHandler);
+  assertInstanceOf(new DiscServer().getProtocolHandler(), FullProtocolHandler);
+  assertInstanceOf(new DiscServer({ protocol: "full" }).getProtocolHandler(), FullProtocolHandler);
+  assertInstanceOf(new DiscServer({ protocol: "simple" }).getProtocolHandler(), SimpleEdgeQLProtocolHandler);
 });
 
 Deno.test("Server Config - maxRequestBodyBytes lands on the server config", () => {

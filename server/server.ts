@@ -50,8 +50,10 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
 
   /**
    * Which protocol handler to use.
-   * - "simple" (default): SimpleEdgeQLProtocolHandler — simulated compilation
-   * - "full": EdgeQLProtocolHandler — real EdgeQL compiler integration
+   * - "full" (default): EdgeQLProtocolHandler — real EdgeQL compiler integration,
+   *   the only handler that enforces access policies
+   * - "simple": SimpleEdgeQLProtocolHandler — simulated compilation for tests
+   *   that assert against simulated SQL strings; explicit opt-in only
    */
   protocol?: "simple" | "full";
 
@@ -426,10 +428,12 @@ export class DiscServer {
       readOnly: config.readOnly ?? false
     };
 
-    if (config.protocol === "full") {
-      this.protocolHandler = new EdgeQLProtocolHandler(handlerOptions);
-    } else {
+    // Default to the full compiler, matching `createServerFromEnv()`. The
+    // simple handler enforces no access policies, so it is an explicit opt-in.
+    if (config.protocol === "simple") {
       this.protocolHandler = new SimpleEdgeQLProtocolHandler(handlerOptions);
+    } else {
+      this.protocolHandler = new EdgeQLProtocolHandler(handlerOptions);
     }
   }
 
