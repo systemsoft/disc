@@ -10,6 +10,7 @@
 
 import { assert, assertEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
+import { CustomFunctionsExtension } from "../ext-custom-functions/extension.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { DiscServer } from "./server.ts";
 import type {
@@ -280,4 +281,44 @@ Deno.test("Schema Reload - stale schema recovery with evolving types", async () 
     "User",
     "Author link should target User"
   );
+});
+
+// ---------------------------------------------------------------------------
+// Extension functions survive a schema reload
+// ---------------------------------------------------------------------------
+// A reloaded schema comes from the SDL alone (built-ins + declared types), so
+// the extension functions merged at startup must be merged again, or every
+// call to one turns into "Unknown function" after a schema-watch reload.
+Deno.test("Schema Reload - extension functions are still known after updateSchema", async () => {
+  const server = new DiscServer({
+    dryRun: true,
+    extensions: [
+      new CustomFunctionsExtension({
+        functions: [{
+          args: [{ name: "n", required: true, type: "int32" }],
+          implementation: { expression: "$1 * 2", kind: "sql_expression" },
+          name: "reload_double",
+          returnType: "int32"
+        }]
+      })
+    ],
+    protocol: "full"
+  });
+
+  const manager = new SchemaManager({ dryRun: true });
+  await manager.initialize();
+  const reloaded = await manager.applySchema("type Note { required body: str; }");
+  assert(reloaded.ok);
+  server.updateSchema(manager.getSchema()!);
+
+  const context: QueryContext = {
+    auth: { permissions: [], roles: [] },
+    requestId: "schema_reload",
+    session: { createdAt: new Date(), database: "test_db", lastActivity: new Date(), sessionId: "schema_reload", variables: {} },
+    startedAt: new Date()
+  };
+  const response = await server.getProtocolHandler().handleRequest({ query: "select reload_double(21)" }, context);
+
+  assertEquals(response.errors?.filter(error => /unknown function/i.test(error.message)), []);
+  assertEquals((server.getProtocolHandler() as unknown as { schema: Schema; }).schema.types.has("Note"), true);
 });

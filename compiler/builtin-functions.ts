@@ -575,6 +575,13 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "uuid",
       sqlName: "GEN_RANDOM_UUID"
     }],
+    // Time-ordered UUIDv7, the default for object ids. The SQL function of the
+    // same name is created by lib/stdlib-sql.ts.
+    ["disc_uuidv7", {
+      name: "disc_uuidv7",
+      args: [],
+      returnType: "uuid"
+    }],
 
     // Set/Generic functions (special compilation for most)
     ["any", {
@@ -690,8 +697,7 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
     ["range_unpack", {
       name: "range_unpack",
       args: [{ name: "r", type: "range", required: true }],
-      returnType: "any",
-      sqlName: "UNNEST"
+      returnType: "any"
     }],
     ["multirange", {
       name: "multirange",

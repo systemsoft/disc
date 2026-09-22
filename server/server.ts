@@ -1062,7 +1062,12 @@ export class DiscServer {
   }
 
   updateSchema(schema: Schema): void {
-    this.protocolHandler.updateSchema?.(schema);
+    // A reloaded schema is built from the SDL alone. Extension functions and
+    // types are merged in again, as at startup, or a call to one becomes an
+    // "Unknown function" after a schema-watch reload.
+    this.protocolHandler.updateSchema?.(
+      mergeSchemaAdditions(schema, this.extensionRegistry.getAllFunctions(), this.extensionRegistry.getAllTypes())
+    );
     // A live schema change invalidates the cached drift epoch/modules and
     // memoized classifications so `/query` drift headers reflect the new
     // schema on the next request (Stage 2).

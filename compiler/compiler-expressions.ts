@@ -146,6 +146,17 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
     }
 
+    // A set-valued `with` binding is a CTE. In expression position its name
+    // stands for its rows: their ids when it binds objects (what a link column
+    // or an `.id`/link comparison takes), else its single column.
+    const cteAlias = Context.getCTEAlias(this.ctx, identifier.name);
+    if (cteAlias) {
+      return SQL.createSubqueryExpression(SQL.createSelectStatement({
+        from: SQL.createFromClause([SQL.createTableReference(cteAlias.cteName)]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference(cteAlias.typeDef ? "id" : "*"))])
+      }));
+    }
+
     throw new CompilationError(
       `Standalone identifier '${identifier.name}' cannot be resolved`
     );
@@ -416,7 +427,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   private compileFunctionCall(
     funcCall: EdgeQLAST.FunctionCall
   ): SQL.SQLExpression {
-    const functionName = funcCall.name.parts.join("_");
+    // `std` is the default module: `std::to_str(x)` is `to_str(x)`, and gets
+    // the same special compilation below.
+    const parts = funcCall.name.parts.length > 1 && funcCall.name.parts[0] === "std" ? funcCall.name.parts.slice(1) : funcCall.name.parts;
+    const functionName = parts.join("_");
     const qualifiedName = funcCall.name.parts.join("::");
 
     // Check for schema:: / cfg:: introspection functions
@@ -829,6 +843,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return SQL.createFunctionCall(rangeConstructor, args);
       }
 
+      case "range_unpack": {
+        // range_unpack(r) → generate_series(lower(r), upper(r) - 1). PostgreSQL
+        // has no unnest(range); a discrete range is canonically `[lower, upper)`.
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "range_unpack() requires exactly 1 argument"
+          );
+        }
+        return SQL.createFunctionCall("generate_series", [
+          SQL.createFunctionCall("lower", [args[0]]),
+          SQL.createBinaryExpression("-", SQL.createFunctionCall("upper", [args[0]]), SQL.createLiteral("number", 1))
+        ]);
+      }
+
       case "multirange": {
         // multirange(r) → type-dependent PG multirange constructor
         // Default to int4multirange; enhanced type inference can be added later
@@ -875,22 +903,34 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         };
     }
 
-    // Standard 1:1 function name mapping. The registry is keyed by the
-    // underscore-joined form (`std_md5`); fall back to the qualified
-    // form (`std::md5`) for entries that prefer the user-facing key.
-    let sqlName = functionName;
-    const funcDef = this.ctx.schema.functions.get(functionName) ??
-      this.ctx.schema.functions.get(qualifiedName);
+    // Standard 1:1 function name mapping. Without an `sqlName` the SQL function
+    // is the entry's own name, underscore-joined: `std::md5` (however the call
+    // spelled it) is the `std_md5` wrapper from lib/stdlib-sql.ts.
+    const funcDef = Context.lookupFunction(this.ctx.schema, funcCall.name.parts);
+    if (!funcDef) {
+      throw this.unknownFunction(funcCall.name.parts);
+    }
     if (funcDef?.windowOnly) {
       throw new CompilationError(
         `Function '${functionName}' requires an OVER clause`
       );
     }
-    if (funcDef?.sqlName) {
-      sqlName = funcDef.sqlName;
-    }
+    const sqlName = funcDef.sqlName ?? funcDef.name.replaceAll("::", "_");
 
     return SQL.createFunctionCall(sqlName, args);
+  }
+
+  /**
+   * A call to a function that is neither built in nor added by the schema (SDL
+   * declaration, extension, custom function). Without this it would reach
+   * PostgreSQL as `enc_base64_decode(…)` and fail there, or worse, resolve to
+   * some unrelated SQL function of that name.
+   */
+  private unknownFunction(parts: string[]): CompilationError {
+    return new CompilationError(
+      `Unknown function '${parts.join("::")}'. It is not a built-in function, and the schema does not declare it ` +
+        "(SDL function, extension or custom function)."
+    );
   }
 
   private compileWindowFunctionCall(
@@ -901,7 +941,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     // Map function name to SQL
     let sqlName = functionName;
-    const funcDef = this.ctx.schema.functions.get(functionName);
+    const funcDef = Context.lookupFunction(this.ctx.schema, wfc.name.parts);
+    if (!funcDef) {
+      throw this.unknownFunction(wfc.name.parts);
+    }
     if (!funcDef?.windowOnly && !funcDef?.windowCompatible) {
       throw new CompilationError(
         `Function '${functionName}' cannot be used with an OVER clause`
@@ -1015,9 +1058,101 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return SQL.createParameterReference(next);
   }
 
+  /**
+   * True when `expr` is known to yield json. There is no expression type
+   * inference in the compiler; this reads the forms whose type is stated:
+   *
+   * - a cast to json (`<json>$rows`);
+   * - a subscript with a string-literal key (`x['k']` — only json takes one), or
+   *   any subscript whose base is json (`x['items'][0]`);
+   * - a call to a function registered as returning json (`json_get`,
+   *   `to_json`, `json_array_unpack`, …);
+   * - a name bound to one of these: a `with` binding (`rows := <json>$rows`), a
+   *   `for` variable over a set literal, or a `for` variable iterating
+   *   `json_array_unpack(…)`;
+   * - a one-step path to a json property of a type in scope (`.meta`).
+   *
+   * Anything else (`a ?? b`, `a if c else b`, a subquery, a multi-step path, a
+   * tuple element) is not recognized and keeps the plain SQL cast.
+   */
+  protected isJsonExpression(expr: EdgeQLAST.Expression): boolean {
+    switch (expr.kind) {
+      case "TypeCast":
+        return edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type)) === "jsonb" && !expr.type.subtypes?.length;
+      case "IndexExpression":
+        return (expr.index.kind === "Literal" && expr.index.type === "string") || this.isJsonExpression(expr.expr);
+      case "FunctionCall":
+        return Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType === "json";
+      case "Identifier": {
+        const variable = [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]
+          .map(scope => scope.variables.get(expr.name))
+          .find(found => found !== undefined);
+        if (!variable) {
+          return false;
+        }
+        return variable.sqlOverride ? variable.type === "json" : this.isJsonExpression(variable.expression);
+      }
+      case "Path": {
+        if (expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+          return false;
+        }
+        for (const alias of this.ctx.currentScope.aliases.values()) {
+          const property = Context.getProperty(this.ctx, alias.type, expr.steps[0].name);
+          if (property) {
+            return !property.computed && property.type === "jsonb";
+          }
+        }
+        return false;
+      }
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * A cast whose operand is json. `CAST(jsonb AS text)` keeps the JSON quotes
+   * and jsonb → `text[]` / `bytea` are not valid PostgreSQL, so the value is
+   * taken out as text first (`#>> '{}'`; JSON null becomes NULL) and that is
+   * cast. An array is rebuilt element by element, in order: `[]` gives an empty
+   * array, a missing key or JSON null gives NULL.
+   *
+   * The operand stays a SQL AST node (for the array, in the NULL test) so a
+   * `<json>$p` inside it is still found by `buildParameterTypeMap`.
+   */
+  private compileCastFromJson(operand: SQL.SQLExpression, pgType: string, typeName: string): SQL.SQLExpression {
+    if (pgType === "jsonb") {
+      return SQL.createCastExpression(operand, pgType);
+    }
+
+    if (pgType === "bytea" || pgType === "bytea[]") {
+      throw new CompilationError(
+        `Cannot cast json to ${typeName}: JSON carries bytes as base64 text. Decode it: std::base64_decode(<str>…)`
+      );
+    }
+
+    if (pgType.endsWith("[]")) {
+      const elements = pgType === "jsonb[]" ? "jsonb_array_elements" : "jsonb_array_elements_text";
+      const rebuilt = `CAST(ARRAY(SELECT e.v FROM ${elements}(${this.renderSqlExpr(operand)}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord) AS ${pgType})`;
+      const isNull = SQL.createBinaryExpression(
+        "OR",
+        SQL.createBinaryExpression("IS", operand, SQL.createLiteral("null", null)),
+        SQL.createBinaryExpression("=", SQL.createFunctionCall("JSONB_TYPEOF", [operand]), SQL.createLiteral("string", "null"))
+      );
+
+      return SQL.createCaseExpression(
+        [SQL.createWhenClause(isNull, SQL.createLiteral("null", null))],
+        { kind: "RawSQLExpression", sql: rebuilt }
+      );
+    }
+
+    const text = SQL.createJsonbAccess(operand, "#>>", SQL.createLiteral("string", "{}"));
+    return pgType === "text" ? text : SQL.createCastExpression(text, pgType);
+  }
+
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     const expr = this.compileExpression(cast.expr);
     const typeName = renderEdgeQLTypeName(cast.type);
+    const fromJson = this.isJsonExpression(cast.expr);
 
     // User-declared enum scalars don't appear in the static built-in map.
     // Resolve them through the schema so casts like `<LogLevel>$level`
@@ -1029,7 +1164,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       resolved && Array.isArray(resolved.enumValues) &&
       resolved.enumValues.length > 0
     ) {
-      return SQL.createCastExpression(expr, Context.getEnumSqlType(typeName));
+      const enumType = Context.getEnumSqlType(typeName);
+      return fromJson ? this.compileCastFromJson(expr, enumType, typeName) : SQL.createCastExpression(expr, enumType);
     }
 
     // `<Program><uuid>$p` names an object by its id. A link column stores that
@@ -1048,7 +1184,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       throw new CompilationError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
     }
 
-    return SQL.createCastExpression(expr, pgType);
+    return fromJson ? this.compileCastFromJson(expr, pgType, typeName) : SQL.createCastExpression(expr, pgType);
   }
 
   /**
@@ -1772,10 +1908,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return SQL.createJsonbAccess(base, "->", idx);
     }
 
-    // JSON type cast base → jsonb -> index
+    // JSON base (a json cast, or a name/subscript/call known to be json) →
+    // jsonb -> index
     if (
-      indexExpr.expr.kind === "TypeCast" &&
-      indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")
+      (indexExpr.expr.kind === "TypeCast" &&
+        indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")) ||
+      this.isJsonExpression(indexExpr.expr)
     ) {
       return SQL.createJsonbAccess(base, "->", idx);
     }

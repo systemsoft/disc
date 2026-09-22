@@ -11,7 +11,7 @@
  *   range_get_lower(r)            → LOWER(r)
  *   range_get_upper(r)            → UPPER(r)
  *   range_is_empty(r)             → ISEMPTY(r)
- *   range_unpack(r)               → UNNEST(r)
+ *   range_unpack(r)               → generate_series(lower(r), upper(r) - 1)
  *   range_is_inclusive_lower(r)    → LOWER_INC(r)
  *   range_is_inclusive_upper(r)    → UPPER_INC(r)
  *   contains(range_val, elem)     → range_val @> elem
@@ -85,12 +85,12 @@ Deno.test("Range functions — range_is_empty compiles to ISEMPTY", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. range_unpack → UNNEST
+// 5. range_unpack → generate_series (PostgreSQL has no unnest(range))
 // ---------------------------------------------------------------------------
 
-Deno.test("Range functions — range_unpack compiles to UNNEST", () => {
+Deno.test("Range functions — range_unpack compiles to generate_series over the bounds", () => {
   const sql = compileEdgeQL(`SELECT range_unpack(range(1, 5))`);
-  assertStringIncludes(sql, "UNNEST");
+  assertStringIncludes(sql, "generate_series(lower(int4range(1, 5)), upper(int4range(1, 5)) - 1)");
 });
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ Deno.test("Range functions — all range functions are registered", () => {
 
   const unpack = fns.get("range_unpack");
   assertExists(unpack, "range_unpack should be registered");
-  assertEquals(unpack.sqlName, "UNNEST");
+  assertEquals(unpack.sqlName, undefined, "range_unpack has special compilation (generate_series), not a 1:1 SQL name");
 
   const multirangeFn = fns.get("multirange");
   assertExists(multirangeFn, "multirange should be registered");

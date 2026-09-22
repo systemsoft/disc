@@ -75,7 +75,7 @@ Deno.test("indexing-slicing - IndexExpression base expr is the array literal", (
 });
 
 Deno.test("indexing-slicing - IndexExpression with string key index", () => {
-  const ast = parseEdgeQL(`SELECT <json>'{"x":1}'['x']`);
+  const ast = parseEdgeQL(`SELECT (<json>'{"x":1}')['x']`);
 
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
@@ -232,14 +232,14 @@ Deno.test("indexing-slicing - array index in SELECT context produces valid SQL",
 // =========================================================================
 
 Deno.test("indexing-slicing - string key index compiles to jsonb -> operator", () => {
-  const sql = compileEdgeQL(`SELECT <json>'{"key":"val"}'['key']`);
+  const sql = compileEdgeQL(`SELECT (<json>'{"key":"val"}')['key']`);
 
   assertStringIncludes(sql, "->");
   assertStringIncludes(sql, "'key'");
 });
 
 Deno.test("indexing-slicing - json type cast with integer index compiles to jsonb -> operator", () => {
-  const sql = compileEdgeQL("SELECT <json>'[1,2,3]'[0]");
+  const sql = compileEdgeQL("SELECT (<json>'[1,2,3]')[0]");
 
   assertStringIncludes(sql, "->");
   assertStringIncludes(sql, "0");

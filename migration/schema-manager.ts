@@ -1080,9 +1080,29 @@ export class SchemaManager {
       }
     }
 
+    // SDL `function` declarations, so a call to one is a known function. A
+    // function of the default module is called bare; any other by its module.
+    const functions = getBuiltinFunctions();
+    for (const module of modules) {
+      for (const item of module.items) {
+        if (item.kind === "FunctionDeclaration") {
+          const name = module.name === "default" ? item.name.value : `${module.name}::${item.name.value}`;
+          functions.set(name, {
+            args: item.parameters.map(parameter => ({
+              name: parameter.name.value,
+              required: parameter.typemod !== "optional" && !parameter.default,
+              type: parameter.type.name.parts.join("::")
+            })),
+            name,
+            returnType: item.returnType.name.parts.join("::")
+          });
+        }
+      }
+    }
+
     const schema: Schema = {
       types,
-      functions: getBuiltinFunctions()
+      functions
     };
     if (aliases.size > 0) {
       schema.aliases = aliases;

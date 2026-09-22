@@ -248,6 +248,12 @@ export function describeResult(query: EdgeQLAST.Query): ResultInfo {
     case "InsertQuery":
     case "UpdateQuery":
       return { kind: "mutation", mutatedType: query.type.name.parts.join("::") };
+    case "ForQuery":
+      // `for x in <function or subquery> union (…)` answers with its row set:
+      // for a bulk insert, the ids of the rows it inserted (`[]` when every row
+      // conflicted). A set-literal for-insert is one multi-row INSERT and keeps
+      // the bare-insert response.
+      return query.iterator.kind === "SetExpr" ? { kind: "mutation" } : { kind: "rows" };
     default:
       return { kind: "mutation" };
   }

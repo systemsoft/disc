@@ -62,6 +62,12 @@ export interface CTEAlias {
    * shape keeps returning its rows as they are (`SELECT alias.*`).
    */
   mutation?: boolean;
+  /**
+   * Set when a query reads from the CTE by name. A plain expression binding
+   * (`with x := <str>$n`) is inlined where it is used, so its CTE is only
+   * emitted when something selects from it (`select x`).
+   */
+  referenced?: boolean;
 }
 
 export interface AbstractAnnotationDef {
@@ -441,6 +447,42 @@ export function resolveGlobal(
     }
   }
 
+  return undefined;
+}
+
+let builtinFunctions: Map<string, FunctionDef> | undefined;
+
+/**
+ * The registry entry for a function call, however the call and the entry are
+ * spelled. Entries are keyed inconsistently — bare (`len`), EdgeQL-qualified
+ * (`std::md5`, `fts::search`) or underscore-joined (`math_log2`) — and a call
+ * may say `f`, `std::f`, or the emitted SQL spelling `std_f`. `std` and
+ * `default` are the modules a bare name resolves in, so their prefix is
+ * optional on both sides; any other module must be named.
+ *
+ * The schema's own map wins (extension, custom and SDL-declared functions, or
+ * an override); the built-ins are part of the language and resolve whatever
+ * map the schema object carries.
+ */
+export function lookupFunction(schema: Schema, parts: string[]): FunctionDef | undefined {
+  let bare = parts;
+  if (parts.length > 1 && (parts[0] === "std" || parts[0] === "default")) {
+    bare = parts.slice(1);
+  } else if (parts.length === 1 && parts[0].startsWith("std_")) {
+    bare = [parts[0].slice("std_".length)];
+  }
+
+  const keys = [parts.join("_"), parts.join("::"), bare.join("_"), bare.join("::"), `std::${bare.join("::")}`];
+  builtinFunctions ??= getBuiltinFunctions();
+
+  for (const functions of [schema.functions, builtinFunctions]) {
+    for (const key of keys) {
+      const found = functions.get(key);
+      if (found) {
+        return found;
+      }
+    }
+  }
   return undefined;
 }
 

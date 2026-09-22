@@ -52,6 +52,8 @@ export interface TableReference extends SQLNode {
   name: string;
   alias?: string;
   subquery?: SQLStatement;
+  /** A set-returning function as the row source: `FROM jsonb_array_elements(…) AS alias(col)`. */
+  expression?: SQLExpression;
   lateral?: boolean;
   columnAliases?: string[];
   joins?: JoinClause[];
@@ -598,13 +600,13 @@ export function createCastExpression(
 export interface JsonbAccessExpression extends SQLExpressionBase {
   kind: "JsonbAccessExpression";
   expression: SQLExpression;
-  operator: "->" | "->>";
+  operator: "->" | "->>" | "#>>";
   accessor: SQLExpression;
 }
 
 export function createJsonbAccess(
   expression: SQLExpression,
-  operator: "->" | "->>",
+  operator: "->" | "->>" | "#>>",
   accessor: SQLExpression
 ): JsonbAccessExpression {
   return {

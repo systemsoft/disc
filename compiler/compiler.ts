@@ -1030,9 +1030,43 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.ctx.moduleScope = query.module;
     }
 
+    // Names the block registers, removed again whether or not it compiles: the
+    // compiler instance (and its context) outlives the query.
+    const registeredAliases: string[] = [];
+    // A plain expression binding (`x := <str>$n`) is also a scope variable, so
+    // the body can use the name in expression position; it is inlined there.
+    // The previous value is kept to restore a shadowed outer name.
+    const variables = this.ctx.currentScope.variables;
+    const shadowedVariables = new Map<string, Context.VariableDef | undefined>();
+
+    try {
+      return this.compileWithBindings(query, registeredAliases, shadowedVariables);
+    } finally {
+      for (const alias of registeredAliases) {
+        Context.removeCTEAlias(this.ctx, alias);
+      }
+      for (const [name, previous] of shadowedVariables) {
+        if (previous) {
+          variables.set(name, previous);
+        } else {
+          variables.delete(name);
+        }
+      }
+
+      // Restore previous module scope
+      this.ctx.moduleScope = previousModuleScope;
+    }
+  }
+
+  private compileWithBindings(
+    query: EdgeQLAST.WithBlock,
+    registeredAliases: string[],
+    shadowedVariables: Map<string, Context.VariableDef | undefined>
+  ): SQL.SQLStatement {
     // Compile each WITH binding into a CTE and register CTE aliases
     const ctes: SQL.CTE[] = [];
-    const registeredAliases: string[] = [];
+    const variables = this.ctx.currentScope.variables;
+    const inlinedAliases = new Map<string, Context.CTEAlias>();
 
     for (const binding of query.bindings) {
       // Validate recursive CTEs: must contain a UNION (which maps to SQL
@@ -1083,13 +1117,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         Context.resolveTypeName(this.ctx, underlyingTypeName) :
         undefined;
 
-      Context.addCTEAlias(this.ctx, cteName, {
+      const cteAlias: Context.CTEAlias = {
         cteName,
         mutation: binding.value.kind === "Subquery" && isMutationQuery(binding.value.query),
         typeName: underlyingTypeName,
         typeDef
-      });
+      };
+      Context.addCTEAlias(this.ctx, cteName, cteAlias);
       registeredAliases.push(cteName);
+
+      if (binding.value.kind !== "Subquery") {
+        shadowedVariables.set(cteName, variables.get(cteName));
+        variables.set(cteName, { name: cteName, type: "any", expression: binding.value });
+        inlinedAliases.set(cteName, cteAlias);
+      }
 
       ctes.push({
         kind: "CTE",
@@ -1103,21 +1144,19 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Compile the body query (CTE aliases are now resolvable)
     const mainQuery = this.compileQuery(query.body);
 
-    // Clean up CTE aliases after body compilation
-    for (const alias of registeredAliases) {
-      Context.removeCTEAlias(this.ctx, alias);
-    }
-
-    // Restore previous module scope
-    this.ctx.moduleScope = previousModuleScope;
+    // An inlined binding nothing selects from needs no CTE.
+    const emitted = ctes.filter(cte => {
+      const inlined = inlinedAliases.get(cte.name);
+      return !inlined || inlined.referenced;
+    });
 
     // If there are no CTEs (WITH MODULE only, no bindings), return body directly
-    if (ctes.length === 0) {
+    if (emitted.length === 0) {
       return mainQuery;
     }
 
     // Combine CTEs with the main query
-    return SQL.withCTEs(ctes, mainQuery);
+    return SQL.withCTEs(emitted, mainQuery);
   }
 
   /**
@@ -1269,38 +1308,47 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return SQL.unionAll(compiledQueries);
     }
 
-    // Subquery iterator: FOR x IN (SELECT ...) UNION (body)
-    // Compile to: SELECT for_sub.* FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
-    if (query.iterator.kind === "Subquery") {
-      const iteratorStmt = this.compileQuery(query.iterator.query);
+    // Row-source iterator: a subquery, or a set-returning function call
+    // (`json_array_unpack(…)`, `array_unpack(…)`, `range_unpack(…)`). Either is a
+    // FROM item `… AS for_iter(val)`, and the variable is its one column.
+    const iteratorTable = this.compileForIteratorTable(query.iterator);
 
-      Context.pushScope(this.ctx);
+    Context.pushScope(this.ctx);
 
-      // Bind variable to a column reference on the iterator alias
+    try {
       this.ctx.currentScope.variables.set(varName, {
         name: varName,
-        type: "any",
+        // `isJsonExpression` reads this: elements of a JSON array are json.
+        type: this.isJsonArrayUnpack(query.iterator) ? "json" : "any",
         expression: { kind: "Literal", type: "empty", value: null },
         sqlOverride: SQL.createColumnReference("val", "for_iter")
       });
 
+      // An insert body is one `INSERT INTO t (cols) SELECT <exprs> FROM <iterator>`.
+      // PostgreSQL has no INSERT inside LATERAL.
+      if (query.body.kind === "InsertQuery") {
+        return this.compileBulkInsert(query.body, iteratorTable);
+      }
+
+      // An update or delete inside LATERAL is not valid PostgreSQL either. The
+      // subquery-iterator form has always emitted it; the function-iterator
+      // form is new and says so instead.
+      if (query.iterator.kind === "FunctionCall" && (query.body.kind === "UpdateQuery" || query.body.kind === "DeleteQuery")) {
+        throw new CompilationError(
+          "A FOR query over a function iterator supports an insert or select body. " +
+            "Run the update or delete once, with a filter over the whole set (e.g. `filter .id in array_unpack(…)`)."
+        );
+      }
+
       const bodyStmt = this.compileQuery(query.body);
 
-      Context.popScope(this.ctx);
-
-      // Build: SELECT for_sub.* FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
+      // Build: SELECT for_sub.* FROM <iterator> AS for_iter(val), LATERAL (body) AS for_sub
       return SQL.createSelectStatement({
         select: SQL.createSelectClause([
           SQL.createSelectItem(SQL.createColumnReference("*", "for_sub"))
         ]),
         from: SQL.createFromClause([
-          {
-            kind: "TableReference",
-            name: "",
-            subquery: iteratorStmt,
-            alias: "for_iter",
-            columnAliases: ["val"]
-          },
+          iteratorTable,
           {
             kind: "TableReference",
             name: "",
@@ -1310,11 +1358,76 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           }
         ])
       });
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
+  /*** Functions a FOR query can iterate: each returns a set, one row per element. ***/
+  private static readonly FOR_ITERATOR_FUNCTIONS = new Set(["json_array_unpack", "array_unpack", "range_unpack"]);
+
+  private isJsonArrayUnpack(iterator: EdgeQLAST.Expression): boolean {
+    return iterator.kind === "FunctionCall" && Context.lookupFunction(this.ctx.schema, iterator.name.parts)?.name === "json_array_unpack";
+  }
+
+  private compileForIteratorTable(iterator: EdgeQLAST.Expression): SQL.TableReference {
+    if (iterator.kind === "Subquery") {
+      return {
+        kind: "TableReference",
+        name: "",
+        subquery: this.compileQuery(iterator.query),
+        alias: "for_iter",
+        columnAliases: ["val"]
+      };
     }
 
-    throw new CompilationError(
-      `FOR query iterator must be a set literal or subquery, got ${query.iterator.kind}`
-    );
+    const functionName = iterator.kind === "FunctionCall" ? Context.lookupFunction(this.ctx.schema, iterator.name.parts)?.name : undefined;
+    if (iterator.kind !== "FunctionCall" || !functionName || !EdgeQLCompiler.FOR_ITERATOR_FUNCTIONS.has(functionName)) {
+      throw new CompilationError(
+        `FOR query iterator must be a set literal, a subquery, or a call to json_array_unpack, array_unpack or range_unpack, got ${
+          iterator.kind === "FunctionCall" ? `${iterator.name.parts.join("::")}()` : iterator.kind
+        }`
+      );
+    }
+
+    // The call stays a SQL AST node so a `<json>$rows` argument is still found
+    // by `buildParameterTypeMap`.
+    return {
+      kind: "TableReference",
+      name: "",
+      expression: this.compileExpression(iterator),
+      alias: "for_iter",
+      columnAliases: ["val"]
+    };
+  }
+
+  /**
+   * `for x in <iterator> union (insert T { … })` as a single statement, whatever
+   * the number of rows. The insert is compiled by `compileInsertQuery` — access
+   * policy, link assignments and conflict target included — and its one VALUES
+   * row becomes the select list over the iterator.
+   *
+   * Only `id` comes back: a bulk insert's rows can be large (`content`), and
+   * the ids are enough to tell which rows were new when there is a conflict
+   * clause.
+   */
+  private compileBulkInsert(body: EdgeQLAST.InsertQuery, iteratorTable: SQL.TableReference): SQL.InsertStatement {
+    const insert = this.compileInsertQuery(body);
+    if (insert.kind !== "InsertStatement") {
+      throw new CompilationError(
+        "A bulk insert (for … union (insert …)) cannot assign a multi link. Insert the objects first, then add the links with an update."
+      );
+    }
+
+    return {
+      ...insert,
+      values: [],
+      insertSelect: SQL.createSelectStatement({
+        select: SQL.createSelectClause(insert.values[0].map(value => SQL.createSelectItem(value))),
+        from: SQL.createFromClause([iteratorTable])
+      }),
+      returning: [SQL.createSelectItem(SQL.createColumnReference("id"))]
+    };
   }
 
   private compileGroupQuery(query: EdgeQLAST.GroupQuery): SQL.SelectStatement {

@@ -136,6 +136,8 @@ export class SQLCodeGenerator {
       parts.push(
         `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`
       );
+    } else if (table.expression) {
+      parts.push(this.generateExpression(table.expression));
     } else {
       parts.push(this.escapeIdentifier(table.name));
     }

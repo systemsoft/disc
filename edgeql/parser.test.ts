@@ -8,6 +8,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { SyntaxError } from "../lib/errors.ts";
 import { EdgeQLAnalyzer } from "./analyzer.ts";
+import type { Expression } from "./ast.ts";
 import { EdgeQLParser } from "./parser.ts";
 
 Deno.test("EdgeQL Parser - Simple SELECT", () => {
@@ -1140,5 +1141,103 @@ Deno.test("EdgeQL Parser - a nested select still parses its own shape and traili
     assertEquals(ast.limit?.kind, "Literal");
   } else {
     throw new Error(`unexpected AST: ${JSON.stringify(ast)}`);
+  }
+});
+
+// --- Cast precedence (D8) ---
+//
+// A cast applies to the full postfix expression that follows it (subscript,
+// call, path) and stops at the first binary operator — Gel's P_TYPECAST sits
+// below P_BRACKET / P_PAREN / P_DOT and above every operator.
+
+function castOperand(source: string): { cast: string; operand: Expression; } {
+  const expr = new EdgeQLParser(source).parseExpressionOnly();
+  if (expr.kind !== "TypeCast") {
+    throw new Error(`expected a TypeCast at the top of '${source}', got ${expr.kind}`);
+  }
+  return { cast: expr.type.name.parts.join("::"), operand: expr.expr };
+}
+
+Deno.test("EdgeQL Parser - cast precedence: <str>x['k'] casts the subscript", () => {
+  const { cast, operand } = castOperand("<str>x['k']");
+
+  assertEquals(cast, "str");
+  assertEquals(operand.kind, "IndexExpression");
+});
+
+Deno.test("EdgeQL Parser - cast precedence: <array<str>>x['k'] casts the subscript", () => {
+  const expr = new EdgeQLParser("<array<str>>x['k']").parseExpressionOnly();
+
+  assertEquals(expr.kind, "TypeCast");
+  if (expr.kind === "TypeCast") {
+    assertEquals(expr.type.name.parts, ["array"]);
+    assertEquals(expr.expr.kind, "IndexExpression");
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: <str>f(x) casts the call", () => {
+  const { operand } = castOperand("<str>json_get(x, 'k')");
+
+  assertEquals(operand.kind, "FunctionCall");
+});
+
+Deno.test("EdgeQL Parser - cast precedence: <str>a.b and <str>.a.b cast the path", () => {
+  for (const source of ["<str>a.b", "<str>.a.b"]) {
+    const { operand } = castOperand(source);
+
+    assertEquals(operand.kind, "Path", source);
+    if (operand.kind === "Path") {
+      assertEquals(operand.steps.map(step => step.name).slice(-2), ["a", "b"], source);
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: a cast does not swallow a binary operator", () => {
+  const expr = new EdgeQLParser("<str>x ++ 'a'").parseExpressionOnly();
+
+  assertEquals(expr.kind, "BinaryOp");
+  if (expr.kind === "BinaryOp") {
+    assertEquals(expr.op, "++");
+    assertEquals(expr.left.kind, "TypeCast");
+    assertEquals(expr.right.kind, "Literal");
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: comparison and arithmetic stay outside the cast", () => {
+  const comparison = new EdgeQLParser("<int64>x['n'] + 1 = <int64>$y").parseExpressionOnly();
+
+  assertEquals(comparison.kind, "BinaryOp");
+  if (comparison.kind === "BinaryOp") {
+    assertEquals(comparison.op, "=");
+    assertEquals(comparison.left.kind, "BinaryOp");
+    assertEquals(comparison.right.kind, "TypeCast");
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: chained casts nest right to left", () => {
+  const { cast, operand } = castOperand("<Program><uuid>item['p']");
+
+  assertEquals(cast, "Program");
+  assertEquals(operand.kind, "TypeCast");
+  if (operand.kind === "TypeCast") {
+    assertEquals(operand.expr.kind, "IndexExpression");
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: a parenthesized cast can still be subscripted", () => {
+  const expr = new EdgeQLParser("(<json>$x)['a']").parseExpressionOnly();
+
+  assertEquals(expr.kind, "IndexExpression");
+  if (expr.kind === "IndexExpression") {
+    assertEquals(expr.expr.kind, "TypeCast");
+  }
+});
+
+Deno.test("EdgeQL Parser - cast precedence: a shape after a cast operand stays on the select", () => {
+  const ast = new EdgeQLParser("select User { name } filter .id = <uuid>$id").parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.filter?.kind, "BinaryOp");
   }
 });

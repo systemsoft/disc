@@ -216,6 +216,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // Check if this identifier references a CTE alias
       const cteAlias = Context.getCTEAlias(this.ctx, expr.name);
       if (cteAlias) {
+        cteAlias.referenced = true;
+
         // The CTE name acts as a virtual table — SELECT FROM the CTE name
         const tableAlias = Context.addTableAlias(
           this.ctx,
@@ -859,10 +861,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     } else if (expr.kind === "Literal") {
       pgType = expr.type === "bytes" ? "bytea" : undefined;
     } else if (expr.kind === "FunctionCall") {
-      const parts = expr.name.parts;
-      const funcDef = this.ctx.schema.functions.get(parts.join("_")) ??
-        this.ctx.schema.functions.get(parts.join("::")) ??
-        this.ctx.schema.functions.get(`std::${parts.join("::")}`);
+      const funcDef = Context.lookupFunction(this.ctx.schema, expr.name.parts);
       pgType = funcDef?.returnType ? edgeqlTypeToPgType(funcDef.returnType) : undefined;
     } else if (expr.kind === "Path") {
       let owner: string | undefined = typeName;

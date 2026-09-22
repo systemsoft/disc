@@ -1469,7 +1469,11 @@ export class EdgeQLParser {
       return AST.createParameter(name);
     }
 
-    // Type cast <type>expr
+    // Type cast <type>expr. The operand is the full postfix expression —
+    // `<str>item['k']` is `<str>(item['k'])`, and `<str>f(x)` / `<str>.a.b`
+    // parse — and stops at the first operator: `<str>x ++ 'a'` is
+    // `(<str>x) ++ 'a'`. Gel's P_TYPECAST sits below P_BRACKET, P_PAREN and
+    // P_DOT and above every operator.
     if (this.match(TokenType.LESS)) {
       const type = this.parseTypeName();
       this.consume(TokenType.GREATER, "Expected '>' after type");
@@ -1486,11 +1490,11 @@ export class EdgeQLParser {
         // Parse the actual type
         const actualType = this.parseTypeName();
         this.consume(TokenType.GREATER, "Expected '>' after type");
-        const expr = this.parsePrimaryExpression();
+        const expr = this.parsePostfixExpression();
         return { kind: "TypeCast", type: actualType, expr, cardinality };
       }
 
-      const expr = this.parsePrimaryExpression();
+      const expr = this.parsePostfixExpression();
       return { kind: "TypeCast", type, expr };
     }
 

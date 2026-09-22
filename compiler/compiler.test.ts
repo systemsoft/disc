@@ -578,7 +578,7 @@ Deno.test("SQL Compiler - FOR with subquery iterator produces LATERAL", () => {
   assertEquals(sql.includes("for_sub"), true);
 });
 
-Deno.test("SQL Compiler - FOR with subquery LATERAL structure", () => {
+Deno.test("SQL Compiler - FOR with subquery iterator and insert body is INSERT … SELECT", () => {
   const source = `
     FOR x IN (SELECT User)
     UNION (
@@ -590,12 +590,12 @@ Deno.test("SQL Compiler - FOR with subquery LATERAL structure", () => {
   `;
   const sql = compileEdgeQL(source);
 
-  // Should produce FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
-  assertEquals(sql.includes("LATERAL"), true);
-  assertEquals(sql.includes("for_iter"), true);
-  assertEquals(sql.includes("for_sub"), true);
+  // An insert body is INSERT INTO … SELECT … FROM (iterator) AS for_iter(val):
+  // PostgreSQL has no INSERT inside LATERAL.
+  assertEquals(sql.includes("LATERAL"), false);
+  assertEquals(sql.includes("for_sub"), false);
   assertEquals(sql.includes("INSERT INTO"), true);
-  assertEquals(sql.includes("for_iter"), true);
+  assertEquals(sql.includes("AS for_iter(val)"), true);
 });
 
 // contains() and find() compilation tests
