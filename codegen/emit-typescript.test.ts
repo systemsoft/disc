@@ -17,6 +17,7 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { assertSnapshot } from "@std/testing/snapshot";
 
 /*** UTILITY ------------------------------------------ ***/
@@ -279,4 +280,15 @@ Deno.test("emitTypeScript matches golden snapshot (computed + collection schema)
 
 Deno.test("emitTypeScript matches golden snapshot (module-qualified link target)", async t => {
   await assertEmittedSnapshot(t, createQualifiedTargetSchema(), clientConfig());
+});
+
+// The generated `delete()` runs a bare `delete T filter .id = <uuid>$id`, which
+// the server answers with `{ deleted: n }` — the type must say so, not `T`.
+Deno.test("emitTypeScript types the builder's delete() as the { deleted } response it resolves to", () => {
+  const files = emitTypeScript(schemaToIR(createTestSchema()), clientConfig());
+  const queries = files.find(file => file.path.endsWith("queries.ts"));
+  assert(queries, "expected the query builders file");
+  assertStringIncludes(queries.content, "async delete(id: string): Promise<{ deleted: number }> {");
+  assertStringIncludes(queries.content, "return await this.client.query<{ deleted: number }>(query, { id });");
+  assertEquals(/async delete\(id: string\): Promise<Types\./.test(queries.content), false);
 });

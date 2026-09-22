@@ -6,13 +6,16 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import type { ConnectionPool } from "../lib/connection-pool.ts";
+import { EnvMock } from "../tests/test-utils.ts";
 import {
   ConnectionManager,
   SessionManager,
   TransactionManager
 } from "./connection.ts";
+import { EdgeQLProtocolHandler as FullProtocolHandler } from "./edgeql-protocol.ts";
 import { EdgeQLProtocolHandler } from "./protocol.ts";
-import { DiscServer } from "./server.ts";
+import { buildEnvOptions, DiscServer } from "./server.ts";
 
 Deno.test("Server Config - Default Values", () => {
   const server = new DiscServer();
@@ -291,4 +294,55 @@ Deno.test("Transaction Manager - ensureBegun rejects an unknown id", async () =>
   }
 
   assertEquals(threw, true);
+});
+
+// --- Phase 7: pool size and request body limit come from the server config ---
+
+/** The pool the protocol handler built for `databaseUrl` (never connected: `initialize()` is not called). */
+function handlerPool(server: DiscServer): ConnectionPool {
+  // deno-lint-ignore no-explicit-any
+  const pool = (server as any).protocolHandler.pool as ConnectionPool | undefined;
+  if (!pool) {
+    throw new Error("the protocol handler has no pool");
+  }
+  return pool;
+}
+
+Deno.test("Server Config - S6: the protocol handler's pool is capped by maxConnections", () => {
+  const server = new DiscServer({ databaseUrl: "postgresql://localhost:5432/never_connected", maxConnections: 7, protocol: "full" });
+  assertEquals(handlerPool(server).getMaxConnections(), 7);
+});
+
+Deno.test("Server Config - S6: the default maxConnections (100) reaches the pool", () => {
+  const server = new DiscServer({ databaseUrl: "postgresql://localhost:5432/never_connected", protocol: "full" });
+  assertEquals(handlerPool(server).getMaxConnections(), 100);
+});
+
+Deno.test("Server Config - S6: a handler built on its own keeps its own default of 10", () => {
+  const handler = new FullProtocolHandler({ databaseUrl: "postgresql://localhost:5432/never_connected" });
+  // deno-lint-ignore no-explicit-any
+  assertEquals(((handler as any).pool as ConnectionPool).getMaxConnections(), 10);
+});
+
+Deno.test("Server Config - maxRequestBodyBytes lands on the server config", () => {
+  assertEquals(new DiscServer({ maxRequestBodyBytes: 123456 }).get_config().maxRequestBodyBytes, 123456);
+  assertEquals(new DiscServer({}).get_config().maxRequestBodyBytes, undefined);
+});
+
+Deno.test("Server Config - buildEnvOptions reads DISC_MAX_REQUEST_BODY_BYTES; unset or invalid leaves it undefined", () => {
+  const env = new EnvMock();
+  try {
+    env.clear("DISC_MAX_REQUEST_BODY_BYTES");
+    assertEquals(buildEnvOptions().maxRequestBodyBytes, undefined);
+
+    env.set("DISC_MAX_REQUEST_BODY_BYTES", "8388608");
+    assertEquals(buildEnvOptions().maxRequestBodyBytes, 8388608);
+
+    for (const invalid of ["0", "-1", "lots", ""]) {
+      env.set("DISC_MAX_REQUEST_BODY_BYTES", invalid);
+      assertEquals(buildEnvOptions().maxRequestBodyBytes, undefined, JSON.stringify(invalid));
+    }
+  } finally {
+    env.restore();
+  }
 });

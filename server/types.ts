@@ -235,6 +235,12 @@ export interface Transaction {
    * when auth is not configured — then the token alone is the capability.
    */
   ownerUserId?: string;
+  /**
+   * Set once a statement inside the transaction failed (or its outcome is
+   * unknown). PostgreSQL has aborted the transaction: a COMMIT now rolls it
+   * back and is answered as a failure, never as `{ok: true}`.
+   */
+  aborted?: boolean;
 }
 
 export interface SubscriptionRequest {
@@ -450,6 +456,7 @@ export interface TransactionManager {
     options?: Partial<Transaction>
   ): Transaction;
   getTransaction(id: string): Transaction | null;
+  markAborted(id: string): void;
   commitTransaction(id: string): Promise<void>;
   rollbackTransaction(id: string): Promise<void>;
   cleanupAbandonedTransactions(): number;

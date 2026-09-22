@@ -127,6 +127,82 @@ Deno.test(
   }
 );
 
+// --- SQLSTATE in the error envelope (Phase 7, S5) ---
+
+/** What deno-postgres throws: an Error whose `fields` carry the server's error fields. */
+function makePostgresErrorPool(fields: Record<string, string | undefined>): ConnectionPool {
+  return {
+    query: () => {
+      const error = new Error(`Database error: ${fields.message ?? "failed"}`);
+      Object.assign(error, { fields });
+      throw error;
+    },
+    initialize: () => Promise.resolve(),
+    close: () => Promise.resolve()
+  } as unknown as ConnectionPool;
+}
+
+Deno.test("EdgeQLProtocolHandler - a unique violation reports sqlState, constraint, table and detail in extensions", async () => {
+  const handler = new EdgeQLProtocolHandler({
+    connectionPool: makePostgresErrorPool({
+      code: "23505",
+      constraint: "uk_git_ref_program_id_name",
+      detail: "Key (program_id, name)=(p, refs/heads/main) already exists.",
+      message: "duplicate key value violates unique constraint \"uk_git_ref_program_id_name\"",
+      severity: "ERROR",
+      table: "git_ref"
+    })
+  });
+
+  const response = await handler.handleRequest({ query: "insert User { name := 'x' }", variables: {} }, makeContext());
+
+  assert(response.errors, "expected errors");
+  const extensions = response.errors[0].extensions!;
+  assertEquals(extensions.code, "EXECUTION_ERROR");
+  assertEquals(extensions.sqlState, "23505");
+  assertEquals(extensions.constraint, "uk_git_ref_program_id_name");
+  assertEquals(extensions.table, "git_ref");
+  assertEquals(extensions.detail, "Key (program_id, name)=(p, refs/heads/main) already exists.");
+  assertStringIncludes(response.errors[0].message, "duplicate key");
+});
+
+Deno.test("EdgeQLProtocolHandler - a serialization failure carries only the fields PostgreSQL sent", async () => {
+  const handler = new EdgeQLProtocolHandler({
+    connectionPool: makePostgresErrorPool({ code: "40001", message: "could not serialize access due to concurrent update", severity: "ERROR" })
+  });
+
+  const response = await handler.handleRequest({ query: "insert User { name := 'x' }", variables: {} }, makeContext());
+
+  const extensions = response.errors![0].extensions!;
+  assertEquals(extensions.sqlState, "40001");
+  assertEquals("constraint" in extensions, false);
+  assertEquals("table" in extensions, false);
+  assertEquals("detail" in extensions, false);
+});
+
+Deno.test("EdgeQLProtocolHandler - an error without PostgreSQL fields has no sqlState", async () => {
+  const handler = new EdgeQLProtocolHandler({ connectionPool: makeFaultyPool("connection refused") });
+
+  const response = await handler.handleRequest({ query: "select User { name }", variables: {} }, makeContext());
+
+  const extensions = response.errors![0].extensions!;
+  assertEquals(extensions.code, "EXECUTION_ERROR");
+  assertEquals("sqlState" in extensions, false);
+});
+
+Deno.test("SimpleEdgeQLProtocolHandler - a unique violation reports sqlState too", async () => {
+  const handler = new SimpleEdgeQLProtocolHandler({
+    connectionPool: makePostgresErrorPool({ code: "23505", constraint: "uk_x", message: "duplicate key", severity: "ERROR" })
+  });
+
+  const response = await handler.handleRequest({ query: "insert User { name := 'x' }", variables: {} }, makeContext());
+
+  const extensions = response.errors![0].extensions!;
+  assertEquals(extensions.code, "EXECUTION_ERROR");
+  assertEquals(extensions.sqlState, "23505");
+  assertEquals(extensions.constraint, "uk_x");
+});
+
 // --- SimpleEdgeQLProtocolHandler ---
 
 Deno.test(

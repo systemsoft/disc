@@ -14,7 +14,8 @@ import * as SQL from "../compiler/sql.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { DatabaseExecutionError, QueryError, QueryTimeoutError, ValidationError } from "../lib/errors.ts";
+import { sha256Hex } from "../lib/crypto.ts";
+import { DatabaseExecutionError, postgresErrorFields, QueryError, QueryTimeoutError, ValidationError } from "../lib/errors.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
 import { DISC_VERSION } from "../lib/version.ts";
@@ -26,7 +27,6 @@ import * as Types from "./types.ts";
 const log = getLogger("edgeql-protocol");
 import {
   hashAccessContext,
-  hashString,
   makeCompilationCacheKey,
   QueryCache
 } from "../lib/query-cache.ts";
@@ -44,6 +44,11 @@ export interface EdgeQLExecutionOptions {
   slowQueryThresholdMs?: number;
   requestTimeout?: number;
   databaseRegistry?: DatabaseRegistry;
+  /**
+   * Cap of the pool this handler opens for `databaseUrl` (the server passes
+   * its `maxConnections`). Ignored when `connectionPool` is given. Default 10.
+   */
+  maxConnections?: number;
   /**
    * When true, reject queries that would write (INSERT/UPDATE/DELETE/
    * CONFIGURE DATABASE|INSTANCE|SYSTEM) with a `READ_ONLY_MODE` error.
@@ -141,7 +146,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       this.pool = new ConnectionPool({
         connectionString: options.databaseUrl,
         minConnections: 2,
-        maxConnections: 10,
+        maxConnections: options.maxConnections ?? 10,
         // gh/geldata#9034: tag pool connections so the migrate-CLI
         // preflight can spot a running server attached to the same DB.
         applicationName: "disc-server"
@@ -193,7 +198,10 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         };
       }
 
-      const queryHash = hashString(request.query);
+      // Keys the compiled-query, parse and EXPLAIN caches. A real digest:
+      // the 32-bit `hashString` collides on texts a caller can construct, and
+      // a collision serves one query's SQL and parameter names to another.
+      const queryHash = await sha256Hex(request.query);
       let cacheHit = false;
       let sqlString: string;
       let sqlStatement: SQL.SQLStatement;
@@ -347,10 +355,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         });
       }
 
-      // Detect SET GLOBAL queries — store the global in the session and
-      // execute the SET LOCAL on the connection, then return a success response.
-      if (parsedAST && parsedAST.kind === "SetGlobalQuery") {
-        const setGlobalAST = parsedAST as EdgeQL.SetGlobalQuery;
+      // SET GLOBAL — store the global in the session and execute the
+      // set_config() on the connection, then return a success response. From
+      // the cached result info, so a cache hit (no AST) takes the same path.
+      if (resultInfo.setGlobal) {
+        const setGlobalAST = resultInfo.setGlobal;
         const globalKey = `global::${setGlobalAST.module || "default"}::${setGlobalAST.name}`;
         context.session.variables[globalKey] = sqlString;
 
@@ -385,7 +394,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         request.variables || {},
         context,
         parameterNames,
-        resultInfo.kind,
+        resultInfo,
         sqlStatement
       );
       const executeMs = Date.now() - executeStart;
@@ -499,12 +508,16 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         error.message :
         "Unknown error";
 
+      // The SQLSTATE (and constraint/table/detail when PostgreSQL sent them)
+      // is what lets a client tell a unique violation from a serialization
+      // failure — the message alone is not something to match on.
       return {
         errors: [{
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            durationMs: Date.now() - startTime
+            durationMs: Date.now() - startTime,
+            ...postgresErrorFields(error)
           }
         }]
       };
@@ -675,7 +688,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext,
     parameterNames: string[],
-    resultKind: Compiler.ResultInfo["kind"],
+    resultInfo: Compiler.ResultInfo,
     sqlStatement?: SQL.SQLStatement
   ): Promise<{ data: any; warnings?: string[]; }> {
     log.debug("Executing SQL", {
@@ -731,54 +744,32 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // response shape below — and every cache hit — is covered.
         const rows = normalizeRows(result.rows);
 
+        // The response shape is decided by the compiler from the query, never
+        // from words in the SQL text: a mutation with a link subselect, a
+        // select over a mutation and a junction-backed multi-link write all
+        // contain `select`, and the latter two share the `WITH … INSERT/UPDATE
+        // … SELECT` shape.
+        //
         // A select answers with its row set as-is, `[]` when empty — also when
         // it selects from a mutation (`select (update …) { id }`, the
-        // with-form). Decided by the compiler from the query, not from the SQL
-        // text: those statements and the multi-link writes below share the
-        // `WITH … INSERT/UPDATE … SELECT` shape.
-        //
-        // The compiler emits `SELECT jsonb_build_object(...)` for shape
-        // expressions, which surfaces as rows of `{jsonb_build_object: {...}}`.
-        // Unwrap that single-column wrapper so callers see clean object
-        // shapes — UI/SDK consumers expect `row.id` to work directly.
-        if (resultKind === "rows") {
+        // with-form). The compiler emits `SELECT jsonb_build_object(...)` for
+        // shape expressions, which surfaces as rows of `{jsonb_build_object:
+        // {...}}`; unwrap that single-column wrapper so callers see clean
+        // object shapes — UI/SDK consumers expect `row.id` to work directly.
+        if (resultInfo.kind === "rows") {
           return { data: this.unwrapJsonbRows(rows) };
         }
 
-        // Everything else keeps the bare-mutation response shapes, still keyed
-        // on the SQL text.
-        const normalizedSQL = sql.toLowerCase().trim();
-
-        // Junction-backed multi-link writes compile to a data-modifying CTE:
-        // `WITH ins/upd AS (INSERT|UPDATE ...), link_n AS (...) SELECT * FROM ...`.
-        // Such SQL begins with `with` and contains a top-level `select`, but it
-        // is still a mutation — the leading INSERT/UPDATE drives a single row
-        // back through the final `SELECT *`. Detect it first so the response
-        // keeps the single-object mutation shape (not the SELECT array shape).
-        const isCteWrite = normalizedSQL.startsWith("with") &&
-          (normalizedSQL.includes("insert into") ||
-            normalizedSQL.includes("update "));
-
-        if (isCteWrite) {
-          return { data: rows[0] || { success: true } };
-        } else if (normalizedSQL.includes("select")) {
-          // Non-select statements whose SQL selects (for/group queries, an
-          // insert with a link subselect): the row set, unwrapped as above.
-          return { data: this.unwrapJsonbRows(rows) };
-        } else if (
-          normalizedSQL.includes("insert") &&
-          normalizedSQL.includes("returning")
-        ) {
-          return { data: rows[0] || { success: true } };
-        } else if (
-          normalizedSQL.includes("update") &&
-          normalizedSQL.includes("returning")
-        ) {
-          return { data: rows[0] || { updated: result.rowCount } };
-        } else if (normalizedSQL.includes("delete")) {
-          return { data: { deleted: result.rowCount } };
-        } else {
-          return { data: { rowCount: result.rowCount, success: true } };
+        // The bare-mutation response shapes.
+        switch (resultInfo.mutation) {
+          case "insert":
+            return { data: rows[0] || { success: true } };
+          case "update":
+            return { data: rows[0] || { updated: result.rowCount } };
+          case "delete":
+            return { data: { deleted: result.rowCount } };
+          default:
+            return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
         // Let QueryTimeoutError propagate directly

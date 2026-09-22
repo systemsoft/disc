@@ -15,9 +15,6 @@
  * by `AuthProvider`. Q8 and Q9 drive it through the SDK; Q8 uses a client
  * generated from the fixture schema, the way `disc codegen` would.
  *
- * Rows that are not due yet are listed in `PENDING`; the phase that turns a
- * row green deletes its entry. Run with `GIT_FORGE_ALL=1` to see every row.
- *
  * Requires PostgreSQL: set DISC_PG_TEST_URL or DISC_PG_AUTO=1.
  */
 
@@ -39,16 +36,6 @@ import type { ServerConfig } from "../server/types.ts";
 import { canRunPgTests, getTestDsn, resetTestDatabase } from "./pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
-
-/**
- * Rows that are known red. `GIT_FORGE_ALL=1` empties the set so the whole
- * contract runs. A phase is not done until its entries are deleted here.
- */
-const PENDING = new Set<string>(
-  Deno.env.get("GIT_FORGE_ALL") === "1" ? [] : [
-    "Q9" // Phase 7 (S3, S11): a failed commit is reported as success
-  ]
-);
 
 const FIXTURE_URL = new URL("./fixtures/git-forge.disc", import.meta.url);
 const SDK_URL = new URL("../sdk/mod.ts", import.meta.url).href;
@@ -353,7 +340,7 @@ async function withGeneratedClient(h: Harness, token: string, fn: (client: Forge
 function acceptance(row: string, name: string, fn: (t: Deno.TestContext, h: Harness) => Promise<void>): void {
   Deno.test({
     fn: t => withHarness(h => fn(t, h)),
-    ignore: !RUN_PG || PENDING.has(row),
+    ignore: !RUN_PG,
     name: `git-forge ${row}: ${name}`,
     sanitizeOps: false,
     sanitizeResources: false

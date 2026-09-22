@@ -27,11 +27,18 @@ import * as Types from "./types.ts";
 
 const SDL = `
 module default {
+  global current_user_id: uuid;
+
+  type Author {
+    required name: str;
+  }
+
   type Tag {
     required name: str;
   }
 
   type Post {
+    author -> Author;
     createdAt: datetime;
     required title: str;
     multi tags -> Tag;
@@ -170,19 +177,22 @@ Deno.test("result shape - a bare delete keeps { deleted: n } and a swallowed ins
 
 Deno.test("result shape - a junction-backed multi-link write keeps its single-row response on both runs", async () => {
   const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
-  const writes = [
-    "insert Post { title := 't', tags := (select Tag filter .name = 'a') }",
-    "update Post filter .title = 't' set { tags += (select Tag filter .name = 'b') }"
+  // With nothing matched, each answers with its statement's documented shape
+  // (the update used to say `{ success: true }` — an artifact of sniffing the
+  // CTE's SQL, gone since the shape is chosen from the query).
+  const writes: Array<[string, unknown]> = [
+    ["insert Post { title := 't', tags := (select Tag filter .name = 'a') }", { success: true }],
+    ["update Post filter .title = 't' set { tags += (select Tag filter .name = 'b') }", { updated: 0 }]
   ];
 
-  for (const query of writes) {
+  for (const [query, nothingMatched] of writes) {
     const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
 
     assert(matched.statements[0].trimStart().startsWith("WITH "), matched.statements[0]);
     assertEquals(matched.data, [expected, expected], query);
 
     const nothing = await runTwice(query, NOTHING);
-    assertEquals(nothing.data, [{ success: true }, { success: true }], query);
+    assertEquals(nothing.data, [nothingMatched, nothingMatched], query);
   }
 });
 
@@ -202,4 +212,72 @@ Deno.test("result shape - simple handler: a select answers with the row set, [] 
     assertEquals(updated.errors, undefined);
     assertEquals(updated.data, { updated: 0 });
   }
+});
+
+// --- Phase 7, 5a: the bare-mutation shape comes from the query, not from words in its SQL ---
+
+Deno.test("result shape - a bare insert whose SQL contains a link subselect still answers with the row, mapped, on both runs", async () => {
+  const query = "insert Post { title := 't', author := (select Author filter .name = 'ada') }";
+  const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
+
+  const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
+  assert(/select/i.test(matched.statements[0]), matched.statements[0]);
+  assertEquals(matched.data, [expected, expected]);
+
+  const swallowed = await runTwice(`${query} unless conflict`, NOTHING);
+  assertEquals(swallowed.data, [{ success: true }, { success: true }]);
+});
+
+Deno.test("result shape - a bare delete whose filter walks a link keeps { deleted: n }", async () => {
+  const deleted = await runTwice("delete Post filter .author.name = 'ada'", { rowCount: 2, rows: [{ id: "a" }, { id: "b" }] });
+  assert(/select/i.test(deleted.statements[0]), deleted.statements[0]);
+  assertEquals(deleted.data, [{ deleted: 2 }, { deleted: 2 }]);
+});
+
+Deno.test("result shape - a bare update whose filter walks a link keeps the row / { updated: 0 }", async () => {
+  const query = "update Post filter .author.name = 'ada' set { title := 'x' }";
+  const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
+
+  const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
+  assert(/select/i.test(matched.statements[0]), matched.statements[0]);
+  assertEquals(matched.data, [expected, expected]);
+  assertEquals((await runTwice(query, NOTHING)).data, [{ updated: 0 }, { updated: 0 }]);
+});
+
+Deno.test("result shape - the with-form of a bare mutation follows the body's kind", async () => {
+  const inserted = await runTwice("with n := 't' insert Post { title := n }", { rowCount: 1, rows: [POST_ROW] });
+  assertEquals(inserted.data, [POST_ROW, POST_ROW]);
+
+  const updated = await runTwice("with n := 'x' update Post filter .title = n set { title := 'y' }", NOTHING);
+  assertEquals(updated.data, [{ updated: 0 }, { updated: 0 }]);
+
+  const deleted = await runTwice("with n := 'x' delete Post filter .title = n", { rowCount: 1, rows: [{ id: "a" }] });
+  assertEquals(deleted.data, [{ deleted: 1 }, { deleted: 1 }]);
+});
+
+Deno.test("result shape - set global takes the session path on a cache hit too", async () => {
+  const statements: string[] = [];
+  const handler = new EdgeQLProtocolHandler({
+    connectionPool: scriptedPool({ rowCount: 1, rows: [{ ["set_config"]: "x" }] }, statements),
+    schema: await testSchema()
+  });
+  const query = "set global current_user_id := <uuid>'11111111-1111-1111-1111-111111111111'";
+
+  const recorded: unknown[] = [];
+
+  for (const expectHit of [false, true]) {
+    const context = makeContext();
+    const response = await handler.handleRequest({ query }, context);
+
+    assertEquals(response.errors, undefined, JSON.stringify(response.errors));
+    assertEquals(response.extensions?.cacheHit, expectHit);
+    assertEquals(response.data, { global: "current_user_id", success: true }, `run ${expectHit ? 2 : 1}`);
+    recorded.push(context.session.variables["global::default::current_user_id"]);
+  }
+
+  // Both sessions carry the set_config() statement, identically.
+  assertEquals(typeof recorded[0], "string");
+  assert((recorded[0] as string).startsWith("SELECT set_config("), recorded[0] as string);
+  assertEquals(recorded[1], recorded[0]);
+  assertEquals(statements, [recorded[0], recorded[0]]);
 });

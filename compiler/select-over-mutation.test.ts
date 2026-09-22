@@ -321,10 +321,34 @@ Deno.test("describeResult - a select is a row set, whatever it selects from", ()
   assertEquals(describe("with module default select GitRef { id }"), { kind: "rows" });
 });
 
-Deno.test("describeResult - a bare mutation keeps the mutation response and names the type its row maps through", () => {
-  assertEquals(describe(BARE_Q1), { kind: "mutation", mutatedType: "GitRef" });
-  assertEquals(describe(BARE_Q3), { kind: "mutation", mutatedType: "GitRef" });
-  assertEquals(describe("insert default::GitRef { name := 'x' }"), { kind: "mutation", mutatedType: "default::GitRef" });
-  assertEquals(describe(BARE_Q2), { kind: "mutation" });
-  assertEquals(describe("with module default insert GitRef { name := 'x' }"), { kind: "mutation" });
+Deno.test("describeResult - a bare mutation keeps the mutation response, says which statement, and names the type its row maps through", () => {
+  assertEquals(describe(BARE_Q1), { kind: "mutation", mutatedType: "GitRef", mutation: "update" });
+  assertEquals(describe(BARE_Q3), { kind: "mutation", mutatedType: "GitRef", mutation: "insert" });
+  assertEquals(describe("insert default::GitRef { name := 'x' }"), { kind: "mutation", mutatedType: "default::GitRef", mutation: "insert" });
+  assertEquals(describe(BARE_Q2), { kind: "mutation", mutation: "delete" });
+});
+
+Deno.test("describeResult - the with-form and a set-literal for follow the body's statement; the row is not mapped there (unchanged)", () => {
+  assertEquals(describe("with module default insert GitRef { name := 'x' }"), { kind: "mutation", mutation: "insert" });
+  assertEquals(describe(`with n := 'x' ${BARE_Q1}`), { kind: "mutation", mutation: "update" });
+  assertEquals(describe(`with n := 'x' ${BARE_Q2}`), { kind: "mutation", mutation: "delete" });
+  assertEquals(describe("for x in {'a', 'b'} union (insert GitRef { name := x })"), { kind: "mutation", mutation: "insert" });
+  assertEquals(describe("for x in {'a', 'b'} union (select GitRef { id } filter .name = x)"), { kind: "rows" });
+  assertEquals(describe("for x in (select GitRef) union (insert GitRef { name := x.name })"), { kind: "rows" });
+});
+
+Deno.test("describeResult - statements that answer with rows or with a plain status", () => {
+  assertEquals(describe("group GitRef { name } by .name"), { kind: "rows" });
+  assertEquals(describe("explain select GitRef { id }"), { kind: "rows" });
+  assertEquals(describe("describe schema"), { kind: "rows" });
+  assertEquals(describe("describe type GitRef"), { kind: "rows" });
+  assertEquals(describe("configure system set max_connections := 200"), { kind: "mutation" });
+});
+
+Deno.test("describeResult - set global names the global so a cache hit takes the session path", () => {
+  assertEquals(describe("set global current_user_id := <uuid>'11111111-1111-1111-1111-111111111111'"), {
+    kind: "mutation",
+    setGlobal: { module: undefined, name: "current_user_id" }
+  });
+  assertEquals(describe("set global default::current_user_id := 'x'"), { kind: "mutation", setGlobal: { module: "default", name: "current_user_id" } });
 });

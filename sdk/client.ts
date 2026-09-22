@@ -7,13 +7,15 @@
 
 import { jsonReplacer, reviveResponse } from "./codecs.ts";
 import {
+  createQueryError,
   DiscAuthError,
   DiscConnectionError,
   DiscNetworkError,
   DiscProtocolError,
   DiscQueryError,
   DiscServerError,
-  DiscTimeoutError
+  DiscTimeoutError,
+  DiscTransactionError
 } from "./errors.ts";
 import { Transaction } from "./transaction.ts";
 import type {
@@ -29,6 +31,8 @@ import { applyValidator } from "./validation.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_TIMEOUT = 30000;
+
+type DiscClientFailure = DiscQueryError | DiscProtocolError;
 
 /** Env var that overrides the server URL on any runtime, before `disc.toml`. */
 const SERVER_URL_ENV = "DISC_SERVER_URL";
@@ -243,7 +247,7 @@ export class DiscClient {
     const response = await this.queryRaw<T>(query, variables);
 
     if (response.errors && response.errors.length > 0) {
-      throw new DiscQueryError(response.errors);
+      throw createQueryError(response.errors);
     }
 
     let data: unknown = response.data;
@@ -383,6 +387,13 @@ export class DiscClient {
    * opens the transaction with; omit it for PostgreSQL's `read_committed`
    * default. Every query issued through the `tx` handle carries the
    * transaction id, so they all run on one PostgreSQL session.
+   *
+   * A statement that fails inside the callback poisons the transaction, as
+   * in PostgreSQL: even if the callback catches the error and returns
+   * normally, the transaction is rolled back and this rejects with a
+   * `DiscTransactionError` whose `cause` is that failure. A commit the
+   * server rejects (unknown transaction, aborted, COMMIT failure) rejects
+   * too — it is never reported as committed.
    */
   async transaction<T>(
     fn: (tx: Transaction) => Promise<T>,
@@ -398,24 +409,42 @@ export class DiscClient {
     };
 
     const tx = new Transaction(transactionId, this);
+    let result: T;
 
     try {
-      const result = await fn(tx);
-
-      if (tx.getState() === "active") {
-        await tx.commit();
-      }
-
-      return result;
+      result = await fn(tx);
     } catch (error) {
-      if (tx.getState() === "active") {
-        try {
-          await tx.rollback();
-        } catch {
-          // Rollback failure is secondary to the original error
-        }
-      }
+      await this.rollbackQuietly(tx);
       throw error;
+    }
+
+    if (tx.getState() === "failed") {
+      await this.rollbackQuietly(tx);
+      throw new DiscTransactionError(
+        "Transaction was not committed: a statement inside it failed and the transaction was rolled back",
+        tx.getFailure()
+      );
+    }
+
+    // A commit the server rejects propagates as-is. Nothing is rolled back
+    // after a commit attempt: the transaction is over on the server either
+    // way, and the SDK never re-sends a COMMIT.
+    if (tx.getState() === "active") {
+      await tx.commit();
+    }
+
+    return result;
+  }
+
+  /** Roll back after a failure inside the callback; that failure is what the caller sees. */
+  private async rollbackQuietly(tx: Transaction): Promise<void> {
+    if (tx.getState() !== "active" && tx.getState() !== "failed") {
+      return;
+    }
+    try {
+      await tx.rollback();
+    } catch {
+      // Rollback failure is secondary to the original error
     }
   }
 
@@ -427,6 +456,16 @@ export class DiscClient {
   /**
    * Internal fetch wrapper used by Transaction and AuthManager.
    * Handles timeout, retries, auth headers, and error classification.
+   *
+   * Every non-OK response is an error: 401/403 → `DiscAuthError`, 5xx →
+   * `DiscServerError`, any other status → the typed query error when the
+   * body is an `errors` envelope, else `DiscProtocolError` with the status
+   * and the server's `error` message (or the body text).
+   *
+   * Retries never apply to `/transaction/*` or to a request carrying
+   * `X-Transaction-ID`: re-sending a statement or a COMMIT whose first
+   * attempt may have gone through would apply it twice or report a failed
+   * commit as success.
    * @internal
    */
   async fetch(
@@ -455,9 +494,12 @@ export class DiscClient {
       extra.forEach((value, key) => headers.set(key, value));
     }
 
+    const transactional = path.startsWith("/transaction/") || headers.has("X-Transaction-ID");
+    const retries = transactional ? 0 : this.retries;
+
     let lastError: Error | undefined;
 
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetch(url, {
           ...init,
@@ -482,6 +524,10 @@ export class DiscClient {
           );
         }
 
+        if (!response.ok) {
+          throw await this.classifyFailure(response);
+        }
+
         this.checkSchemaDrift(response);
         return response;
       } catch (error) {
@@ -497,7 +543,7 @@ export class DiscClient {
         // Server errors get retried
         if (error instanceof DiscServerError) {
           lastError = error;
-          if (attempt < this.retries) {
+          if (attempt < retries) {
             this.logger?.warn?.("retrying after server error", {
               attempt: attempt + 1,
               max: this.retries,
@@ -528,7 +574,7 @@ export class DiscClient {
             `Connection failed: ${error.message}`,
             error
           );
-          if (attempt < this.retries) {
+          if (attempt < retries) {
             await this.delay(this.backoffDelay(attempt));
             continue;
           }
@@ -540,7 +586,7 @@ export class DiscClient {
           new DiscNetworkError(error.message, error) :
           new DiscNetworkError(String(error));
 
-        if (attempt < this.retries) {
+        if (attempt < retries) {
           await this.delay(this.retryDelay * (attempt + 1));
           continue;
         }
@@ -551,6 +597,29 @@ export class DiscClient {
 
     // Should not reach here, but satisfy TypeScript
     throw lastError ?? new DiscNetworkError("Request failed after retries");
+  }
+
+  /**
+   * The error for a 4xx response (other than 401/403): a `{ errors }`
+   * envelope is a query failure, typed by its SQLSTATE; a `{ error }` body
+   * or plain text is a `DiscProtocolError` carrying the status.
+   */
+  private async classifyFailure(response: Response): Promise<DiscClientFailure> {
+    const text = await response.text();
+    let parsed: { error?: unknown; errors?: unknown; } | undefined;
+
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Not JSON: the text is the message.
+    }
+
+    if (Array.isArray(parsed?.errors) && parsed.errors.length > 0) {
+      return createQueryError(parsed.errors);
+    }
+
+    const message = typeof parsed?.error === "string" ? parsed.error : text || response.statusText;
+    return new DiscProtocolError(message, response.status);
   }
 
   /**

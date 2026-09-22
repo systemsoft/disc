@@ -86,6 +86,9 @@ export type {
 
 // Error hierarchy
 export {
+  ConstraintViolationError,
+  createQueryError,
+  DeadlockError,
   DiscAuthError,
   DiscClientError,
   DiscConnectionError,
@@ -96,7 +99,10 @@ export {
   DiscServerError,
   DiscTimeoutError,
   DiscTransactionError,
-  DiscValidationError
+  DiscValidationError,
+  ForeignKeyViolationError,
+  SerializationFailureError,
+  UniqueViolationError
 } from "./errors.ts";
 
 // Types

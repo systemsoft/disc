@@ -368,6 +368,7 @@ export class DiscServer {
       databaseUrl,
       maxConnections: config.maxConnections || 100,
       requestTimeout: config.requestTimeout || 30000,
+      maxRequestBodyBytes: config.maxRequestBodyBytes,
       enableCors: config.enableCors !== undefined ? config.enableCors : true,
       corsOrigins: config.corsOrigins,
       enableWebsockets: config.enableWebsockets !== undefined ?
@@ -415,6 +416,9 @@ export class DiscServer {
       explainCacheTtlMs: config.explainCacheTtlMs,
       dryRun: config.dryRun || false,
       databaseUrl: this.config.databaseUrl,
+      // The handler's PostgreSQL pool is the server's pool: `DISC_MAX_CONNECTIONS`
+      // caps it (it was hard-coded to 10 before, whatever the config said).
+      maxConnections: this.config.maxConnections,
       schema: config.schema,
       enableAccessPolicies: config.enableAccessPolicies,
       cacheMaxSize: config.cacheMaxSize,
@@ -1248,6 +1252,17 @@ export function buildEnvOptions(
   const readOnly = parseBoolEnv("DISC_READ_ONLY");
   if (readOnly !== undefined) {
     config.readOnly = readOnly;
+  }
+
+  // `POST /query` body cap. disc.toml's `max_request_body_bytes` is applied
+  // over this by the serve command, so the file still wins; the default (4 MiB)
+  // lives where the limit is enforced (`handle_query`).
+  const maxRequestBodyBytesRaw = Deno.env.get("DISC_MAX_REQUEST_BODY_BYTES");
+  if (maxRequestBodyBytesRaw !== undefined) {
+    const parsed = parseInt(maxRequestBodyBytesRaw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      config.maxRequestBodyBytes = parsed;
+    }
   }
 
   const trustProxy = parseBoolEnv("DISC_TRUST_PROXY");

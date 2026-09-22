@@ -23,7 +23,7 @@ import * as Context from "../compiler/context.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { DatabaseExecutionError } from "../lib/errors.ts";
+import { DatabaseExecutionError, postgresErrorFields } from "../lib/errors.ts";
 import { getLogger } from "../lib/logger.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
 import { normalizeRows } from "./row-normalizer.ts";
@@ -149,7 +149,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         compilationResult.sql,
         request.variables || {},
         context,
-        describeResult(parseResult.ast).kind
+        describeResult(parseResult.ast)
       );
 
       const durationMs = Date.now() - startTime;
@@ -191,7 +191,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            durationMs: Date.now() - startTime
+            durationMs: Date.now() - startTime,
+            ...postgresErrorFields(error)
           }
         }]
       };
@@ -471,7 +472,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     variables: Record<string, any>,
     context: Types.QueryContext,
-    resultKind: ResultInfo["kind"]
+    resultInfo: ResultInfo
   ): Promise<{ data: any; warnings?: string[]; }> {
     log.debug("Executing SQL", { sql });
     log.debug("Query variables", { variables: JSON.stringify(variables) });
@@ -499,41 +500,22 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Same wire representation as the full handler (a driver bigint is not JSON).
         const rows = normalizeRows(result.rows);
 
-        // Same rule as the full handler: a select answers with its row set,
-        // decided from the query and not from the SQL text.
-        if (resultKind === "rows") {
+        // Same rule as the full handler: the response shape is decided from
+        // the query, not from the SQL text. A select answers with its row set;
+        // a bare mutation with its documented shape.
+        if (resultInfo.kind === "rows") {
           return { data: rows };
         }
 
-        // Everything else keeps the bare-mutation response shapes.
-        const normalizedSQL = sql.toLowerCase().trim();
-
-        // Junction-backed multi-link writes compile to a data-modifying CTE
-        // (`WITH ins/upd AS (INSERT|UPDATE ...) ... SELECT * FROM ...`): a
-        // mutation that also contains a top-level SELECT. Detect it first so
-        // the response keeps the single-row mutation shape.
-        const isCteWrite = normalizedSQL.startsWith("with") &&
-          (normalizedSQL.includes("insert into") ||
-            normalizedSQL.includes("update "));
-
-        if (isCteWrite) {
-          return { data: rows[0] || { success: true } };
-        } else if (normalizedSQL.includes("select")) {
-          return { data: rows };
-        } else if (
-          normalizedSQL.includes("insert") &&
-          normalizedSQL.includes("returning")
-        ) {
-          return { data: rows[0] || { success: true } };
-        } else if (
-          normalizedSQL.includes("update") &&
-          normalizedSQL.includes("returning")
-        ) {
-          return { data: rows[0] || { updated: result.rowCount } };
-        } else if (normalizedSQL.includes("delete")) {
-          return { data: { deleted: result.rowCount } };
-        } else {
-          return { data: { rowCount: result.rowCount, success: true } };
+        switch (resultInfo.mutation) {
+          case "insert":
+            return { data: rows[0] || { success: true } };
+          case "update":
+            return { data: rows[0] || { updated: result.rowCount } };
+          case "delete":
+            return { data: { deleted: result.rowCount } };
+          default:
+            return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
         const dbError = error instanceof Error ?

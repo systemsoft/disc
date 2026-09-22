@@ -218,10 +218,11 @@ export function parameterBindOrder(node: unknown, parameterIndex: Map<string, nu
  */
 export interface ResultInfo {
   /**
-   * `"rows"`: the statement is a select (directly, or as the body of a `with`
-   * block) and answers with its row set as-is, `[]` when empty — including a
-   * select over a mutation. `"mutation"`: anything else; the response keeps the
-   * bare-mutation shapes (`{updated}`, `{deleted}`, `{success}`, or the row).
+   * `"rows"`: the statement answers with its row set as-is, `[]` when empty —
+   * a select (directly, or as the body of a `with` block, including a select
+   * over a mutation), a group, a describe, an explain. `"mutation"`: anything
+   * else; the response keeps the bare-mutation shapes chosen by `mutation`
+   * (`{updated}`, `{deleted}`, `{success}`, or the row), or a plain status.
    */
   kind: "rows" | "mutation";
   /**
@@ -230,6 +231,20 @@ export interface ResultInfo {
    * to property names through this type.
    */
   mutatedType?: string;
+  /**
+   * Which statement a `"mutation"` result comes from — bare, as the body of a
+   * `with` block, or as the body of a set-literal `for`. Chooses the response
+   * shape: insert → the row or `{success: true}`, update → the row or
+   * `{updated: n}`, delete → `{deleted: n}`. Absent for statements with a
+   * plain status response (`configure`, `set global`).
+   */
+  mutation?: "insert" | "update" | "delete";
+  /**
+   * For `set global`: the global being set, so the handler takes the session
+   * path (record the setting, answer `{success, global}`) on a cache hit too,
+   * where it has no query AST.
+   */
+  setGlobal?: { module?: string; name: string; };
 }
 
 export function isMutationQuery(
@@ -238,22 +253,45 @@ export function isMutationQuery(
   return query.kind === "InsertQuery" || query.kind === "UpdateQuery" || query.kind === "DeleteQuery";
 }
 
+const MUTATION_OF: Record<string, ResultInfo["mutation"]> = {
+  DeleteQuery: "delete",
+  InsertQuery: "insert",
+  UpdateQuery: "update"
+};
+
 export function describeResult(query: EdgeQLAST.Query): ResultInfo {
   switch (query.kind) {
     case "SelectQuery":
+    case "GroupQuery":
+    case "DescribeType":
+    case "DescribeSchema":
+    case "ExplainQuery":
       return { kind: "rows" };
     case "WithBlock": {
-      return describeResult(query.body).kind === "rows" ? { kind: "rows" } : { kind: "mutation" };
+      // The body decides. Its `RETURNING *` row is deliberately not mapped
+      // through `mutatedType` here (the with-form answers with column names,
+      // as it always has).
+      const body = describeResult(query.body);
+      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutation: body.mutation };
     }
     case "InsertQuery":
     case "UpdateQuery":
-      return { kind: "mutation", mutatedType: query.type.name.parts.join("::") };
-    case "ForQuery":
+      return { kind: "mutation", mutatedType: query.type.name.parts.join("::"), mutation: MUTATION_OF[query.kind] };
+    case "DeleteQuery":
+      return { kind: "mutation", mutation: "delete" };
+    case "ForQuery": {
       // `for x in <function or subquery> union (…)` answers with its row set:
       // for a bulk insert, the ids of the rows it inserted (`[]` when every row
       // conflicted). A set-literal for-insert is one multi-row INSERT and keeps
-      // the bare-insert response.
-      return query.iterator.kind === "SetExpr" ? { kind: "mutation" } : { kind: "rows" };
+      // the bare-insert response; a set-literal for over a select is rows.
+      if (query.iterator.kind !== "SetExpr") {
+        return { kind: "rows" };
+      }
+      const body = describeResult(query.body);
+      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutation: body.mutation };
+    }
+    case "SetGlobalQuery":
+      return { kind: "mutation", setGlobal: { module: query.module, name: query.name } };
     default:
       return { kind: "mutation" };
   }

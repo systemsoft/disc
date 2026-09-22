@@ -166,7 +166,7 @@ Deno.test("bulk insert: the response is the row set of inserted ids", () => {
 });
 
 Deno.test("bulk insert: a set-literal for-insert keeps its bare-insert response", () => {
-  assertEquals(describeResult(new EdgeQLParser("for x in {'a', 'b'} union (insert Program { name := x })").parse()), { kind: "mutation" });
+  assertEquals(describeResult(new EdgeQLParser("for x in {'a', 'b'} union (insert Program { name := x })").parse()), { kind: "mutation", mutation: "insert" });
 });
 
 Deno.test("bulk insert: a Program selected once in the with block is visible in the body", async () => {

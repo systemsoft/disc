@@ -179,3 +179,59 @@ export class QueryTimeoutError extends DiscError {
     return output;
   }
 }
+
+/**
+ * COMMIT was requested on a transaction a failed statement had already
+ * aborted. The server rolls it back instead; the id is no longer valid.
+ */
+export class TransactionAbortedError extends DiscError {
+  readonly transactionId: string;
+
+  constructor(transactionId: string, context?: ErrorContext) {
+    super(
+      `Transaction ${transactionId} was aborted by a failed statement and has been rolled back`,
+      context
+    );
+    this.transactionId = transactionId;
+  }
+}
+
+/**
+ * The PostgreSQL error fields a client can act on, read from the driver's
+ * error (deno-postgres keeps the server's ErrorResponse in `fields`) or from
+ * a wrapper whose `cause` is that error. `sqlState` is the SQLSTATE
+ * (`23505`, `40001`, …); the other three are present when PostgreSQL sent
+ * them. Undefined when the error did not come from PostgreSQL.
+ */
+export interface PostgresErrorFields {
+  constraint?: string;
+  detail?: string;
+  sqlState: string;
+  table?: string;
+}
+
+export function postgresErrorFields(error: unknown): PostgresErrorFields | undefined {
+  const own = (error as { fields?: unknown; } | undefined)?.fields;
+  const fields = own ?? (error as { cause?: { fields?: unknown; }; } | undefined)?.cause?.fields;
+
+  if (!fields || typeof fields !== "object") {
+    return undefined;
+  }
+
+  const { code, constraint, detail, table } = fields as Record<string, unknown>;
+  if (typeof code !== "string") {
+    return undefined;
+  }
+
+  const out: PostgresErrorFields = { sqlState: code };
+  if (typeof constraint === "string") {
+    out.constraint = constraint;
+  }
+  if (typeof table === "string") {
+    out.table = table;
+  }
+  if (typeof detail === "string") {
+    out.detail = detail;
+  }
+  return out;
+}

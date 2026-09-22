@@ -898,10 +898,10 @@ class TypeScriptEmitter {
     content += `    return reviveTyped(await this.client.query<${typeRef}>(query, variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
-    content += `  /** Delete ${typeName} by ID */\n`;
-    content += `  async delete(id: string): Promise<${typeRef}> {\n`;
+    content += `  /** Delete ${typeName} by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */\n`;
+    content += `  async delete(id: string): Promise<{ deleted: number }> {\n`;
     content += `    const query = \`delete ${edgeqlTypeName} filter .id = <uuid>$id\`;\n`;
-    content += `    return await this.client.query<${typeRef}>(query, { id });\n`;
+    content += `    return await this.client.query<{ deleted: number }>(query, { id });\n`;
     content += `  }\n\n`;
 
     content += `  /** Count ${typeName} objects */\n`;

@@ -7,6 +7,7 @@
 
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { TransactionAbortedError } from "../lib/errors.ts";
 import { logger } from "../postgres/logger.ts";
 import * as Types from "./types.ts";
 
@@ -225,6 +226,20 @@ export class TransactionManager implements Types.TransactionManager {
   }
 
   /**
+   * Record that a statement inside the transaction failed. PostgreSQL has
+   * aborted it, and its own `COMMIT` on an aborted transaction answers with
+   * a `ROLLBACK` tag and no error — so the flag is what makes the commit
+   * route report the failure. Unknown ids are ignored: the transaction may
+   * already have been rolled back.
+   */
+  markAborted(id: string): void {
+    const transaction = this.transactions.get(id);
+    if (transaction) {
+      transaction.aborted = true;
+    }
+  }
+
+  /**
    * Await the BEGIN issued by `beginTransaction()`. `beginTransaction` is
    * synchronous — it returns the transaction while BEGIN is still in flight —
    * so callers that need the held connection to exist (the HTTP begin route,
@@ -253,10 +268,22 @@ export class TransactionManager implements Types.TransactionManager {
     return this.transaction_connections.get(id);
   }
 
+  /**
+   * COMMIT the transaction. An aborted transaction (see `markAborted`) is
+   * rolled back instead and reported as `TransactionAbortedError`. Either
+   * way the transaction is over once this returns or throws: the entry is
+   * removed and the connection released, so a repeated commit is "not
+   * found", never a silent `{ok: true}` on a transaction that failed.
+   */
   async commitTransaction(id: string): Promise<void> {
     const transaction = this.transactions.get(id);
     if (!transaction) {
       throw new Error(`Transaction ${id} not found`);
+    }
+
+    if (transaction.aborted) {
+      await this.rollbackTransaction(id);
+      throw new TransactionAbortedError(id);
     }
 
     // Await pending BEGIN if pool is available
@@ -278,6 +305,8 @@ export class TransactionManager implements Types.TransactionManager {
       } finally {
         this.pool.release(conn);
         this.transaction_connections.delete(id);
+        // A failed COMMIT has ended the transaction on PostgreSQL's side too.
+        this.transactions.delete(id);
       }
     }
 

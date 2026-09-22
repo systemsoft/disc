@@ -27,6 +27,7 @@ import { DISC_VERSION } from "../lib/version.ts";
 import { dispatchRest } from "./rest/router.ts";
 import { getLogger } from "../lib/logger.ts";
 import { sha256Equal, sha256Hex } from "../lib/crypto.ts";
+import { postgresErrorFields, TransactionAbortedError } from "../lib/errors.ts";
 import { handleGetMigrations } from "./migrations-endpoint.ts";
 
 import {
@@ -44,6 +45,22 @@ import type { MetricsSource } from "./metrics.ts";
 import * as Types from "./types.ts";
 
 const log = getLogger("http");
+
+/**
+ * Error codes a query can fail with before anything reaches PostgreSQL.
+ * Inside a transaction, any other failure means a statement was sent and
+ * failed (or its outcome is unknown), which aborts the transaction. An
+ * unrecognized code counts as a failed statement — fail closed.
+ */
+const PRE_EXECUTION_ERROR_CODES: ReadonlySet<string> = new Set([
+  "COMPILATION_ERROR",
+  "PARSE_ERROR",
+  "QUERY_TOO_LARGE",
+  "READ_ONLY_MODE",
+  "SYNTAX_ERROR",
+  "VALIDATION_ERROR",
+  "WARNING"
+]);
 
 /** Isolation levels `POST /transaction/begin` accepts, mirroring `Types.Transaction`. */
 const ISOLATION_LEVELS: ReadonlyArray<Types.Transaction["isolationLevel"]> = [
@@ -444,6 +461,11 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
             error instanceof Error &&
             error.message === "__HTTP_TIMEOUT__"
           ) {
+            // The statement may still be running on the held connection;
+            // its outcome is unknown, so the transaction cannot be committed.
+            if (transactionId) {
+              this.transaction_manager.markAborted(transactionId);
+            }
             this.stats.failed_requests++;
             return new Response(
               JSON.stringify({
@@ -480,6 +502,15 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         e => e.extensions?.code !== "WARNING"
       );
 
+      // A statement that failed on PostgreSQL has aborted the transaction it
+      // ran in (S11). One rejected before execution has not.
+      if (
+        transactionId &&
+        response.errors?.some(e => !PRE_EXECUTION_ERROR_CODES.has(String(e.extensions?.code)))
+      ) {
+        this.transaction_manager.markAborted(transactionId);
+      }
+
       if (hasRealErrors && !response.data) {
         this.stats.failed_requests++;
         const errorHeaders = this.get_default_headers("application/json");
@@ -502,6 +533,12 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         requestId,
         error: error instanceof Error ? error.message : String(error)
       });
+
+      // Whatever happened, the statement's outcome is unknown.
+      const transactionId = request.headers.get("X-Transaction-ID");
+      if (transactionId) {
+        this.transaction_manager.markAborted(transactionId);
+      }
 
       const errorResponse: Types.QueryResponse = {
         errors: [{
@@ -1349,15 +1386,43 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         error: error instanceof Error ? error.message : String(error),
         transactionId
       });
-      return this.create_error_response(
+
+      // A failed statement had already aborted it; the commit rolled it back.
+      if (error instanceof TransactionAbortedError) {
+        return this.transaction_error_response(error.message, 409, { code: "TRANSACTION_ABORTED" }, request);
+      }
+
+      // PostgreSQL rejected the COMMIT/ROLLBACK itself (deferred constraint,
+      // serialization failure, …): the SQLSTATE travels like a query error's.
+      return this.transaction_error_response(
         `Transaction ${action} failed: ${error instanceof Error ? error.message : String(error)}`,
         500,
+        { code: "EXECUTION_ERROR", ...postgresErrorFields(error) },
         request
       );
     }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: this.get_default_headers("application/json")
+    });
+  }
+
+  /**
+   * A `/transaction/*` failure in the `/query` error envelope (`errors[]`
+   * with `extensions`), so a client classifies it exactly like a failed
+   * statement. The other transaction errors (unknown id, wrong owner, bad
+   * input) keep the plain `{ error }` body.
+   */
+  private transaction_error_response(
+    message: string,
+    status: number,
+    extensions: Record<string, unknown>,
+    request: Request
+  ): Response {
+    const body: Types.QueryResponse = { errors: [{ extensions, message }] };
+    return new Response(JSON.stringify(body), {
+      headers: this.get_default_headers("application/json", request),
+      status
     });
   }
 

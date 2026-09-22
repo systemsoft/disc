@@ -8,8 +8,12 @@ import { createClient, DiscClient } from "./client.ts";
 import {
   DiscAuthError,
   DiscConnectionError,
+  DiscProtocolError,
   DiscQueryError,
-  DiscServerError
+  DiscServerError,
+  DiscTransactionError,
+  SerializationFailureError,
+  UniqueViolationError
 } from "./errors.ts";
 
 // --- Mock fetch helper ---
@@ -628,6 +632,209 @@ Deno.test("client - commit sends the transaction id as a header, not in the URL"
     // The id authorizes the transaction — keep it out of URLs, which end up
     // in access logs, proxy logs, and Referer headers.
     assertEquals(commitUrl?.includes("tx-secret"), false);
+  } finally {
+    restore();
+  }
+});
+
+// --- Non-OK responses are failures (Phase 7: S3, S4, S11) ---
+
+/** A scripted transaction server: begin, then whatever `routes` says per path suffix. */
+function transactionServer(routes: Record<string, () => Response>): { calls: string[]; restore: () => void; } {
+  const calls: string[] = [];
+  const restore = mockFetch(url => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === "/transaction/begin") {
+      return new Response(JSON.stringify({ transactionId: "tx-p7" }));
+    }
+    const route = routes[path];
+    return route ? route() : new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
+  });
+  return { calls, restore };
+}
+
+const OK = () => new Response(JSON.stringify({ ok: true }));
+const ROW = () => new Response(JSON.stringify({ data: [{ id: "r" }] }));
+
+Deno.test("client - S3: a 413 { error } body rejects query() with DiscProtocolError instead of resolving undefined", async () => {
+  const restore = mockFetch(() => new Response(JSON.stringify({ error: "Request body too large (max 4194304 bytes)" }), { status: 413 }));
+  try {
+    const client = new DiscClient();
+    const error = await assertRejects(() => client.query("insert GitObject { content := <bytes>$c }", { c: "AAAA" }), DiscProtocolError);
+    assertEquals(error.statusCode, 413);
+    assertEquals(error.message, "Request body too large (max 4194304 bytes)");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S3: a non-JSON 4xx body is a DiscProtocolError carrying the text", async () => {
+  const restore = mockFetch(() => new Response("Too Many Requests", { status: 429 }));
+  try {
+    const client = new DiscClient();
+    const error = await assertRejects(() => client.query("select 1"), DiscProtocolError);
+    assertEquals(error.statusCode, 429);
+    assertEquals(error.message, "Too Many Requests");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - a 400 { errors } body with a SQLSTATE throws the typed query error", async () => {
+  const restore = mockFetch(() =>
+    new Response(
+      JSON.stringify({
+        errors: [{
+          extensions: { code: "EXECUTION_ERROR", constraint: "uk_git_ref_program_id_name", sqlState: "23505", table: "git_ref" },
+          message: "Database query failed: duplicate key value violates unique constraint \"uk_git_ref_program_id_name\""
+        }]
+      }),
+      { status: 400 }
+    )
+  );
+  try {
+    const client = new DiscClient();
+    const error = await assertRejects(() => client.query("insert GitRef { … }"), UniqueViolationError);
+    assertInstanceOf(error, DiscQueryError);
+    assertEquals(error.constraint, "uk_git_ref_program_id_name");
+    assertEquals(error.sqlState, "23505");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - a 200 envelope with errors also goes through the typed factory", async () => {
+  const restore = mockFetch(() => new Response(JSON.stringify({ errors: [{ extensions: { sqlState: "40001" }, message: "could not serialize access" }] })));
+  try {
+    const client = new DiscClient();
+    await assertRejects(() => client.query("select 1"), SerializationFailureError);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S3: transaction() rejects when the commit is a 404 (the server no longer knows the transaction)", async () => {
+  const { calls, restore } = transactionServer({
+    "/query": ROW,
+    "/transaction/commit": () => new Response(JSON.stringify({ error: "Unknown transaction: \"tx-p7\"" }), { status: 404 })
+  });
+  try {
+    const client = new DiscClient();
+    const error = await assertRejects(() => client.transaction(tx => tx.query("insert Program { name := 'x' }")), DiscProtocolError);
+    assertEquals(error.statusCode, 404);
+    assertEquals(calls, ["/transaction/begin", "/query", "/transaction/commit"]);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S3: a 409 TRANSACTION_ABORTED commit rejects transaction()", async () => {
+  const { restore } = transactionServer({
+    "/query": ROW,
+    "/transaction/commit": () =>
+      new Response(
+        JSON.stringify({
+          errors: [{ extensions: { code: "TRANSACTION_ABORTED" }, message: "Transaction tx-p7 was aborted by a failed statement and has been rolled back" }]
+        }),
+        {
+          status: 409
+        }
+      )
+  });
+  try {
+    const client = new DiscClient();
+    const error = await assertRejects(() => client.transaction(tx => tx.query("select 1")), DiscQueryError);
+    assertEquals(error.errors[0].extensions?.code, "TRANSACTION_ABORTED");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S4: a failed commit is sent once even with retries configured, and transaction() rejects", async () => {
+  let commits = 0;
+  const { calls, restore } = transactionServer({
+    "/query": ROW,
+    "/transaction/commit": () => {
+      commits++;
+      return new Response(JSON.stringify({ errors: [{ extensions: { code: "EXECUTION_ERROR", sqlState: "40001" }, message: "could not serialize access" }] }), {
+        status: 500
+      });
+    }
+  });
+  try {
+    const client = new DiscClient({ retries: 2, retryDelay: 1 });
+    await assertRejects(() => client.transaction(tx => tx.query("select 1")), DiscServerError);
+    assertEquals(commits, 1, "a COMMIT must never be re-sent: the first one may have succeeded");
+    assertEquals(calls.filter(path => path === "/transaction/rollback"), [], "nothing to roll back after a commit was attempted");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S4: a query carrying X-Transaction-ID is not retried on a network error", async () => {
+  let queries = 0;
+  const restore = mockFetch((url, init) => {
+    const path = new URL(url).pathname;
+    if (path === "/transaction/begin") {
+      return new Response(JSON.stringify({ transactionId: "tx-p7" }));
+    }
+    if (path === "/query" && new Headers(init?.headers).get("X-Transaction-ID")) {
+      queries++;
+      throw new TypeError("fetch failed");
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  });
+  try {
+    const client = new DiscClient({ retries: 3, retryDelay: 1 });
+    await assertRejects(() => client.transaction(tx => tx.query("insert Program { name := 'x' }")), DiscConnectionError);
+    assertEquals(queries, 1);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S4: a plain query is still retried on a network error", async () => {
+  let attempts = 0;
+  const restore = mockFetch(() => {
+    attempts++;
+    if (attempts === 1) {
+      throw new TypeError("fetch failed");
+    }
+    return new Response(JSON.stringify({ data: 1 }));
+  });
+  try {
+    const client = new DiscClient({ retries: 1, retryDelay: 1 });
+    assertEquals(await client.query("select 1"), 1);
+    assertEquals(attempts, 2);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - S11: a caught statement error still fails the transaction — rollback, never commit", async () => {
+  const { calls, restore } = transactionServer({
+    "/query": () => new Response(JSON.stringify({ errors: [{ extensions: { sqlState: "23505" }, message: "duplicate key" }] }), { status: 400 }),
+    "/transaction/rollback": OK
+  });
+  try {
+    const client = new DiscClient();
+    let caught: unknown;
+    const error = await assertRejects(
+      () =>
+        client.transaction(async tx => {
+          try {
+            await tx.query("insert Program { name := 'dup' }");
+          } catch (e) {
+            caught = e;
+          }
+          return "returned normally";
+        }),
+      DiscTransactionError
+    );
+    assertInstanceOf(caught, UniqueViolationError);
+    assertEquals(error.cause, caught);
+    assertEquals(calls, ["/transaction/begin", "/query", "/transaction/rollback"]);
   } finally {
     restore();
   }

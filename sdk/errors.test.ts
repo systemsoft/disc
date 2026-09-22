@@ -8,6 +8,9 @@ import {
 } from "@std/assert";
 
 import {
+  ConstraintViolationError,
+  createQueryError,
+  DeadlockError,
   DiscAuthError,
   DiscClientError,
   DiscConnectionError,
@@ -17,7 +20,10 @@ import {
   DiscQueryError,
   DiscServerError,
   DiscTimeoutError,
-  DiscTransactionError
+  DiscTransactionError,
+  ForeignKeyViolationError,
+  SerializationFailureError,
+  UniqueViolationError
 } from "./errors.ts";
 
 Deno.test("errors - DiscClientError base", () => {
@@ -124,6 +130,87 @@ Deno.test("errors - inheritance chain", () => {
   assertInstanceOf(err, DiscQueryError);
   assertInstanceOf(err, DiscClientError);
   assertInstanceOf(err, Error);
+});
+
+// --- SQLSTATE-typed query errors (Phase 7, S5) ---
+
+const UNIQUE = {
+  extensions: {
+    code: "EXECUTION_ERROR",
+    constraint: "uk_git_ref_program_id_name",
+    detail: "Key (program_id, name)=(p, main) already exists.",
+    sqlState: "23505",
+    table: "git_ref"
+  },
+  message: "duplicate key value violates unique constraint \"uk_git_ref_program_id_name\""
+};
+
+Deno.test("errors - createQueryError maps 23505 to UniqueViolationError with the constraint fields", () => {
+  const err = createQueryError([UNIQUE]);
+  assertInstanceOf(err, UniqueViolationError);
+  assertInstanceOf(err, ConstraintViolationError);
+  assertInstanceOf(err, DiscQueryError);
+  assertEquals(err.name, "UniqueViolationError");
+  assertEquals(err.code, DiscErrorCode.QUERY_ERROR);
+  assertEquals(err.sqlState, "23505");
+  assertEquals(err.constraint, "uk_git_ref_program_id_name");
+  assertEquals(err.table, "git_ref");
+  assertEquals(err.detail, "Key (program_id, name)=(p, main) already exists.");
+  assertStringIncludes(err.message, "duplicate key");
+  assertEquals(err.errors, [UNIQUE]);
+});
+
+Deno.test("errors - createQueryError maps 23503 to ForeignKeyViolationError", () => {
+  const err = createQueryError([{ extensions: { constraint: "fk_git_ref_program", sqlState: "23503" }, message: "fk" }]);
+  assertInstanceOf(err, ForeignKeyViolationError);
+  assertInstanceOf(err, ConstraintViolationError);
+  assertEquals(err.name, "ForeignKeyViolationError");
+  assertEquals(err.constraint, "fk_git_ref_program");
+});
+
+Deno.test("errors - createQueryError maps any other class-23 state to ConstraintViolationError", () => {
+  for (const sqlState of ["23502", "23514", "23000"]) {
+    const err = createQueryError([{ extensions: { sqlState }, message: "check" }]);
+    assertInstanceOf(err, ConstraintViolationError, sqlState);
+    assertEquals(err.name, "ConstraintViolationError", sqlState);
+    assertEquals(err.sqlState, sqlState);
+    assertEquals(err instanceof UniqueViolationError, false, sqlState);
+    assertEquals(err instanceof ForeignKeyViolationError, false, sqlState);
+  }
+});
+
+Deno.test("errors - createQueryError maps 40001 and 40P01 to their own classes", () => {
+  const serialization = createQueryError([{ extensions: { sqlState: "40001" }, message: "could not serialize access" }]);
+  assertInstanceOf(serialization, SerializationFailureError);
+  assertInstanceOf(serialization, DiscQueryError);
+  assertEquals(serialization.name, "SerializationFailureError");
+  assertEquals(serialization instanceof ConstraintViolationError, false);
+
+  const deadlock = createQueryError([{ extensions: { sqlState: "40P01" }, message: "deadlock detected" }]);
+  assertInstanceOf(deadlock, DeadlockError);
+  assertInstanceOf(deadlock, DiscQueryError);
+  assertEquals(deadlock.name, "DeadlockError");
+});
+
+Deno.test("errors - createQueryError without a SQLSTATE is a plain DiscQueryError", () => {
+  for (
+    const errors of [[{ message: "Unknown type 'Foo'" }], [{ extensions: { code: "COMPILATION_ERROR" }, message: "x" }], [{
+      extensions: { sqlState: "42P01" },
+      message: "no table"
+    }]]
+  ) {
+    const err = createQueryError(errors);
+    assertEquals(err.constructor, DiscQueryError, JSON.stringify(errors));
+    assertEquals(err.name, "DiscQueryError");
+  }
+  assertEquals(createQueryError([{ message: "plain" }]).sqlState, undefined);
+  assertEquals(createQueryError([{ extensions: { sqlState: "42P01" }, message: "no table" }]).sqlState, "42P01");
+});
+
+Deno.test("errors - createQueryError reads the SQLSTATE of the first error only", () => {
+  const err = createQueryError([{ message: "first" }, UNIQUE]);
+  assertEquals(err.constructor, DiscQueryError);
+  assertStringIncludes(err.message, "2 query errors");
 });
 
 Deno.test("errors - DiscErrorCode enum values", () => {

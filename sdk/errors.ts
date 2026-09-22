@@ -40,9 +40,21 @@ export class DiscClientError extends Error {
   }
 }
 
+/** A string field of the first error's `extensions`, when the server sent one. */
+function firstExtension(errors: QueryError[], key: string): string | undefined {
+  const value = errors[0]?.extensions?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 /** Wraps one or more QueryError objects from the server response */
 export class DiscQueryError extends DiscClientError {
   readonly errors: QueryError[];
+  /**
+   * PostgreSQL SQLSTATE of the statement that failed (`extensions.sqlState`),
+   * when the error came from the database. Undefined for parse, compile and
+   * validation errors, which never reach it.
+   */
+  readonly sqlState?: string;
 
   constructor(errors: QueryError[]) {
     const message = errors.length === 1 ?
@@ -51,7 +63,86 @@ export class DiscQueryError extends DiscClientError {
     super(message, DiscErrorCode.QUERY_ERROR);
     this.name = "DiscQueryError";
     this.errors = errors;
+    this.sqlState = firstExtension(errors, "sqlState");
   }
+}
+
+/** An integrity constraint was violated (SQLSTATE class 23). */
+export class ConstraintViolationError extends DiscQueryError {
+  /** Name of the violated constraint or unique index (`extensions.constraint`). */
+  readonly constraint?: string;
+  /** Table the constraint belongs to (`extensions.table`). */
+  readonly table?: string;
+  /** PostgreSQL's detail line, e.g. the conflicting key (`extensions.detail`). */
+  readonly detail?: string;
+
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "ConstraintViolationError";
+    this.constraint = firstExtension(errors, "constraint");
+    this.table = firstExtension(errors, "table");
+    this.detail = firstExtension(errors, "detail");
+  }
+}
+
+/** A unique constraint or `exclusive` index was violated (SQLSTATE 23505). */
+export class UniqueViolationError extends ConstraintViolationError {
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "UniqueViolationError";
+  }
+}
+
+/** A link points at a row that does not exist (SQLSTATE 23503). */
+export class ForeignKeyViolationError extends ConstraintViolationError {
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "ForeignKeyViolationError";
+  }
+}
+
+/** The transaction could not be serialized (SQLSTATE 40001); retry the whole transaction. */
+export class SerializationFailureError extends DiscQueryError {
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "SerializationFailureError";
+  }
+}
+
+/** PostgreSQL broke a deadlock by aborting this transaction (SQLSTATE 40P01); retry it. */
+export class DeadlockError extends DiscQueryError {
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "DeadlockError";
+  }
+}
+
+/**
+ * The query error for a server `errors` envelope, typed by the SQLSTATE of
+ * its first error: `UniqueViolationError` (23505), `ForeignKeyViolationError`
+ * (23503), `ConstraintViolationError` (any other class 23),
+ * `SerializationFailureError` (40001), `DeadlockError` (40P01), and a plain
+ * `DiscQueryError` otherwise. Every result is an `instanceof DiscQueryError`.
+ */
+export function createQueryError(errors: QueryError[]): DiscQueryError {
+  const sqlState = firstExtension(errors, "sqlState");
+
+  if (sqlState === "23505") {
+    return new UniqueViolationError(errors);
+  }
+  if (sqlState === "23503") {
+    return new ForeignKeyViolationError(errors);
+  }
+  if (sqlState?.startsWith("23")) {
+    return new ConstraintViolationError(errors);
+  }
+  if (sqlState === "40001") {
+    return new SerializationFailureError(errors);
+  }
+  if (sqlState === "40P01") {
+    return new DeadlockError(errors);
+  }
+  return new DiscQueryError(errors);
 }
 
 /** Network-level failure (fetch threw, DNS resolution failed, etc.) */
@@ -100,9 +191,13 @@ export class DiscConnectionError extends DiscClientError {
 
 /** Transaction is in an invalid state for the requested operation */
 export class DiscTransactionError extends DiscClientError {
-  constructor(message: string) {
+  /** The statement failure that put the transaction in the `failed` state, when that is why. */
+  override readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
     super(message, DiscErrorCode.TRANSACTION_ERROR);
     this.name = "DiscTransactionError";
+    this.cause = cause;
   }
 }
 

@@ -337,10 +337,10 @@ export class UserQueryBuilder {
     return reviveTyped(await this.client.query<Types.User>(query, variables), UserQueryBuilder._typeInfo);
   }
 
-  /** Delete User by ID */
-  async delete(id: string): Promise<Types.User> {
+  /** Delete User by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete User filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.User>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count User objects */
@@ -455,10 +455,10 @@ export class PostQueryBuilder {
     return reviveTyped(await this.client.query<Types.Post>(query, variables), PostQueryBuilder._typeInfo);
   }
 
-  /** Delete Post by ID */
-  async delete(id: string): Promise<Types.Post> {
+  /** Delete Post by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Post filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.Post>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Post objects */
@@ -921,10 +921,10 @@ export class MerchantQueryBuilder {
     return reviveTyped(await this.client.query<Types.\$default.Merchant>(query, variables), MerchantQueryBuilder._typeInfo);
   }
 
-  /** Delete Merchant by ID */
-  async delete(id: string): Promise<Types.\$default.Merchant> {
+  /** Delete Merchant by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Merchant filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.\$default.Merchant>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Merchant objects */
@@ -1037,10 +1037,10 @@ export class ApiKeyQueryBuilder {
     return reviveTyped(await this.client.query<Types.api.ApiKey>(query, variables), ApiKeyQueryBuilder._typeInfo);
   }
 
-  /** Delete ApiKey by ID */
-  async delete(id: string): Promise<Types.api.ApiKey> {
+  /** Delete ApiKey by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete api::ApiKey filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.api.ApiKey>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count ApiKey objects */
@@ -1155,10 +1155,10 @@ export class PaymentQueryBuilder {
     return reviveTyped(await this.client.query<Types.payment.Payment>(query, variables), PaymentQueryBuilder._typeInfo);
   }
 
-  /** Delete Payment by ID */
-  async delete(id: string): Promise<Types.payment.Payment> {
+  /** Delete Payment by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete payment::Payment filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.payment.Payment>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Payment objects */
@@ -1561,10 +1561,10 @@ export class PersonQueryBuilder {
     return reviveTyped(await this.client.query<Types.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
-  /** Delete Person by ID */
-  async delete(id: string): Promise<Types.Person> {
+  /** Delete Person by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Person filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.Person>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Person objects */
@@ -1692,10 +1692,10 @@ export class PlaceQueryBuilder {
     return reviveTyped(await this.client.query<Types.Place>(query, variables), PlaceQueryBuilder._typeInfo);
   }
 
-  /** Delete Place by ID */
-  async delete(id: string): Promise<Types.Place> {
+  /** Delete Place by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Place filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.Place>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Place objects */
@@ -2028,10 +2028,10 @@ export class PersonQueryBuilder {
     return reviveTyped(await this.client.query<Types.\$default.Person>(query, variables), PersonQueryBuilder._typeInfo);
   }
 
-  /** Delete Person by ID */
-  async delete(id: string): Promise<Types.\$default.Person> {
+  /** Delete Person by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Person filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.\$default.Person>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Person objects */
@@ -2142,10 +2142,10 @@ export class PetQueryBuilder {
     return reviveTyped(await this.client.query<Types.\$default.Pet>(query, variables), PetQueryBuilder._typeInfo);
   }
 
-  /** Delete Pet by ID */
-  async delete(id: string): Promise<Types.\$default.Pet> {
+  /** Delete Pet by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
+  async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Pet filter .id = <uuid>\$id\`;
-    return await this.client.query<Types.\$default.Pet>(query, { id });
+    return await this.client.query<{ deleted: number }>(query, { id });
   }
 
   /** Count Pet objects */

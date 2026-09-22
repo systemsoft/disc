@@ -274,7 +274,13 @@ export interface TransactionOptions {
   readOnly?: boolean;
 }
 
-export type TransactionState = "active" | "committed" | "rolled_back";
+/**
+ * `failed`: a statement inside the transaction failed (or its outcome is
+ * unknown), so PostgreSQL has aborted it. Only `rollback()` is allowed; a
+ * `commit()` throws, and `DiscClient.transaction()` rolls back and rejects
+ * even when the callback caught the error and returned normally.
+ */
+export type TransactionState = "active" | "committed" | "rolled_back" | "failed";
 
 // --- Subscription Types ---
 

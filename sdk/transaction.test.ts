@@ -1,7 +1,7 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
 import { DiscClient } from "./client.ts";
 import { DiscQueryError, DiscTransactionError } from "./errors.ts";
@@ -229,6 +229,88 @@ Deno.test("transaction - rollback after commit throws DiscTransactionError", asy
       DiscTransactionError,
       "Transaction is committed"
     );
+  } finally {
+    restore();
+  }
+});
+
+// --- A failed statement poisons the transaction (Phase 7, S11) ---
+
+/** Every `/query` fails as PostgreSQL would report a duplicate key; `/transaction/*` succeeds. */
+function failingStatementServer(): { calls: string[]; restore: () => void; } {
+  const calls: string[] = [];
+  const restore = mockFetch(url => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === "/query") {
+      return new Response(
+        JSON.stringify({ errors: [{ extensions: { code: "EXECUTION_ERROR", sqlState: "23505" }, message: "duplicate key" }] }),
+        { status: 400 }
+      );
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  });
+  return { calls, restore };
+}
+
+Deno.test("transaction - a query that fails on the server marks the transaction failed", async () => {
+  const { restore } = failingStatementServer();
+  try {
+    const tx = makeTransaction();
+    await assertRejects(() => tx.query("insert Program { name := 'dup' }"), DiscQueryError);
+    assertEquals(tx.getState(), "failed");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("transaction - commit on a failed transaction throws DiscTransactionError without contacting the server", async () => {
+  const { calls, restore } = failingStatementServer();
+  try {
+    const tx = makeTransaction();
+    await assertRejects(() => tx.query("insert Program { name := 'dup' }"), DiscQueryError);
+    const error = await assertRejects(() => tx.commit(), DiscTransactionError, "Transaction is failed");
+    assertInstanceOf(error.cause, DiscQueryError);
+    assertEquals(calls, ["/query"]);
+    assertEquals(tx.getState(), "failed");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("transaction - a further query on a failed transaction is refused, as PostgreSQL would", async () => {
+  const { calls, restore } = failingStatementServer();
+  try {
+    const tx = makeTransaction();
+    await assertRejects(() => tx.query("insert Program { name := 'dup' }"), DiscQueryError);
+    await assertRejects(() => tx.query("select 1"), DiscTransactionError, "Transaction is failed");
+    assertEquals(calls, ["/query"]);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("transaction - rollback is still allowed on a failed transaction", async () => {
+  const { calls, restore } = failingStatementServer();
+  try {
+    const tx = makeTransaction();
+    await assertRejects(() => tx.query("insert Program { name := 'dup' }"), DiscQueryError);
+    await tx.rollback();
+    assertEquals(tx.getState(), "rolled_back");
+    assertEquals(calls, ["/query", "/transaction/rollback"]);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("transaction - a network failure while a statement is in flight also fails the transaction (outcome unknown)", async () => {
+  const restore = mockFetch(() => {
+    throw new TypeError("fetch failed");
+  });
+  try {
+    const tx = makeTransaction();
+    await assertRejects(() => tx.query("insert Program { name := 'x' }"));
+    assertEquals(tx.getState(), "failed");
   } finally {
     restore();
   }
