@@ -632,3 +632,110 @@ Deno.test("client - commit sends the transaction id as a header, not in the URL"
     restore();
   }
 });
+
+// --- Derived clients (withToken / withHeaders) ---
+
+Deno.test("client - withToken returns a derived client with its own credential and the parent's config", async () => {
+  const seen: Array<{ auth: string | null; url: string; }> = [];
+  const restore = mockFetch((url, init) => {
+    seen.push({ auth: new Headers(init?.headers).get("Authorization"), url });
+    return new Response(JSON.stringify({ data: [] }));
+  });
+
+  try {
+    const parent = new DiscClient({ baseUrl: "http://example.com:1234", headers: { "X-App": "forge" } });
+    parent.setAuthToken("parent-token");
+    const service = parent.withToken("service-token");
+
+    assertEquals(service.getBaseUrl(), "http://example.com:1234");
+    assertEquals(service.getAuthToken(), "service-token");
+    assertEquals(parent.getAuthToken(), "parent-token", "the parent keeps its own credential");
+
+    await service.query("select 1");
+    await parent.query("select 1");
+    assertEquals(seen.map(s => s.auth), ["Bearer service-token", "Bearer parent-token"]);
+    assertEquals(seen[0].url, "http://example.com:1234/query");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - withHeaders returns a derived client that does not inherit the parent's token", async () => {
+  const seen: Headers[] = [];
+  const restore = mockFetch((_url, init) => {
+    seen.push(new Headers(init?.headers));
+    return new Response(JSON.stringify({ data: [] }));
+  });
+
+  try {
+    const parent = new DiscClient({ baseUrl: "http://example.com", headers: { "X-App": "forge" } });
+    parent.setAuthToken("parent-token");
+    const derived = parent.withHeaders({ "X-Request-Source": "worker" });
+
+    await derived.query("select 1");
+    assertEquals(seen[0].get("Authorization"), null, "credentials are not shared");
+    assertEquals(seen[0].get("X-App"), "forge", "the parent's headers are kept");
+    assertEquals(seen[0].get("X-Request-Source"), "worker");
+
+    // An Authorization header given explicitly is a way to carry a bearer too.
+    await parent.withHeaders({ Authorization: "Bearer explicit" }).query("select 1");
+    assertEquals(seen[1].get("Authorization"), "Bearer explicit");
+
+    // The parent is untouched.
+    await parent.query("select 1");
+    assertEquals(seen[2].get("Authorization"), "Bearer parent-token");
+    assertEquals(seen[2].get("X-Request-Source"), null);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - two derived clients in flight concurrently each send their own Authorization", async () => {
+  const seen: Array<{ auth: string | null; query: string; }> = [];
+  const restore = mockFetch(async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as { query: string; };
+    // Reverse the completion order so the slow request cannot borrow the fast one's header.
+    await new Promise(resolve => setTimeout(resolve, body.query === "slow" ? 20 : 1));
+    seen.push({ auth: new Headers(init?.headers).get("Authorization"), query: body.query });
+    return new Response(JSON.stringify({ data: body.query }));
+  });
+
+  try {
+    const parent = new DiscClient({ baseUrl: "http://example.com" });
+    const a = parent.withToken("token-a");
+    const b = parent.withToken("token-b");
+    const [fromA, fromB] = await Promise.all([a.query("slow"), b.query("fast")]);
+    assertEquals([fromA, fromB], ["slow", "fast"]);
+    assertEquals(seen.find(s => s.query === "slow")?.auth, "Bearer token-a");
+    assertEquals(seen.find(s => s.query === "fast")?.auth, "Bearer token-b");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - a Transaction inherits the credential of the client that created it", async () => {
+  const seen: Array<{ auth: string | null; path: string; }> = [];
+  const restore = mockFetch((url, init) => {
+    seen.push({ auth: new Headers(init?.headers).get("Authorization"), path: new URL(url).pathname });
+    if (url.endsWith("/transaction/begin")) {
+      return new Response(JSON.stringify({ transactionId: "tx-derived" }));
+    }
+    if (url.endsWith("/query")) {
+      return new Response(JSON.stringify({ data: 1 }));
+    }
+    return new Response(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    const parent = new DiscClient({ baseUrl: "http://example.com" });
+    parent.setAuthToken("parent-token");
+    const service = parent.withToken("service-token");
+
+    await service.transaction(async tx => await tx.query("select 1"));
+
+    assertEquals(seen.map(s => s.path), ["/transaction/begin", "/query", "/transaction/commit"]);
+    assertEquals(seen.map(s => s.auth), ["Bearer service-token", "Bearer service-token", "Bearer service-token"]);
+  } finally {
+    restore();
+  }
+});

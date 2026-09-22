@@ -26,6 +26,7 @@ import {
 import { DISC_VERSION } from "../lib/version.ts";
 import { dispatchRest } from "./rest/router.ts";
 import { getLogger } from "../lib/logger.ts";
+import { sha256Equal, sha256Hex } from "../lib/crypto.ts";
 import { handleGetMigrations } from "./migrations-endpoint.ts";
 
 import {
@@ -51,9 +52,76 @@ const ISOLATION_LEVELS: ReadonlyArray<Types.Transaction["isolationLevel"]> = [
   "serializable"
 ];
 
+/**
+ * Who a request is from, as far as `/query` and `/transaction/*` care.
+ * Resolved once per request by `resolveCaller` (through `gateAuth`) so a
+ * JWT is verified at most once.
+ */
+export interface ResolvedCaller {
+  /** The request presented the configured service token. `auth` is then `null`. */
+  service: boolean;
+  /** The verified user, or `null` when anonymous or when no auth middleware is wired. */
+  auth: import("../auth/middleware.ts").AuthContext | null;
+}
+
+/** Constant identity of the service credential; also the owner id of its transactions. */
+export const SERVICE_USER_ID = "service";
+
 /*** EXPORT ------------------------------------------- ***/
 
 export abstract class HttpRouteHandlers extends HttpServerBase {
+  /**
+   * Resolve the caller of a request. The service credential is checked
+   * first, and only for the routes that honor it (`/query`,
+   * `/transaction/*`): a matching `Authorization: Bearer <token>` is the
+   * service and no JWT is looked at. Anything else — a mismatch, another
+   * scheme, a cookie, another route — goes through the auth middleware
+   * exactly as if no service token were configured, so a user's JWT keeps
+   * working as a bearer token.
+   */
+  protected async resolveCaller(
+    request: Request,
+    pathname: string
+  ): Promise<ResolvedCaller> {
+    if (
+      (pathname === "/query" || pathname.startsWith("/transaction/")) &&
+      await this.presentsServiceToken(request)
+    ) {
+      return { auth: null, service: true };
+    }
+
+    const auth = this.authMiddleware ?
+      await this.authMiddleware.authenticate(request) :
+      null;
+    return { auth, service: false };
+  }
+
+  /**
+   * Whether the request's `Authorization: Bearer` value is the configured
+   * service token. Inert when no token is configured: an empty or missing
+   * configuration never matches anything, not even an empty bearer. The
+   * two values are compared as SHA-256 digests in constant time, so the
+   * comparison runs over 32 bytes whatever either input's length.
+   */
+  private async presentsServiceToken(request: Request): Promise<boolean> {
+    const configured = this.config.serviceToken;
+    if (!configured) {
+      return false;
+    }
+
+    const header = request.headers.get("Authorization");
+    if (!header?.startsWith("Bearer ")) {
+      return false;
+    }
+
+    return await sha256Equal(configured, header.slice(7));
+  }
+
+  /** User id a caller's transactions are pinned to; the service uses a constant. */
+  protected caller_user_id(caller: ResolvedCaller): string | undefined {
+    return caller.service ? SERVICE_USER_ID : caller.auth?.userId;
+  }
+
   protected handle_root(request?: Request): Response {
     const endpoints: Record<string, any> = {
       query: "/query",
@@ -153,7 +221,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
   protected async handle_query(
     request: Request,
     info: Deno.ServeHandlerInfo,
-    requestId: string
+    requestId: string,
+    caller: ResolvedCaller
   ): Promise<Response> {
     if (request.method !== "POST") {
       return this.create_error_response("Method Not Allowed", 405, request);
@@ -239,40 +308,57 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       // Set the resolved database name on the session
       connection.session.database = databaseName;
 
-      // Build auth context from JWT if auth middleware is configured
-      const authContext: Types.AuthContext = { roles: [], permissions: [] };
-      if (this.authMiddleware) {
-        const authResult = await this.authMiddleware.authenticate(request);
-        if (authResult) {
-          authContext.userId = authResult.userId;
-          // RBAC: roles come from the JWT claim populated by
-          // `AuthProvider.generateJWT` at login. (gh/geldata#8177)
-          if (authResult.roles && authResult.roles.length > 0) {
-            authContext.roles = authResult.roles;
-          }
-          authContext.jwtClaims = {
-            sub: authResult.sub,
-            email: authResult.email,
-            username: authResult.username,
-            iss: authResult.iss,
-            aud: authResult.aud,
-            roles: authResult.roles
-          };
+      // Build the auth context. The service credential is a fixed
+      // identity with no claims; a verified JWT (resolved once, in
+      // `gateAuth`) fills in the user; otherwise the caller is anonymous.
+      const authContext: Types.AuthContext = caller.service ?
+        { userId: SERVICE_USER_ID, roles: [SERVICE_USER_ID], permissions: [] } :
+        { roles: [], permissions: [] };
+      const authResult = caller.auth;
+      if (authResult) {
+        authContext.userId = authResult.userId;
+        // RBAC: roles come from the JWT claim populated by
+        // `AuthProvider.generateJWT` at login. (gh/geldata#8177)
+        if (authResult.roles && authResult.roles.length > 0) {
+          authContext.roles = authResult.roles;
         }
+        authContext.jwtClaims = {
+          sub: authResult.sub,
+          email: authResult.email,
+          username: authResult.username,
+          iss: authResult.iss,
+          aud: authResult.aud,
+          roles: authResult.roles
+        };
       }
 
       // Per-request access-policy override (gh/geldata#6358). The
       // header opts out of policy injection for the upcoming query,
       // mirroring `apply_access_policies := false` in EdgeQL. Only
-      // admins may exercise it; for any other role the flag is dropped
-      // so a regular user setting the header can't escalate.
+      // admins may exercise it — `admin`, or the `superuser` role that
+      // `disc admin create-superuser` grants; for any other role the flag
+      // is dropped so a regular user setting the header can't escalate.
+      // The service credential always bypasses and needs no header.
       const bypassHeader = request
         .headers
         .get("X-Disc-Apply-Access-Policies");
       const bypassRequested = bypassHeader !== null &&
         /^(false|0|no)$/i.test(bypassHeader.trim());
-      const callerIsAdmin = authContext.roles.includes("admin");
-      const bypassAccessPolicies = bypassRequested && callerIsAdmin;
+      const callerIsAdmin = authContext.roles.includes("admin") ||
+        authContext.roles.includes("superuser");
+      const bypassAccessPolicies = caller.service ||
+        (bypassRequested && callerIsAdmin);
+
+      if (bypassAccessPolicies) {
+        this.stats.bypassed_queries++;
+      }
+      if (caller.service) {
+        // The query hash identifies what ran; the token itself is never logged.
+        log.debug("Service credential query", {
+          queryHash: (await sha256Hex(queryRequest.query)).slice(0, 16),
+          requestId
+        });
+      }
 
       // Per-policy disable (gh/geldata#6432 slice 3). The header lists
       // qualified policy names (`<TypeName>.<policy_name>`) the caller
@@ -583,7 +669,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         failed: this.stats.failed_requests,
         avgDurationMs: this.stats.total_requests > 0 ?
           this.stats.total_duration_ms / this.stats.total_requests :
-          0
+          0,
+        bypassed: this.stats.bypassed_queries
       },
       transactions: this.transaction_manager.get_stats(),
       memoryUsage: this.get_memory_stats(),
@@ -1174,23 +1261,6 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
   }
 
   /**
-   * Resolve the authenticated caller, if any. `handle_query` builds a full
-   * `AuthContext`; the transaction routes only need the user id to enforce
-   * ownership, so this is the narrow version. Returns undefined when no auth
-   * middleware is configured or the request is anonymous.
-   */
-  protected async resolve_caller_user_id(
-    request: Request
-  ): Promise<string | undefined> {
-    if (!this.authMiddleware) {
-      return undefined;
-    }
-
-    const authResult = await this.authMiddleware.authenticate(request);
-    return authResult?.userId;
-  }
-
-  /**
    * Look up a transaction and check the caller may drive it.
    *
    * The id is a bearer capability, so possession is the baseline check. When
@@ -1236,14 +1306,15 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
    */
   protected async handle_transaction(
     request: Request,
-    url: URL
+    url: URL,
+    caller: ResolvedCaller
   ): Promise<Response> {
     if (request.method !== "POST") {
       return this.create_error_response("Method Not Allowed", 405, request);
     }
 
     const action = url.pathname.slice("/transaction/".length);
-    const callerUserId = await this.resolve_caller_user_id(request);
+    const callerUserId = this.caller_user_id(caller);
 
     if (action === "begin") {
       return await this.handle_transaction_begin(request, callerUserId);

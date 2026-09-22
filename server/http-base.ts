@@ -164,6 +164,7 @@ export abstract class HttpServerBase {
     total_requests: 0,
     successful_requests: 0,
     failed_requests: 0,
+    bypassed_queries: 0,
     total_duration_ms: 0
   };
 

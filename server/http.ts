@@ -16,6 +16,8 @@ import { handleDataWatch } from "./admin/data-watch.ts";
 import { handleGetConfig, handleSetConfig } from "./config-endpoint.ts";
 import { HttpRouteHandlers } from "./http-handlers.ts";
 
+import type { ResolvedCaller } from "./http-handlers.ts";
+
 const log = getLogger("http");
 
 export type { HttpServerOptions } from "./http-base.ts";
@@ -92,12 +94,16 @@ export class HttpServer extends HttpRouteHandlers {
       // Auth gate. When `config.requireAuth` is enabled, protected
       // routes need a valid `Authorization: Bearer <JWT>` header before
       // the route handler runs. Returns a 401/503 response on failure
-      // or `null` when the request may proceed. (gh/geldata#6345)
+      // or the resolved caller when the request may proceed.
+      // (gh/geldata#6345)
       const authResult = await this.gateAuth(request, url);
       if (authResult instanceof Response) {
         return authResult;
       }
-      const authedContext = authResult; // AuthContext | null
+      const caller = authResult;
+      // Only `/query` and `/transaction/*` honor the service credential;
+      // every other route sees its verified user or nobody.
+      const authedContext = caller.auth; // AuthContext | null
 
       // Extension route handling
       if (url.pathname.startsWith("/ext/")) {
@@ -190,7 +196,7 @@ export class HttpServer extends HttpRouteHandlers {
       // rollback. Queries join a transaction via the `X-Transaction-ID`
       // header on `/query`, handled inside handle_query.
       if (url.pathname.startsWith("/transaction/")) {
-        return await this.handle_transaction(request, url);
+        return await this.handle_transaction(request, url, caller);
       }
 
       // Route handling
@@ -198,7 +204,7 @@ export class HttpServer extends HttpRouteHandlers {
         case "/":
           return this.handle_root(request);
         case "/query":
-          return await this.handle_query(request, info, requestId);
+          return await this.handle_query(request, info, requestId, caller);
         case "/health":
           return await this.handle_health(request);
         case "/health/live":
@@ -296,10 +302,15 @@ export class HttpServer extends HttpRouteHandlers {
   }
 
   /**
-   * Authenticate the request when `config.requireAuth` is on. Returns
-   * `null` to indicate "proceed without an attached context" (public
-   * route or auth disabled), an `AuthContext` when the JWT verified,
-   * or a 401/503 `Response` to short-circuit the dispatcher.
+   * Resolve the caller and, when `config.requireAuth` is on, enforce it.
+   * Returns the `ResolvedCaller` when the request may proceed (its `auth`
+   * is `null` on a public route, for an anonymous caller in permissive
+   * mode, and for the service credential), or a 401/503 `Response` to
+   * short-circuit the dispatcher.
+   *
+   * The service credential is resolved before the `requireAuth` checks:
+   * it needs no JWT, so it is accepted even when no `authMiddleware` is
+   * wired (on the routes that honor it; see `resolveCaller`).
    *
    * 503 (not 401) when `requireAuth=true` but no `authMiddleware` is
    * wired — that's a misconfig that would otherwise let traffic
@@ -308,17 +319,19 @@ export class HttpServer extends HttpRouteHandlers {
   private async gateAuth(
     request: Request,
     url: URL
-  ): Promise<import("../auth/middleware.ts").AuthContext | null | Response> {
+  ): Promise<ResolvedCaller | Response> {
     if (!this.config.requireAuth) {
       // Permissive mode — populate context if we can, but don't reject.
-      if (!this.authMiddleware) {
-        return null;
-      }
-      return await this.authMiddleware.authenticate(request);
+      return await this.resolveCaller(request, url.pathname);
     }
 
     if (this.isPublicRoute(url.pathname)) {
-      return null;
+      return { auth: null, service: false };
+    }
+
+    const caller = await this.resolveCaller(request, url.pathname);
+    if (caller.service) {
+      return caller;
     }
 
     if (!this.authMiddleware) {
@@ -337,8 +350,7 @@ export class HttpServer extends HttpRouteHandlers {
       );
     }
 
-    const ctx = await this.authMiddleware.authenticate(request);
-    if (!ctx) {
+    if (!caller.auth) {
       const headers = this.get_default_headers("application/json");
       // RFC 6750 §3 — return a WWW-Authenticate challenge so clients
       // know which scheme to retry with.
@@ -348,7 +360,7 @@ export class HttpServer extends HttpRouteHandlers {
         { status: 401, headers }
       );
     }
-    return ctx;
+    return caller;
   }
 
   /**

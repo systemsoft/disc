@@ -232,7 +232,8 @@ Deno.test("ServerStats - metrics structure", () => {
       total: 1000,
       successful: 950,
       failed: 50,
-      avgDurationMs: 25.5
+      avgDurationMs: 25.5,
+      bypassed: 3
     },
     transactions: {
       active: 2,

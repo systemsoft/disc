@@ -63,9 +63,10 @@ function makeContext(
 }
 
 /**
- * Mirrors the role gate in `server/http.ts:handle_query`. Centralized
- * here so the test sees the exact same predicate the production code
- * uses.
+ * Mirrors the role gate in `server/http-handlers.ts:handle_query`
+ * (`admin` or `superuser` — the role `disc admin create-superuser`
+ * grants). The gate itself, through the real `HttpServer`, is covered in
+ * `server/service-token.test.ts`.
  */
 function headerToBypass(
   header: string | null,
@@ -73,7 +74,7 @@ function headerToBypass(
 ): boolean {
   const requested = header !== null &&
     /^(false|0|no)$/i.test(header.trim());
-  return requested && roles.includes("admin");
+  return requested && (roles.includes("admin") || roles.includes("superuser"));
 }
 
 Deno.test("apply_access_policies bypass — admin caller honors header", () => {
@@ -81,6 +82,11 @@ Deno.test("apply_access_policies bypass — admin caller honors header", () => {
   assertEquals(headerToBypass("0", ["admin"]), true);
   assertEquals(headerToBypass("NO", ["admin"]), true);
   assertEquals(headerToBypass(" false ", ["admin"]), true);
+});
+
+Deno.test("apply_access_policies bypass — superuser caller honors header", () => {
+  assertEquals(headerToBypass("false", ["superuser"]), true);
+  assertEquals(headerToBypass("false", ["viewer", "superuser"]), true);
 });
 
 Deno.test("apply_access_policies bypass — non-admin caller dropped silently", () => {

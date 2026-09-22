@@ -418,6 +418,22 @@ Deno.test("applySecurityToggleEnvVars — leaves env vars untouched when flags a
   }
 });
 
+Deno.test("applySecurityToggleEnvVars — forwards --service-token to DISC_SERVICE_TOKEN, leaves it alone otherwise", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+
+  try {
+    env.set("DISC_SERVICE_TOKEN", "from-the-environment-0123456789abcdef");
+    applySecurityToggleEnvVars({}); /*** no flag: the env var stays ***/
+    assertEquals(Deno.env.get("DISC_SERVICE_TOKEN"), "from-the-environment-0123456789abcdef");
+
+    applySecurityToggleEnvVars({ serviceToken: "from-the-command-line-0123456789abcdef" });
+    assertEquals(Deno.env.get("DISC_SERVICE_TOKEN"), "from-the-command-line-0123456789abcdef");
+  } finally {
+    env.restore();
+  }
+});
+
 Deno.test("applySecurityToggleEnvVars — combines multiple flags", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();

@@ -84,6 +84,11 @@ export interface ServeOptions {
    * on the CLI.
    */
   schemaFile?: string;
+  /**
+   * Static service credential (`--service-token`, forwarded to
+   * `DISC_SERVICE_TOKEN`). Env/CLI only — never `disc.toml`.
+   */
+  serviceToken?: string;
   tlsCert?: string;
   tlsKey?: string;
   trustProxy?: boolean;
@@ -97,7 +102,9 @@ export interface ServeOptions {
  * `disc.toml`-only knobs added in Bundle H. Exported so the wiring is
  * testable without spinning up the full `serve` command.
  */
-export function applySecurityToggleEnvVars(options: Pick<ServeOptions, "readOnly" | "requireAuth" | "trustProxy">): void {
+export function applySecurityToggleEnvVars(
+  options: Pick<ServeOptions, "readOnly" | "requireAuth" | "serviceToken" | "trustProxy">
+): void {
   if (options.requireAuth)
     Deno.env.set("DISC_REQUIRE_AUTH", "true");
 
@@ -106,6 +113,9 @@ export function applySecurityToggleEnvVars(options: Pick<ServeOptions, "readOnly
 
   if (options.trustProxy)
     Deno.env.set("DISC_TRUST_PROXY", "true");
+
+  if (options.serviceToken)
+    Deno.env.set("DISC_SERVICE_TOKEN", options.serviceToken);
 }
 
 /**
@@ -901,6 +911,9 @@ export class CLICommands {
 
       if (options.enableAccessPolicies || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES"))
         getLogger("cli").info("Access policies enabled");
+
+      if (Deno.env.get("DISC_SERVICE_TOKEN"))
+        getLogger("cli").info("Service credential enabled (/query and /transaction/* accept DISC_SERVICE_TOKEN as a bearer)");
 
       /*** Create server from environment variables, passing schema if available ***/
       const server = schema ?

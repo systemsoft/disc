@@ -384,6 +384,7 @@ export class DiscServer {
       rateLimitRpm: config.rateLimitRpm,
       rateLimitBurst: config.rateLimitBurst,
       requireAuth: config.requireAuth,
+      serviceToken: config.serviceToken,
       readOnly: config.readOnly,
       trustProxy: config.trustProxy,
       enableRest: config.enableRest,
@@ -446,6 +447,10 @@ export class DiscServer {
   }
 
   async start(): Promise<void> {
+    // Before anything is opened or bound: a bad service token is a
+    // configuration error, not a runtime one.
+    checkServiceToken(this.config);
+
     logger.debug("Starting Disc Database Server");
 
     const configuration = [
@@ -993,6 +998,11 @@ export class DiscServer {
     if (next.jwtSecret !== undefined && next.jwtSecret !== cur.jwtSecret)
       noteIgnored("jwtSecret", "(redacted)", "(redacted)");
 
+    // An unset env var reads as `undefined` and is skipped, so a reload can
+    // neither rotate nor drop the credential a running server was started with.
+    if (next.serviceToken !== undefined && next.serviceToken !== cur.serviceToken)
+      noteIgnored("serviceToken", "(redacted)", "(redacted)");
+
     if (next.enableAuth !== undefined && next.enableAuth !== cur.enableAuth)
       noteIgnored("enableAuth", cur.enableAuth, next.enableAuth);
 
@@ -1092,6 +1102,37 @@ export class DiscServer {
 }
 
 /**
+ * Validate the service credential before boot. Mirrors the JWT secret rule
+ * (`auth/provider-helpers.ts` `importHmacKey`): at least 32 bytes, or the
+ * server refuses to start. Also warns when a token is configured while
+ * access policies are off, since the bypass it grants then means nothing —
+ * nothing is enforced for anyone. The token's value never reaches a log
+ * line or an error message; only its byte length does.
+ */
+export function checkServiceToken(
+  config: Pick<Types.ServerConfig, "enableAccessPolicies" | "serviceToken">
+): void {
+  if (!config.serviceToken)
+    return;
+
+  const byteLength = new TextEncoder().encode(config.serviceToken).length;
+
+  if (byteLength < 32) {
+    throw new Error(
+      `DISC_SERVICE_TOKEN (--service-token) must be at least 32 bytes; got ${byteLength}. ` +
+        "Generate one with e.g. `openssl rand -base64 48`."
+    );
+  }
+
+  if (config.enableAccessPolicies !== true) {
+    logger.warn(
+      "A service token is configured but access policies are off (DISC_ENABLE_ACCESS_POLICIES), " +
+        "so the bypass it grants is meaningless: nothing is enforced for anyone"
+    );
+  }
+}
+
+/**
  * Order-sensitive equality for two optional string arrays. `undefined`
  * and `[]` are treated as equal — both mean "no allowlist set".
  */
@@ -1149,6 +1190,7 @@ export function buildEnvOptions(
     enableCors: Deno.env.get("DISC_ENABLE_CORS") !== "false",
     enableWebsockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwtSecret: Deno.env.get("DISC_JWT_SECRET"),
+    serviceToken: Deno.env.get("DISC_SERVICE_TOKEN"),
     enableAuth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
     enableAccessPolicies: enableAccessPolicies !== undefined ?
       enableAccessPolicies !== "false" :

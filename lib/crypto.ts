@@ -62,3 +62,35 @@ export function hmacSha256(
 ): Promise<Uint8Array> {
   return hmac("SHA-256", key, data);
 }
+
+/**
+ * Constant-time comparison of two byte arrays: every byte is visited
+ * whatever the first mismatch, so timing does not reveal how long a
+ * matching prefix was. Unequal lengths compare unequal (the length
+ * itself is not hidden — compare digests, not raw secrets, when the
+ * secret's length must stay private; see `sha256Equal`).
+ */
+export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
+}
+
+/**
+ * Whether two secrets are equal, decided on their SHA-256 digests in
+ * constant time. Hashing first means the comparison always runs over
+ * 32 bytes, so neither the length of the expected secret nor the
+ * position of the first differing byte leaks through timing.
+ */
+export async function sha256Equal(
+  a: Uint8Array | string,
+  b: Uint8Array | string
+): Promise<boolean> {
+  const [digestA, digestB] = await Promise.all([sha256(a), sha256(b)]);
+  return constantTimeEqual(digestA, digestB);
+}

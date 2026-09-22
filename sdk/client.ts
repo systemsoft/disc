@@ -331,6 +331,51 @@ export class DiscClient {
   }
 
   /**
+   * A derived client that sends `token` as its bearer credential — for
+   * example a server's `DISC_SERVICE_TOKEN`. It shares this client's
+   * configuration (base URL, timeout, headers, retries, logger, schema
+   * epoch) but not its credentials, and neither client's `setAuthToken`
+   * affects the other. Prefer this over mutating a shared client: a
+   * `Transaction` uses the credential of the client that opened it, so
+   * concurrent callers with different identities each need their own.
+   */
+  withToken(token: string): this {
+    const derived = this.derive();
+    derived.authToken = token;
+    return derived;
+  }
+
+  /**
+   * A derived client with `headers` merged over this client's custom
+   * headers. Like `withToken`, it shares configuration but not
+   * credentials: the derived client starts without an auth token (pass an
+   * `Authorization` header explicitly, or call `withToken`).
+   */
+  withHeaders(headers: Record<string, string>): this {
+    return this.derive({ ...this.customHeaders, ...headers });
+  }
+
+  /**
+   * Construct a client of the same class from this client's configuration.
+   * The generated `DiscClient` subclass has the same constructor signature
+   * and rebuilds its query builders around the new instance, so a derived
+   * typed client keeps its builders.
+   */
+  private derive(headers: Record<string, string> = this.customHeaders): this {
+    const Client = this.constructor as new(config?: DiscClientConfig) => this;
+    return new Client({
+      baseUrl: this.baseUrl,
+      headers,
+      logger: this.logger,
+      onSchemaMismatch: this.onSchemaMismatch,
+      retries: this.retries,
+      retryDelay: this.retryDelay,
+      schemaEpoch: this.schemaEpoch,
+      timeout: this.timeout
+    });
+  }
+
+  /**
    * Execute a callback within a transaction.
    * Automatically commits on success and rolls back on error.
    *

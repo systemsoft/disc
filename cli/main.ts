@@ -573,6 +573,9 @@ const COMMAND_HELP: Record<string, string> = {
       --jwt-secret ${gray("<key>")} ${gray(".".repeat(7))} JWT signing secret (enables auth)
       --read-only ${gray(".".repeat(14))} Refuse writes (DDL + INSERT/UPDATE/DELETE)
       --require-auth ${gray(".".repeat(11))} Reject unauthenticated requests on protected routes
+      --service-token ${gray("<tok>")} ${gray(".".repeat(4))} Static bearer token for a trusted backend (≥32 bytes; bypasses
+      ${" ".repeat(30)} access policies on /query and /transaction/*). Visible in \`ps\`;
+      ${" ".repeat(30)} prefer DISC_SERVICE_TOKEN
       --tls-cert ${gray("<path>")} ${gray(".".repeat(8))} Path to TLS certificate
       --tls-key ${gray("<path>")} ${gray(".".repeat(9))} Path to TLS private key
       --trust-proxy ${gray(".".repeat(12))} Trust X-Forwarded-* headers (rate-limit + auth IP source)
@@ -699,6 +702,7 @@ async function main() {
       "rollback-to",
       "schema",
       "schema-dir",
+      "service-token",
       "squash-from",
       "squash-to",
       "target",
@@ -1133,6 +1137,7 @@ async function main() {
           requireAuth: args["require-auth"],
           schemaDir: args["schema-dir"],
           schemaFile: args.schema,
+          serviceToken: args["service-token"],
           tlsCert: args["tls-cert"],
           tlsKey: args["tls-key"],
           trustProxy: args["trust-proxy"]

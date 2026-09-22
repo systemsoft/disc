@@ -4,7 +4,7 @@
 import { assertEquals } from "@std/assert";
 import { encodeHex } from "@std/encoding";
 
-import { hmac, hmacSha256, sha256, sha256Hex } from "./crypto.ts";
+import { constantTimeEqual, hmac, hmacSha256, sha256, sha256Equal, sha256Hex } from "./crypto.ts";
 
 /*** sha256 ***/
 
@@ -81,4 +81,37 @@ Deno.test("hmac - SHA-256 agrees with hmacSha256", async () => {
   const viaGeneric = await hmac("SHA-256", "key", "data");
   const viaSpecific = await hmacSha256("key", "data");
   assertEquals(viaGeneric, viaSpecific);
+});
+
+/*** constantTimeEqual / sha256Equal (service credential comparison) ***/
+
+Deno.test("constantTimeEqual - equal bytes compare equal", () => {
+  assertEquals(constantTimeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 3])), true);
+});
+
+Deno.test("constantTimeEqual - a single differing byte compares unequal", () => {
+  assertEquals(constantTimeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4])), false);
+});
+
+Deno.test("constantTimeEqual - different lengths compare unequal without throwing", () => {
+  assertEquals(constantTimeEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2])), false);
+  assertEquals(constantTimeEqual(new Uint8Array([]), new Uint8Array([0])), false);
+});
+
+Deno.test("sha256Equal - same strings match", async () => {
+  assertEquals(await sha256Equal("correct horse battery staple", "correct horse battery staple"), true);
+});
+
+Deno.test("sha256Equal - strings of the same length but different content do not match", async () => {
+  assertEquals(await sha256Equal("aaaaaaaa", "aaaaaaab"), false);
+});
+
+Deno.test("sha256Equal - a prefix of the expected value does not match", async () => {
+  assertEquals(await sha256Equal("secret-token-value", "secret-token"), false);
+  assertEquals(await sha256Equal("secret-token", "secret-token-value"), false);
+});
+
+Deno.test("sha256Equal - two empty strings match only each other", async () => {
+  assertEquals(await sha256Equal("", ""), true);
+  assertEquals(await sha256Equal("", "x"), false);
 });

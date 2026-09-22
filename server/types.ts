@@ -99,6 +99,17 @@ export interface ServerConfig {
    */
   requireAuth?: boolean;
   /**
+   * Static service credential for trusted backends (`DISC_SERVICE_TOKEN` /
+   * `--service-token`; never `disc.toml`, which is committed). A request to
+   * `/query` or `/transaction/*` whose `Authorization: Bearer <token>`
+   * matches runs as `{ userId: "service", roles: ["service"] }` with access
+   * policies bypassed — no JWT, no session row, no expiry. Compared as
+   * SHA-256 digests in constant time. At least 32 bytes, or the server
+   * refuses to start. Not honored by REST, WebSocket or the binary
+   * listener. Must never be logged or reported.
+   */
+  serviceToken?: string;
+  /**
    * When true, the server runs in read-only mode: queries that would
    * write to the database (INSERT/UPDATE/DELETE/CONFIGURE
    * DATABASE|INSTANCE|SYSTEM) are rejected with a `READ_ONLY_MODE`
@@ -257,6 +268,8 @@ export interface ServerStats {
     successful: number;
     failed: number;
     avgDurationMs: number;
+    /** `/query` requests that ran with access policies bypassed (service credential or admin header). */
+    bypassed: number;
   };
   transactions: {
     active: number;

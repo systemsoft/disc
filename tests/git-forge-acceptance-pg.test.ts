@@ -46,8 +46,7 @@ const RUN_PG = canRunPgTests();
  */
 const PENDING = new Set<string>(
   Deno.env.get("GIT_FORGE_ALL") === "1" ? [] : [
-    "Q9", // Phase 7 (S3, S11): a failed commit is reported as success
-    "Q10" // Phase 6 (D10): no service credential; nested mutations skip policies until Phase 1 (S10)
+    "Q9" // Phase 7 (S3, S11): a failed commit is reported as success
   ]
 );
 
@@ -55,7 +54,7 @@ const FIXTURE_URL = new URL("./fixtures/git-forge.disc", import.meta.url);
 const SDK_URL = new URL("../sdk/mod.ts", import.meta.url).href;
 const JWT_SECRET = "git-forge-acceptance-jwt-secret-at-least-32-bytes";
 
-/** What Phase 6 will read from `ServerConfig.serviceToken` / `DISC_SERVICE_TOKEN`. */
+/** The server's `ServerConfig.serviceToken` (`DISC_SERVICE_TOKEN`); sent as a bearer, no bypass header. */
 const SERVICE_TOKEN = "git-forge-acceptance-service-token-0123456789abcdef";
 
 const TEST_PASSWORD = "correct-horse-battery-staple";
