@@ -1260,12 +1260,17 @@ export class MigrationEngine {
       return "empty_migration";
     }
 
-    if (operations.length === 1) {
-      return this.getOperationName(operations[0]);
+    /*** Indexes follow the type they belong to (a new type's `index on` is its own CreateIndex), so
+         they only name a migration that consists of nothing else. ***/
+    const nonIndex = operations.filter(op => op.kind !== "CreateIndex" && op.kind !== "DropIndex");
+    const basis = nonIndex.length > 0 ? nonIndex : operations;
+
+    if (basis.length === 1) {
+      return this.getOperationName(basis[0]);
     }
 
-    const typeCount = operations.filter(op => op.kind.includes("Type")).length;
-    const tableCount = operations.filter(op => op.kind.includes("Table")).length;
+    const typeCount = basis.filter(op => op.kind.includes("Type")).length;
+    const tableCount = basis.filter(op => op.kind.includes("Table")).length;
 
     if (typeCount > 0) {
       return `schema_changes_${typeCount}_types`;
@@ -1273,7 +1278,7 @@ export class MigrationEngine {
       return `table_changes_${tableCount}_tables`;
     }
 
-    return `migration_${operations.length}_operations`;
+    return `migration_${basis.length}_operations`;
   }
 
   private generateMigrationDescription(operations: Types.MigrationOperation[]): string {

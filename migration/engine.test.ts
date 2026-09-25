@@ -6,7 +6,8 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { Module } from "../schema/converter.ts";
+import { Module, SDLConverter } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { MigrationEngine } from "./engine.ts";
@@ -382,6 +383,21 @@ Deno.test("Migration Engine - Plan Initial Migration", () => {
     assertEquals(plan.migrations[0].operations.length, 1);
     assertEquals(plan.migrations[0].operations[0].kind, "CreateType");
     assertEquals(plan.operationsCount, 1);
+  }
+});
+
+Deno.test("Migration Engine - a new type's index does not change the migration name", () => {
+  const engine = new MigrationEngine(config);
+  const schema = new SDLConverter().convertToModules(
+    new SDLParser(`module default { type Item { required name: str; index on (.name); }; };`).parse()
+  );
+
+  const result = engine.planMigration(null, schema);
+
+  assertEquals(result.ok, true);
+  if (result.ok) {
+    assertEquals(result.value.migrations[0].operations.map(op => op.kind), ["CreateType", "CreateIndex"]);
+    assertEquals(result.value.migrations[0].name, "create_item");
   }
 });
 
