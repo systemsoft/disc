@@ -49,6 +49,15 @@ Deno.test("pgTypeToEdgeqlType - common scalars", () => {
   assertEquals(pgTypeToEdgeqlType("jsonb"), "json");
 });
 
+// An array column is read back as `array<T>`. Disc also stores a `multi`
+// scalar property as an array column; the column alone can't tell the two
+// apart, so introspection keeps the `array<T>` reading.
+Deno.test("pgTypeToEdgeqlType - array columns map to array<T>", () => {
+  assertEquals(pgTypeToEdgeqlType("_text"), "array<str>");
+  assertEquals(pgTypeToEdgeqlType("_int8"), "array<int64>");
+  assertEquals(pgTypeToEdgeqlType("text[]"), "array<str>");
+});
+
 Deno.test("pgTypeToEdgeqlType - unknown type falls back to str (best-effort)", () => {
   // Unknown types aren't an error — emit `str` so the user can edit
   // the resulting SDL rather than failing the entire export.

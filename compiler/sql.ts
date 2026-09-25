@@ -534,11 +534,12 @@ export function eq(left: string, right: string): BinaryExpression {
   );
 }
 
-export function isNotNull(column: string): UnaryExpression {
+/*** `<expr> IS NOT NULL`. A string is a column name. ***/
+export function isNotNull(expr: string | SQLExpression): UnaryExpression {
   return {
     kind: "UnaryExpression",
     operator: "IS NOT NULL",
-    operand: createColumnReference(column)
+    operand: typeof expr === "string" ? createColumnReference(expr) : expr
   };
 }
 

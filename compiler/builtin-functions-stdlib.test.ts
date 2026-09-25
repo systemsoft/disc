@@ -347,10 +347,11 @@ Deno.test("Stage 27 — set functions are registered: any, all, enumerate, disti
 Deno.test("Stage 27 — exists compiles via parser unary operator path", () => {
   // The EdgeQL parser treats `exists` as a unary keyword operator, not a
   // regular function call. So `exists(1)` is parsed as UnaryOp("EXISTS", 1)
-  // rather than FunctionCall("exists", [1]). The compiled SQL uses the EXISTS
-  // keyword directly rather than the IS NOT NULL path in compileFunctionCall.
+  // rather than FunctionCall("exists", [1]). A scalar operand is at most one
+  // value, so the unary path tests it with IS NOT NULL (SQL's EXISTS takes a
+  // subquery only).
   const sql = compileEdgeQL(`SELECT exists(1)`);
-  assertStringIncludes(sql, "EXISTS");
+  assertStringIncludes(sql, "1 IS NOT NULL");
 });
 
 Deno.test("Stage 27 — sequence_next compiles to NEXTVAL", () => {

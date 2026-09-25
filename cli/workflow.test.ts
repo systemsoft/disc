@@ -18,6 +18,7 @@ import { default as dedent } from "@netopwibby/dedent";
 /*** UTILITY ------------------------------------------ ***/
 
 import { commands } from "./commands.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 
 import {
   cleanupTempDir,
@@ -74,13 +75,14 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
   }
 });
 
-Deno.test("CLI Workflow - Migration planning and execution", async () => {
+/*** Dry-run diffs against the database's applied schema, so it needs PostgreSQL. ***/
+Deno.test({ ignore: !canRunPgTests(), name: "CLI Workflow - Migration planning and execution" }, async () => {
   const console = new ConsoleCapture();
   const tempDir = await createTempDir();
   const env = new EnvMock();
 
   try {
-    env.set("DATABASE_URL", "postgresql://localhost:5432/test_disc");
+    env.set("DATABASE_URL", await getTestDsn());
 
     /*** Create a test schema file ***/
     const schemaFile = `${tempDir}/schema.disc`;
@@ -97,7 +99,7 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
       `
     );
 
-    /*** Test migration create (dry-run to avoid needing a real database) ***/
+    /*** Test migration create (dry-run: plans against the database without applying) ***/
     await commands.migrate({
       _: ["migrate"],
       "auto-approve": false,

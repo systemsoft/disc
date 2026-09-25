@@ -425,6 +425,10 @@ export class SDLParser {
 
         if (this.match(TokenType.PROPERTY)) {
           properties.push(this.parsePropertyDeclaration(propQualifiers));
+          // `property x: T { … };` — the `;` after a body is optional.
+          this.match(TokenType.SEMICOLON);
+        } else if (this.isBareLinkPropertyStart()) {
+          properties.push(this.parseBareLinkProperty(propQualifiers));
         } else if (this.match(TokenType.CONSTRAINT)) {
           constraints.push(this.parseConstraint());
         } else if (this.match(TokenType.ANNOTATION)) {
@@ -582,6 +586,7 @@ export class SDLParser {
       const constraints: AST.Constraint[] = [];
       const annotations: AST.Annotation[] = [];
       const rewrites: AST.RewriteDeclaration[] = [];
+      const linkProperties: AST.PropertyDeclaration[] = [];
 
       while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
         if (this.match(TokenType.CONSTRAINT)) {
@@ -602,13 +607,24 @@ export class SDLParser {
         } else if (this.match(TokenType.REWRITE)) {
           rewrites.push(this.parseRewriteDeclaration());
         } else {
-          throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
-          );
+          // A colon-form link (`multi members: User { role: str; }`) declares
+          // its link properties in this body; the validator rejects them when
+          // the target turns out to be a scalar.
+          const linkProperty = this.parseLinkPropertyMember();
+          if (!linkProperty) {
+            throw this.error(
+              `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
+            );
+          }
+          linkProperties.push(linkProperty);
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after property body");
+
+      if (linkProperties.length > 0) {
+        property.properties = linkProperties;
+      }
 
       if (constraints.length > 0) {
         property.constraints = constraints;
@@ -629,6 +645,40 @@ export class SDLParser {
     return property;
   }
 
+  /*** `role: str` inside a link body: a link property declared without the `property` keyword. ***/
+  private isBareLinkPropertyStart(): boolean {
+    return this.isMemberNameStart() && this.checkNext(TokenType.COLON);
+  }
+
+  private parseBareLinkProperty(qualifiers: any): AST.PropertyDeclaration {
+    const name = this.parseMemberName();
+    this.consume(TokenType.COLON, "Expected ':' after link property name");
+    const property = this.parsePropertyBody(name, this.parseTypeRef(), qualifiers);
+    // `role: str { … };` — the `;` after a body is optional.
+    this.match(TokenType.SEMICOLON);
+    return property;
+  }
+
+  /**
+   * A link property in a colon-form pointer body: `[required] role: str …` or
+   * `[required] property role: str …`. Returns null (consuming nothing) when
+   * the next tokens are not a link property.
+   */
+  private parseLinkPropertyMember(): AST.PropertyDeclaration | null {
+    const checkpoint = this.current;
+    const qualifiers = this.parsePointerQualifiers();
+    if (this.match(TokenType.PROPERTY)) {
+      const property = this.parsePropertyDeclaration(qualifiers);
+      this.match(TokenType.SEMICOLON);
+      return property;
+    }
+    if (this.isBareLinkPropertyStart()) {
+      return this.parseBareLinkProperty(qualifiers);
+    }
+    this.current = checkpoint;
+    return null;
+  }
+
   private parseLinkDeclaration(qualifiers: any): AST.LinkDeclaration {
     const name = this.parseIdentifier();
 
@@ -638,7 +688,10 @@ export class SDLParser {
       extending = this.parseTypeRefList();
     }
 
-    this.consume(TokenType.ARROW, "Expected '->' after link name");
+    // `link members -> User` and the modern `link members: User`.
+    if (!this.match(TokenType.COLON)) {
+      this.consume(TokenType.ARROW, "Expected '->' or ':' after link name");
+    }
     const target = this.parseTypeRef();
 
     return this.parseLinkBody(name, target, qualifiers, extending);
@@ -671,6 +724,10 @@ export class SDLParser {
 
         if (this.match(TokenType.PROPERTY)) {
           properties.push(this.parsePropertyDeclaration(propQualifiers));
+          // `property x: T { … };` — the `;` after a body is optional.
+          this.match(TokenType.SEMICOLON);
+        } else if (this.isBareLinkPropertyStart()) {
+          properties.push(this.parseBareLinkProperty(propQualifiers));
         } else if (this.match(TokenType.CONSTRAINT)) {
           constraints.push(this.parseConstraint());
         } else if (this.match(TokenType.ANNOTATION)) {

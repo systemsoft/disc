@@ -361,8 +361,16 @@ class GoEmitter {
     if (this.config.includeMutations) {
       out += this.emitTypeCastFn(builder, obj);
       out += this.emitMultiLinkFn(builder, obj);
-      out += this.emitInsertFn(builder, name, etype);
-      out += this.emitUpdateFn(builder, name, etype);
+      // Multi scalar properties: the whole set is bound as one array
+      // parameter and assigned with `array_unpack(<array<T>>$p)`.
+      const multiProperties = obj
+        .fields
+        .filter(field => !field.isLink && !field.isComputed && isMulti(field.cardinality))
+        .map(field => field.name);
+      if (multiProperties.length > 0)
+        out += this.emitMultiPropertyFn(builder, multiProperties);
+      out += this.emitInsertFn(builder, name, etype, multiProperties.length > 0);
+      out += this.emitUpdateFn(builder, name, etype, multiProperties.length > 0);
       out += this.emitDeleteFn(builder, name, etype);
     }
     out += this.emitCountFn(builder, etype);
@@ -410,7 +418,8 @@ class GoEmitter {
           arms.push(`\tcase ${JSON.stringify(field.name)}:\n\t\treturn "<uuid>"`);
         continue;
       }
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const cast = isMulti(field.cardinality) ? `<array${elementCast}>` : elementCast;
       arms.push(`\tcase ${JSON.stringify(field.name)}:\n\t\treturn ${JSON.stringify(cast)}`);
     }
     let out = "";
@@ -443,7 +452,18 @@ class GoEmitter {
     return out;
   }
 
-  private emitInsertFn(builder: string, name: string, etype: string): string {
+  private emitMultiPropertyFn(builder: string, names: string[]): string {
+    let out = "";
+    out += `func (b *${builder}) isMultiProperty(field string) bool {\n`;
+    out += "\tswitch field {\n";
+    out += `\tcase ${names.map(n => JSON.stringify(n)).join(", ")}:\n\t\treturn true\n`;
+    out += "\t}\n";
+    out += "\treturn false\n";
+    out += "}\n\n";
+    return out;
+  }
+
+  private emitInsertFn(builder: string, name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
     out += `func (b *${builder}) Insert(data ${name}Insert) (${name}, error) {\n`;
     out += `\tvar zero ${name}\n`;
@@ -464,6 +484,10 @@ class GoEmitter {
     out += "\t\tvariables[key] = val\n";
     out += "\t\tif target, ok := b.multiLinkTarget(key); ok {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := (select %s filter .id in array_unpack(<array<uuid>>$%s))\", key, target, key))\n";
+    if (hasMultiProperties) {
+      out += "\t\t} else if b.isMultiProperty(key) {\n";
+      out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := array_unpack(%s$%s)\", key, b.typeCast(key), key))\n";
+    }
     out += "\t\t} else {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := %s$%s\", key, b.typeCast(key), key))\n";
     out += "\t\t}\n";
@@ -474,7 +498,7 @@ class GoEmitter {
     return out;
   }
 
-  private emitUpdateFn(builder: string, name: string, etype: string): string {
+  private emitUpdateFn(builder: string, name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
     out += `func (b *${builder}) Update(id string, data ${name}Update) (${name}, error) {\n`;
     out += `\tvar zero ${name}\n`;
@@ -495,6 +519,10 @@ class GoEmitter {
     out += "\t\tvariables[key] = val\n";
     out += "\t\tif target, ok := b.multiLinkTarget(key); ok {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := (select %s filter .id in array_unpack(<array<uuid>>$%s))\", key, target, key))\n";
+    if (hasMultiProperties) {
+      out += "\t\t} else if b.isMultiProperty(key) {\n";
+      out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := array_unpack(%s$%s)\", key, b.typeCast(key), key))\n";
+    }
     out += "\t\t} else {\n";
     out += "\t\t\tassignments = append(assignments, fmt.Sprintf(\"%s := %s$%s\", key, b.typeCast(key), key))\n";
     out += "\t\t}\n";

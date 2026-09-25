@@ -171,6 +171,9 @@ export function normalizeObjectPropertiesToLinks(modules: Module[]): Module[] {
         if (property.annotations !== undefined) {
           link.annotations = property.annotations;
         }
+        if (property.properties !== undefined) {
+          link.properties = property.properties;
+        }
         return link;
       });
       return { ...typeDecl, members: newMembers };
@@ -184,7 +187,53 @@ export function normalizeObjectPropertiesToLinks(modules: Module[]): Module[] {
  * arrow and colon forms produce identical storage layouts.
  */
 export function normalizeModules(modules: Module[]): Module[] {
-  return normalizeObjectPropertiesToLinks(normalizeArrowsToProperties(modules));
+  return inheritAbstractLinkProperties(
+    normalizeObjectPropertiesToLinks(normalizeArrowsToProperties(modules))
+  );
+}
+
+/**
+ * Give each concrete link that `extending`s an abstract link the abstract
+ * link's link properties (a property the link declares itself wins), so the
+ * migration differ lays down the same junction columns the runtime schema
+ * exposes. Returns a new Module[]; inputs are not mutated.
+ */
+export function inheritAbstractLinkProperties(modules: Module[]): Module[] {
+  const abstractLinks = new Map<string, AST.LinkDeclaration>();
+  for (const module of modules) {
+    for (const item of module.items) {
+      if (item.kind === "LinkDeclaration" && item.abstract) {
+        abstractLinks.set(item.name.value, item);
+      }
+    }
+  }
+  if (abstractLinks.size === 0) {
+    return modules;
+  }
+
+  const withInherited = (link: AST.LinkDeclaration): AST.LinkDeclaration => {
+    const properties = [...(link.properties ?? [])];
+    for (const base of link.extending ?? []) {
+      for (const inherited of abstractLinks.get(base.name.parts.join("::"))?.properties ?? []) {
+        if (!properties.some(p => p.name.value === inherited.name.value)) {
+          properties.push(inherited);
+        }
+      }
+    }
+    return properties.length === (link.properties?.length ?? 0) ? link : { ...link, properties };
+  };
+
+  return modules.map(module => ({
+    name: module.name,
+    items: module.items.map(item =>
+      item.kind === "TypeDeclaration" ?
+        {
+          ...item,
+          members: item.members.map(member => member.kind === "LinkDeclaration" && !member.abstract ? withInherited(member) : member)
+        } :
+        item
+    )
+  }));
 }
 
 /**

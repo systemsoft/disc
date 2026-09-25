@@ -7,6 +7,7 @@
 
 import type { AccessPolicy } from "../access/types.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import { CompilationError } from "../lib/errors.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import * as SQL from "./sql.ts";
 
@@ -202,6 +203,11 @@ export interface LinkDef {
   computedExpr?: string;
   /** Annotations (e.g., description) from SDL */
   annotations?: Record<string, string>;
+  /**
+   * Link properties (`multi members: User { role: str; }`), keyed by name.
+   * Each is a column (`PropertyDef.columnName`) of `junctionTable`.
+   */
+  properties?: Map<string, PropertyDef>;
 }
 
 export interface FunctionDef {
@@ -223,6 +229,12 @@ export interface ArgDef {
 export interface Scope {
   aliases: Map<string, TableAlias>;
   variables: Map<string, VariableDef>;
+  /**
+   * Set inside a link's sub-shape: the link being traversed and the SQL
+   * alias of the junction row joined for each target, which is where `@prop`
+   * (a link property) reads from. Absent for links without a junction table.
+   */
+  linkSource?: { alias: string; link: LinkDef; };
 }
 
 export interface TableAlias {
@@ -246,6 +258,15 @@ export function createContext(schema: Schema): CompilationContext {
     scopes: [],
     cteAliases: new Map()
   };
+}
+
+/*** A link property of `link`, or a CompilationError naming the link when it has none by that name. ***/
+export function getLinkProperty(link: LinkDef, name: string): PropertyDef {
+  const property = link.properties?.get(name);
+  if (!property) {
+    throw new CompilationError(`Link '${link.name}' has no link property '${name}'`);
+  }
+  return property;
 }
 
 export function pushScope(ctx: CompilationContext): void {

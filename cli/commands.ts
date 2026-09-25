@@ -629,12 +629,11 @@ export class CLICommands {
       undefined;
 
     try {
-      if (dryRun) {
-        /*** Dry-run mode: no pool needed, no PostgreSQL connection required ***/
+      if (dryRun && !needsSchema) {
+        /*** Rollback / squash dry-runs stay offline: a dry rollback against a live tracker would
+             skip the rollback SQL yet still delete the history rows. ***/
         manager = new SchemaManager({ dryRun: true });
-        await manager.initialize();
       } else {
-        /*** Live mode: create pool and wire to SchemaManager ***/
         pool = new ConnectionPool({
           /*** gh/geldata#9034: tag CLI connections so the preflight can tell `disc-cli` apart from
                `disc-server` in `pg_stat_activity`. ***/
@@ -642,10 +641,27 @@ export class CLICommands {
           connectionString: databaseUrl
         });
 
-        await pool.initialize();
-        manager = new SchemaManager({ dryRun: false, onProgress, pool });
-        await manager.initialize();
+        if (dryRun) {
+          /*** Dry-run still reads the migration history, so the preview diffs against the applied
+               schema instead of an empty one (which would list a CREATE of every type). The
+               manager’s dry-run flag keeps it from executing anything. ***/
+          try {
+            await pool.initialize();
+          } catch (error) {
+            throw new Error(
+              `--dry-run needs the database to diff against the applied schema, but could not connect: ${(error as Error).message}` +
+                (ctx?.managed ? ` (is PostgreSQL running? try "disc start")` : "")
+            );
+          }
+
+          manager = new SchemaManager({ dryRun: true, pool });
+        } else {
+          await pool.initialize();
+          manager = new SchemaManager({ dryRun: false, onProgress, pool });
+        }
       }
+
+      await manager.initialize();
 
       if (args.status) {
         await this.showMigrationStatus(manager, load?.modules);

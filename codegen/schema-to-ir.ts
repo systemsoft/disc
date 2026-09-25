@@ -161,7 +161,7 @@ function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
 }
 
 function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
-  return {
+  const field: Field = {
     name: link.name,
     type: { kind: "object", name: resolveQualified(link.target, resolve) },
     cardinality: cardinalityOf(link.required, link.multi),
@@ -175,6 +175,17 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
     computedExpr: link.computedExpr,
     description: link.annotations?.["description"]
   };
+  if (link.properties && link.properties.size > 0) {
+    field.linkProperties = [...link.properties.values()].map(prop => ({
+      name: prop.name,
+      type: typeRefOf(prop.edgeqlType ?? prop.type, resolve),
+      cardinality: cardinalityOf(prop.required, false),
+      constraints: (prop.constraints ?? []).map(c => ({ name: c.name, args: c.args ?? [] })),
+      hasDefault: prop.hasDefault ?? false,
+      sourceType: prop.edgeqlType ?? prop.type
+    }));
+  }
+  return field;
 }
 
 // ---------------------------------------------------------------------------

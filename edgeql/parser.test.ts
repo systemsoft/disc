@@ -1241,3 +1241,57 @@ Deno.test("EdgeQL Parser - cast precedence: a shape after a cast operand stays o
     assertEquals(ast.filter?.kind, "BinaryOp");
   }
 });
+
+// --- Function arguments with select clauses: count(X filter …) ---
+
+Deno.test("EdgeQL Parser - a function argument can carry filter / order by / limit", () => {
+  const expr = new EdgeQLParser("count(User filter .active order by .name limit 5)").parseExpressionOnly();
+
+  assertEquals(expr.kind, "FunctionCall");
+  if (expr.kind === "FunctionCall") {
+    assertEquals(expr.args.length, 1);
+    const arg = expr.args[0].value;
+    assertEquals(arg.kind, "Subquery");
+    if (arg.kind === "Subquery" && arg.query.kind === "SelectQuery") {
+      assertEquals(arg.query.expr.kind, "TypeName");
+      assertEquals(arg.query.filter?.kind, "Path");
+      assertEquals(arg.query.orderBy?.length, 1);
+      assertEquals(arg.query.limit?.kind, "Literal");
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - a filtered function argument is followed by more arguments", () => {
+  const expr = new EdgeQLParser("f(User filter .active, 2)").parseExpressionOnly();
+
+  assertEquals(expr.kind, "FunctionCall");
+  if (expr.kind === "FunctionCall") {
+    assertEquals(expr.args.map(arg => arg.value.kind), ["Subquery", "Literal"]);
+  }
+});
+
+// --- Cardinality casts: <optional T>$x / <required T>$x ---
+
+Deno.test("EdgeQL Parser - <optional str>$x is a str cast marked optional", () => {
+  const expr = new EdgeQLParser("<optional str>$x").parseExpressionOnly();
+
+  assertEquals(expr.kind, "TypeCast");
+  if (expr.kind === "TypeCast") {
+    assertEquals(expr.type.name.parts, ["str"]);
+    assertEquals(expr.cardinality?.required, false);
+    assertEquals(expr.expr.kind, "Parameter");
+  }
+});
+
+Deno.test("EdgeQL Parser - <required T> and generic optional casts parse", () => {
+  const required = new EdgeQLParser("<required int64>$n").parseExpressionOnly();
+  assertEquals(required.kind === "TypeCast" && required.cardinality?.required, true);
+
+  const generic = new EdgeQLParser("<optional array<str>>$tags").parseExpressionOnly();
+  assertEquals(generic.kind, "TypeCast");
+  if (generic.kind === "TypeCast") {
+    assertEquals(generic.type.name.parts, ["array"]);
+    assertEquals(generic.type.subtypes?.[0].name.parts, ["str"]);
+    assertEquals(generic.cardinality?.required, false);
+  }
+});

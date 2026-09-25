@@ -253,6 +253,24 @@ export interface Field {
   computedExpr?: string;
   /** Optional doc description (from the schema annotation). */
   description?: string;
+  /**
+   * Link properties of a link field (`multi members: User { role: str; }`),
+   * in declaration order. Absent on properties and on links that declare
+   * none. A query reads them as `@name` keys of each linked object.
+   */
+  linkProperties?: LinkPropertyField[];
+}
+
+/** One link property: a value stored per link, not per target object. */
+export interface LinkPropertyField {
+  name: string;
+  type: TypeRef;
+  /** `One` for a `required` link property, else `AtMostOne` (never multi). */
+  cardinality: Cardinality;
+  constraints: FieldConstraint[];
+  hasDefault: boolean;
+  /** The EdgeQL type as written (see `Field.sourceType`). */
+  sourceType: string;
 }
 
 export interface FieldConstraint {

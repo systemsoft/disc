@@ -373,7 +373,15 @@ class TypeScriptEmitter {
     // generator does, rather than a canonicalized bare name.
     content += `${indent}  /** Link to ${field.sourceType} (${relationshipType}${required ? ", required" : ""}) */\n`;
 
-    const targetType = this.targetRef(target, currentModule);
+    let targetType = this.targetRef(target, currentModule);
+
+    // Link properties ride on each linked object as `"@name"` keys, present
+    // only when the query selects them.
+    if (field.linkProperties && field.linkProperties.length > 0) {
+      const keys = field.linkProperties.map(p => `"@${p.name}"?: ${Types.mapEdgeQLTypeToTypeScript(p.sourceType, isRequired(p.cardinality), false)};`);
+      targetType = `(${targetType} & { ${keys.join(" ")} })`;
+    }
+
     let tsType = targetType;
 
     if (multi)
@@ -515,8 +523,10 @@ class TypeScriptEmitter {
         continue;
       }
 
+      // A multi property is filtered by element (`.scopes = x` holds when any
+      // element equals x), so its operand is the element type.
       const edgeqlType = field.sourceType;
-      const tsType = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, isMulti(field.cardinality));
+      const tsType = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, false);
       const opHelper = this.getOperatorHelperFor(edgeqlType, tsType);
       content += `${indent}  ${field.name}?: ${tsType} | ${opHelper};\n`;
     }
@@ -718,11 +728,19 @@ class TypeScriptEmitter {
     const updateRef = multiModule ? `Types.${ns}.${typeName}Update` : `Types.${typeName}Update`;
 
     const typeCastEntries: string[] = [];
+    // Multi scalar properties: the whole set is bound as one array parameter
+    // and assigned with `array_unpack(<array<T>>$p)`.
+    const multiPropertyNames: string[] = [];
 
     for (const field of obj.fields) {
       if (field.isLink || field.isComputed || field.name === "id")
         continue;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      if (isMulti(field.cardinality)) {
+        multiPropertyNames.push(field.name);
+        typeCastEntries.push(`    ${field.name}: "<array${cast}>"`);
+        continue;
+      }
       typeCastEntries.push(`    ${field.name}: "${cast}"`);
     }
 
@@ -788,6 +806,9 @@ class TypeScriptEmitter {
       content += ",\n";
 
     content += `  };\n\n`;
+
+    if (multiPropertyNames.length > 0)
+      content += `  private static _multiProperties = new Set<string>(${JSON.stringify(multiPropertyNames)});\n\n`;
 
     content += `  private static _multiLinkTargets: Record<string, string> = {\n`;
     content += multiLinkTargetEntries.join(",\n");
@@ -861,6 +882,9 @@ class TypeScriptEmitter {
     content += `        return \`\${escapeEdgeQLIdent(key)} := (select \${target} filter .id in array_unpack(<array<uuid>>$\${key}))\`;\n`;
     content += `      }\n`;
     content += `      variables[key] = value;\n`;
+    if (multiPropertyNames.length > 0)
+      content +=
+        `      if (${builderName}._multiProperties.has(key)) return \`\${escapeEdgeQLIdent(key)} := array_unpack(\${${builderName}._typeCasts[key]}$\${key})\`;\n`;
     content += `      return \`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
     content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
@@ -892,6 +916,12 @@ class TypeScriptEmitter {
     content += `        continue;\n`;
     content += `      }\n`;
     content += `      variables[key] = value;\n`;
+    if (multiPropertyNames.length > 0) {
+      content += `      if (${builderName}._multiProperties.has(key)) {\n`;
+      content += `        assignments.push(\`\${escapeEdgeQLIdent(key)} := array_unpack(\${${builderName}._typeCasts[key]}$\${key})\`);\n`;
+      content += `        continue;\n`;
+      content += `      }\n`;
+    }
     content += `      assignments.push(\`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
     content += `    }\n`;
     content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;

@@ -168,6 +168,19 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileIsTypeCheck(binOp);
     }
 
+    // A multi scalar property is an array column; comparing it tests its
+    // elements (EdgeQL set semantics: true when any element matches).
+    const multiComparison = this.compileMultiPropertyComparison(binOp);
+    if (multiComparison) {
+      return multiComparison;
+    }
+
+    // `.link@prop <op> x` / `x in .link@prop`: EXISTS over the junction.
+    const linkPropertyComparison = this.compileLinkPropertyComparison(binOp);
+    if (linkPropertyComparison) {
+      return linkPropertyComparison;
+    }
+
     // Multi-cardinality 2-step path on the LHS: rewrite the entire
     // comparison to EXISTS over the target table. EdgeQL set-comparison
     // semantics say `set OP scalar` is true if any element matches; SQL
@@ -219,11 +232,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const left = this.compileExpression(binOp.left);
     const right = this.compileExpression(binOp.right);
 
+    // Coalescing: `a ?? b` → `COALESCE(a, b)`. A chain `a ?? b ?? c` nests
+    // (`COALESCE(COALESCE(a, b), c)`), which is equivalent. Scalar operands
+    // only — a multi-cardinality LHS (set coalescing) is not supported.
+    if (binOp.op === "??") {
+      return SQL.createFunctionCall("COALESCE", [left, right]);
+    }
+
     // Map EdgeQL operators to SQL operators
     let sqlOp: string = binOp.op;
     switch (binOp.op) {
       case "++":
         sqlOp = "||"; // String concatenation in PostgreSQL
+        break;
+      // Coalescing equality: an empty set (SQL NULL) equals only another
+      // empty set, so these are NULL-safe comparisons in PG.
+      case "?=":
+        sqlOp = "IS NOT DISTINCT FROM";
+        break;
+      case "?!=":
+        sqlOp = "IS DISTINCT FROM";
         break;
       case "LIKE":
       case "ILIKE":
@@ -416,12 +444,206 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     });
   }
 
-  private compileUnaryOp(unaryOp: EdgeQLAST.UnaryOp): SQL.UnaryExpression {
+  private compileUnaryOp(unaryOp: EdgeQLAST.UnaryOp): SQL.SQLExpression {
+    if (unaryOp.op === "EXISTS") {
+      return this.compileExists(unaryOp.operand);
+    }
+
+    // `not exists <value>` is `<value> IS NULL`; `not exists <set>` negates the set test.
+    if (unaryOp.op === "NOT" && unaryOp.operand.kind === "UnaryOp" && unaryOp.operand.op === "EXISTS") {
+      const test = this.compileExists(unaryOp.operand.operand);
+      if (test.kind === "UnaryExpression" && test.operator === "IS NOT NULL") {
+        return { kind: "UnaryExpression", operator: "IS NULL", operand: test.operand };
+      }
+      return { kind: "UnaryExpression", operator: "NOT", operand: test };
+    }
+
     return {
       kind: "UnaryExpression",
       operator: unaryOp.op,
       operand: this.compileExpression(unaryOp.operand)
     };
+  }
+
+  /**
+   * `exists <expr>`. A subquery is a set: `EXISTS (subquery)`. A multi link or
+   * backlink is a set with no column of its own, so its linked rows are
+   * counted. Anything else — a property, a single link's FK column, a
+   * parameter — is at most one value: `<expr> IS NOT NULL`.
+   */
+  private compileExists(operand: EdgeQLAST.Expression): SQL.SQLExpression {
+    if (operand.kind === "Subquery") {
+      return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(operand) };
+    }
+    const multi = this.multiPropertyColumn(operand);
+    if (multi) {
+      return SQL.createBinaryExpression(">", SQL.createFunctionCall("CARDINALITY", [multi.column]), SQL.createLiteral("number", 0));
+    }
+    const linkCount = this.compileAggregateOverLinkPath("count", operand);
+    if (linkCount) {
+      return SQL.createBinaryExpression(">", linkCount, SQL.createLiteral("number", 0));
+    }
+    return SQL.isNotNull(this.compileExpression(operand));
+  }
+
+  /**
+   * The array column behind `.prop` when it names a stored multi scalar
+   * property of a type in scope (the same alias lookup as
+   * `compilePathInExpression`), else null.
+   */
+  protected multiPropertyColumn(
+    expr: EdgeQLAST.Expression
+  ): { column: SQL.ColumnReference; property: Context.PropertyDef; } | null {
+    if (expr.kind !== "Path" || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+      return null;
+    }
+    const name = expr.steps[0].name;
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const property = Context.resolveTypeName(this.ctx, ta.type)?.properties.get(name);
+      if (property) {
+        return property.multi && !property.computed ?
+          { column: SQL.createColumnReference(property.columnName, ta.alias), property } :
+          null;
+      }
+    }
+    return null;
+  }
+
+  /*** The SQL array type of a multi property's column: `text[]`, or the enum's `disc_enum_<name>[]`. ***/
+  protected multiPropertyArrayType(property: Context.PropertyDef): string {
+    const element = property.edgeqlType ?? "";
+    const resolved = element ? Context.resolveTypeName(this.ctx, element) : undefined;
+    return resolved?.enumValues?.length ? `${Context.getEnumSqlType(element)}[]` : property.type;
+  }
+
+  /**
+   * The value assigned to a multi property, as one array of its column type:
+   * a set literal is `ARRAY[…]`, `{}` is `'{}'`, `array_unpack(arr)` is `arr`,
+   * and any other expression is a single value (an empty one — SQL NULL —
+   * gives the empty array).
+   */
+  protected compileMultiPropertyValue(
+    expr: EdgeQLAST.Expression,
+    property: Context.PropertyDef
+  ): SQL.SQLExpression {
+    const arrayType = this.multiPropertyArrayType(property);
+    const asArray = (value: SQL.SQLExpression) =>
+      value.kind === "CastExpression" && value.targetType === arrayType ? value : SQL.createCastExpression(value, arrayType);
+
+    if ((expr.kind === "Literal" && expr.type === "empty") || (expr.kind === "SetExpr" && expr.elements.length === 0)) {
+      return asArray(SQL.createLiteral("string", "{}"));
+    }
+    if (expr.kind === "SetExpr") {
+      return asArray(SQL.createFunctionCall("ARRAY", expr.elements.map(element => this.compileExpression(element))));
+    }
+    if (expr.kind === "FunctionCall" && expr.name.parts.join("_") === "array_unpack" && expr.args.length === 1) {
+      return asArray(this.compileExpression(expr.args[0].value));
+    }
+    return asArray(
+      SQL.createFunctionCall("ARRAY_REMOVE", [SQL.createFunctionCall("ARRAY", [this.compileExpression(expr)]), SQL.createLiteral("null", null)])
+    );
+  }
+
+  /**
+   * An update `set { prop op value }` on a multi property: `:=` replaces the
+   * array, `+=` appends, and `-=` removes every occurrence of each given value
+   * (`disc_array_except`, lib/stdlib-sql.ts).
+   */
+  protected compileMultiPropertyAssignment(
+    property: Context.PropertyDef,
+    operator: ":=" | "+=" | "-=",
+    expr: EdgeQLAST.Expression
+  ): SQL.SQLExpression {
+    const value = this.compileMultiPropertyValue(expr, property);
+    const current = SQL.createColumnReference(property.columnName);
+    switch (operator) {
+      case "+=":
+        return SQL.createBinaryExpression("||", current, value);
+      case "-=":
+        return SQL.createFunctionCall("disc_array_except", [current, value]);
+      default:
+        return value;
+    }
+  }
+
+  /** Commuted comparison: `col_elem <op> x` is `x <commuted op> ANY(col)`. */
+  private static readonly COMMUTED_COMPARISONS = new Map<string, string>([
+    ["=", "="],
+    ["!=", "<>"],
+    ["<", ">"],
+    ["<=", ">="],
+    [">", "<"],
+    [">=", "<="]
+  ]);
+
+  /** Pattern operators on a multi property, tested per element with EXISTS over UNNEST. */
+  private static readonly ELEMENT_PATTERN_OPERATORS = new Set(["LIKE", "ILIKE", "NOT LIKE", "NOT ILIKE", "~", "~*", "!~", "!~*"]);
+
+  /**
+   * A comparison with a multi property on one side, over its array column.
+   * EdgeQL compares a set element-wise and a filter keeps the object when
+   * any result is true:
+   *
+   *   x in .p / .p = x          → x = ANY(p)        (x not in .p → x <> ALL(p))
+   *   .p > x                    → x < ANY(p)
+   *   .p in array_unpack(arr)   → p && arr           (not in → NOT (p <@ arr))
+   *   .p like x                 → EXISTS (SELECT 1 FROM UNNEST(p) AS e(v) WHERE e.v LIKE x)
+   *
+   * Returns null when neither side is a multi property.
+   */
+  private compileMultiPropertyComparison(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression | null {
+    const left = this.multiPropertyColumn(binOp.left);
+    const right = this.multiPropertyColumn(binOp.right);
+    if (!left && !right) {
+      return null;
+    }
+    if (left && right) {
+      throw new CompilationError(`Comparing two multi properties ('${binOp.op}') is not supported yet`);
+    }
+
+    const op = binOp.op;
+    if (right) {
+      const value = this.compileExpression(binOp.left);
+      if (op === "IN") {
+        return SQL.createBinaryExpression("=", value, SQL.createFunctionCall("ANY", [right.column]));
+      }
+      if (op === "NOT IN") {
+        return SQL.createBinaryExpression("<>", value, SQL.createFunctionCall("ALL", [right.column]));
+      }
+      const sqlOp = ExpressionCompilerLayer.COMMUTED_COMPARISONS.has(op) ? (op === "!=" ? "<>" : op) : undefined;
+      return sqlOp ? SQL.createBinaryExpression(sqlOp, value, SQL.createFunctionCall("ANY", [right.column])) : null;
+    }
+
+    const { column, property } = left!;
+    if (op === "IN" || op === "NOT IN") {
+      const values = this.compileMultiPropertyValue(binOp.right, property);
+      return op === "IN" ?
+        SQL.createBinaryExpression("&&", column, values) :
+        { kind: "UnaryExpression", operator: "NOT", operand: SQL.createBinaryExpression("<@", column, values) };
+    }
+
+    const commuted = ExpressionCompilerLayer.COMMUTED_COMPARISONS.get(op);
+    if (commuted) {
+      return SQL.createBinaryExpression(commuted, this.compileExpression(binOp.right), SQL.createFunctionCall("ANY", [column]));
+    }
+
+    if (ExpressionCompilerLayer.ELEMENT_PATTERN_OPERATORS.has(op)) {
+      const element = SQL.createColumnReference("v", "multi_elem");
+      const match = SQL.createSelectStatement({
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("number", 1))]),
+        from: SQL.createFromClause([{
+          kind: "TableReference",
+          name: "",
+          expression: SQL.createFunctionCall("UNNEST", [column]),
+          alias: "multi_elem",
+          columnAliases: ["v"]
+        }]),
+        where: SQL.createWhereClause(SQL.createBinaryExpression(op, element, this.compileExpression(binOp.right)))
+      });
+      return { kind: "UnaryExpression", operator: "EXISTS", operand: SQL.createSubqueryExpression(match) };
+    }
+
+    return null;
   }
 
   private compileFunctionCall(
@@ -446,10 +668,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // no scalar column to wrap. Returns null (fall through) for ordinary
     // scalar arguments.
     if (funcCall.args.length === 1) {
-      const aggregated = this.compileAggregateOverLinkPath(
-        functionName,
-        funcCall.args[0].value
-      );
+      const arg = funcCall.args[0].value;
+      const multi = functionName === "count" ? this.multiPropertyColumn(arg) : null;
+      if (multi) {
+        return SQL.createFunctionCall("CARDINALITY", [multi.column]);
+      }
+      const aggregated = arg.kind === "Subquery" ?
+        this.compileAggregateOverSubquery(functionName, arg) :
+        this.compileAggregateOverLinkPath(functionName, arg);
       if (aggregated) {
         return aggregated;
       }
@@ -1345,6 +1571,58 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     };
   }
 
+  /**
+   * Compile a set-aggregate (or `exists`) over a subquery — `count(X filter …)`
+   * parses to one — by aggregating the subquery's rows:
+   *
+   *   count((select X filter …))    → (SELECT COUNT(*) FROM (…) AS __set)
+   *   sum((select X.size filter …)) → (SELECT COALESCE(SUM(__set.value), 0)
+   *                                      FROM (…) AS __set(value))
+   *   std::exists((select X …))     → EXISTS (…)
+   *
+   * Wrapping the subquery itself (`COUNT((SELECT …))`) makes it a scalar
+   * subquery, which fails as soon as it yields more than one row. The subquery
+   * stays a SQL AST node so parameter casts inside it are still found by
+   * `buildParameterTypeMap`. Returns null for any other function.
+   */
+  private compileAggregateOverSubquery(
+    funcName: string,
+    subquery: EdgeQLAST.Subquery
+  ): SQL.SQLExpression | null {
+    if (funcName === "exists") {
+      return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(subquery) };
+    }
+    const sqlAgg = funcName === "array_agg" ? "ARRAY_AGG" : ExpressionCompilerLayer.SET_AGGREGATES.get(funcName);
+    if (!sqlAgg) {
+      return null;
+    }
+
+    const value = SQL.createColumnReference("value", "__set");
+    let aggregate: SQL.SQLExpression;
+    if (funcName === "count") {
+      aggregate = SQL.createFunctionCall("COUNT", [SQL.star()]);
+    } else if (funcName === "sum") {
+      // EdgeQL's sum of an empty set is 0; SQL SUM() yields NULL.
+      aggregate = SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall("SUM", [value]), SQL.createLiteral("number", 0)]);
+    } else if (funcName === "array_agg") {
+      // EdgeQL's array_agg of an empty set is []; SQL ARRAY_AGG() yields NULL.
+      aggregate = SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall("ARRAY_AGG", [value]), SQL.createLiteral("string", "{}")]);
+    } else {
+      aggregate = SQL.createFunctionCall(sqlAgg, [value]);
+    }
+
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(aggregate)]),
+      from: SQL.createFromClause([{
+        kind: "TableReference",
+        name: "",
+        subquery: this.compileQuery(subquery.query),
+        alias: "__set",
+        columnAliases: funcName === "count" ? undefined : ["value"]
+      }])
+    }));
+  }
+
   private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
     if (expr.kind !== "Path" || expr.steps.length !== 2) {
       return false;
@@ -1644,6 +1922,68 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     return `EXISTS (SELECT 1 FROM ${fromSql} WHERE ${correlation} AND ${inner})`;
+  }
+
+  /*** `.link@prop` — a link step followed by a link-property step. ***/
+  private isLinkPropertyPath(expr: EdgeQLAST.Expression): expr is EdgeQLAST.Path {
+    return expr.kind === "Path" && expr.steps.length === 2 && expr.steps[0].type === "property" &&
+      expr.steps[1].type === "link_property";
+  }
+
+  /**
+   * A comparison with a link-property path `.link@prop` on one side. The
+   * path is a set — one value per link — so, as for a multi link's target
+   * properties, the comparison holds when any link matches:
+   *
+   *   .members@role <op> x      → EXISTS (SELECT 1 FROM <junction> j
+   *                                 WHERE j.source_id = <src>.id AND j.role <op> x)
+   *   x in .members@role        → EXISTS (… AND j.role = x)   (`not in` → NOT EXISTS)
+   *   x = / != .members@role    → EXISTS (… AND j.role = / != x)
+   *
+   * Returns null when neither side is a link-property path, or when the link
+   * isn't on any type in scope (the generic path compiler then reports it).
+   */
+  private compileLinkPropertyComparison(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression | null {
+    const reversed = !this.isLinkPropertyPath(binOp.left) && this.isLinkPropertyPath(binOp.right);
+    const path = reversed ? binOp.right : binOp.left;
+    if (!this.isLinkPropertyPath(path) || !this.isComparisonOp(binOp.op)) {
+      return null;
+    }
+    const [linkStep, propStep] = path.steps;
+
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const link = Context.resolveTypeName(this.ctx, ta.type)?.links.get(linkStep.name);
+      if (!link) {
+        continue;
+      }
+      if (!link.junctionTable) {
+        throw new CompilationError(
+          `Link property path '.${linkStep.name}@${propStep.name}': link properties are only stored on multi links`
+        );
+      }
+      const column = Context.getLinkProperty(link, propStep.name).columnName;
+      const jAlias = `__lp_${linkStep.name}`;
+      const columnSql = `"${jAlias}"."${column}"`;
+
+      let predicate: string;
+      let negate = false;
+      if (!reversed) {
+        predicate = this.renderInnerPredicate(columnSql, binOp.op, binOp.right);
+      } else if (binOp.op === "IN" || binOp.op === "NOT IN" || binOp.op === "=" || binOp.op === "!=") {
+        negate = binOp.op === "NOT IN";
+        predicate = this.renderInnerPredicate(columnSql, binOp.op === "!=" ? "!=" : "=", binOp.left);
+      } else {
+        throw new CompilationError(
+          `Link property path '.${linkStep.name}@${propStep.name}' on the right of '${binOp.op}' is not supported — put it on the left`
+        );
+      }
+
+      const sourceCol = link.junctionSourceColumn ?? "source_id";
+      const sql = `${negate ? "NOT " : ""}EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+        `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" AND ${predicate})`;
+      return { kind: "RawSQLExpression", sql };
+    }
+    return null;
   }
 
   /**

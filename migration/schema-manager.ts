@@ -43,6 +43,7 @@ import {
   Expression,
   GlobalDeclaration,
   LinkDeclaration,
+  PropertyDeclaration,
   ScalarTypeDeclaration,
   SDLDocument,
   TriggerDeclaration,
@@ -357,6 +358,35 @@ function extractPropertyConstraints(
     }
     return constraint;
   });
+}
+
+/**
+ * The runtime PropertyDefs of a link's link properties — columns of the
+ * link's junction table — or undefined when the link declares none.
+ */
+function linkPropertyDefs(
+  declarations: PropertyDeclaration[] | undefined
+): Map<string, PropertyDef> | undefined {
+  if (!declarations || declarations.length === 0) {
+    return undefined;
+  }
+  return new Map(declarations.map(decl => {
+    const name = decl.name.value;
+    const edgeqlType = typeRefToSdlString(decl.type);
+    const property: PropertyDef = {
+      name,
+      type: sdlTypeToSqlType(edgeqlType),
+      required: decl.required ?? false,
+      multi: false,
+      columnName: propNameToColumnName(name),
+      edgeqlType,
+      readonly: decl.readonly ?? false,
+      hasDefault: decl.default !== undefined,
+      constraints: extractPropertyConstraints(decl.constraints),
+      annotations: extractAnnotationMap(decl.annotations)
+    };
+    return [name, property];
+  }));
 }
 
 function extractAnnotationMap(
@@ -730,6 +760,7 @@ export class SchemaManager {
           if (isObjectTarget && !propDecl.computed) {
             const linkAnnotations = extractAnnotationMap(propDecl.annotations);
             const isMultiLink = propDecl.multi ?? false;
+            const linkProperties = linkPropertyDefs(propDecl.properties);
             links.set(propName, {
               name: propName,
               target: sdlTypeName,
@@ -742,12 +773,16 @@ export class SchemaManager {
                 undefined :
                 linkColumnName(propName),
               computed: propDecl.computed !== undefined,
-              annotations: linkAnnotations
+              annotations: linkAnnotations,
+              ...(linkProperties ? { properties: linkProperties } : {})
             });
             continue;
           }
 
-          const sqlType = sdlTypeToSqlType(sdlTypeName);
+          // A stored multi property is an array column of its element type
+          // (`multi scopes: str` → `text[]`); `edgeqlType` keeps the element.
+          const elementSqlType = sdlTypeToSqlType(sdlTypeName);
+          const sqlType = propDecl.multi && !propDecl.computed ? `${elementSqlType}[]` : elementSqlType;
 
           const constraints = extractPropertyConstraints(
             propDecl.constraints
@@ -850,7 +885,8 @@ export class SchemaManager {
             // lost and codegen would emit unbindable `<tuple>`/`<array>` casts.
             // Mirrors the PropertyDeclaration branch, which uses the same helper.
             const fullTypeName = typeRefToSdlString(linkDecl.target);
-            const sqlType = sdlTypeToSqlType(fullTypeName);
+            const elementSqlType = sdlTypeToSqlType(fullTypeName);
+            const sqlType = isMulti && !linkDecl.computed ? `${elementSqlType}[]` : elementSqlType;
             const linkConstraints = extractPropertyConstraints(
               linkDecl.constraints
             );
@@ -870,7 +906,9 @@ export class SchemaManager {
             continue;
           }
 
+          const linkProperties = linkPropertyDefs(linkDecl.properties);
           links.set(linkName, {
+            ...(linkProperties ? { properties: linkProperties } : {}),
             name: linkName,
             target: targetName,
             required: linkDecl.required ?? false,
@@ -1074,6 +1112,10 @@ export class SchemaManager {
           linkDef.junctionTargetColumn = forwardLink.junctionSourceColumn ??
             "source_id";
           linkDef.backlink = undefined;
+          // The junction row carries the link properties in both directions.
+          if (forwardLink.properties) {
+            linkDef.properties = forwardLink.properties;
+          }
         }
         // else: forward link is a single FK; keep `backlink` so the link-shape
         // compiler resolves `target.<backlink>.columnName`.

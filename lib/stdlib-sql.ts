@@ -61,6 +61,33 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql VOLATILE;`,
 
+  // Per-element checks for `multi` str properties, stored as `text[]`
+  // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
+  // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty
+  // array, which a CHECK treats as passing. Elements come from a
+  // `(SELECT unnest(…))` derived table, never `FROM <name>`, per the Gel #8811
+  // no-table-reads pin (tests/gel-divergence-pins.test.ts).
+  `CREATE OR REPLACE FUNCTION disc_array_max_len(vals text[]) RETURNS integer AS $$
+     SELECT max(char_length(e.v)) FROM (SELECT unnest(vals) AS v) AS e;
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_array_min_len(vals text[]) RETURNS integer AS $$
+     SELECT min(char_length(e.v)) FROM (SELECT unnest(vals) AS v) AS e;
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_array_all_match(vals text[], pattern text) RETURNS boolean AS $$
+     SELECT bool_and(e.v ~ pattern) FROM (SELECT unnest(vals) AS v) AS e;
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  // `update … set { multi_prop -= values }`: the elements of `vals` not in
+  // `removed`, in their original order (every occurrence is removed).
+  `CREATE OR REPLACE FUNCTION disc_array_except(vals anyarray, removed anyarray) RETURNS anyarray AS $$
+     SELECT ARRAY(
+       SELECT e.v FROM (SELECT unnest(vals) AS v, generate_subscripts(vals, 1) AS ord) AS e
+       WHERE e.v <> ALL(removed) ORDER BY e.ord
+     );
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
   `CREATE OR REPLACE FUNCTION std_md5(msg bytea) RETURNS bytea AS $$
      SELECT decode(md5(msg), 'hex');
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,

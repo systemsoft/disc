@@ -62,6 +62,9 @@ interface CachedCompilation {
   /*** Variable names in bind order (`parameterNames[i]` binds to `$${i + 1}`). Kept with the SQL
        because a cache hit has no query AST to derive it from, and variables bind by name. ***/
   parameterNames: string[];
+  /*** Variables cast `<optional T>`: they may be left out of a request. From the query AST, like
+       `parameterNames`. ***/
+  optionalParameters: string[];
   /*** What the response is made of (row set or bare-mutation shape, and the mutated type a
        `RETURNING *` row maps through). From the query AST, so it is kept for cache hits too. ***/
   resultInfo: Compiler.ResultInfo;
@@ -206,6 +209,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       let sqlString: string;
       let sqlStatement: SQL.SQLStatement;
       let parameterNames: string[];
+      let optionalParameters: string[];
       let resultInfo: Compiler.ResultInfo;
       let parsedAST: EdgeQL.Query | undefined;
       let parseMs = 0;
@@ -250,6 +254,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       if (cached) {
         cacheHit = true;
         parameterNames = cached.parameterNames;
+        optionalParameters = cached.optionalParameters;
         resultInfo = cached.resultInfo;
         sqlString = cached.sqlString;
         sqlStatement = cached.sqlAST;
@@ -344,10 +349,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         sqlStatement = compileResult.value;
         sqlString = this.generateSQLString(sqlStatement);
         parameterNames = Compiler.parameterBindOrder(ast, parameterIndex);
+        optionalParameters = Compiler.optionalParameterNames(ast);
         resultInfo = Compiler.describeResult(ast);
 
         // Store in compilation cache
         this.compilationCache.set(compilationKey, {
+          optionalParameters,
           parameterNames,
           resultInfo,
           sqlAST: sqlStatement,
@@ -394,6 +401,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         request.variables || {},
         context,
         parameterNames,
+        optionalParameters,
         resultInfo,
         sqlStatement
       );
@@ -688,6 +696,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext,
     parameterNames: string[],
+    optionalParameters: string[],
     resultInfo: Compiler.ResultInfo,
     sqlStatement?: SQL.SQLStatement
   ): Promise<{ data: any; warnings?: string[]; }> {
@@ -723,7 +732,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (transactionConnection || pool) {
       // Outside the try: a variables mismatch is a ValidationError for the
       // caller, not a database failure.
-      const params = this.prepareParameters(variables, parameterNames, sqlStatement);
+      const params = this.prepareParameters(variables, parameterNames, optionalParameters, sqlStatement);
 
       try {
         const timeoutMs = this.options.requestTimeout ?? 0;
@@ -839,17 +848,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    *
    * Throws a ValidationError naming the variable when one is missing, or when
    * the request carries one the query does not use (a typo would otherwise
-   * surface as a PostgreSQL bind-count error, or not at all).
+   * surface as a PostgreSQL bind-count error, or not at all). A variable cast
+   * `<optional T>` may be left out; it binds as NULL.
    */
   private prepareParameters(
     variables: Record<string, any>,
     parameterNames: string[],
+    optionalParameters: string[],
     sqlStatement?: SQL.SQLStatement
   ): any[] {
     const expected = new Set(parameterNames);
+    const optional = new Set(optionalParameters);
 
     for (const name of expected) {
-      if (name !== undefined && !Object.hasOwn(variables, name)) {
+      if (name !== undefined && !optional.has(name) && !Object.hasOwn(variables, name)) {
         throw new ValidationError(`Missing variable: the query uses $${name}, but no value was provided for it`);
       }
     }
@@ -871,7 +883,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Array.from, not map: a gap in numeric parameters (`$1` without `$0`)
     // leaves a hole in parameterNames that must still occupy its slot.
     return Array.from(parameterNames, (name, i) => {
-      const value = name === undefined ? undefined : variables[name];
+      const value = name === undefined ? undefined : optional.has(name) ? variables[name] ?? null : variables[name];
       // `parameterNames[i]` is the parameter at 1-indexed position i + 1.
       const pgType = typeMap.get(i + 1);
       if (pgType === "jsonb" && value !== undefined) {

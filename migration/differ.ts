@@ -636,29 +636,33 @@ export class SchemaDiffer {
 
     for (const member of typeDef.members) {
       if (member.kind === "PropertyDeclaration") {
-        const rewrites = this.extractRewrites(member);
-        const propDef: Types.PropertyDefinition = {
-          name: member.name.value,
-          type: this.typeToString(member.type),
-          required: member.required || false,
-          multi: member.multi || false,
-          default: member.default ?
-            this.extractDefaultValue(member.default) :
-            undefined,
-          computed: member.computed ?
-            this.extractExpressionString(member.computed) :
-            undefined,
-          constraints: this.extractConstraints(member.constraints || []),
-          annotations: this.extractAnnotations(member.annotations || [])
-        };
-        if (rewrites.length > 0) {
-          propDef.rewrites = rewrites;
-        }
-        properties.push(propDef);
+        properties.push(this.propertyDefinition(member));
       }
     }
 
     return properties;
+  }
+
+  private propertyDefinition(member: AST.PropertyDeclaration): Types.PropertyDefinition {
+    const rewrites = this.extractRewrites(member);
+    const propDef: Types.PropertyDefinition = {
+      name: member.name.value,
+      type: this.typeToString(member.type),
+      required: member.required || false,
+      multi: member.multi || false,
+      default: member.default ?
+        this.extractDefaultValue(member.default) :
+        undefined,
+      computed: member.computed ?
+        this.extractExpressionString(member.computed) :
+        undefined,
+      constraints: this.extractConstraints(member.constraints || []),
+      annotations: this.extractAnnotations(member.annotations || [])
+    };
+    if (rewrites.length > 0) {
+      propDef.rewrites = rewrites;
+    }
+    return propDef;
   }
 
   private extractLinks(typeDef: AST.TypeDeclaration): Types.LinkDefinition[] {
@@ -680,6 +684,10 @@ export class SchemaDiffer {
         // Extract extending references
         if (member.extending && member.extending.length > 0) {
           linkDef.extending = member.extending.map(ext => ext.name.parts.join("::"));
+        }
+
+        if (member.properties && member.properties.length > 0) {
+          linkDef.properties = member.properties.map(p => this.propertyDefinition(p));
         }
 
         links.push(linkDef);
@@ -834,11 +842,16 @@ export class SchemaDiffer {
       if (oldProp) {
         const changes = this.diffProperty(oldProp, newProp);
         if (changes.length > 0) {
-          operations.push({
+          const alter: Types.AlterPropertyOperation = {
             kind: "AlterProperty",
             propertyName: propName,
             changes
-          } as Types.AlterPropertyOperation);
+          };
+          if (oldProp.multi || newProp.multi) {
+            alter.oldProperty = oldProp;
+            alter.newProperty = newProp;
+          }
+          operations.push(alter);
         }
       }
     }
@@ -984,12 +997,21 @@ export class SchemaDiffer {
       const oldLink = oldLinksMap.get(linkName);
       if (oldLink) {
         const changes = this.diffLink(oldLink, newLink);
-        if (changes.length > 0) {
-          operations.push({
+        // Link properties are junction-table columns, so they diff like a
+        // type's properties — only while the link stays junction-backed.
+        const propertyOperations = oldLink.multi && newLink.multi ?
+          this.diffProperties(oldLink.properties ?? [], newLink.properties ?? []) :
+          [];
+        if (changes.length > 0 || propertyOperations.length > 0) {
+          const alter: Types.AlterLinkOperation = {
             kind: "AlterLink",
             linkName: linkName,
             changes
-          } as Types.AlterLinkOperation);
+          };
+          if (propertyOperations.length > 0) {
+            alter.propertyOperations = propertyOperations;
+          }
+          operations.push(alter);
         }
       }
     }
@@ -1085,6 +1107,31 @@ export class SchemaDiffer {
     const types = this.extractTypes(schema);
 
     return [...types.values()].flatMap(typeDef => this.extractIndexes(typeDef, types, true));
+  }
+
+  /**
+   * Every stored link property of a schema's multi links, with the junction
+   * table whose column holds it — what the database should contain. Used by
+   * the link-property backfill (`reconcileDeclaredLinkProperties`): schema
+   * snapshots written before Disc stored link properties already declare
+   * them, so diffing two snapshots alone would never add their columns.
+   */
+  declaredLinkProperties(schema: Module[]): Types.DeclaredLinkProperty[] {
+    const types = this.extractTypes(schema);
+
+    return [...types.values()].flatMap(typeDef =>
+      this
+        .extractLinksWithInheritance(typeDef, types)
+        .filter(link => link.multi)
+        .flatMap(link =>
+          (link.properties ?? []).map(property => ({
+            typeName: typeDef.name.value,
+            linkName: link.name,
+            junctionTable: `${typeNameToTableName(typeDef.name.value)}_${link.name}`,
+            property
+          }))
+        )
+    );
   }
 
   /**

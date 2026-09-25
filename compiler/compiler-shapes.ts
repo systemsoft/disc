@@ -585,7 +585,9 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         if (cols.has(colName)) {
           continue;
         }
-        const pgType = edgeqlTypeToPgType(property.edgeqlType ?? property.type);
+        const pgType = property.multi && !property.computed ?
+          this.multiPropertyArrayType(property) :
+          edgeqlTypeToPgType(property.edgeqlType ?? property.type);
         cols.set(colName, pgType);
         continue;
       }
@@ -917,6 +919,12 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       return this.compilePolymorphicShapeElement(element, typeName, tableAlias);
     }
 
+    // `@role` / `@r := expr` in a link's sub-shape: the expression reads the
+    // junction row (see compileLinkPropertyPath); Gel keys it `@<name>`.
+    if (element.linkProperty && element.name) {
+      return SQL.createJsonField(`@${element.name.name}`, this.compileExpression(element.expr));
+    }
+
     let key: string;
     let value: SQL.SQLExpression;
 
@@ -1208,6 +1216,11 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         type: targetTypeDef.name
       }
     );
+    // A junction-backed link joins one junction row per target (below);
+    // `@prop` in the sub-shape, its filter and its ordering reads that row.
+    if (link.junctionTable) {
+      this.ctx.currentScope.linkSource = { alias: link.junctionTable, link };
+    }
     // Compile the optional sub-shape predicate and ordering inside the pushed
     // scope so their path expressions (e.g. `.created`) resolve to the target
     // table's columns, not the outer query's.
@@ -1402,6 +1415,10 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
+    if (path.steps.some(step => step.type === "link_property")) {
+      return this.compileLinkPropertyPath(path);
+    }
+
     // Handle relative paths starting with '.'
     if (path.steps.length === 1) {
       const step = path.steps[0];
@@ -1530,6 +1547,29 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     }
 
     throw new CompilationError(`Complex path expressions not yet implemented`);
+  }
+
+  /**
+   * A path containing a link property. A bare `@prop` reads the junction row
+   * of the link whose sub-shape is being compiled. `.link@prop` is a set (one
+   * value per link), so it is only compiled as a comparison operand, where
+   * compileBinaryOp rewrites it to EXISTS over the junction.
+   */
+  private compileLinkPropertyPath(path: EdgeQLAST.Path): SQL.SQLExpression {
+    const [step] = path.steps;
+    if (path.steps.length === 1) {
+      const source = this.ctx.currentScope.linkSource;
+      if (!source) {
+        throw new CompilationError(
+          `Link property '@${step.name}' can only be used inside the shape of a multi link that declares it (e.g. 'members: { @${step.name} }')`
+        );
+      }
+      return SQL.createColumnReference(Context.getLinkProperty(source.link, step.name).columnName, source.alias);
+    }
+    const rendered = path.steps.map(s => s.type === "link_property" ? `@${s.name}` : `.${s.name}`).join("");
+    throw new CompilationError(
+      `Link property path '${rendered}' is only supported as a comparison operand in a filter (e.g. '${rendered} = <value>')`
+    );
   }
 
   /**

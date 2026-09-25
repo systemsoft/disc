@@ -315,6 +315,21 @@ export class EdgeQLParser {
       shape = this.parseShape();
     }
 
+    const clauses = this.parseSelectClauses();
+
+    this.skipShapeInPostfix = enclosingSkipShape;
+
+    return {
+      kind: "SelectQuery",
+      distinct,
+      expr,
+      shape,
+      ...clauses
+    };
+  }
+
+  /*** The `filter`, `order by`, `offset` and `limit` clauses that follow a select's subject. ***/
+  private parseSelectClauses(): Pick<AST.SelectQuery, "filter" | "orderBy" | "offset" | "limit"> {
     let filter: AST.Expression | undefined;
     if (this.match(TokenType.FILTER)) {
       filter = this.parseExpression();
@@ -350,18 +365,7 @@ export class EdgeQLParser {
       break;
     }
 
-    this.skipShapeInPostfix = enclosingSkipShape;
-
-    return {
-      kind: "SelectQuery",
-      distinct,
-      expr,
-      shape,
-      filter,
-      orderBy,
-      offset,
-      limit
-    };
+    return { filter, orderBy, offset, limit };
   }
 
   private parseInsertQuery(): AST.InsertQuery {
@@ -776,6 +780,24 @@ export class EdgeQLParser {
         // Not a polymorphic shape, rewind
         this.current = bracketCheckpoint;
       }
+    }
+
+    // Link property: `@role` or `@alias := expr`
+    if (this.match(TokenType.AT)) {
+      const ident = this.parseIdentifier();
+      if (this.match(TokenType.ASSIGN)) {
+        return AST.createShapeElement(this.parseExpression(), {
+          name: ident,
+          computable: true,
+          cardinality,
+          operator: ":=",
+          linkProperty: true
+        });
+      }
+      return AST.createShapeElement(
+        AST.createPath([{ kind: "PathStep", type: "link_property", name: ident.name }]),
+        { name: ident, cardinality, linkProperty: true }
+      );
     }
 
     // Check if it's a computed property (name := expr)
@@ -1300,12 +1322,13 @@ export class EdgeQLParser {
         }
       } // Link property access with @
       else if (this.match(TokenType.AT)) {
+        // `.members@role` (after a link step) or a bare `@role` (the primary
+        // expression parser starts it as an empty path).
         const propName = this.parseIdentifier().name;
-
-        if (expr.kind === "Path" && expr.steps.length > 0) {
-          const lastStep = expr.steps[expr.steps.length - 1];
-          lastStep.linkProps = propName;
+        if (expr.kind !== "Path") {
+          throw this.error(`Link property '@${propName}' must follow a link path (e.g. '.members@${propName}') or stand alone inside a link's shape`);
         }
+        expr.steps.push({ kind: "PathStep", type: "link_property", name: propName });
       } // Function call
       else if (this.match(TokenType.LPAREN)) {
         const args = this.parseFunctionArguments();
@@ -1475,27 +1498,18 @@ export class EdgeQLParser {
     // `(<str>x) ++ 'a'`. Gel's P_TYPECAST sits below P_BRACKET, P_PAREN and
     // P_DOT and above every operator.
     if (this.match(TokenType.LESS)) {
+      // Cardinality modifier: `<optional str>$x` may be bound to null / left
+      // out; `<required str>$x` may not.
+      let cardinality: AST.Cardinality | undefined;
+      if (this.check(TokenType.OPTIONAL) || this.check(TokenType.REQUIRED)) {
+        cardinality = { kind: "Cardinality", required: this.advance().type === TokenType.REQUIRED };
+      }
+
       const type = this.parseTypeName();
       this.consume(TokenType.GREATER, "Expected '>' after type");
 
-      // Check for cardinality cast
-      let cardinality: AST.Cardinality | undefined;
-      if (
-        type.name.parts[0] === "REQUIRED" || type.name.parts[0] === "OPTIONAL"
-      ) {
-        cardinality = {
-          kind: "Cardinality",
-          required: type.name.parts[0] === "REQUIRED"
-        };
-        // Parse the actual type
-        const actualType = this.parseTypeName();
-        this.consume(TokenType.GREATER, "Expected '>' after type");
-        const expr = this.parsePostfixExpression();
-        return { kind: "TypeCast", type: actualType, expr, cardinality };
-      }
-
       const expr = this.parsePostfixExpression();
-      return { kind: "TypeCast", type, expr };
+      return cardinality ? { kind: "TypeCast", type, expr, cardinality } : { kind: "TypeCast", type, expr };
     }
 
     // Parenthesized expression or tuple
@@ -1654,6 +1668,11 @@ export class EdgeQLParser {
       return AST.createPath([]);
     }
 
+    // Link property path `@prop` (completed in parsePostfixExpression)
+    if (this.check(TokenType.AT)) {
+      return AST.createPath([]);
+    }
+
     // Backward link path starting with .<
     if (this.check(TokenType.BACKLINK)) {
       // Will be handled in parsePostfixExpression
@@ -1714,7 +1733,27 @@ export class EdgeQLParser {
         }
       }
 
-      const value = this.parseExpression();
+      let value = this.parseExpression();
+
+      // `count(User filter .active)`: an argument may carry a select's
+      // clauses, and is then the set that select yields.
+      if (
+        this.check(TokenType.FILTER) || this.check(TokenType.ORDER) ||
+        this.check(TokenType.OFFSET) || this.check(TokenType.LIMIT)
+      ) {
+        const shaped = value.kind === "ShapeExpr" ? value : undefined;
+        value = {
+          kind: "Subquery",
+          query: {
+            kind: "SelectQuery",
+            distinct: false,
+            expr: shaped ? shaped.expr : value,
+            shape: shaped?.shape,
+            ...this.parseSelectClauses()
+          }
+        };
+      }
+
       args.push({ kind: "FunctionArg", name, value });
     } while (this.match(TokenType.COMMA));
 

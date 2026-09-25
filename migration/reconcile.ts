@@ -24,7 +24,18 @@
  */
 
 import { MigrationError } from "../lib/errors.ts";
-import type { CreateIndexOperation, IndexDefinition, MigrationOperation } from "./types.ts";
+import { propNameToColumnName } from "../lib/identifiers.ts";
+import type {
+  AddLinkOperation,
+  AddPropertyOperation,
+  AlterLinkOperation,
+  AlterTypeOperation,
+  CreateIndexOperation,
+  CreateTypeOperation,
+  DeclaredLinkProperty,
+  IndexDefinition,
+  MigrationOperation
+} from "./types.ts";
 
 /** A column the database currently reports for an existing table. */
 export interface ExistingColumn {
@@ -346,4 +357,68 @@ export async function reconcileDeclaredIndexes(
   return candidates
     .filter(index => !existing.has(index.name))
     .map(index => ({ ifNotExists: true, index, kind: "CreateIndex" }));
+}
+
+/**
+ * Add the junction columns of declared link properties that the database
+ * lacks. Before Disc stored link properties, a multi link's junction table
+ * got only `source_id` / `target_id`, while the stored schema snapshot already
+ * declared the link's properties — so the differ, comparing two snapshots that
+ * both declare them, diffs to nothing.
+ *
+ * Returns one `AlterType` → `AlterLink` → `AddProperty` operation per link
+ * with missing columns, skipping links the pending migration (`planned`)
+ * creates or whose link properties it already changes, and junction tables
+ * that don't exist. Idempotent: once the columns exist it returns nothing.
+ */
+export async function reconcileDeclaredLinkProperties(
+  declared: DeclaredLinkProperty[],
+  planned: MigrationOperation[],
+  readExisting: ExistingColumnReader
+): Promise<AlterTypeOperation[]> {
+  const handled = new Set<string>();
+  for (const op of planned) {
+    if (op.kind === "CreateType") {
+      for (const link of (op as CreateTypeOperation).links) {
+        handled.add(`${(op as CreateTypeOperation).typeName}.${link.name}`);
+      }
+    } else if (op.kind === "AlterType") {
+      const alter = op as AlterTypeOperation;
+      for (const sub of alter.operations) {
+        if (sub.kind === "AddLink") {
+          handled.add(`${alter.typeName}.${(sub as AddLinkOperation).link.name}`);
+        } else if (sub.kind === "AlterLink" && (sub as AlterLinkOperation).propertyOperations) {
+          handled.add(`${alter.typeName}.${(sub as AlterLinkOperation).linkName}`);
+        }
+      }
+    }
+  }
+
+  const missing = new Map<string, DeclaredLinkProperty[]>();
+  const columnsByTable = new Map<string, Set<string> | null>();
+  for (const entry of declared) {
+    const key = `${entry.typeName}.${entry.linkName}`;
+    if (handled.has(key)) {
+      continue;
+    }
+    if (!columnsByTable.has(entry.junctionTable)) {
+      const columns = await readExisting(entry.junctionTable);
+      columnsByTable.set(entry.junctionTable, columns ? new Set(columns.map(c => c.name)) : null);
+    }
+    const columns = columnsByTable.get(entry.junctionTable);
+    if (columns && !columns.has(propNameToColumnName(entry.property.name))) {
+      missing.set(key, [...(missing.get(key) ?? []), entry]);
+    }
+  }
+
+  return [...missing.values()].map(entries => ({
+    kind: "AlterType",
+    typeName: entries[0].typeName,
+    operations: [{
+      kind: "AlterLink",
+      linkName: entries[0].linkName,
+      changes: [],
+      propertyOperations: entries.map((entry): AddPropertyOperation => ({ kind: "AddProperty", property: entry.property }))
+    } as AlterLinkOperation]
+  }));
 }

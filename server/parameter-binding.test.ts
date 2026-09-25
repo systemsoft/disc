@@ -150,6 +150,21 @@ Deno.test("parameter binding - an extra variable is rejected by name, on a cache
   assertEquals(calls.length, 0, "nothing may reach the database");
 });
 
+Deno.test("parameter binding - an <optional T> parameter may be absent and binds as null, on a cache miss and on a cache hit", async () => {
+  const { calls, handler } = makeHandler();
+  const query = "select User { name } filter .name = <str>$a and .email ?= <optional str>$b";
+
+  for (const round of ["cache miss", "cache hit"]) {
+    const response = await handler.handleRequest({ query, variables: { a: "A" } }, makeContext());
+    assertEquals(response.errors, undefined, round);
+    assertEquals(response.extensions?.cacheHit, round === "cache hit", round);
+    const call = calls.at(-1)!;
+    assertEquals(call.params.length, 2, round);
+    assert(call.params.includes("A"), round);
+    assert(call.params.includes(null), `${round}: the absent optional binds as null`);
+  }
+});
+
 Deno.test("parameter binding - a query without parameters accepts no variables and an empty object", async () => {
   const { calls, handler } = makeHandler();
 

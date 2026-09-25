@@ -192,6 +192,14 @@ export interface ShapeElement extends EdgeQLNode {
   /** Type filter for polymorphic shape fields: [IS Type].property */
   typeFilter?: string;
   /**
+   * The element is a link property: `@role` or `@alias := expr` in a link's
+   * sub-shape (read from the link's junction row, keyed `"@<name>"`), or
+   * `@role := value` in the shape following a link target in an insert /
+   * update assignment (written to the junction row). `name` holds the bare
+   * property name, without the `@`.
+   */
+  linkProperty?: boolean;
+  /**
    * Splat marker for `{ * }` — expand to all scalar properties of the
    * containing type at compile time. The `expr` field is a placeholder
    * (an Identifier with name "*"); consumers should branch on `splat`
@@ -262,11 +270,15 @@ export interface Path extends EdgeQLNode {
 
 export interface PathStep extends EdgeQLNode {
   kind: "PathStep";
-  type: "property" | "link" | "backlink" | "type_intersection";
+  /**
+   * `link_property` is `@name`: a link property of the link traversed by the
+   * preceding step (`.members@role`), or — as a path's only step — of the
+   * link whose sub-shape is being compiled (`members: { @role }`).
+   */
+  type: "property" | "link" | "backlink" | "type_intersection" | "link_property";
   name: string;
   optional?: boolean;
   filter?: Expression;
-  linkProps?: string; // @prop_name
 }
 
 // Type cast
@@ -572,6 +584,7 @@ export function createShapeElement(
     shape?: Shape;
     filter?: Expression;
     orderBy?: OrderByClause[];
+    linkProperty?: boolean;
   }
 ): ShapeElement {
   return {

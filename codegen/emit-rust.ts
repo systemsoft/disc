@@ -441,16 +441,27 @@ class RustEmitter {
     out += "        Self { client }\n";
     out += "    }\n\n";
 
+    // Multi scalar properties: the whole set is bound as one array parameter
+    // and assigned with `array_unpack(<array<T>>$p)`.
+    const multiProperties = obj
+      .fields
+      .filter(field => !field.isLink && !field.isComputed && isMulti(field.cardinality))
+      .map(field => field.name);
+
     out += this.emitTypeCastFn(obj);
     out += "\n";
     out += this.emitMultiLinkFn(obj);
     out += "\n";
+    if (multiProperties.length > 0) {
+      out += this.emitMultiPropertyFn(multiProperties);
+      out += "\n";
+    }
 
     out += this.emitSelectFns(name, etype);
     // --no-mutations drops the write methods; reads (select/filter/count) stay.
     if (this.config.includeMutations) {
-      out += this.emitInsertFn(name, etype);
-      out += this.emitUpdateFn(name, etype);
+      out += this.emitInsertFn(name, etype, multiProperties.length > 0);
+      out += this.emitUpdateFn(name, etype, multiProperties.length > 0);
       out += this.emitDeleteFn(name, etype);
     }
     out += this.emitCountFn(etype);
@@ -469,7 +480,8 @@ class RustEmitter {
           arms.push(`            ${JSON.stringify(field.name)} => "<uuid>",`);
         continue;
       }
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const cast = isMulti(field.cardinality) ? `<array${elementCast}>` : elementCast;
       arms.push(`            ${JSON.stringify(field.name)} => ${JSON.stringify(cast)},`);
     }
     let out = "";
@@ -498,6 +510,14 @@ class RustEmitter {
     out += arms.length > 0 ? arms.join("\n") + "\n" : "";
     out += "            _ => None,\n";
     out += "        }\n";
+    out += "    }\n";
+    return out;
+  }
+
+  private emitMultiPropertyFn(names: string[]): string {
+    let out = "";
+    out += "    fn is_multi_property(field: &str) -> bool {\n";
+    out += `        matches!(field, ${names.map(n => JSON.stringify(n)).join(" | ")})\n`;
     out += "    }\n";
     return out;
   }
@@ -534,7 +554,7 @@ class RustEmitter {
     return out;
   }
 
-  private emitInsertFn(name: string, etype: string): string {
+  private emitInsertFn(name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
     out += `    pub fn insert(&self, data: ${name}Insert) -> Result<${name}, DiscError> {\n`;
     out += "        let value = serde_json::to_value(&data)?;\n";
@@ -546,6 +566,10 @@ class RustEmitter {
     out += "            variables.insert(key.clone(), val.clone());\n";
     out += "            if let Some(target) = Self::multi_link_target(key) {\n";
     out += "                assignments.push(format!(\"{} := (select {} filter .id in array_unpack(<array<uuid>>${}))\", key, target, key));\n";
+    if (hasMultiProperties) {
+      out += "            } else if Self::is_multi_property(key) {\n";
+      out += "                assignments.push(format!(\"{} := array_unpack({}${})\", key, Self::type_cast(key), key));\n";
+    }
     out += "            } else {\n";
     out += "                assignments.push(format!(\"{} := {}${}\", key, Self::type_cast(key), key));\n";
     out += "            }\n";
@@ -556,7 +580,7 @@ class RustEmitter {
     return out;
   }
 
-  private emitUpdateFn(name: string, etype: string): string {
+  private emitUpdateFn(name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
     out += `    pub fn update(&self, id: &str, data: ${name}Update) -> Result<${name}, DiscError> {\n`;
     out += "        let value = serde_json::to_value(&data)?;\n";
@@ -569,6 +593,10 @@ class RustEmitter {
     out += "            variables.insert(key.clone(), val.clone());\n";
     out += "            if let Some(target) = Self::multi_link_target(key) {\n";
     out += "                assignments.push(format!(\"{} := (select {} filter .id in array_unpack(<array<uuid>>${}))\", key, target, key));\n";
+    if (hasMultiProperties) {
+      out += "            } else if Self::is_multi_property(key) {\n";
+      out += "                assignments.push(format!(\"{} := array_unpack({}${})\", key, Self::type_cast(key), key));\n";
+    }
     out += "            } else {\n";
     out += "                assignments.push(format!(\"{} := {}${}\", key, Self::type_cast(key), key));\n";
     out += "            }\n";

@@ -10,7 +10,7 @@
  *
  * Kept narrow on purpose: only the metadata categories the
  * transformer consumes (tables, columns, primary keys, unique
- * constraints, foreign keys). Indexes / check constraints / triggers
+ * constraints and plain unique indexes, foreign keys). Indexes / check constraints / triggers
  * land in a follow-up if needed.
  */
 
@@ -162,6 +162,50 @@ export async function introspectDatabase(
       byConstraint.set(cn, []);
     }
     byConstraint.get(cn)!.push(row.column_name as string);
+  }
+
+  // ── unique indexes ───────────────────────────────────────────────────
+  // A plain `CREATE UNIQUE INDEX` enforces the same thing as a UNIQUE
+  // constraint but is not listed in `table_constraints` — and it is how
+  // Disc backs a property-level exclusive (`uk_<table>_<column>`). Indexes
+  // that back a constraint were read above; partial and expression indexes
+  // do not map to a plain `constraint exclusive`, so they are skipped.
+  const uniqueIndexRows = await db.query(
+    `
+    SELECT
+      t.relname AS table_name,
+      i.relname AS index_name,
+      a.attname AS column_name
+    FROM pg_index ix
+    JOIN pg_class i ON i.oid = ix.indexrelid
+    JOIN pg_class t ON t.oid = ix.indrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
+    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+    WHERE ix.indisunique
+      AND NOT ix.indisprimary
+      AND ix.indpred IS NULL
+      AND ix.indexprs IS NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = ix.indexrelid)
+      AND n.nspname = ANY($1::text[])
+    ORDER BY t.relname, i.relname, k.ord
+    `,
+    [schemas]
+  );
+  for (const row of uniqueIndexRows.rows) {
+    const tn = row.table_name as string;
+    if (!tableFilter(tn)) {
+      continue;
+    }
+    if (!uniqueByTable.has(tn)) {
+      uniqueByTable.set(tn, new Map());
+    }
+    const byIndex = uniqueByTable.get(tn)!;
+    const index = row.index_name as string;
+    if (!byIndex.has(index)) {
+      byIndex.set(index, []);
+    }
+    byIndex.get(index)!.push(row.column_name as string);
   }
 
   // ── foreign keys ─────────────────────────────────────────────────────

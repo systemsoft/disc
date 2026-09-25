@@ -19,8 +19,23 @@ import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
-export { buildParameterIndex, buildParameterTypeMap, describeResult, parameterBindOrder } from "./compiler-base.ts";
+export { buildParameterIndex, buildParameterTypeMap, describeResult, optionalParameterNames, parameterBindOrder } from "./compiler-base.ts";
 export type { CompilerOptions, ResultInfo } from "./compiler-base.ts";
+
+/*** One target assigned to a junction-backed multi link, with the link properties set for it. ***/
+interface LinkTarget {
+  /** SELECT yielding the target rows' `id`. */
+  idSelect: SQL.SelectStatement;
+  /** Junction columns written for this target: `@role := "admin"` → `{ column: "role", value }`. */
+  linkProperties: { column: string; value: SQL.SQLExpression; }[];
+}
+
+/*** An update `set { link op targets }` on a junction-backed multi link. ***/
+interface MultiLinkOp {
+  link: Context.LinkDef;
+  operator: ":=" | "+=" | "-=";
+  targets: LinkTarget[];
+}
 
 export class EdgeQLCompiler extends ShapeCompilerLayer {
   compile(
@@ -97,7 +112,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         );
 
         if (!decision.allowed) {
-          // Block access entirely with WHERE FALSE
+          // Block access entirely with WHERE FALSE. The user's filter is kept
+          // as `FALSE AND (filter)` rather than replaced: the bind list comes
+          // from the EdgeQL AST, so dropping a filter that references `$n`
+          // leaves PostgreSQL expecting fewer parameters than are sent
+          // (08P01). The planner folds the conjunction to FALSE either way.
           const falseCondition: SQL.SQLExpression = {
             kind: "LiteralExpression",
             type: "boolean",
@@ -108,7 +127,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
             ...statement,
             where: {
               kind: "WhereClause",
-              condition: falseCondition
+              condition: statement.where ?
+                {
+                  kind: "BinaryExpression",
+                  operator: "AND",
+                  left: falseCondition,
+                  right: statement.where.condition
+                } :
+                falseCondition
             }
           };
         }
@@ -305,8 +331,18 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   // invalid SQL. Any other expression (uuid cast, parameter) compiles
   // normally.
   private compileLinkAssignmentExpression(
-    expr: EdgeQLAST.Expression
+    link: Context.LinkDef,
+    assigned: EdgeQLAST.Expression
   ): SQL.SQLExpression {
+    // `(select T …) { … }`: the shape only matters for its link properties,
+    // which a single (FK-column) link cannot store.
+    const expr = assigned.kind === "ShapeExpr" ? assigned.expr : assigned;
+    const linkProperty = assigned.kind === "ShapeExpr" ? assigned.shape.elements.find(e => e.linkProperty) : undefined;
+    if (linkProperty) {
+      throw new CompilationError(
+        `Link property '@${linkProperty.name?.name}' on link '${link.name}': link properties are only supported on multi links`
+      );
+    }
     const query = expr.kind === "Subquery" ?
       (expr as EdgeQLAST.Subquery).query :
       expr;
@@ -371,6 +407,42 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     });
   }
 
+  /**
+   * The targets assigned to a junction-backed multi link, one per element of
+   * a set literal (`{(select A …), (select B …)}`; `{}` is no targets), each
+   * with the link properties its shape sets:
+   * `(select User filter …) { @role := "admin" }`. Link properties are
+   * compiled in the statement's scope, so they may reference parameters and
+   * `with` bindings but not the target.
+   */
+  private compileLinkTargets(
+    link: Context.LinkDef,
+    expr: EdgeQLAST.Expression
+  ): LinkTarget[] {
+    if (expr.kind === "SetExpr") {
+      return expr.elements.flatMap(element => this.compileLinkTargets(link, element));
+    }
+    if (expr.kind !== "ShapeExpr") {
+      return [{ idSelect: this.compileTargetIdSelect(expr), linkProperties: [] }];
+    }
+    const idSelect = this.compileTargetIdSelect(expr.expr);
+    const linkProperties = expr
+      .shape
+      .elements
+      .filter(element => element.linkProperty)
+      .map(element => {
+        const name = element.name!.name;
+        if (!element.computable) {
+          throw new CompilationError(`Link property '@${name}' in an assignment must be set with ':=' (e.g. '@${name} := <value>')`);
+        }
+        return {
+          column: Context.getLinkProperty(link, name).columnName,
+          value: this.compileExpression(element.expr)
+        };
+      });
+    return [{ idSelect, linkProperties }];
+  }
+
   private compileInsertQuery(
     query: EdgeQLAST.InsertQuery
   ): SQL.InsertStatement | SQL.CTEStatement {
@@ -387,8 +459,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const columns: string[] = [];
     const values: SQL.SQLExpression[] = [];
     // Multi-links (junction-backed, no FK column) are written as separate
-    // junction INSERTs in a CTE — collect them here, keyed by link.
-    const multiLinks: { link: Context.LinkDef; idSelect: SQL.SelectStatement; }[] = [];
+    // junction INSERTs in a CTE — collect them here, one per assigned target.
+    const multiLinks: { link: Context.LinkDef; target: LinkTarget; }[] = [];
 
     // Process shape elements to extract column assignments
     for (const element of query.shape.elements) {
@@ -400,17 +472,16 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       const propName = element.name.name;
       const property = Context.getProperty(this.ctx, typeName, propName);
-      let isLink = false;
+      let singleLink: Context.LinkDef | undefined;
       if (!property) {
         const link = Context.getLink(this.ctx, typeName, propName);
         if (link && link.columnName) {
           columns.push(link.columnName);
-          isLink = true;
+          singleLink = link;
         } else if (link && link.junctionTable) {
-          multiLinks.push({
-            link,
-            idSelect: this.compileTargetIdSelect(element.expr)
-          });
+          for (const target of this.compileLinkTargets(link, element.expr)) {
+            multiLinks.push({ link, target });
+          }
           continue;
         } else {
           throw new CompilationError(
@@ -421,8 +492,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         columns.push(property.columnName);
       }
 
-      const value = isLink ?
-        this.compileLinkAssignmentExpression(element.expr) :
+      const value = singleLink ?
+        this.compileLinkAssignmentExpression(singleLink, element.expr) :
+        property?.multi && !property.computed ?
+        this.compileMultiPropertyValue(element.expr, property) :
         this.compileExpression(element.expr);
       values.push(value);
     }
@@ -482,7 +555,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
               setClauses.push({
                 kind: "SetClause",
                 column: link.columnName,
-                value: this.compileLinkAssignmentExpression(element.expr)
+                value: this.compileLinkAssignmentExpression(link, element.expr)
               });
             } else {
               throw new CompilationError(
@@ -493,7 +566,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
             setClauses.push({
               kind: "SetClause",
               column: property.columnName,
-              value: this.compileExpression(element.expr)
+              value: property.multi && !property.computed ?
+                this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
+                this.compileExpression(element.expr)
             });
           }
         }
@@ -548,14 +623,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       query: sourceInsert
     }];
 
-    multiLinks.forEach(({ link, idSelect }, index) => {
+    multiLinks.forEach(({ link, target }, index) => {
       ctes.push(
         this.buildJunctionInsertCTE(
           `link_${index}`,
           link,
           SQL.createColumnReference("id", "ins"),
-          idSelect,
-          true,
+          target,
           "ins"
         )
       );
@@ -607,10 +681,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
   // Build a junction INSERT as a CTE row:
   //   <name> AS (
-  //     INSERT INTO <junction> (<srcCol>, <tgtCol>)
-  //     SELECT <sourceId>, sub.id FROM (<idSelect>) AS sub
-  //     [ON CONFLICT DO NOTHING]
+  //     INSERT INTO <junction> (<srcCol>, <tgtCol>[, <linkPropCol>…])
+  //     SELECT <sourceId>, sub.id[, <linkPropValue>…] FROM (<idSelect>) AS sub
+  //     ON CONFLICT DO NOTHING
   //   )
+  // An already-linked target keeps its junction row. When the target sets
+  // link properties the conflict clause is instead
+  //   ON CONFLICT (<srcCol>, <tgtCol>) DO UPDATE SET <linkPropCol> = EXCLUDED.<linkPropCol>…
+  // so `+=` / `:=` update the link properties they name on an existing link;
+  // link properties they don't name keep their values.
   // When `crossJoinSource` is set, the source id comes from a preceding CTE
   // (the INSERT path joins `FROM <sourceCteName> CROSS JOIN (sub)`); otherwise
   // the source id is a literal/parameter expression (the UPDATE path).
@@ -618,10 +697,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     name: string,
     link: Context.LinkDef,
     sourceId: SQL.SQLExpression,
-    idSelect: SQL.SelectStatement,
-    onConflictDoNothing: boolean,
+    target: LinkTarget,
     crossJoinSourceCteName?: string
   ): SQL.CTE {
+    const { idSelect, linkProperties } = target;
     const srcCol = link.junctionSourceColumn ?? "source_id";
     const tgtCol = link.junctionTargetColumn ?? "target_id";
 
@@ -640,20 +719,34 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const selectStmt = SQL.createSelectStatement({
       select: SQL.createSelectClause([
         SQL.createSelectItem(sourceId),
-        SQL.createSelectItem(SQL.createColumnReference("id", subAlias))
+        SQL.createSelectItem(SQL.createColumnReference("id", subAlias)),
+        ...linkProperties.map(p => SQL.createSelectItem(p.value))
       ]),
       from: SQL.createFromClause(fromTables)
     });
 
+    const onConflict: SQL.OnConflictClause = linkProperties.length === 0 ?
+      { kind: "OnConflictClause", action: "DO NOTHING" } :
+      {
+        kind: "OnConflictClause",
+        target: [srcCol, tgtCol],
+        action: {
+          kind: "UpdateAction",
+          set: linkProperties.map(p => ({
+            kind: "SetClause" as const,
+            column: p.column,
+            value: { kind: "RawSQLExpression" as const, sql: `EXCLUDED."${p.column}"` }
+          }))
+        }
+      };
+
     const junctionInsert: SQL.InsertStatement = {
       kind: "InsertStatement",
       table: link.junctionTable!,
-      columns: [srcCol, tgtCol],
+      columns: [srcCol, tgtCol, ...linkProperties.map(p => p.column)],
       values: [],
       insertSelect: selectStmt,
-      onConflict: onConflictDoNothing ?
-        { kind: "OnConflictClause", action: "DO NOTHING" } :
-        undefined
+      onConflict
     };
 
     return {
@@ -680,11 +773,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   // already present survive the replace — sibling INSERT/DELETE CTEs run on the
   // same snapshot, so deleting-then-reinserting a kept row would otherwise
   // violate the junction's unique constraint).
+  //
+  // With several target selects (a set of targets), `IN` matches any of them
+  // and `NOT IN` none of them; with none, `NOT IN` deletes every junction row
+  // of the source (`link := {}`).
   private buildJunctionDeleteCTE(
     name: string,
     link: Context.LinkDef,
     sourceCteName: string,
-    targetIdSelect?: SQL.SelectStatement,
+    targetIdSelects: SQL.SelectStatement[],
     targetOp: "IN" | "NOT IN" = "IN"
   ): SQL.CTE {
     const srcCol = link.junctionSourceColumn ?? "source_id";
@@ -696,15 +793,18 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       SQL.createSubqueryExpression(this.selectIdFrom(sourceCteName))
     );
 
-    if (targetIdSelect) {
+    const targetConditions = targetIdSelects.map(idSelect =>
+      SQL.createBinaryExpression(
+        targetOp,
+        SQL.createColumnReference(tgtCol),
+        SQL.createSubqueryExpression(idSelect)
+      )
+    );
+    if (targetConditions.length > 0) {
       condition = SQL.createBinaryExpression(
         "AND",
         condition,
-        SQL.createBinaryExpression(
-          targetOp,
-          SQL.createColumnReference(tgtCol),
-          SQL.createSubqueryExpression(targetIdSelect)
-        )
+        targetConditions.reduce((all, next) => SQL.createBinaryExpression(targetOp === "IN" ? "OR" : "AND", all, next))
       );
     }
 
@@ -790,11 +890,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const setClauses: SQL.SetClause[] = [];
     // Multi-link ops carry their assignment operator so the CTE knows whether
     // to replace (`:=`), add (`+=`), or remove (`-=`) junction rows.
-    const multiLinkOps: {
-      link: Context.LinkDef;
-      operator: ":=" | "+=" | "-=";
-      idSelect: SQL.SelectStatement;
-    }[] = [];
+    const multiLinkOps: MultiLinkOp[] = [];
 
     // Process shape elements to extract SET clauses
     for (const element of query.shape.elements) {
@@ -812,13 +908,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           setClauses.push({
             kind: "SetClause",
             column: link.columnName,
-            value: this.compileLinkAssignmentExpression(element.expr)
+            value: this.compileLinkAssignmentExpression(link, element.expr)
           });
         } else if (link && link.junctionTable) {
           multiLinkOps.push({
             link,
             operator: element.operator ?? ":=",
-            idSelect: this.compileTargetIdSelect(element.expr)
+            targets: this.compileLinkTargets(link, element.expr)
           });
         } else {
           throw new CompilationError(
@@ -829,7 +925,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         setClauses.push({
           kind: "SetClause",
           column: property.columnName,
-          value: this.compileExpression(element.expr)
+          value: property.multi && !property.computed ?
+            this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
+            this.compileExpression(element.expr)
         });
       }
     }
@@ -886,11 +984,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     typeDef: Context.TypeDef,
     setClauses: SQL.SetClause[],
     whereClause: SQL.WhereClause | undefined,
-    multiLinkOps: {
-      link: Context.LinkDef;
-      operator: ":=" | "+=" | "-=";
-      idSelect: SQL.SelectStatement;
-    }[]
+    multiLinkOps: MultiLinkOp[]
   ): SQL.CTEStatement {
     const sourceCte = "upd";
     const sourceId = SQL.createColumnReference("id", sourceCte);
@@ -929,12 +1023,22 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       query: sourceQuery
     }];
 
-    multiLinkOps.forEach(({ link, operator, idSelect }, index) => {
+    // Junction inserts are numbered across all ops (`link_<n>`), one per target.
+    let insertCount = 0;
+    const insertTargets = (link: Context.LinkDef, targets: LinkTarget[]) => {
+      for (const target of targets) {
+        ctes.push(this.buildJunctionInsertCTE(`link_${insertCount++}`, link, sourceId, target, sourceCte));
+      }
+    };
+
+    multiLinkOps.forEach(({ link, operator, targets }, index) => {
+      const idSelects = targets.map(target => target.idSelect);
       switch (operator) {
         case ":=": {
           // Replace: delete existing junction rows whose target is NOT in the
-          // new set, then insert the new set with ON CONFLICT DO NOTHING. This
-          // keeps rows present in both old and new sets untouched — a plain
+          // new set, then insert the new set with ON CONFLICT DO NOTHING (or,
+          // for targets setting link properties, DO UPDATE of those). This
+          // keeps rows present in both old and new sets — a plain
           // delete-all + insert would, within one snapshot, try to re-insert a
           // just-deleted row and trip the unique constraint.
           ctes.push(
@@ -942,44 +1046,29 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
               `del_${index}`,
               link,
               sourceCte,
-              idSelect,
+              idSelects,
               "NOT IN"
             )
           );
-          ctes.push(
-            this.buildJunctionInsertCTE(
-              `link_${index}`,
-              link,
-              sourceId,
-              idSelect,
-              true,
-              sourceCte
-            )
-          );
+          insertTargets(link, targets);
           break;
         }
         case "+=": {
-          ctes.push(
-            this.buildJunctionInsertCTE(
-              `link_${index}`,
-              link,
-              sourceId,
-              idSelect,
-              true,
-              sourceCte
-            )
-          );
+          insertTargets(link, targets);
           break;
         }
         case "-=": {
-          ctes.push(
-            this.buildJunctionDeleteCTE(
-              `del_${index}`,
-              link,
-              sourceCte,
-              idSelect
-            )
-          );
+          // Removing the empty set removes nothing.
+          if (idSelects.length > 0) {
+            ctes.push(
+              this.buildJunctionDeleteCTE(
+                `del_${index}`,
+                link,
+                sourceCte,
+                idSelects
+              )
+            );
+          }
           break;
         }
       }

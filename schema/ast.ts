@@ -141,6 +141,13 @@ export interface PropertyDeclaration extends SDLNode {
   constraints?: Constraint[];
   annotations?: Annotation[];
   rewrites?: RewriteDeclaration[];
+  /**
+   * Link properties declared in the body of a colon-form pointer whose target
+   * is an object type (`multi members: User { role: str; }`). The pointer is a
+   * link; `normalizeObjectPropertiesToLinks` moves these onto the
+   * `LinkDeclaration.properties` it builds.
+   */
+  properties?: PropertyDeclaration[];
 }
 
 // Link declaration

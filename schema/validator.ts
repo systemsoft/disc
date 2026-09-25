@@ -7,6 +7,7 @@
 
 import { isPolymorphicType } from "../compiler/context.ts";
 import { ValidationError } from "../lib/errors.ts";
+import { propNameToColumnName } from "../lib/identifiers.ts";
 import * as AST from "./ast.ts";
 import { Module, SDLConverter } from "./converter.ts";
 
@@ -402,6 +403,22 @@ export class SchemaValidator {
       );
     }
 
+    // A colon-form pointer with link properties must be a link: its target
+    // decides whether `multi x: T` is a multi scalar or a multi link.
+    const isLink = property.properties !== undefined && this.isObjectTypeName(property.type.name.parts.join("::"));
+    if (property.properties && !isLink) {
+      this.addError(
+        `Property '${property.name.value}': only links can have link properties — '${property.type.name.parts.join("::")}' is not an object type`
+      );
+    }
+    if (isLink) {
+      this.validateLinkProperties(property.name.value, property.multi ?? false, property.properties ?? []);
+    }
+
+    if (property.multi && !property.computed && !isLink) {
+      this.validateMultiScalar(property.name.value, property.type, property.constraints, property.default !== undefined);
+    }
+
     // Validate default expression
     if (property.default) {
       this.validateExpression(property.default);
@@ -432,6 +449,43 @@ export class SchemaValidator {
     this.validateAnnotationUsage(property.annotations);
   }
 
+  /**
+   * A stored multi scalar property is a PostgreSQL array column, one value
+   * per element. Reject what that storage can't express yet: a per-element
+   * `exclusive` (unique across all objects' elements), an `expression on`
+   * constraint (a CHECK can't iterate the elements), a default, and an
+   * `array<…>` element (PG arrays are not arrays of arrays).
+   */
+  private validateMultiScalar(
+    name: string,
+    type: AST.TypeRef,
+    constraints: AST.Constraint[] | undefined,
+    hasDefault: boolean
+  ): void {
+    for (const constraint of constraints ?? []) {
+      const constraintName = constraint.name?.value;
+      if (constraintName === "exclusive" || constraintName === "expression") {
+        this.addError(
+          `Property '${name}': constraint '${constraintName}' is not supported on a multi property yet (it is stored as an array; ` +
+            "per-element uniqueness and expression constraints can't be checked)"
+        );
+      }
+    }
+    if (hasDefault) {
+      this.addError(`Property '${name}': a default on a multi property is not supported yet — an unset multi property is the empty set`);
+    }
+    if (type.name.parts.join("::") === "array") {
+      this.addError(`Property '${name}': a multi property of array type is not supported (it is stored as an array column)`);
+    }
+  }
+
+  /*** True when `name` resolves to a declared object type (in the current module or fully qualified). ***/
+  private isObjectTypeName(name: string): boolean {
+    const qualified = this.context.currentModule && !name.includes("::") ? `${this.context.currentModule}::${name}` : name;
+    const decl = this.context.types.get(qualified) ?? this.context.types.get(name);
+    return decl?.kind === "TypeDeclaration";
+  }
+
   private validateLink(link: AST.LinkDeclaration): void {
     // Validate target type (skip placeholder target for abstract links without
     // targets, and computed links whose target is the inferred `auto`
@@ -439,6 +493,11 @@ export class SchemaValidator {
     const targetName = link.target.name.parts.join("::");
     if (targetName !== "std::BaseObject" && !link.computed) {
       this.validateTypeRef(link.target);
+    }
+
+    // `multi name -> str` is a multi scalar property in arrow form.
+    if (link.multi && !link.computed && !link.abstract && !this.isObjectTypeName(targetName)) {
+      this.validateMultiScalar(link.name.value, link.target, link.constraints, link.default !== undefined);
     }
 
     // Validate extending references
@@ -481,18 +540,16 @@ export class SchemaValidator {
       this.validateExpression(link.computed);
     }
 
-    // Validate link properties
-    if (link.properties) {
-      const propNames = new Set<string>();
-      for (const prop of link.properties) {
-        if (propNames.has(prop.name.value)) {
-          this.addError(
-            `Link property '${prop.name.value}' is already defined`
-          );
-        }
-        propNames.add(prop.name.value);
-        this.validateProperty(prop);
+    // Validate link properties. A concrete link also carries those of the
+    // abstract links it extends.
+    const inherited = (link.extending ?? []).flatMap(base => this.context.abstractLinks.get(base.name.parts.join("::"))?.properties ?? []);
+    if (link.abstract) {
+      this.validateLinkProperties(link.name.value, true, link.properties ?? []);
+    } else if (link.properties || inherited.length > 0) {
+      if (!link.computed && !this.isObjectTypeName(targetName)) {
+        this.addError(`Property '${link.name.value}': only links can have link properties — '${targetName}' is not an object type`);
       }
+      this.validateLinkProperties(link.name.value, link.multi ?? false, link.properties ?? [], inherited.length > 0);
     }
 
     // Validate constraints
@@ -504,6 +561,44 @@ export class SchemaValidator {
 
     // Validate annotation usages
     this.validateAnnotationUsage(link.annotations);
+  }
+
+  /**
+   * Link properties are stored as columns of a multi link's junction table,
+   * so a single link can't carry them (it is a foreign-key column), and each
+   * one is a single stored value whose column name must not collide with the
+   * junction's own `source_id` / `target_id`.
+   */
+  private validateLinkProperties(
+    linkName: string,
+    multi: boolean,
+    properties: AST.PropertyDeclaration[],
+    hasInherited = false
+  ): void {
+    if (!multi && (properties.length > 0 || hasInherited)) {
+      this.addError(
+        `Link '${linkName}': link properties are only supported on multi links (they are stored on the link's junction table) — ` +
+          "declare the link `multi`, or move the property onto the target type"
+      );
+    }
+    const propNames = new Set<string>();
+    for (const prop of properties) {
+      const name = prop.name.value;
+      if (propNames.has(name)) {
+        this.addError(`Link property '${name}' is already defined`);
+      }
+      propNames.add(name);
+      if (prop.multi) {
+        this.addError(`Link property '${linkName}@${name}' cannot be multi — a link property holds one value per link`);
+      }
+      if (["source_id", "target_id"].includes(propNameToColumnName(name))) {
+        this.addError(`Link property '${linkName}@${name}': the name is reserved for the link's junction table columns`);
+      }
+      if ((prop.constraints ?? []).some(c => c.name?.value === "exclusive")) {
+        this.addError(`Link property '${linkName}@${name}': constraint 'exclusive' is not supported on a link property yet`);
+      }
+      this.validateProperty(prop);
+    }
   }
 
   private checkLinkInheritanceCycle(

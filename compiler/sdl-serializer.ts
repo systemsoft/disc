@@ -220,11 +220,16 @@ function serializeLink(link: LinkDef): string {
       body.push(`annotation ${k} := ${formatAnnotationValue(v)};`);
     }
   }
+  // Link properties: `role: str;` declarations inside the link body.
+  for (const prop of link.properties?.values() ?? []) {
+    body.push(serializeProperty(prop));
+  }
 
   if (body.length === 0) {
     return `${parts.join(" ")};`;
   }
-  const lines = body.map(l => INDENT + l).join("\n");
+  // A link property with a body spans several lines; indent each of them.
+  const lines = body.map(l => l.split("\n").map(sub => INDENT + sub).join("\n")).join("\n");
   return `${parts.join(" ")} {\n${lines}\n};`;
 }
 

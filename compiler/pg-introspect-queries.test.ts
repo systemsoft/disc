@@ -20,6 +20,17 @@ DROP TABLE IF EXISTS introspect_posts_tags CASCADE;
 DROP TABLE IF EXISTS introspect_posts CASCADE;
 DROP TABLE IF EXISTS introspect_tags CASCADE;
 DROP TABLE IF EXISTS introspect_users CASCADE;
+DROP TABLE IF EXISTS introspect_objects CASCADE;
+
+CREATE TABLE introspect_objects (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  object_id text NOT NULL,
+  label text,
+  scope text
+);
+CREATE UNIQUE INDEX uk_introspect_objects_object_id ON introspect_objects (object_id);
+CREATE UNIQUE INDEX introspect_objects_label_lower ON introspect_objects (lower(label));
+CREATE UNIQUE INDEX introspect_objects_scope_partial ON introspect_objects (scope) WHERE scope IS NOT NULL;
 
 CREATE TABLE introspect_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,6 +65,7 @@ DROP TABLE IF EXISTS introspect_posts_tags CASCADE;
 DROP TABLE IF EXISTS introspect_posts CASCADE;
 DROP TABLE IF EXISTS introspect_tags CASCADE;
 DROP TABLE IF EXISTS introspect_users CASCADE;
+DROP TABLE IF EXISTS introspect_objects CASCADE;
 `;
 
 async function withSampleSchema<T>(
@@ -151,6 +163,22 @@ Deno.test({
         uc => uc.length === 1 && uc[0] === "email"
       );
       assert(hasEmailUnique, "email UNIQUE not detected");
+    });
+  }
+});
+
+Deno.test({
+  name: "introspectDatabase - plain unique indexes count as unique; partial and expression ones do not",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withSampleSchema(async db => {
+      /*** Disc backs a property-level exclusive with `CREATE UNIQUE INDEX uk_<t>_<c>`, not a
+           UNIQUE constraint, so introspecting a Disc database has to see it. ***/
+      const data = await introspectDatabase(db, {
+        tableFilter: t => t.startsWith("introspect_")
+      });
+      const objects = data.tables.find(t => t.tableName === "introspect_objects")!;
+      assertEquals(objects.uniqueConstraints, [["object_id"]]);
     });
   }
 });

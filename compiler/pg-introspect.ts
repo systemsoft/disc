@@ -105,6 +105,14 @@ const PG_TO_EDGEQL: Record<string, string> = {
 
 export function pgTypeToEdgeqlType(pgType: string): string {
   const norm = pgType.toLowerCase().trim();
+  // Array columns: PG's udt_name spells them `_<element>` (`_text`), a type
+  // name spells them `<element>[]`. A Disc `multi` scalar property is also an
+  // array column; nothing in the column distinguishes it, so it reads back as
+  // `array<T>`.
+  const element = norm.startsWith("_") ? norm.slice(1) : norm.endsWith("[]") ? norm.slice(0, -2) : null;
+  if (element) {
+    return `array<${pgTypeToEdgeqlType(element)}>`;
+  }
   return PG_TO_EDGEQL[norm] ?? "str";
 }
 

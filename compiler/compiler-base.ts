@@ -209,6 +209,33 @@ export function parameterBindOrder(node: unknown, parameterIndex: Map<string, nu
 }
 
 /**
+ * Bare names of the parameters cast `<optional T>` under `node`. The binding
+ * layer lets these be left out of a request (they bind as NULL). Like
+ * `parameterBindOrder`, this is stored with a cached compilation.
+ */
+export function optionalParameterNames(node: unknown): string[] {
+  const names = new Set<string>();
+
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    const obj = value as Partial<EdgeQLAST.TypeCast>;
+    if (obj.kind === "TypeCast" && obj.cardinality?.required === false && obj.expr?.kind === "Parameter") {
+      names.add(obj.expr.name.startsWith("$") ? obj.expr.name.slice(1) : obj.expr.name);
+    }
+    Object.values(value).forEach(visit);
+  };
+
+  visit(node);
+  return [...names];
+}
+
+/**
  * What a query's result is, as far as the response layer is concerned. Derived
  * from the query AST, never from the SQL text: `select (update …) { id }` and a
  * junction-backed multi-link write both emit `WITH … UPDATE … SELECT`, yet the

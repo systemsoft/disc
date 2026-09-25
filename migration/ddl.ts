@@ -13,6 +13,19 @@ import {
 } from "../lib/identifiers.ts";
 import * as Types from "./types.ts";
 
+/** The empty-set value of a multi property's array column (its default). */
+const EMPTY_ARRAY = "'{}'";
+
+/** Name of the unique index backing a property-level `constraint exclusive`. */
+function exclusiveIndexName(tableName: string, columnName: string): string {
+  return `uk_${tableName}_${columnName}`;
+}
+
+/** Name of the CHECK backing a property constraint such as `min_value(0)`. */
+function checkConstraintName(tableName: string, columnName: string, constraint: string): string {
+  return `chk_${tableName}_${columnName}_${constraint.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+}
+
 export class DDLGenerator {
   /** Tracks junction tables already emitted in this DDL batch to avoid duplicates */
   private createdJunctionTables = new Set<string>();
@@ -391,16 +404,21 @@ END $$;`,
         continue;
       }
 
+      // A multi property is an array column that is never NULL: an unset
+      // property is the empty set `'{}'`, and `required multi` is a
+      // non-empty CHECK (see generateCheckConstraints).
       columns.push({
         name: propNameToColumnName(property.name),
-        type: this.mapEdgeQLTypeToPostgreSQL(property.type),
-        nullable: !property.required,
+        type: this.propertyColumnType(property),
+        nullable: !property.multi && !property.required,
         primaryKey: false,
         unique: property.constraints.includes("exclusive"),
         // `default !== undefined` rather than truthy — `default := 0`,
         // `default := false`, and `default := ""` are valid SDL defaults
         // that the truthy form would silently drop.
-        default: property.default !== undefined ?
+        default: property.multi ?
+          EMPTY_ARRAY :
+          property.default !== undefined ?
           this.formatDefaultValue(property.default, property.type) :
           undefined
       });
@@ -431,10 +449,17 @@ END $$;`,
     // cross-table FKs are emitted later via `ALTER TABLE ADD CONSTRAINT`
     // so the migration can create types in any order without tripping
     // "relation does not exist" on a forward reference.
+    //
+    // Exclusive columns are written without an inline `UNIQUE`: their one
+    // unique index is the `uk_<table>_<column>` created below, the same name
+    // the add/drop-constraint paths use. An inline `UNIQUE` would add a second
+    // `<table>_<column>_key` index that dropping the constraint never removes.
     statements.push(
-      this.generateCreateTableFromColumns(tableName, columns, {
-        inlineFKs: false
-      })
+      this.generateCreateTableFromColumns(
+        tableName,
+        columns.map(column => ({ ...column, unique: false })),
+        { inlineFKs: false }
+      )
     );
 
     // Defer single-link FKs to the second phase.
@@ -496,7 +521,8 @@ END $$;`,
               column: "id",
               onDelete: "CASCADE"
             }
-          }
+          },
+          ...this.linkPropertyColumns(link)
         ];
 
         // Defer junction-table creation: it references base tables on
@@ -517,6 +543,11 @@ END $$;`,
             this.escapeIdentifier(`uk_${junctionTableName}_source_target`)
           } UNIQUE (source_id, target_id);`
         );
+
+        // Link-property constraints are CHECKs on the junction's columns.
+        this.deferredStatements.push(
+          ...this.generateCheckConstraints(junctionTableName, link.properties ?? [])
+        );
       }
     }
 
@@ -533,7 +564,7 @@ END $$;`,
       }
       if (column.unique && !column.primaryKey) {
         statements.push(
-          `CREATE UNIQUE INDEX ${this.escapeIdentifier(`uk_${tableName}_${column.name}`)} ON ${this.escapeIdentifier(tableName)} (${
+          `CREATE UNIQUE INDEX ${this.escapeIdentifier(exclusiveIndexName(tableName, column.name))} ON ${this.escapeIdentifier(tableName)} (${
             this.escapeIdentifier(column.name)
           });`
         );
@@ -683,17 +714,26 @@ END $$;`,
       ];
     }
 
-    const columnType = this.mapEdgeQLTypeToPostgreSQL(property.type);
-    const nullable = property.required ? "NOT NULL" : "NULL";
-    const defaultClause = property.default !== undefined ?
+    const columnType = this.propertyColumnType(property);
+    const nullable = property.required || property.multi ? "NOT NULL" : "NULL";
+    const defaultClause = property.multi ?
+      ` DEFAULT ${EMPTY_ARRAY}` :
+      property.default !== undefined ?
       ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` :
       "";
 
+    const columnName = propNameToColumnName(property.name);
     const statements = [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
-        this.escapeIdentifier(propNameToColumnName(property.name))
-      } ${columnType} ${nullable}${defaultClause};`
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(columnName)} ${columnType} ${nullable}${defaultClause};`
     ];
+
+    if (property.constraints.includes("exclusive")) {
+      statements.push(
+        `CREATE UNIQUE INDEX ${this.escapeIdentifier(exclusiveIndexName(tableName, columnName))} ON ${this.escapeIdentifier(tableName)} (${
+          this.escapeIdentifier(columnName)
+        });`
+      );
+    }
 
     // Generate CHECK constraints for the new property
     statements.push(
@@ -722,6 +762,16 @@ END $$;`,
     tableName: string,
     operation: Types.AlterPropertyOperation
   ): string[] {
+    if (operation.oldProperty?.multi && !operation.newProperty?.multi) {
+      throw new Error(
+        `Cannot migrate property '${operation.propertyName}' from multi → single: a set of values has no lossless single-value form. ` +
+          "Add a new single property, copy the data over, then drop the multi one."
+      );
+    }
+    if (operation.oldProperty && operation.newProperty?.multi) {
+      return this.generateAlterMultiProperty(tableName, operation, operation.oldProperty, operation.newProperty);
+    }
+
     const statements: string[] = [];
     const colName = propNameToColumnName(operation.propertyName);
     const columnName = this.escapeIdentifier(colName);
@@ -762,38 +812,41 @@ END $$;`,
             change.newValue
           );
           if (checkExpr) {
-            const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
-            const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
+            const constraintName = checkConstraintName(tableName, colName, change.newValue);
             statements.push(
               `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
             );
           }
-          // Handle exclusive constraint as UNIQUE index
+          // Handle exclusive constraint as UNIQUE index — same name CREATE TABLE uses
           if (change.newValue === "exclusive") {
             statements.push(
-              `CREATE UNIQUE INDEX ${
-                this.escapeIdentifier(
-                  `idx_${tableName}_${operation.propertyName}_unique`
-                )
-              } ON ${tableRef} (${columnName});`
+              `CREATE UNIQUE INDEX ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))} ON ${tableRef} (${columnName});`
             );
           }
           break;
         }
         case "DropConstraint": {
-          const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
-          const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
+          const constraintName = checkConstraintName(tableName, colName, change.oldValue);
           statements.push(
             `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`
           );
-          // Handle exclusive constraint UNIQUE index removal
+          // Older versions named a CHECK added to an existing property after the
+          // property rather than the column; drop that name too so they heal.
+          const legacyName = checkConstraintName(tableName, operation.propertyName, change.oldValue);
+          if (legacyName !== constraintName) {
+            statements.push(
+              `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(legacyName)};`
+            );
+          }
+          // Handle exclusive constraint UNIQUE index removal. Besides the current
+          // `uk_` index, drop what older versions created so those databases heal:
+          // `idx_<t>_<c>_unique` from the add path and the `<t>_<c>_key`
+          // constraint PG named for the inline `UNIQUE` CREATE TABLE used to emit.
           if (change.oldValue === "exclusive") {
             statements.push(
-              `DROP INDEX IF EXISTS ${
-                this.escapeIdentifier(
-                  `idx_${tableName}_${operation.propertyName}_unique`
-                )
-              };`
+              `DROP INDEX IF EXISTS ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))};`,
+              `DROP INDEX IF EXISTS ${this.escapeIdentifier(`idx_${tableName}_${operation.propertyName}_unique`)};`,
+              `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(`${tableName}_${colName}_key`)};`
             );
           }
           break;
@@ -802,6 +855,55 @@ END $$;`,
     }
 
     return statements;
+  }
+
+  /**
+   * AlterProperty for a property that is multi after the change. Its CHECKs
+   * depend on the whole definition (element type, `required`, every
+   * constraint), so any change touching them drops the old set and adds the
+   * new one. single → multi converts the column in place: NULL becomes the
+   * empty set and a value becomes a one-element set.
+   */
+  private generateAlterMultiProperty(
+    tableName: string,
+    operation: Types.AlterPropertyOperation,
+    oldProperty: Types.PropertyDefinition,
+    newProperty: Types.PropertyDefinition
+  ): string[] {
+    const checkKinds = new Set(["ChangeMulti", "ChangeType", "ChangeRequired", "AddConstraint", "DropConstraint"]);
+    if (!operation.changes.some(change => checkKinds.has(change.kind))) {
+      return [];
+    }
+
+    const colName = propNameToColumnName(operation.propertyName);
+    const column = this.escapeIdentifier(colName);
+    const tableRef = this.escapeIdentifier(tableName);
+    const elementType = this.mapEdgeQLTypeToPostgreSQL(newProperty.type);
+    const statements = this.dropCheckConstraints(tableName, oldProperty);
+
+    if (!oldProperty.multi) {
+      if (oldProperty.constraints.includes("exclusive")) {
+        statements.push(`DROP INDEX IF EXISTS ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))};`);
+      }
+      const element = oldProperty.type === newProperty.type ? column : `${column}::${elementType}`;
+      statements.push(
+        `ALTER TABLE ${tableRef} ALTER COLUMN ${column} DROP DEFAULT;`,
+        `ALTER TABLE ${tableRef} ALTER COLUMN ${column} TYPE ${elementType}[] USING CASE WHEN ${column} IS NULL THEN ${EMPTY_ARRAY} ELSE ARRAY[${element}] END;`,
+        `ALTER TABLE ${tableRef} ALTER COLUMN ${column} SET DEFAULT ${EMPTY_ARRAY};`,
+        `ALTER TABLE ${tableRef} ALTER COLUMN ${column} SET NOT NULL;`
+      );
+    } else if (oldProperty.type !== newProperty.type) {
+      statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${column} TYPE ${elementType}[] USING ${column}::${elementType}[];`);
+    }
+
+    statements.push(...this.generateCheckConstraints(tableName, [newProperty]));
+    return statements;
+  }
+
+  /*** `DROP CONSTRAINT IF EXISTS` for every CHECK generateCheckConstraints would create for `property`. ***/
+  private dropCheckConstraints(tableName: string, property: Types.PropertyDefinition): string[] {
+    const tableRef = this.escapeIdentifier(tableName);
+    return this.checkConstraintsOf(tableName, property).map(({ name }) => `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(name)};`);
   }
 
   private generateAddLink(
@@ -853,7 +955,8 @@ END $$;`,
             column: "id",
             onDelete: link.onTargetDelete || "CASCADE"
           }
-        }
+        },
+        ...this.linkPropertyColumns(link)
       ];
 
       statements.push(
@@ -863,6 +966,9 @@ END $$;`,
         `ALTER TABLE ${this.escapeIdentifier(junctionTableName)} ADD CONSTRAINT ${
           this.escapeIdentifier(`uk_${junctionTableName}_source_target`)
         } UNIQUE (source_id, target_id);`
+      );
+      statements.push(
+        ...this.generateCheckConstraints(junctionTableName, link.properties ?? [])
       );
     } else {
       // Single-valued link - add foreign key column
@@ -919,7 +1025,10 @@ END $$;`,
     tableName: string,
     operation: Types.AlterLinkOperation
   ): string[] {
-    const statements: string[] = [];
+    // Link properties are columns of the junction table: add/drop/alter them
+    // there exactly like a type's properties on its own table.
+    const junctionTableName = `${tableName}_${operation.linkName}`;
+    const statements: string[] = (operation.propertyOperations ?? []).flatMap(op => this.generateTypeOperationDDL(junctionTableName, op));
 
     for (const change of operation.changes) {
       if (change.kind === "ChangeOnSourceDelete") {
@@ -1179,28 +1288,105 @@ END $$;`,
     tableName: string,
     properties: Types.PropertyDefinition[]
   ): string[] {
-    const statements: string[] = [];
+    return properties.flatMap(property =>
+      this.checkConstraintsOf(tableName, property).map(({ name, expression }) =>
+        `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(name)} CHECK (${expression});`
+      )
+    );
+  }
 
-    for (const property of properties) {
-      const colName = propNameToColumnName(property.name);
-      for (const constraint of property.constraints) {
-        const checkExpr = this.constraintToCheckExpression(
-          colName,
-          constraint
-        );
+  /**
+   * The CHECK constraints of one property, by name. A multi property's
+   * constraints hold for every element, and `required multi` adds a
+   * non-empty check (the column itself is always NOT NULL).
+   */
+  private checkConstraintsOf(
+    tableName: string,
+    property: Types.PropertyDefinition
+  ): { name: string; expression: string; }[] {
+    if (property.computed) {
+      return [];
+    }
+    const colName = propNameToColumnName(property.name);
+    const elementType = property.multi ? this.mapEdgeQLTypeToPostgreSQL(property.type) : undefined;
+    const checks: { name: string; expression: string; }[] = [];
 
-        if (checkExpr) {
-          const safeName = constraint.replace(/[^a-zA-Z0-9_]/g, "_");
-          const constraintName = `chk_${tableName}_${colName}_${safeName}`;
-
-          statements.push(
-            `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
-          );
-        }
+    for (const constraint of property.constraints) {
+      const expression = elementType ?
+        this.multiConstraintToCheckExpression(colName, constraint, elementType) :
+        this.constraintToCheckExpression(colName, constraint);
+      if (expression) {
+        checks.push({ name: checkConstraintName(tableName, colName, constraint), expression });
       }
     }
 
-    return statements;
+    if (property.multi && property.required) {
+      checks.push({
+        name: `chk_${tableName}_${colName}_required`,
+        expression: `cardinality(${this.escapeIdentifier(colName)}) > 0`
+      });
+    }
+
+    return checks;
+  }
+
+  /**
+   * A constraint on a multi property, applied to every element of its array
+   * column. CHECK can't hold a subquery, so bounds compare against `ALL(col)`,
+   * `one_of` is containment in the allowed array, and the string tests call
+   * the IMMUTABLE `disc_array_*` helpers from lib/stdlib-sql.ts. An empty
+   * array passes every check. `exclusive` and `expression on` are rejected on
+   * multi properties by the schema validator, so they map to nothing here.
+   */
+  private multiConstraintToCheckExpression(
+    columnName: string,
+    constraint: string,
+    elementType: string
+  ): string | null {
+    const col = this.escapeIdentifier(columnName);
+    const match = constraint.match(/^(\w+)(?:\((.+)\))?$/);
+    const arg = match?.[2]?.trim();
+    if (!match || !arg) {
+      return null;
+    }
+
+    switch (match[1]) {
+      case "one_of":
+        return `${col} <@ ARRAY[${this.oneOfValues(arg).join(", ")}]::${elementType}[]`;
+      case "min_value":
+        return `${arg} <= ALL(${col})`;
+      case "max_value":
+        return `${arg} >= ALL(${col})`;
+      case "min_ex_value":
+        return `${arg} < ALL(${col})`;
+      case "max_ex_value":
+        return `${arg} > ALL(${col})`;
+      case "max_len_value":
+        return `disc_array_max_len(${col}) <= ${arg}`;
+      case "min_len_value":
+        return `disc_array_min_len(${col}) >= ${arg}`;
+      case "regexp":
+        return `disc_array_all_match(${col}, '${arg.replace(/'/g, "''")}')`;
+    }
+
+    return null;
+  }
+
+  /*** The SQL literals of a serialized `one_of(a,b,…)` argument list. ***/
+  private oneOfValues(arg: string): string[] {
+    return arg.split(",").map((v: string) => {
+      const trimmed = v.trim();
+      // If already quoted (from differ serialization), use as-is
+      if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+        return trimmed;
+      }
+      // Numeric values don't need quoting
+      if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+        return trimmed;
+      }
+      // String values need single-quote wrapping
+      return `'${trimmed.replace(/'/g, "''")}'`;
+    });
   }
 
   /**
@@ -1261,21 +1447,7 @@ END $$;`,
         break;
       case "one_of":
         if (arg) {
-          // Split comma-separated values and quote each one for SQL IN clause
-          const values = arg.split(",").map((v: string) => {
-            const trimmed = v.trim();
-            // If already quoted (from differ serialization), use as-is
-            if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-              return trimmed;
-            }
-            // Numeric values don't need quoting
-            if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-              return trimmed;
-            }
-            // String values need single-quote wrapping
-            return `'${trimmed.replace(/'/g, "''")}'`;
-          });
-          return `${col} IN (${values.join(", ")})`;
+          return `${col} IN (${this.oneOfValues(arg).join(", ")})`;
         }
         break;
       case "expression":
@@ -1294,6 +1466,27 @@ END $$;`,
     }
 
     return null;
+  }
+
+  /*** The column type of a stored property: a multi property is an array of its element type. ***/
+  /**
+   * The junction-table columns of a multi link's link properties, typed like
+   * the columns of ordinary properties (`required` → NOT NULL, `default`).
+   */
+  private linkPropertyColumns(link: Types.LinkDefinition): Types.ColumnDefinition[] {
+    return (link.properties ?? []).map(property => ({
+      name: propNameToColumnName(property.name),
+      type: this.propertyColumnType(property),
+      nullable: !property.required,
+      primaryKey: false,
+      unique: false,
+      default: property.default !== undefined ? this.formatDefaultValue(property.default, property.type) : undefined
+    }));
+  }
+
+  private propertyColumnType(property: Types.PropertyDefinition): string {
+    const pgType = this.mapEdgeQLTypeToPostgreSQL(property.type);
+    return property.multi ? `${pgType}[]` : pgType;
   }
 
   private mapEdgeQLTypeToPostgreSQL(edgeqlType: string): string {
@@ -1802,8 +1995,20 @@ END $$;`
     tableName: string,
     operation: Types.AlterPropertyOperation
   ): string[] {
+    // A multi property change can't be undone column-by-column (multi → single
+    // loses values), so, as for DropProperty, fail loudly instead.
+    if (operation.oldProperty?.multi || operation.newProperty?.multi) {
+      return [
+        `-- MANUAL ROLLBACK REQUIRED: multi property '${tableName}.${operation.propertyName}' was altered`,
+        `DO $$ BEGIN
+  RAISE EXCEPTION 'Cannot auto-rollback AlterProperty on multi property "${tableName}.${operation.propertyName}".';
+END $$;`
+      ];
+    }
+
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.propertyName);
+    const colName = propNameToColumnName(operation.propertyName);
+    const columnName = this.escapeIdentifier(colName);
     const tableRef = this.escapeIdentifier(tableName);
 
     // Process changes in reverse order
@@ -1838,8 +2043,7 @@ END $$;`
           break;
         case "AddConstraint": {
           // Rollback: drop the constraint that was added
-          const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
-          const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
+          const constraintName = checkConstraintName(tableName, colName, change.newValue);
           statements.push(
             `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`
           );
@@ -1848,12 +2052,11 @@ END $$;`
         case "DropConstraint": {
           // Rollback: re-add the constraint that was dropped
           const checkExpr = this.constraintToCheckExpression(
-            operation.propertyName,
+            colName,
             change.oldValue
           );
           if (checkExpr) {
-            const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
-            const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
+            const constraintName = checkConstraintName(tableName, colName, change.oldValue);
             statements.push(
               `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
             );

@@ -91,6 +91,15 @@ export interface AlterPropertyOperation extends TypeOperation {
   kind: "AlterProperty";
   propertyName: string;
   changes: PropertyChange[];
+  /**
+   * The property before and after the change. The differ sets these when the
+   * property is `multi` on either side: a multi property is an array column,
+   * so its DDL (element-wise checks, `required` as a non-empty check, the
+   * single → multi column conversion) depends on the whole definition, not
+   * just the changed field.
+   */
+  oldProperty?: PropertyDefinition;
+  newProperty?: PropertyDefinition;
 }
 
 export interface AddLinkOperation extends TypeOperation {
@@ -107,6 +116,12 @@ export interface AlterLinkOperation extends TypeOperation {
   kind: "AlterLink";
   linkName: string;
   changes: LinkChange[];
+  /**
+   * Link-property changes on a `multi` link: AddProperty / DropProperty /
+   * AlterProperty operations applied to the link's junction table, whose
+   * columns are the link properties.
+   */
+  propertyOperations?: TypeOperation[];
 }
 
 export interface TriggerDefinition {
@@ -327,6 +342,8 @@ export interface LinkDefinition {
   onTargetDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   onSourceDelete?: "ALLOW" | "DELETE TARGET";
   annotations: Record<string, any>;
+  /** Link properties (`multi members: User { role: str; }`): columns of the junction table. */
+  properties?: PropertyDefinition[];
 }
 
 export interface PropertyChange {
@@ -400,6 +417,14 @@ export interface IndexDefinition {
   typeName?: string;
   /** …and the declaration as written, e.g. `constraint exclusive on ((.program, .name))`. */
   declaration?: string;
+}
+
+/** A stored link property and the junction table whose column holds it. */
+export interface DeclaredLinkProperty {
+  typeName: string;
+  linkName: string;
+  junctionTable: string;
+  property: PropertyDefinition;
 }
 
 export interface ColumnChange {

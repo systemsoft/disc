@@ -17,6 +17,7 @@ import { SchemaDiffer } from "./differ.ts";
 import {
   reconcileCreateTables,
   reconcileDeclaredIndexes,
+  reconcileDeclaredLinkProperties,
   type ExistingColumn
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
@@ -207,7 +208,9 @@ export class MigrationEngine {
   /**
    * Add the index backfill to a plan: `CREATE … INDEX IF NOT EXISTS` for every
    * index `newSchema` declares that the database lacks and the plan does not
-   * already create (see `reconcileDeclaredIndexes`). The backfill travels as
+   * already create (see `reconcileDeclaredIndexes`), plus the junction columns
+   * of declared link properties the database lacks (see
+   * `reconcileDeclaredLinkProperties`). The backfill travels as
    * ordinary operations of the plan, so preview, unsafe-op gating, execution,
    * history and rollback treat it like any other change — and a plan whose
    * diff is empty stops being a no-op exactly when there is something to fix.
@@ -219,11 +222,21 @@ export class MigrationEngine {
     if (!this.pool || this.config.dryRun || plan.migrations.length === 0)
       return plan;
 
-    const backfill = await reconcileDeclaredIndexes(
-      this.differ.declaredIndexes(newSchema),
-      plan.migrations.flatMap(m => m.operations),
-      names => this.readExistingIndexNames(names)
-    );
+    const planned = plan.migrations.flatMap(m => m.operations);
+    const backfill: Types.MigrationOperation[] = [
+      // Junction columns of link properties declared before Disc stored them
+      // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
+      ...await reconcileDeclaredLinkProperties(
+        this.differ.declaredLinkProperties(newSchema),
+        planned,
+        tableName => this.readExistingColumns(tableName)
+      ),
+      ...await reconcileDeclaredIndexes(
+        this.differ.declaredIndexes(newSchema),
+        planned,
+        names => this.readExistingIndexNames(names)
+      )
+    ];
 
     if (backfill.length === 0)
       return plan;
@@ -954,10 +967,13 @@ export class MigrationEngine {
                       classification: "ambiguous"
                     });
                     upgradeParent("ambiguous");
-                  } else if (change.kind === "ChangeMulti") {
+                  } else if (change.kind === "ChangeMulti" && change.newValue === false) {
+                    // single → multi is lossless (each value becomes a
+                    // one-element set, see DDLGenerator.generateAlterMultiProperty);
+                    // only the reverse needs a decision.
                     flagged.push({
                       operation: `AlterType ${alter.typeName} → ChangeMulti ${altProp.propertyName}`,
-                      reason: "single ↔ multi cardinality change — disc cannot infer how to fan in/out existing values",
+                      reason: "multi → single cardinality change — disc cannot infer how to fan in existing values",
                       classification: "ambiguous"
                     });
                     upgradeParent("ambiguous");
@@ -965,6 +981,34 @@ export class MigrationEngine {
                 }
               } else if (sub.kind === "AlterLink") {
                 const altLink = sub as Types.AlterLinkOperation;
+                // Link properties are junction-table columns: dropping one
+                // loses its values, like dropping a property's column.
+                for (const propOp of altLink.propertyOperations ?? []) {
+                  if (propOp.kind === "DropProperty") {
+                    flagged.push({
+                      operation: `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} → DropProperty ${
+                        (propOp as Types.DropPropertyOperation).propertyName
+                      }`,
+                      reason: "drops a link-property column and all values stored in it",
+                      classification: "unsafe"
+                    });
+                    upgradeParent("unsafe");
+                  } else if (
+                    propOp.kind === "AlterProperty" &&
+                    (propOp as Types.AlterPropertyOperation).changes.some(change =>
+                      change.kind === "ChangeType" || (change.kind === "ChangeRequired" && change.newValue === true)
+                    )
+                  ) {
+                    flagged.push({
+                      operation: `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} → AlterProperty ${
+                        (propOp as Types.AlterPropertyOperation).propertyName
+                      }`,
+                      reason: "link-property type or required change — existing junction rows may fail the conversion or the SET NOT NULL",
+                      classification: "ambiguous"
+                    });
+                    upgradeParent("ambiguous");
+                  }
+                }
                 for (const change of altLink.changes) {
                   if (
                     change.kind === "ChangeCardinality" ||

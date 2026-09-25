@@ -280,9 +280,12 @@ Deno.test(
 );
 
 /*** --- 10. migrate dry-run with real SDL produces plan output --- ***/
-Deno.test(
-  "CLI Integration - migrate dry-run with real SDL produces plan output",
-  async () => {
+/*** Dry-run diffs against the database's applied schema, so it needs PostgreSQL. ***/
+Deno.test({
+  name: "CLI Integration - migrate dry-run with real SDL produces plan output",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
     const capture = new ConsoleCapture();
     capture.start();
     const tempDir = await createTempDir();
@@ -304,6 +307,7 @@ Deno.test(
 
       await commands.migrate({
         _: ["migrate"],
+        "backend-dsn": dsn,
         "dry-run": true,
         schema: schemaFile
       });
@@ -320,12 +324,14 @@ Deno.test(
       await cleanupTempDir(tempDir);
     }
   }
-);
+});
 
 /*** --- 11. migrate --create with dry-run mode shows plan details --- ***/
-Deno.test(
-  "CLI Integration - migrate --create with dry-run shows plan details",
-  async () => {
+Deno.test({
+  name: "CLI Integration - migrate --create with dry-run shows plan details",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
     const capture = new ConsoleCapture();
     capture.start();
     const tempDir = await createTempDir();
@@ -343,12 +349,13 @@ Deno.test(
 }`
       );
 
-      /*** Use dry-run + create to avoid needing a real database. The create path reads the schema
-           and plans without executing DDL. ***/
+      /*** The create path reads the schema and plans against the applied one without executing
+           DDL. ***/
       const commands = new CLICommands();
 
       await commands.migrate({
         _: ["migrate"],
+        "backend-dsn": dsn,
         create: true,
         "dry-run": true,
         schema: schemaFile
@@ -370,7 +377,7 @@ Deno.test(
       await cleanupTempDir(tempDir);
     }
   }
-);
+});
 
 /*** --- 12. SchemaManager round-trip: SDL -> Module[] -> Schema -> types --- ***/
 Deno.test(

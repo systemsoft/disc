@@ -369,6 +369,18 @@ export class SQLCodeGenerator {
       return `NOT ${operand}`;
     }
 
+    // Postfix null tests: `<expr> IS NOT NULL`, `<expr> IS NULL`.
+    if (expr.operator === "IS NOT NULL" || expr.operator === "IS NULL") {
+      const wrapped = this.needsParentheses(expr.operand) ? `(${operand})` : operand;
+      return `${wrapped} ${expr.operator}`;
+    }
+
+    // A word operator (`EXISTS`, `DISTINCT`) needs a space before its operand;
+    // a symbol (`-`, `~`) does not.
+    if (/^[A-Z]/.test(expr.operator)) {
+      return `${expr.operator} ${operand}`;
+    }
+
     return `${expr.operator}${operand}`;
   }
 

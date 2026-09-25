@@ -20,7 +20,7 @@ import type {
   AccessPolicy
 } from "../access/mod.ts";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
+import { buildParameterIndex, EdgeQLCompiler, parameterBindOrder } from "../compiler/compiler.ts";
 import type { Schema } from "../compiler/context.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
@@ -1064,6 +1064,85 @@ Deno.test({
       await manager.close();
     } finally {
       await dropTables(pool, [TABLE_A, TABLE_B, ...MIGRATION_TABLES]);
+      await pool.close();
+    }
+  }
+});
+
+// =========================================================================
+// Denied SELECT with bound parameters
+// =========================================================================
+
+Deno.test({
+  name: "Access PG: denied SELECT keeps the filter's parameters bindable and returns 0 rows",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    const TABLE = "denied_access_token";
+    const SDL = `
+      type DeniedAccessToken {
+        required token_hash: str;
+      }
+    `;
+
+    try {
+      const { manager, schema } = await applyTestSchema(pool, SDL);
+
+      await pool.query(
+        `INSERT INTO ${TABLE} (id, token_hash) VALUES (gen_random_uuid(), 'abc')`
+      );
+
+      // Allow select only for a signed-in user; anonymous callers are denied.
+      const policy = buildPolicy("signed_in_only", "DeniedAccessToken", true, ["select"], {
+        kind: "AccessComparison",
+        operator: "=",
+        left: { kind: "AccessPath", path: ["id"] },
+        right: { kind: "AccessGlobal", name: "current_user" }
+      });
+      policy.condition = { kind: "AccessGlobal", name: "current_user" };
+
+      // Compile and bind the way the server does: the parameter map and the
+      // bind order both come from the EdgeQL AST, not from the emitted SQL.
+      const cases: { edgeql: string; variables: Record<string, unknown>; }[] = [
+        {
+          edgeql: "select DeniedAccessToken { id } filter .token_hash = <str>$h",
+          variables: { h: "abc" }
+        },
+        {
+          edgeql: "select DeniedAccessToken { id } filter .token_hash = <str>$h limit <int64>$lim",
+          variables: { h: "abc", lim: 5 }
+        }
+      ];
+
+      for (const { edgeql, variables } of cases) {
+        const ast = new EdgeQLParser(edgeql).parse();
+        const compiler = new EdgeQLCompiler(schema, {
+          enableAccessControl: true,
+          accessConfig: DEFAULT_ACCESS_CONFIG,
+          accessContext: {}
+        });
+        compiler.registerAccessPolicy(policy);
+
+        const parameterIndex = buildParameterIndex(ast);
+        const compiled = compiler.compile(ast, { parameterMap: parameterIndex });
+        assertEquals(compiled.ok, true, "Compilation should succeed");
+        if (!compiled.ok) {
+          return;
+        }
+
+        const sql = new SQLCodeGenerator().generate(compiled.value);
+        const params = parameterBindOrder(ast, parameterIndex).map(name => variables[name]);
+
+        const result = await pool.query(sql, params);
+        assertEquals(result.rowCount, 0, `Denied select should return 0 rows: ${edgeql}`);
+      }
+
+      await manager.close();
+    } finally {
+      await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
   }
