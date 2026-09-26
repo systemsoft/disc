@@ -152,3 +152,9 @@ Deno.test("alter link - single ↔ multi throws instead of emitting a comment", 
   assertStringIncludes(error.message, "link 'program' on 'bug'");
   assertStringIncludes(error.message, "single → multi");
 });
+
+Deno.test("drop link - a camelCase single link drops its snake_case FK column", () => {
+  const ddl = migrationDDL(bug("link pinnedProgram: Program;"), bug("")).join("\n");
+
+  assertStringIncludes(ddl, "DROP COLUMN IF EXISTS pinned_program_id;");
+});

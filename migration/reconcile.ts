@@ -62,6 +62,15 @@ interface IntendedColumn {
 }
 
 /**
+ * A captured identifier as PostgreSQL stores it: a quoted one keeps its case
+ * (a camelCase link's junction is `"channel_pinnedVideo"`), a bare one folds
+ * to lowercase.
+ */
+function storedIdentifier(quoted: string | undefined, bare: string | undefined): string {
+  return quoted ?? bare!.toLowerCase();
+}
+
+/**
  * Parse a generated `CREATE TABLE "name" ( ... );` statement into a table name
  * and the columns it would create. Returns `null` for any statement that is
  * not a `CREATE TABLE` (those pass through untouched).
@@ -81,7 +90,7 @@ function parseCreateTable(
   if (!header) {
     return null;
   }
-  const tableName = (header[1] ?? header[2]).toLowerCase();
+  const tableName = storedIdentifier(header[1], header[2]);
 
   // Body is everything between the first "(" and the final ")".
   const open = trimmed.indexOf("(");
@@ -256,7 +265,7 @@ export function withoutDropsOf(rollbackSql: string[], tables: Set<string>): stri
 
   return rollbackSql.filter(statement => {
     const drop = /^DROP TABLE\s+(?:IF EXISTS\s+)?(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/i.exec(statement.trim());
-    return !drop || !tables.has(drop[1] ?? drop[2]);
+    return !drop || !tables.has(storedIdentifier(drop[1], drop[2]));
   });
 }
 
@@ -268,15 +277,15 @@ export function withoutDropsOf(rollbackSql: string[], tables: Set<string>): stri
  */
 function dependentStatementTarget(statement: string): string | null {
   const trimmed = statement.trim();
-  const alter = /^ALTER TABLE\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))\b/i
+  const alter = /^ALTER TABLE\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*)\b)/i
     .exec(trimmed);
   if (alter) {
-    return (alter[1] ?? alter[2]).toLowerCase();
+    return storedIdentifier(alter[1], alter[2]);
   }
-  const index = /^CREATE\s+(?:UNIQUE\s+)?INDEX\b.*?\bON\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))\b/i
+  const index = /^CREATE\s+(?:UNIQUE\s+)?INDEX\b.*?\bON\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*)\b)/i
     .exec(trimmed);
   if (index) {
-    return (index[1] ?? index[2]).toLowerCase();
+    return storedIdentifier(index[1], index[2]);
   }
   return null;
 }

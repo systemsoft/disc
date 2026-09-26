@@ -31,6 +31,60 @@ const V2 = `module default {
   type Video { required title: str; };
 };`;
 
+/*** Adds a type with a multi link (with a link property), delete-target links (single and multi,
+     on the new type and added to the existing one) and an enum: objects beyond the type's table. ***/
+const V2_LINKED = `module default {
+  scalar type RbkStatus extending enum<Draft, Live>;
+  type Channel {
+    required name: str;
+    multi featured: RbkVideo { on source delete delete target; };
+    link pinned: RbkVideo { on source delete delete target; };
+  };
+  type RbkTag { required label: str; };
+  type RbkVideo {
+    required title: str;
+    status: RbkStatus;
+    multi tags: RbkTag { weight: int64; };
+    multi clips: RbkTag { on source delete delete target; };
+    link thumbnail: RbkTag { on source delete delete target; };
+  };
+};`;
+
+/*** The functions, triggers and enum types in `public` (tables are checked with `tableExists`). ***/
+async function nonTableObjects(pool: ConnectionPool): Promise<string[]> {
+  const result = await pool.query(`
+    SELECT 'function ' || p.proname AS name FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.prorettype = 'trigger'::regtype
+    UNION ALL
+    SELECT 'trigger ' || t.tgname FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND NOT t.tgisinternal
+    UNION ALL
+    SELECT 'type ' || t.typname FROM pg_type t
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = 'public' AND t.typtype = 'e'
+    ORDER BY 1
+  `);
+  return result.rows.map(row => row.name as string);
+}
+
+/*** `resetTestDatabase` drops tables only; clear what V2_LINKED adds besides them. ***/
+async function dropLinkedObjects(pool: ConnectionPool): Promise<void> {
+  await resetTestDatabase(pool);
+
+  for (const name of await nonTableObjects(pool)) {
+    const [kind, object] = name.split(" ");
+
+    if (kind === "function" && object.includes("source_delete"))
+      await pool.query(`DROP FUNCTION IF EXISTS "${object}"() CASCADE`);
+
+    if (kind === "type" && object === "disc_enum_rbkstatus")
+      await pool.query(`DROP TYPE IF EXISTS "${object}" CASCADE`);
+  }
+}
+
 async function columnNames(dsn: string, table: string): Promise<string[]> {
   return (await getColumns(dsn, table)).map(c => c.column_name);
 }
@@ -216,6 +270,130 @@ Deno.test({
       assertEquals(await tableExists(dsn, "video"), false, "the table this migration created is dropped");
       assert(await tableExists(dsn, "channel"), "the pre-existing table survives");
       assertEquals((await pool.query(`SELECT name FROM channel`)).rows.map(row => row.name), ["kept"]);
+    } finally {
+      capture.stop();
+      Deno.chdir(cwd);
+      await cleanupTempDir(tempDir);
+      await resetTestDatabase(pool);
+      await pool.close();
+    }
+  }
+});
+
+Deno.test({
+  name: "PG: rolling back a migration removes the junction tables, trigger functions and enums it created, and nothing else",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    const capture = new ConsoleCapture();
+    const cwd = Deno.cwd();
+    const tempDir = await createTempDir();
+    const created = ["channel_featured", "rbk_tag", "rbk_video", "rbk_video_clips", "rbk_video_tags"];
+
+    try {
+      await dropLinkedObjects(pool);
+      Deno.chdir(tempDir);
+      capture.start();
+
+      await cliMigrate(dsn, tempDir, V1);
+      await pool.query(`INSERT INTO channel (name) VALUES ('kept')`);
+      const before = await nonTableObjects(pool);
+
+      await cliMigrate(dsn, tempDir, V2_LINKED);
+      assertEquals(await migrationCount(pool), 2);
+
+      for (const table of created)
+        assert(await tableExists(dsn, table), `v2 creates ${table}`);
+
+      assert((await nonTableObjects(pool)).includes("type disc_enum_rbkstatus"));
+      assert((await nonTableObjects(pool)).includes("function disc_source_delete_channel_pinned"));
+
+      await cliRollback(dsn);
+
+      assertEquals(await migrationCount(pool), 1);
+
+      for (const table of created)
+        assertEquals(await tableExists(dsn, table), false, `rollback drops ${table}`);
+
+      assertEquals(await nonTableObjects(pool), before, "every trigger, trigger function and enum v2 created is gone");
+      assertEquals((await columnNames(dsn, "channel")).includes("pinned_id"), false);
+      assertEquals((await pool.query(`SELECT name FROM channel`)).rows.map(row => row.name), ["kept"], "pre-existing rows remain");
+
+      /*** No trigger is left behind on the surviving table to break a delete. ***/
+      await pool.query(`DELETE FROM channel`);
+      await pool.query(`INSERT INTO channel (name) VALUES ('kept')`);
+
+      await cliMigrate(dsn, tempDir, V2_LINKED);
+      assertEquals(await migrationCount(pool), 2, "re-migrating re-applies v2");
+
+      for (const table of created)
+        assert(await tableExists(dsn, table), `re-migrating re-creates ${table}`);
+
+      await cliMigrate(dsn, tempDir, V2_LINKED);
+      assertEquals(await migrationCount(pool), 2, "a further migrate is a no-op");
+    } finally {
+      capture.stop();
+      Deno.chdir(cwd);
+      await cleanupTempDir(tempDir);
+      await dropLinkedObjects(pool);
+      await pool.close();
+    }
+  }
+});
+
+Deno.test({
+  name: "PG: rolling back a migration whose junction CREATE drift repair skipped keeps the pre-existing junction and its rows",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    const capture = new ConsoleCapture();
+    const cwd = Deno.cwd();
+    const tempDir = await createTempDir();
+    const linked = `module default {
+      type Channel { required name: str; multi tags: RbkTag; };
+      type RbkTag { required label: str; };
+    };`;
+
+    try {
+      await resetTestDatabase(pool);
+      Deno.chdir(tempDir);
+      capture.start();
+
+      await cliMigrate(dsn, tempDir, linked);
+      await pool.query(`
+        WITH c AS (INSERT INTO channel (name) VALUES ('kept') RETURNING id),
+             t AS (INSERT INTO rbk_tag (label) VALUES ('kept') RETURNING id)
+        INSERT INTO channel_tags (source_id, target_id) SELECT c.id, t.id FROM c, t
+      `);
+
+      /*** History lost, tables kept: drift repair skips every existing CREATE, junction included. ***/
+      await pool.query(`DELETE FROM disc_migrations`);
+      await cliMigrate(
+        dsn,
+        tempDir,
+        `module default {
+          type Channel { required name: str; multi tags: RbkTag; };
+          type RbkTag { required label: str; };
+          type RbkVideo { required title: str; multi tags: RbkTag; };
+        };`
+      );
+      assert(await tableExists(dsn, "rbk_video_tags"));
+
+      await cliRollback(dsn);
+
+      assertEquals(await tableExists(dsn, "rbk_video"), false);
+      assertEquals(await tableExists(dsn, "rbk_video_tags"), false, "the junction this migration created is dropped");
+
+      for (const table of ["channel", "channel_tags", "rbk_tag"])
+        assert(await tableExists(dsn, table), `the pre-existing ${table} survives`);
+
+      assertEquals((await pool.query(`SELECT count(*)::int AS n FROM channel_tags`)).rows[0].n, 1);
     } finally {
       capture.stop();
       Deno.chdir(cwd);

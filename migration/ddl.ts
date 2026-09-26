@@ -92,6 +92,30 @@ export class DDLGenerator {
   generateRollbackDDL(operations: Types.MigrationOperation[]): string[] {
     const statements: string[] = [];
 
+    /*** Replay the forward pass's junction claims, in forward order, so the rollback drops
+         exactly the junction tables the forward DDL created (see `junctionCreatedFor`). ***/
+    this.createdJunctionTables.clear();
+
+    for (const operation of operations) {
+      if (operation.kind === "CreateType") {
+        const tableName = typeNameToTableName((operation as Types.CreateTypeOperation).typeName);
+
+        for (const link of (operation as Types.CreateTypeOperation).links) {
+          if (link.multi)
+            this.claimJunctionTable(tableName, link);
+        }
+      }
+
+      if (operation.kind === "AlterType") {
+        const tableName = typeNameToTableName((operation as Types.AlterTypeOperation).typeName);
+
+        for (const typeOp of (operation as Types.AlterTypeOperation).operations) {
+          if (typeOp.kind === "AddLink" && (typeOp as Types.AddLinkOperation).link.multi)
+            this.claimJunctionTable(tableName, (typeOp as Types.AddLinkOperation).link);
+        }
+      }
+    }
+
     // Process operations in reverse order for rollback
     for (const operation of [...operations].reverse()) {
       statements.push(...this.generateRollbackOperationDDL(operation));
@@ -496,29 +520,13 @@ END $$;`,
     // Generate junction tables for multi-valued links
     for (const link of operation.links) {
       if (link.multi) {
-        const junctionTableName = `${tableName}_${link.name}`;
+        const junctionTableName = this.claimJunctionTable(tableName, link);
 
-        // Skip if this exact junction table name was already created
-        if (this.createdJunctionTables.has(junctionTableName)) {
+        if (junctionTableName === null) {
           continue;
         }
 
-        // For many-to-many between DIFFERENT types, check if the reciprocal
-        // direction already created a junction table (e.g., "group_users"
-        // already covers the "user_groups" relationship). Only applies when
-        // source != target to avoid incorrectly deduplicating self-referencing
-        // multi-links (e.g., User.friends and User.enemies).
         const targetTable = typeNameToTableName(link.target);
-        if (tableName !== targetTable) {
-          const reverseKey = `${targetTable}→${tableName}`;
-          if (this.createdJunctionTables.has(reverseKey)) {
-            continue;
-          }
-        }
-
-        this.createdJunctionTables.add(junctionTableName);
-        this.createdJunctionTables.add(`${tableName}→${targetTable}`);
-
         const junctionColumns: Types.ColumnDefinition[] = [
           {
             name: "source_id",
@@ -630,6 +638,29 @@ END $$;`,
     }
 
     return statements;
+  }
+
+  /**
+   * The junction table the multi link `link` of `tableName` gets in this batch, recorded as
+   * created — or null when the batch already created that table, or (for many-to-many between
+   * DIFFERENT types) the reciprocal direction's: "group_users" already covers "user_groups".
+   * The reciprocal check skips self-referencing multi links (User.friends and User.enemies).
+   */
+  private claimJunctionTable(tableName: string, link: Types.LinkDefinition): string | null {
+    const junctionTableName = `${tableName}_${link.name}`;
+    const targetTable = typeNameToTableName(link.target);
+
+    if (this.createdJunctionTables.has(junctionTableName)) {
+      return null;
+    }
+
+    if (tableName !== targetTable && this.createdJunctionTables.has(`${targetTable}→${tableName}`)) {
+      return null;
+    }
+
+    this.createdJunctionTables.add(junctionTableName);
+    this.createdJunctionTables.add(`${tableName}→${targetTable}`);
+    return junctionTableName;
   }
 
   private generateDropType(operation: Types.DropTypeOperation): string[] {
@@ -940,22 +971,13 @@ END $$;`,
     const link = operation.link;
 
     if (link.multi) {
-      // Multi-valued link - create junction table
-      const junctionTableName = `${tableName}_${link.name}`;
+      // Multi-valued link - create junction table (skipped if already created or reciprocal exists)
+      const junctionTableName = this.claimJunctionTable(tableName, link);
       const targetTable = typeNameToTableName(link.target);
 
-      // Skip if already created or reciprocal exists
-      if (this.createdJunctionTables.has(junctionTableName)) {
+      if (junctionTableName === null) {
         return statements;
       }
-      if (tableName !== targetTable) {
-        const reverseKey = `${targetTable}→${tableName}`;
-        if (this.createdJunctionTables.has(reverseKey)) {
-          return statements;
-        }
-      }
-      this.createdJunctionTables.add(junctionTableName);
-      this.createdJunctionTables.add(`${tableName}→${targetTable}`);
 
       const junctionColumns: Types.ColumnDefinition[] = [
         {
@@ -1043,7 +1065,7 @@ END $$;`,
     );
 
     // Drop foreign key column if it exists
-    const columnName = `${linkName}_id`;
+    const columnName = linkColumnName(linkName);
     statements.push(
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`
     );
@@ -1968,11 +1990,45 @@ END $$;`,
   private generateRollbackCreateType(
     operation: Types.CreateTypeOperation
   ): string[] {
-    // To rollback CreateType, we drop the table
+    // To rollback CreateType, we drop everything its forward DDL created
     const tableName = typeNameToTableName(operation.typeName);
-    return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`
-    ];
+    const statements: string[] = [];
+
+    /*** Dropping the table drops its triggers but not their functions. ***/
+    for (const trigger of operation.triggers ?? []) {
+      statements.push(...this.generateDropTrigger(tableName, trigger.name));
+    }
+
+    for (const property of operation.properties) {
+      for (const rewrite of property.rewrites ?? []) {
+        statements.push(...this.generateDropRewrite(tableName, property.name, rewrite.events));
+      }
+    }
+
+    for (const link of operation.links) {
+      if (link.onSourceDelete === "DELETE TARGET") {
+        statements.push(...this.dropSourceDeleteTrigger(tableName, link.name));
+      }
+    }
+
+    /*** Junctions are sibling tables: the table's CASCADE only drops their foreign keys. ***/
+    for (const link of operation.links) {
+      if (link.multi && this.junctionCreatedFor(tableName, link)) {
+        statements.push(`DROP TABLE IF EXISTS ${this.escapeIdentifier(`${tableName}_${link.name}`)} CASCADE;`);
+      }
+    }
+
+    statements.push(`DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`);
+    return statements;
+  }
+
+  /**
+   * Whether the forward DDL of the batch being rolled back created the junction table of the
+   * multi link `link` of `tableName` — false when a reciprocal link's junction stood in for it
+   * (see `claimJunctionTable`, replayed by `generateRollbackDDL`).
+   */
+  private junctionCreatedFor(tableName: string, link: Types.LinkDefinition): boolean {
+    return this.createdJunctionTables.has(`${tableName}_${link.name}`);
   }
 
   private generateRollbackDropType(
@@ -2094,7 +2150,7 @@ END $$;`
 
     // To rollback AddProperty, we drop the column
     return [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.property.name)};`
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(propNameToColumnName(operation.property.name))};`
     ];
   }
 
@@ -2197,18 +2253,25 @@ END $$;`
     tableName: string,
     operation: Types.AddLinkOperation
   ): string[] {
-    const statements: string[] = [];
-    const linkName = operation.link.name;
+    const link = operation.link;
+    const linkName = link.name;
 
-    // Drop junction table if it was a multi-link
-    if (operation.link.multi) {
-      const junctionTableName = `${tableName}_${linkName}`;
-      statements.push(
-        `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`
-      );
+    /*** The source table survives the rollback, so its delete-target trigger must go explicitly. ***/
+    const statements: string[] = link.onSourceDelete === "DELETE TARGET" ?
+      this.dropSourceDeleteTrigger(tableName, linkName) :
+      [];
+
+    // Drop junction table if it was a multi-link that created one
+    if (link.multi) {
+      if (this.junctionCreatedFor(tableName, link)) {
+        const junctionTableName = `${tableName}_${linkName}`;
+        statements.push(
+          `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`
+        );
+      }
     } else {
       // Drop foreign key column if it was a single-link
-      const columnName = `${linkName}_id`;
+      const columnName = linkColumnName(linkName);
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`
       );

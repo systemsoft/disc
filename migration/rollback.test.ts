@@ -5,7 +5,7 @@
  * Tests for Migration Rollback Functionality
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { Module } from "../schema/converter.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { MigrationEngine } from "./engine.ts";
@@ -462,4 +462,106 @@ Deno.test("DDL Generator - rollback leaves nested alter operations in order", ()
     operation.operations.map(typeOp => (typeOp as Types.DropPropertyOperation).propertyName),
     ["first", "second"]
   );
+});
+
+/*** Rolling back a migration must remove every object its forward DDL created: `DROP TABLE <type> CASCADE`
+     only drops the FKs into a type's junction tables, and a dropped table's trigger functions survive it. ***/
+
+function prop(name: string, extra: Partial<Types.PropertyDefinition> = {}): Types.PropertyDefinition {
+  return { annotations: {}, constraints: [], multi: false, name, required: false, type: "str", ...extra };
+}
+
+function link(name: string, target: string, extra: Partial<Types.LinkDefinition> = {}): Types.LinkDefinition {
+  return { annotations: {}, multi: false, name, required: false, target, ...extra };
+}
+
+/*** The index of the first rollback statement containing `text`, or -1. ***/
+function indexOfStatement(statements: string[], text: string): number {
+  return statements.findIndex(statement => statement.includes(text));
+}
+
+Deno.test("DDL Generator - CreateType rollback drops the type's junction tables before the table", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL([
+    Types.createTypeOperation("Video", [prop("title")], [
+      link("tags", "Tag", { multi: true, properties: [prop("weight", { type: "int64" })] }),
+      link("owner", "User")
+    ])
+  ]);
+
+  const junction = indexOfStatement(rollback, "DROP TABLE IF EXISTS video_tags CASCADE;");
+  const table = indexOfStatement(rollback, "DROP TABLE IF EXISTS video CASCADE;");
+
+  assert(junction !== -1, rollback.join("\n"));
+  assert(junction < table, "the junction is dropped before the table it references");
+  assertEquals(indexOfStatement(rollback, "video_owner"), -1, "a single link has no junction");
+});
+
+Deno.test("DDL Generator - CreateType rollback drops the functions of its triggers, rewrites and delete-target links", () => {
+  const operation = Types.createTypeOperation("Video", [
+    prop("slug", { rewrites: [{ body: "str_lower(__subject__.title)", events: ["insert"] }] })
+  ], [
+    link("thumbnail", "Image", { onSourceDelete: "DELETE TARGET" }),
+    link("clips", "Clip", { multi: true, onSourceDelete: "DELETE TARGET" })
+  ]);
+  operation.triggers = [{ body: "select 1", events: ["insert"], name: "log_insert", scope: "each", timing: "after" }];
+
+  const rollback = new DDLGenerator().generateRollbackDDL([operation]);
+  const table = indexOfStatement(rollback, "DROP TABLE IF EXISTS video CASCADE;");
+
+  for (
+    const fn of [
+      "disc_source_delete_video_thumbnail",
+      "disc_source_delete_video_clips",
+      "video__log_insert_fn",
+      "video__slug__rewrite_fn"
+    ]
+  ) {
+    const drop = indexOfStatement(rollback, `DROP FUNCTION IF EXISTS ${fn}();`);
+    assert(drop !== -1, `drops ${fn}:\n${rollback.join("\n")}`);
+    assert(drop < table, `${fn} is dropped with its trigger, before the table`);
+  }
+});
+
+Deno.test("DDL Generator - CreateType rollback drops only the junction the forward DDL created for a reciprocal link", () => {
+  const operations = [
+    Types.createTypeOperation("Group", [], [link("users", "User", { multi: true })]),
+    Types.createTypeOperation("User", [], [link("groups", "Group", { multi: true })])
+  ];
+  const generator = new DDLGenerator();
+  const forward = generator.generateDDL(operations).join("\n");
+  const rollback = generator.generateRollbackDDL(operations);
+
+  assertStringIncludes(forward, "CREATE TABLE group_users");
+  assertEquals(forward.includes("CREATE TABLE user_groups"), false);
+  assert(indexOfStatement(rollback, "DROP TABLE IF EXISTS group_users CASCADE;") !== -1);
+  assertEquals(indexOfStatement(rollback, "user_groups"), -1, "user_groups was never created, so rollback leaves that name alone");
+});
+
+Deno.test("DDL Generator - AddLink rollback drops a delete-target link's trigger and function", () => {
+  for (const multi of [false, true]) {
+    const rollback = new DDLGenerator()
+      .generateRollbackDDL([{
+        kind: "AlterType",
+        operations: [{ kind: "AddLink", link: link("pinnedVideo", "Video", { multi, onSourceDelete: "DELETE TARGET" }) } as Types.AddLinkOperation],
+        typeName: "Channel"
+      } as Types.AlterTypeOperation])
+      .join("\n");
+
+    assertStringIncludes(rollback, `DROP TRIGGER IF EXISTS "trg_source_delete_channel_pinnedVideo" ON channel;`);
+    assertStringIncludes(rollback, `DROP FUNCTION IF EXISTS "disc_source_delete_channel_pinnedVideo"();`);
+    assertStringIncludes(
+      rollback,
+      multi ? `DROP TABLE IF EXISTS "channel_pinnedVideo" CASCADE;` : "ALTER TABLE channel DROP COLUMN IF EXISTS pinned_video_id;"
+    );
+  }
+});
+
+Deno.test("DDL Generator - AddProperty rollback drops the snake_case column the forward DDL added", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL([{
+    kind: "AlterType",
+    operations: [Types.addPropertyOperation(prop("displayName"))],
+    typeName: "Channel"
+  } as Types.AlterTypeOperation]);
+
+  assertEquals(rollback, ["ALTER TABLE channel DROP COLUMN IF EXISTS display_name;"]);
 });
