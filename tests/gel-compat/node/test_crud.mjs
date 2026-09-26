@@ -87,3 +87,8 @@ test("DELETE removes the row", async () => {
   );
   assert.equal(fetched.length, 0);
 });
+
+test("SELECT of a set literal returns one element per member", async () => {
+  assert.deepEqual(await client.query("SELECT {1, 2, 2}"), [1, 2, 2]);
+  assert.deepEqual(await client.query("SELECT {<str>$a, <str>$b}", { a: "x", b: "y" }), ["x", "y"]);
+});

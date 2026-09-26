@@ -107,3 +107,59 @@ Deno.test("output descriptor emits true per-field cardinality", () => {
   const distinct = new Set(cards.values());
   assertEquals(distinct.size > 1, true);
 });
+
+/*** Scalar type and result cardinality inferred for `query`. ***/
+function inferScalarSet(
+  query: string
+): { cardinality?: number; isScalar?: boolean; type: string; } {
+  const shape = inferOutputShape(new EdgeQLParser(query).parse(), schema);
+  return {
+    cardinality: shape.cardinality,
+    isScalar: shape.isScalar,
+    type: shape.fields[0].edgeqlType
+  };
+}
+
+Deno.test("set literal output shape: element type and Gel union cardinality", () => {
+  const cases: [string, string, number][] = [
+    ["select {1, 2, 3}", "int64", Cardinality.AT_LEAST_ONE],
+    ["select {1, 2.5}", "float64", Cardinality.AT_LEAST_ONE],
+    ["select {<int32>$a, 1}", "int64", Cardinality.AT_LEAST_ONE],
+    ["select {<str>$a, <str>$b}", "str", Cardinality.AT_LEAST_ONE],
+    ["select {<optional str>$a, <optional str>$b}", "str", Cardinality.MANY],
+    ["select {<optional str>$a}", "str", Cardinality.AT_MOST_ONE],
+    ["select {7}", "int64", Cardinality.ONE],
+    ["select {{1, 2}, 3}", "int64", Cardinality.AT_LEAST_ONE],
+    ["select {(select 1), 2}", "int64", Cardinality.AT_LEAST_ONE],
+    ["with xs := {1, 2} select xs", "int64", Cardinality.AT_LEAST_ONE]
+  ];
+  for (const [query, type, cardinality] of cases) {
+    assertEquals(
+      inferScalarSet(query),
+      { cardinality, isScalar: true, type },
+      query
+    );
+  }
+  const empty = inferScalarSet("select {}");
+  assertEquals([empty.cardinality, empty.isScalar], [
+    Cardinality.AT_MOST_ONE,
+    true
+  ]);
+});
+
+Deno.test("set literal of object queries is described like the object query", () => {
+  const shape = inferOutputShape(
+    new EdgeQLParser(
+      "select {(select Thing { title }), (select Thing { title })}"
+    )
+      .parse(),
+    schema
+  );
+  assertEquals(shape.typeName, "Thing");
+  assertEquals(shape.isScalar, undefined);
+  assertEquals(shape.cardinality, Cardinality.MANY);
+  assertEquals(shape.fields.map(f => [f.name, f.edgeqlType]), [[
+    "title",
+    "str"
+  ]]);
+});

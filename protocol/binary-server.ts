@@ -305,6 +305,12 @@ interface OutputShape {
    * prefix, no per-field reserved/length wrapper).
    */
   isScalar?: boolean;
+  /**
+   * The result cardinality, when the query's shape pins it down (a
+   * selected set literal). Otherwise the CommandDataDescription echoes the
+   * client's expected cardinality.
+   */
+  cardinality?: number;
 }
 
 /**
@@ -440,8 +446,38 @@ export function inferOutputShape(
     return { typeName: "Object", fields: [idField] };
   }
 
+  // `with xs := {…} select xs`: describe the aliased set literal.
+  if (q.kind === "WithBlock") {
+    const block = q as AST.WithBlock;
+    const body = block.body as AST.SelectQuery;
+    if (
+      body.kind === "SelectQuery" && !body.shape &&
+      body.expr.kind === "Identifier"
+    ) {
+      const alias = (body.expr as AST.Identifier).name;
+      const binding = block.bindings.find(b => b.name.name === alias);
+      if (binding?.value.kind === "SetExpr") {
+        return inferOutputShape({ ...body, expr: binding.value }, schema);
+      }
+    }
+  }
+
   if (q.kind === "SelectQuery") {
     const sel = q as AST.SelectQuery;
+
+    // Selected set literal (`select {1, 2}`): one element per row.
+    if (!sel.shape && sel.expr.kind === "SetExpr") {
+      const shape = inferSetShape(sel.expr as AST.SetExpr, schema);
+      // A filter, offset or limit can drop every element.
+      if (sel.filter || sel.offset || sel.limit) {
+        shape.cardinality = shape.cardinality === Cardinality.ONE ?
+          Cardinality.AT_MOST_ONE :
+          shape.cardinality === Cardinality.AT_LEAST_ONE ?
+          Cardinality.MANY :
+          shape.cardinality;
+      }
+      return shape;
+    }
 
     // Bare-scalar SELECT (`SELECT <bool>$x`, `SELECT 42`, …): emit a
     // BaseScalar shape so the descriptor doesn't wrap the value in an
@@ -517,6 +553,156 @@ export function inferOutputShape(
   }
 
   return { typeName: "Object", fields: [idField] };
+}
+
+/**
+ * Describe a selected set literal: the output is one row per element, so
+ * the element type is the output type. Scalar elements unify to the type
+ * Gel would pick (`{1, 2.5}` → float64); object elements (`{(select A {…}),
+ * …}`) are described like their first object query. The result cardinality
+ * follows Gel's union rule (see `unionCardinality`).
+ */
+function inferSetShape(
+  set: AST.SetExpr,
+  schema: Parameters<typeof inferOutputShape>[1]
+): OutputShape {
+  const cardinalities: number[] = [];
+  const objects: OutputShape[] = [];
+  const scalarTypes: string[] = [];
+  let unknown: OutputShape | undefined;
+
+  function visit(expr: AST.Expression): void {
+    if (expr.kind === "SetExpr") {
+      const elements = (expr as AST.SetExpr).elements;
+      if (elements.length === 0) {
+        cardinalities.push(Cardinality.AT_MOST_ONE);
+      }
+      elements.forEach(visit);
+      return;
+    }
+    cardinalities.push(elementCardinality(expr));
+    // Each element is described as if it were selected on its own.
+    const shape = expr.kind === "Subquery" ?
+      inferOutputShape((expr as AST.Subquery).query, schema) :
+      inferOutputShape({ kind: "SelectQuery", expr }, schema);
+    if (shape.isScalar) {
+      scalarTypes.push(shape.fields[0].edgeqlType);
+    } else if (shape.typeName !== "Object") {
+      objects.push(shape);
+    } else {
+      unknown ??= shape;
+    }
+  }
+  visit(set);
+
+  const cardinality = unionCardinality(cardinalities);
+  if (objects.length > 0) {
+    return { ...objects[0], cardinality };
+  }
+  if (scalarTypes.length > 0 || !unknown) {
+    // An untyped `{}` (which Gel rejects as indeterminate) never yields a
+    // row, so its scalar type is never decoded; `str` is a placeholder.
+    const scalar = scalarTypes.length > 0 ?
+      unifyScalarTypes(scalarTypes) :
+      "str";
+    return {
+      cardinality,
+      fields: [{ cardinality, edgeqlType: scalar, name: "_value" }],
+      isScalar: true,
+      typeName: scalar
+    };
+  }
+  return { ...unknown, cardinality };
+}
+
+/**
+ * Cardinality of one set-literal element: a literal or a required
+ * parameter is ONE, an `<optional T>$p` parameter is AT_MOST_ONE, a
+ * scalar subquery takes its expression's cardinality, and anything else
+ * (a type, a path, a query over objects) may be MANY.
+ */
+function elementCardinality(expr: AST.Expression): number {
+  switch (expr.kind) {
+    case "Literal":
+      return Cardinality.ONE;
+    case "Parameter":
+      return Cardinality.ONE;
+    case "SetExpr":
+      return unionCardinality(
+        (expr as AST.SetExpr).elements.map(elementCardinality)
+      );
+    case "TypeCast": {
+      const cast = expr as AST.TypeCast;
+      if (cast.cardinality?.required === false) {
+        return Cardinality.AT_MOST_ONE;
+      }
+      return elementCardinality(cast.expr);
+    }
+    case "Subquery": {
+      const query = (expr as AST.Subquery).query as AST.SelectQuery;
+      if (
+        query.kind === "SelectQuery" && !query.shape && !query.filter &&
+        !query.limit && !query.offset
+      ) {
+        return elementCardinality(query.expr);
+      }
+      return Cardinality.MANY;
+    }
+    default:
+      return Cardinality.MANY;
+  }
+}
+
+/**
+ * Gel's UNION cardinality (edb/edgeql/compiler/inference/cardinality.py
+ * `_union_cardinality`): lower and upper bounds add up. `{}` is
+ * AT_MOST_ONE, like Gel's EmptySet.
+ */
+function unionCardinality(cardinalities: number[]): number {
+  let lower = 0;
+  let upper = 0;
+  for (const c of cardinalities) {
+    if (c === Cardinality.ONE || c === Cardinality.AT_LEAST_ONE) {
+      lower += 1;
+    }
+    upper += c === Cardinality.ONE || c === Cardinality.AT_MOST_ONE ? 1 : 2;
+  }
+  if (upper <= 1) {
+    return lower >= 1 ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
+  }
+  return lower >= 1 ? Cardinality.AT_LEAST_ONE : Cardinality.MANY;
+}
+
+const INT_TYPES = ["int16", "int32", "int64"];
+const FLOAT_TYPES = ["float32", "float64"];
+
+/**
+ * The common type of a set literal's scalar elements, by Gel's implicit
+ * numeric casts: ints widen to the widest int, floats to the widest float,
+ * and a mix of ints and floats to float64 (float32 only for int16, the one
+ * int Gel implicitly casts to float32). Anything else keeps the first
+ * element's type.
+ */
+function unifyScalarTypes(types: string[]): string {
+  if (types.every(t => t === types[0])) {
+    return types[0];
+  }
+  const ints = types.filter(t => INT_TYPES.includes(t));
+  const floats = types.filter(t => FLOAT_TYPES.includes(t));
+  if (ints.length + floats.length !== types.length) {
+    return types[0];
+  }
+  const widest = (candidates: string[], order: string[]): string => order[Math.max(...candidates.map(t => order.indexOf(t)))];
+  if (floats.length === 0) {
+    return widest(ints, INT_TYPES);
+  }
+  if (ints.length === 0) {
+    return widest(floats, FLOAT_TYPES);
+  }
+  return ints.every(t => t === "int16") &&
+      floats.every(t => t === "float32") ?
+    "float32" :
+    "float64";
 }
 
 function extractTypeNameFromExpr(expr: unknown): string | null {
@@ -1496,7 +1682,8 @@ export class BinaryConnection {
           kind: "CommandDataDescription",
           annotations: [],
           capabilities: 0n,
-          resultCardinality: msg.expectedCardinality || Cardinality.MANY,
+          resultCardinality: cached.outputShape.cardinality ??
+            (msg.expectedCardinality || Cardinality.MANY),
           inputTypedescId: cached.inputDescId,
           inputTypedesc: cached.inputDesc,
           outputTypedescId: cached.outputDescId,
@@ -1528,8 +1715,8 @@ export class BinaryConnection {
         kind: "CommandDataDescription",
         annotations: [],
         capabilities: 0n,
-        resultCardinality: msg.expectedCardinality ||
-          Cardinality.MANY,
+        resultCardinality: built.outputShape.cardinality ??
+          (msg.expectedCardinality || Cardinality.MANY),
         inputTypedescId: built.inputDesc.id,
         inputTypedesc: built.inputDesc.data,
         outputTypedescId: built.outputDesc.id,
@@ -1612,8 +1799,8 @@ export class BinaryConnection {
           kind: "CommandDataDescription",
           annotations: [],
           capabilities: 0n,
-          resultCardinality: msg.expectedCardinality ||
-            Cardinality.MANY,
+          resultCardinality: outputShape.cardinality ??
+            (msg.expectedCardinality || Cardinality.MANY),
           inputTypedescId: inputDesc.id,
           inputTypedesc: inputDesc.data,
           outputTypedescId: outputDesc.id,

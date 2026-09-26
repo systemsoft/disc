@@ -96,3 +96,8 @@ def test_delete_then_missing(client):
         id=inserted.id,
     )
     assert len(fetched) == 0
+
+
+def test_select_set_literal(client):
+    assert list(client.query("SELECT {1, 2, 2}")) == [1, 2, 2]
+    assert list(client.query("SELECT {<str>$a, <str>$b}", a="x", b="y")) == ["x", "y"]
