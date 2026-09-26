@@ -175,6 +175,34 @@ class TypeScriptEmitter {
       this.getTypeScriptTypeName(qn.name);
   }
 
+  /** Base TS type of an enum (or an array of one), resolved like a link target; null for anything else. */
+  private enumTsBase(type: TypeRef, currentModule?: string): string | null {
+    if (type.kind === "enum")
+      return this.targetRef(type.name, currentModule);
+
+    if (type.kind === "array") {
+      const element = this.enumTsBase(type.element, currentModule);
+      return element === null ? null : `${element}[]`;
+    }
+
+    return null;
+  }
+
+  /**
+   * TS type for a property. Enums resolve through `targetRef`, like link targets,
+   * so one declared in another module is namespace-qualified (`agents.AgentStatus`);
+   * everything else goes through the EdgeQL type mapping.
+   */
+  private propertyTsType(type: TypeRef, sourceType: string, required: boolean, multi: boolean, currentModule?: string): string {
+    const base = this.enumTsBase(type, currentModule);
+
+    if (base === null)
+      return Types.mapEdgeQLTypeToTypeScript(sourceType, required, multi);
+
+    const withMulti = multi ? `${base}[]` : base;
+    return required ? withMulti : `${withMulti} | null`;
+  }
+
   // -- File header ----------------------------------------------------------
 
   private generateFileHeader(description: string): string {
@@ -213,11 +241,11 @@ class TypeScriptEmitter {
           content += this.generateInterface(obj, "  ", module.name);
           content += "\n";
           const tsName = this.getTypeScriptTypeName(obj.name.name);
-          content += this.generateInsertType(tsName, obj, "  ");
+          content += this.generateInsertType(tsName, obj, "  ", module.name);
           content += "\n";
-          content += this.generateUpdateType(tsName, obj, "  ");
+          content += this.generateUpdateType(tsName, obj, "  ", module.name);
           content += "\n";
-          content += this.generateFilterVarsType(tsName, obj, "  ");
+          content += this.generateFilterVarsType(tsName, obj, "  ", module.name);
           content += "\n";
           content += this.generateFilterType(obj, "  ", module.name);
           content += "\n";
@@ -300,7 +328,7 @@ class TypeScriptEmitter {
         continue;
       if (field.name === "id")
         continue;
-      content += this.generatePropertyDefinition(field, indent);
+      content += this.generatePropertyDefinition(field, indent, currentModule);
     }
 
     for (const field of obj.fields) {
@@ -313,7 +341,7 @@ class TypeScriptEmitter {
     return content;
   }
 
-  private generatePropertyDefinition(field: Field, indent: string = ""): string {
+  private generatePropertyDefinition(field: Field, indent: string = "", currentModule?: string): string {
     let content = "";
 
     const typeForMapping = field.sourceType;
@@ -354,7 +382,7 @@ class TypeScriptEmitter {
       content += `${indent}  /** ${docType}${required ? " (required)" : ""} */\n`;
     }
 
-    const tsType = Types.mapEdgeQLTypeToTypeScript(typeForMapping, required, multi);
+    const tsType = this.propertyTsType(field.type, typeForMapping, required, multi, currentModule);
     const optional = required ? "" : "?";
 
     content += `${indent}  ${field.name}${optional}: ${tsType};\n`;
@@ -378,7 +406,9 @@ class TypeScriptEmitter {
     // Link properties ride on each linked object as `"@name"` keys, present
     // only when the query selects them.
     if (field.linkProperties && field.linkProperties.length > 0) {
-      const keys = field.linkProperties.map(p => `"@${p.name}"?: ${Types.mapEdgeQLTypeToTypeScript(p.sourceType, isRequired(p.cardinality), false)};`);
+      const keys = field.linkProperties.map(p =>
+        `"@${p.name}"?: ${this.propertyTsType(p.type, p.sourceType, isRequired(p.cardinality), false, currentModule)};`
+      );
       targetType = `(${targetType} & { ${keys.join(" ")} })`;
     }
 
@@ -398,7 +428,7 @@ class TypeScriptEmitter {
 
   // -- Insert / Update ------------------------------------------------------
 
-  private generateInsertType(tsTypeName: string, obj: ObjectType, indent: string = ""): string {
+  private generateInsertType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Insert {\n`;
 
@@ -410,7 +440,7 @@ class TypeScriptEmitter {
 
       const base = this.fieldByName(obj, sf.name);
       const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
-      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, isMulti(sf.cardinality));
+      const tsType = this.propertyTsType(base ? base.type : sf.type, src, true, isMulti(sf.cardinality), currentModule);
       const optional = sf.optional ? "?" : "";
       content += `${indent}  ${sf.name}${optional}: ${tsType};\n`;
     }
@@ -436,7 +466,7 @@ class TypeScriptEmitter {
     return content;
   }
 
-  private generateUpdateType(tsTypeName: string, obj: ObjectType, indent: string = ""): string {
+  private generateUpdateType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Update {\n`;
 
@@ -448,7 +478,7 @@ class TypeScriptEmitter {
 
       const base = this.fieldByName(obj, sf.name);
       const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
-      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, isMulti(sf.cardinality));
+      const tsType = this.propertyTsType(base ? base.type : sf.type, src, true, isMulti(sf.cardinality), currentModule);
       content += `${indent}  ${sf.name}?: ${tsType};\n`;
     }
 
@@ -474,7 +504,7 @@ class TypeScriptEmitter {
 
   // -- FilterVars / Filter / Select -----------------------------------------
 
-  private generateFilterVarsType(tsTypeName: string, obj: ObjectType, indent: string = ""): string {
+  private generateFilterVarsType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}FilterVars {\n`;
 
@@ -482,7 +512,7 @@ class TypeScriptEmitter {
       const base = this.fieldByName(obj, fv.name);
       const multi = base ? isMulti(base.cardinality) : false;
       const src = base ? base.sourceType : typeRefToEdgeQL(fv.type);
-      const tsType = Types.mapEdgeQLTypeToTypeScript(src, true, multi);
+      const tsType = this.propertyTsType(base ? base.type : fv.type, src, true, multi, currentModule);
       content += `${indent}  ${fv.name}?: ${tsType};\n`;
     }
 
@@ -526,7 +556,7 @@ class TypeScriptEmitter {
       // A multi property is filtered by element (`.scopes = x` holds when any
       // element equals x), so its operand is the element type.
       const edgeqlType = field.sourceType;
-      const tsType = Types.mapEdgeQLTypeToTypeScript(edgeqlType, true, false);
+      const tsType = this.propertyTsType(field.type, edgeqlType, true, false, currentModule);
       const opHelper = this.getOperatorHelperFor(edgeqlType, tsType);
       content += `${indent}  ${field.name}?: ${tsType} | ${opHelper};\n`;
     }

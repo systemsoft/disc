@@ -10,6 +10,8 @@
  * - Every `filter()` passed `FilterArg<XFilter>` to a `compileFilter` constrained
  *   to `Record<string, unknown>`, which an index-signature-free interface can't
  *   satisfy (TS2345, one per object type).
+ * - An enum used from another module was emitted bare inside the using module's
+ *   namespace (TS2304) instead of qualified like a cross-module link target.
  *
  * Also pins that `writeGeneratedFiles` formats its output when the project's
  * `deno.json` excludes the output directory from `deno fmt`.
@@ -33,8 +35,13 @@ import { schemaToIR } from "./schema-to-ir.ts";
 
 const SDL = `
 module default {
+  scalar type Priority extending enum<Low, High>;
+
   type Note {
     required body: str;
+    priority: Priority;
+    required status: agents::AgentStatus;
+    multi capabilities: agents::AgentCapability;
   }
 }
 
@@ -60,6 +67,19 @@ module agents {
   type Team {
     required name: str;
     multi members: Agent;
+  }
+}
+
+module ops {
+  type Run {
+    required priority: default::Priority;
+    status: agents::AgentStatus;
+    multi capabilities: agents::AgentCapability;
+    multi priorities: default::Priority;
+    history: array<agents::AgentStatus>;
+    multi agents: agents::Agent {
+      priority: default::Priority;
+    };
   }
 }
 `;
