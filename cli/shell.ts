@@ -12,7 +12,7 @@ import { TextLineStream } from "@std/streams";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { DatabaseConnection } from "../lib/database.ts";
+import { DatabaseConnection, replaceDsnDatabase } from "../lib/database.ts";
 import { describeAllTypes, describeType } from "./describe.ts";
 import { discoverSchemaFiles, loadMultiFileSchema } from "../codegen/mod.ts";
 import { ensurePgRunning } from "../postgres/ensure-running.ts";
@@ -152,24 +152,28 @@ export class DiscShell {
     }
   }
 
-  private async changeDatabase(database: string): Promise<void> {
+  /*** `\c <database>`: switch databases. On failure the previous connection is kept, as in psql. ***/
+  private async changeDatabase(database: string): Promise<boolean> {
     console.log(`Connecting to database: ${database}…`);
 
-    /*** Close current connection ***/
-    if (this.db)
-      await this.db.close();
+    const previous = this.db;
 
-    /*** Connect to new database ***/
     try {
-      await this.connectToDatabase(this.session?.host || "localhost", this.session?.port || 5656, database);
-
-      if (this.session)
-        this.session.database = database;
-
-      console.log(`[ OK ] Connected to ${database}`);
+      await this.connectToDatabase(this.session?.host || "localhost", this.session?.port || 5656, database, true);
     } catch (error) {
-      console.error(`[FAIL] Failed to connect: ${(error as Error).message}`);
+      this.db = previous;
+      console.error(`[FAIL] Failed to connect to ${database}: ${(error as Error).message}`);
+      return false;
     }
+
+    if (previous)
+      await previous.close();
+
+    if (this.session)
+      this.session.database = database;
+
+    console.log(`[ OK ] Connected to ${database}`);
+    return true;
   }
 
   private async cleanup(): Promise<void> {
@@ -182,49 +186,23 @@ export class DiscShell {
       await this.db.close();
   }
 
-  private async connectToDatabase(host: string, port: number, database: string): Promise<void> {
-    if (this.explicitDsn) {
-      this.db = new DatabaseConnection(this.explicitDsn);
-      await this.db.connect();
+  /*** Connect via the resolved DSN, else TCP with `host`/`port`/`database`. `switchDatabase` (`\c`)
+       points a DSN at `database` too; the startup connection uses the DSN as given. ***/
+  private async connectToDatabase(host: string, port: number, database: string, switchDatabase = false): Promise<void> {
+    const dsn = await this.resolveDsn();
 
-      if (this.session)
-        this.session.connected = true;
-
-      return;
+    if (dsn) {
+      this.db = new DatabaseConnection(switchDatabase ? replaceDsnDatabase(dsn, database) : dsn);
+    } else {
+      /*** Fallback: direct TCP connection with provided parameters ***/
+      this.db = new DatabaseConnection({
+        database,
+        host,
+        password: Deno.env.get("DB_PASSWORD") || "",
+        port,
+        user: Deno.env.get("DB_USER") || "disc"
+      });
     }
-
-    /*** Then project context (auto-discovery via disc.toml) ***/
-    const ctx = resolveProjectContext();
-
-    if (ctx?.managed) {
-      const { dsn } = await ensurePgRunning(ctx);
-      this.db = new DatabaseConnection(dsn);
-      await this.db.connect();
-
-      if (this.session)
-        this.session.connected = true;
-
-      return;
-    }
-
-    if (ctx?.backendDsn) {
-      this.db = new DatabaseConnection(ctx.backendDsn);
-      await this.db.connect();
-
-      if (this.session)
-        this.session.connected = true;
-
-      return;
-    }
-
-    /*** Fallback: direct TCP connection with provided parameters ***/
-    this.db = new DatabaseConnection({
-      database,
-      host,
-      password: Deno.env.get("DB_PASSWORD") || "",
-      port,
-      user: Deno.env.get("DB_USER") || "disc"
-    });
 
     await this.db.connect();
 
@@ -236,20 +214,23 @@ export class DiscShell {
    * `\d <Type>`: render a verbose description of a single type. Reports
    * a clear error when the type can’t be found.
    */
-  private describeTypeByName(name: string): void {
+  private describeTypeByName(name: string): boolean {
     if (!this.schema || this.schema.types.size === 0) {
-      console.log("[WARN]  No schema loaded. Pass --schema <file> or run from a project with a dbschema/ directory.");
-      return;
+      console.error(
+        `[FAIL] Cannot describe ${name}: no schema loaded. Pass --schema <file> or run from a project with a dbschema/ directory.`
+      );
+      return false;
     }
 
     const out = describeType(this.schema, name);
 
     if (!out) {
-      console.log(`Type not found: ${name}`);
-      return;
+      console.error(`[FAIL] Type not found: ${name}`);
+      return false;
     }
 
     console.log(out);
+    return true;
   }
 
   /*** Run each statement in `filename`, stopping at the first failure. Returns false on failure. ***/
@@ -318,10 +299,11 @@ export class DiscShell {
     return ok;
   }
 
-  private async listTables(detailed = false): Promise<void> {
+  /*** Returns false when the listing query fails; an empty listing is not a failure. ***/
+  private async listTables(detailed = false): Promise<boolean> {
     if (!this.db) {
       console.error("[FAIL] Not connected to database");
-      return;
+      return false;
     }
 
     /*** Detailed variant joins pg_class via OID rather than casting the qualified name with
@@ -348,8 +330,11 @@ export class DiscShell {
         console.table(result.rows);
       else
         console.log("No tables found");
+
+      return true;
     } catch (error) {
       console.error(`[FAIL] Failed to list tables: ${(error as Error).message}`);
+      return false;
     }
   }
 
@@ -357,14 +342,14 @@ export class DiscShell {
    * `\d` (no args): show every Disc type known to the loaded schema.
    * Falls back to listing PostgreSQL tables when no schema is available.
    */
-  private async listTypes(): Promise<void> {
+  private async listTypes(): Promise<boolean> {
     if (this.schema && this.schema.types.size > 0) {
       console.log(describeAllTypes(this.schema));
-      return;
+      return true;
     }
 
     /*** No schema in scope — show PG tables so the user still gets something. ***/
-    await this.listTables();
+    return await this.listTables();
   }
 
   private async loadSchema(schemaFile: string): Promise<void> {
@@ -445,6 +430,8 @@ export class DiscShell {
     return ok ? "continue" : "error";
   }
 
+  /*** Run a backslash command. Any failure (bad usage, unknown command, failed lookup or query)
+       returns "error" so piped input stops, like psql's ON_ERROR_STOP. ***/
   private async processShellCommand(command: string): Promise<InputResult> {
     const parts = command.split(/\s+/);
     const cmd = parts[0];
@@ -452,10 +439,12 @@ export class DiscShell {
 
     switch (cmd) {
       case "\\c": {
-        if (parts[1])
-          await this.changeDatabase(parts[1]);
-        else
-          console.log("Usage: \\c <database>");
+        if (parts[1]) {
+          ok = await this.changeDatabase(parts[1]);
+        } else {
+          console.error("[FAIL] Usage: \\c <database>");
+          ok = false;
+        }
 
         break;
       }
@@ -470,20 +459,20 @@ export class DiscShell {
              full schema metadata. Falls back to a PG-table listing when no schema is loaded so the
              REPL still gives the user something useful in a fresh database. ***/
         if (parts[1])
-          this.describeTypeByName(parts[1]);
+          ok = this.describeTypeByName(parts[1]);
         else
-          await this.listTypes();
+          ok = await this.listTypes();
 
         break;
       }
 
       case "\\dt": {
-        await this.listTables(false);
+        ok = await this.listTables(false);
         break;
       }
 
       case "\\dt+": {
-        await this.listTables(true);
+        ok = await this.listTables(true);
         break;
       }
 
@@ -493,10 +482,12 @@ export class DiscShell {
       }
 
       case "\\i": {
-        if (parts[1])
+        if (parts[1]) {
           ok = await this.executeFile(parts[1]);
-        else
-          console.log("Usage: \\i <file>");
+        } else {
+          console.error("[FAIL] Usage: \\i <file>");
+          ok = false;
+        }
 
         break;
       }
@@ -522,12 +513,26 @@ export class DiscShell {
       }
 
       default: {
-        console.log(`Unknown command: ${cmd}`);
+        console.error(`[FAIL] Invalid command ${cmd}. Type \\? for help.`);
+        ok = false;
       }
     }
 
     await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
     return ok ? "continue" : "error";
+  }
+
+  /*** The DSN to connect with: `--backend-dsn`/DATABASE_URL, then disc.toml (managed or backend_dsn). ***/
+  private async resolveDsn(): Promise<string | undefined> {
+    if (this.explicitDsn)
+      return this.explicitDsn;
+
+    const ctx = resolveProjectContext();
+
+    if (ctx?.managed)
+      return (await ensurePgRunning(ctx)).dsn;
+
+    return ctx?.backendDsn;
   }
 
   private showHelp(): void {

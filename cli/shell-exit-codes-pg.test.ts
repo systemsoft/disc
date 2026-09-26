@@ -26,8 +26,9 @@ interface ShellRun {
   stdout: string;
 }
 
-/*** Run `disc shell <args>` in a temp project connected to the test database, feeding `stdin`. ***/
-async function runShell(args: string[], stdin = ""): Promise<ShellRun> {
+/*** Run `disc shell <args>` in a temp project connected to the test database, feeding `stdin`.
+     `schema`, when given, is written to the project’s dbschema/ so `\d` can describe its types. ***/
+async function runShell(args: string[], stdin = "", schema?: string): Promise<ShellRun> {
   const dsn = await getTestDsn();
   const projectDir = await createTempDir();
 
@@ -36,6 +37,11 @@ async function runShell(args: string[], stdin = ""): Promise<ShellRun> {
       join(projectDir, "disc.toml"),
       `name = "shell-probe"\n\n[database]\nmanaged = false\nbackend_dsn = "${dsn}"\n`
     );
+
+    if (schema) {
+      await Deno.mkdir(join(projectDir, "dbschema"));
+      await Deno.writeTextFile(join(projectDir, "dbschema", "default.esdl"), schema);
+    }
 
     const child = new Deno.Command(Deno.execPath(), {
       args: ["run", "--allow-all", "--no-check", "--config", CONFIG, MAIN, "shell", ...args],
@@ -164,6 +170,123 @@ Deno.test({
     } finally {
       await cleanupTempDir(dir);
     }
+  }
+});
+
+const PROBE_SCHEMA = "module default {\n  type ShellProbe {\n    name: str;\n  };\n};\n";
+
+/*** Pipe a failing meta-command followed by a statement that must not run; the shell exits 1. ***/
+async function assertMetaCommandStops(command: string, schema?: string): Promise<ShellRun> {
+  await dropProbeTable();
+
+  const run = await runShell([], `${command}\nCREATE TABLE shell_exit_probe (id int);\n\\q\n`, schema);
+
+  assertEquals(run.code, 1, run.stderr);
+  assertEquals(await tableExists(await getTestDsn(), "shell_exit_probe"), false);
+
+  return run;
+}
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero when \\c cannot connect",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const { stderr } = await assertMetaCommandStops("\\c shell_exit_nosuchdb");
+
+    assertStringIncludes(stderr, "shell_exit_nosuchdb");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero on \\c without a database",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await assertMetaCommandStops("\\c");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero on an unknown command",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const { stderr } = await assertMetaCommandStops("\\foo");
+
+    assertStringIncludes(stderr, "\\foo");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero when \\d names an unknown type",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const { stderr } = await assertMetaCommandStops("\\d NoSuchType", PROBE_SCHEMA);
+
+    assertStringIncludes(stderr, "NoSuchType");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero on \\d <Type> with no schema loaded",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await assertMetaCommandStops("\\d NoSuchType");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero when \\i names a missing file",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const { stderr } = await assertMetaCommandStops("\\i shell_exit_missing.edgeql");
+
+    assertStringIncludes(stderr, "shell_exit_missing.edgeql");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input stops and exits non-zero on \\i without a file",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await assertMetaCommandStops("\\i");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell with piped input exits 0 when every meta-command succeeds",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const database = new URL(await getTestDsn()).pathname.slice(1);
+    const commands = [
+      "\\?",
+      "\\help",
+      "\\timing",
+      "SELECT 1;",
+      "\\history",
+      "\\d",
+      "\\d ShellProbe",
+      "\\dt",
+      "\\dt+",
+      `\\c ${database}`,
+      "SELECT current_database() AS db;",
+      "\\clear",
+      "\\q"
+    ];
+
+    const { code, stderr, stdout } = await runShell([], commands.join("\n") + "\n", PROBE_SCHEMA);
+
+    assertEquals(code, 0, stderr);
+    assertStringIncludes(stdout, "ShellProbe");
+  }
+});
+
+Deno.test({
+  name: "PG: disc shell \\c switches the database of a DSN connection",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const { code, stderr, stdout } = await runShell([], "\\c postgres\nSELECT current_database() AS db;\n\\q\n");
+
+    assertEquals(code, 0, stderr);
+    assertStringIncludes(stdout, `"postgres"`);
   }
 });
 
