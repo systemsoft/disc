@@ -48,9 +48,12 @@ export interface ExtensionAuthContext {
 export interface ExtensionRoute {
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   path: string;
+  /*** `info` is the connection the request arrived on (as handed to `Deno.serve`), for handlers that
+       key on the caller's address. Absent when the handler is invoked outside `Deno.serve`. ***/
   handler: (
     request: Request,
-    authContext?: ExtensionAuthContext
+    authContext?: ExtensionAuthContext,
+    info?: Deno.ServeHandlerInfo
   ) => Response | Promise<Response>;
 }
 

@@ -19,6 +19,7 @@ import { AuthRoutes } from "../auth/integration.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import { TestDatabase } from "../auth/test-database.ts";
+import { AuthExtensionAdapter } from "../extensions/auth-extension.ts";
 import { RateLimiter } from "./rate-limiter.ts";
 import { HttpServer } from "./http.ts";
 
@@ -29,7 +30,9 @@ interface Harness {
   login(peer: string, headers?: Record<string, string>): Promise<number>;
 }
 
-async function createHarness(options: { burstSize: number; trustProxy?: boolean; }): Promise<Harness> {
+async function createHarness(
+  options: { burstSize: number; trustProxy?: boolean; viaExtension?: boolean; }
+): Promise<Harness> {
   const db = new TestDatabase();
   await db.connect();
 
@@ -42,10 +45,20 @@ async function createHarness(options: { burstSize: number; trustProxy?: boolean;
     trustProxy: options.trustProxy ?? false
   });
 
+  // `viaExtension` mounts the routes only through the auth extension
+  // (`/ext/auth/auth/login`), the path that dispatches via `ExtensionRoute`.
+  const mount = options.viaExtension ?
+    {
+      extensionRoutes: new Map([[
+        "auth",
+        new AuthExtensionAdapter({ authMiddleware: middleware, authProvider: provider, authRoutes: routes }).getRoutes()
+      ]])
+    } :
+    { authMiddleware: middleware, authProvider: provider, authRoutes: routes };
+  const loginPath = options.viaExtension ? "/ext/auth/auth/login" : "/auth/login";
+
   const server = new HttpServer({
-    authMiddleware: middleware,
-    authProvider: provider,
-    authRoutes: routes,
+    ...mount,
     config: {
       databaseUrl: "postgresql://localhost:5432/test",
       enableAuth: true,
@@ -70,7 +83,7 @@ async function createHarness(options: { burstSize: number; trustProxy?: boolean;
       await db.close();
     },
     login: async (peer: string, headers: Record<string, string> = {}) => {
-      const request = new Request("http://127.0.0.1/auth/login", {
+      const request = new Request(`http://127.0.0.1${loginPath}`, {
         body: JSON.stringify({ email: "nobody@example.com", password: "wrong-password" }),
         headers: { "Content-Type": "application/json", ...headers },
         method: "POST"
@@ -142,5 +155,45 @@ Deno.test("auth rate limit: with trustProxy, clients behind one proxy get separa
     assertNotEquals(await harness.login(proxy, { "X-Forwarded-For": "203.0.113.2" }), 429);
   } finally {
     await harness.close();
+  }
+});
+
+Deno.test("auth rate limit: extension-mounted routes give different peer addresses separate buckets", async () => {
+  const harness = await createHarness({ burstSize: 2, viaExtension: true });
+
+  try {
+    assertNotEquals(await harness.login("198.51.100.1"), 429);
+    assertNotEquals(await harness.login("198.51.100.1"), 429);
+    assertEquals(await harness.login("198.51.100.1"), 429);
+
+    assertNotEquals(await harness.login("198.51.100.2"), 429, "a second client must not inherit the first client's bucket");
+  } finally {
+    await harness.close();
+  }
+});
+
+Deno.test("auth rate limit: extension-mounted routes honour X-Forwarded-For only with trustProxy", async () => {
+  const direct = await createHarness({ burstSize: 2, viaExtension: true });
+
+  try {
+    assertNotEquals(await direct.login("198.51.100.9", { "X-Forwarded-For": "203.0.113.1" }), 429);
+    assertNotEquals(await direct.login("198.51.100.9", { "X-Forwarded-For": "203.0.113.2" }), 429);
+    assertEquals(await direct.login("198.51.100.9", { "X-Forwarded-For": "203.0.113.3" }), 429);
+  } finally {
+    await direct.close();
+  }
+
+  const proxied = await createHarness({ burstSize: 2, trustProxy: true, viaExtension: true });
+
+  try {
+    const proxy = "10.0.0.1";
+
+    assertNotEquals(await proxied.login(proxy, { "X-Forwarded-For": "203.0.113.1" }), 429);
+    assertNotEquals(await proxied.login(proxy, { "X-Forwarded-For": "203.0.113.1" }), 429);
+    assertEquals(await proxied.login(proxy, { "X-Forwarded-For": "203.0.113.1" }), 429);
+
+    assertNotEquals(await proxied.login(proxy, { "X-Forwarded-For": "203.0.113.2" }), 429);
+  } finally {
+    await proxied.close();
   }
 });

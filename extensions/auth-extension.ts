@@ -10,7 +10,7 @@
  */
 
 import type { AuthRoutes } from "../auth/integration.ts";
-import type { AuthMiddleware } from "../auth/middleware.ts";
+import type { AuthMiddleware, RequestHandler } from "../auth/middleware.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import { BaseExtension } from "./base-extension.ts";
 import type {
@@ -56,51 +56,68 @@ export class AuthExtensionAdapter extends BaseExtension {
   override getRoutes(): ExtensionRoute[] {
     return [
       {
-        handler: (request: Request) => this.authRoutes.register()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.register()),
         method: "POST",
         path: "/auth/register"
       },
       {
-        handler: (request: Request) => this.authRoutes.login()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.login()),
         method: "POST",
         path: "/auth/login"
       },
       {
-        handler: (request: Request) => this.authRoutes.logout()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.logout()),
         method: "POST",
         path: "/auth/logout"
       },
       {
-        handler: (request: Request) => this.authRoutes.refresh()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.refresh()),
         method: "POST",
         path: "/auth/refresh"
       },
       {
-        handler: (request: Request) => this.authRoutes.profile()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.profile()),
         method: "GET",
         path: "/auth/profile"
       },
       {
-        handler: (request: Request) => this.authRoutes.updatePassword()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.updatePassword()),
         method: "POST",
         path: "/auth/password"
       },
       {
-        handler: (request: Request) => this.authRoutes.resetPasswordRequest()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.resetPasswordRequest()),
         method: "POST",
         path: "/auth/reset"
       },
       {
-        handler: (request: Request) => this.authRoutes.resetPassword()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.resetPassword()),
         method: "POST",
         path: "/auth/reset/confirm"
       },
       {
-        handler: (request: Request) => this.authRoutes.verifyEmail()(request),
+        handler: (request, _authContext, info) => this.dispatch(request, info, this.authRoutes.verifyEmail()),
         method: "GET",
         path: "/auth/verify"
       }
     ];
+  }
+
+  /**
+   * Bind `request` to the connection it arrived on, then run `handler`.
+   * Without the binding the auth rate limiter can't see the caller's
+   * address and every caller shares one "anonymous" bucket. `info` is
+   * absent only when a handler is invoked outside `Deno.serve`.
+   */
+  private dispatch(
+    request: Request,
+    info: Deno.ServeHandlerInfo | undefined,
+    handler: RequestHandler
+  ): Response | Promise<Response> {
+    if (info) {
+      this.authRoutes.bindConnection(request, info);
+    }
+    return handler(request);
   }
 
   override getMiddleware(): ExtensionMiddleware[] {

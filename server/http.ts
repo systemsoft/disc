@@ -15,6 +15,7 @@ import { getLogger } from "../lib/logger.ts";
 import { handleDataWatch } from "./admin/data-watch.ts";
 import { handleGetConfig, handleSetConfig } from "./config-endpoint.ts";
 import { HttpRouteHandlers } from "./http-handlers.ts";
+import { getClientIp } from "./proxy.ts";
 
 import type { ResolvedCaller } from "./http-handlers.ts";
 
@@ -38,10 +39,11 @@ export class HttpServer extends HttpRouteHandlers {
       );
     }
 
-    // Enforce rate limit before touching in-flight counter or stats
+    // Enforce rate limit before touching in-flight counter or stats.
+    // Keyed like the auth limiter: X-Forwarded-For only with trustProxy,
+    // so clients behind a trusted proxy don't share its address's bucket.
     if (this.rate_limiter) {
-      const clientIp = "hostname" in info.remoteAddr ?
-        info.remoteAddr.hostname :
+      const clientIp = getClientIp(request, info, this.config.trustProxy ?? false) ??
         "unknown";
       if (!this.rate_limiter.allow(clientIp)) {
         const headers = this.get_default_headers("application/json");
@@ -107,7 +109,7 @@ export class HttpServer extends HttpRouteHandlers {
 
       // Extension route handling
       if (url.pathname.startsWith("/ext/")) {
-        return await this.handleExtensionRoute(request, url, authedContext);
+        return await this.handleExtensionRoute(request, url, authedContext, info);
       }
 
       // Auth route handling

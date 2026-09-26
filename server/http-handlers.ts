@@ -965,7 +965,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
   protected async handleExtensionRoute(
     request: Request,
     url: URL,
-    authContext?: import("../auth/middleware.ts").AuthContext | null
+    authContext?: import("../auth/middleware.ts").AuthContext | null,
+    info?: Deno.ServeHandlerInfo
   ): Promise<Response> {
     // Parse /ext/<name>/<path>
     const parts = url.pathname.slice(5).split("/"); // strip "/ext/"
@@ -989,8 +990,10 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
 
     try {
       // gh/geldata#6345 — forward auth context so extensions (graphql,
-      // custom-functions, …) can enforce per-route authorization.
-      return await route.handler(request, authContext ?? undefined);
+      // custom-functions, …) can enforce per-route authorization. The
+      // connection info lets handlers (the auth extension's rate
+      // limiter) key on the caller's address.
+      return await route.handler(request, authContext ?? undefined, info);
     } catch (error) {
       log.error("Extension route error", {
         extension: extName,
