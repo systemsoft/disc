@@ -261,6 +261,16 @@ export interface RenameScalarOperation extends MigrationOperation {
   toTypeName: string;
 }
 
+/**
+ * Convert the TEXT column of an `array<Enum>` property to the enum's array
+ * type. Disc created such columns as TEXT before it mapped `array<Enum>`, and
+ * the stored schema snapshot already says `array<Enum>`, so the differ never
+ * sees the change; `reconcileEnumArrayColumns` finds them in the database.
+ */
+export interface ConvertEnumArrayColumnOperation extends MigrationOperation, DeclaredEnumArrayColumn {
+  kind: "ConvertEnumArrayColumn";
+}
+
 // Global operations
 export interface CreateGlobalOperation extends MigrationOperation {
   kind: "CreateGlobal";
@@ -459,6 +469,16 @@ export interface DeclaredLinkProperty {
   linkName: string;
   junctionTable: string;
   property: PropertyDefinition;
+}
+
+/** A column holding an `array<Enum>` property (or link property), and its enum's PostgreSQL type. */
+export interface DeclaredEnumArrayColumn {
+  columnName: string;
+  /** The enum's type, without `[]` (e.g. `disc_enum_priority`). */
+  pgTypeName: string;
+  /** The property's type as declared, for error messages (e.g. `array<Priority>`). */
+  propertyType: string;
+  tableName: string;
 }
 
 export interface ColumnChange {

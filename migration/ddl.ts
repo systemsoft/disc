@@ -225,6 +225,13 @@ export class DDLGenerator {
         const op = operation as Types.RenameScalarOperation;
         return this.generateRenameScalar({ ...op, fromTypeName: op.toTypeName, toTypeName: op.fromTypeName });
       }
+      case "ConvertEnumArrayColumn": {
+        const op = operation as Types.ConvertEnumArrayColumnOperation;
+        const column = this.escapeIdentifier(op.columnName);
+        return [
+          `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
+        ];
+      }
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -290,6 +297,10 @@ export class DDLGenerator {
         return this.generateRenameScalar(
           operation as Types.RenameScalarOperation
         );
+      case "ConvertEnumArrayColumn":
+        return this.generateConvertEnumArrayColumn(
+          operation as Types.ConvertEnumArrayColumnOperation
+        );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -308,6 +319,46 @@ export class DDLGenerator {
    */
   private scalarTypeName(operation: { pgTypeName?: string; scalarName: string; }): string {
     return operation.pgTypeName ?? enumTypeName("default", operation.scalarName, false);
+  }
+
+  /**
+   * Convert a legacy TEXT `array<Enum>` column (see
+   * `ConvertEnumArrayColumnOperation`). It holds what PostgreSQL's assignment
+   * cast to text wrote: an array literal (`{Low,"In Progress"}`) from array
+   * values, or a JSON array (`["Low"]`) from a `<json>` value. Every stored
+   * value is checked first, so one that isn't an array of the enum's values
+   * fails the migration naming the column and the value rather than being
+   * dropped; then JSON arrays are rewritten as array literals, which the
+   * column type change casts.
+   */
+  private generateConvertEnumArrayColumn(
+    operation: Types.ConvertEnumArrayColumnOperation
+  ): string[] {
+    const table = this.escapeIdentifier(operation.tableName);
+    const column = this.escapeIdentifier(operation.columnName);
+    const arrayType = `${this.escapeIdentifier(operation.pgTypeName)}[]`;
+    const jsonElements = (value: string): string =>
+      `ARRAY(SELECT e.v FROM jsonb_array_elements_text(${value}::jsonb) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
+    const isJsonArray = (value: string): string => `${value} ~ '^\\s*\\['`;
+    const message = `Cannot convert ${operation.tableName}.${operation.columnName} from text to ${operation.propertyType}`
+      .replace(/'/g, "''");
+
+    return [
+      `DO $$
+DECLARE
+  disc_value text;
+BEGIN
+  FOR disc_value IN SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL LOOP
+    BEGIN
+      PERFORM CASE WHEN ${isJsonArray("disc_value")} THEN ${jsonElements("disc_value")}::${arrayType} ELSE disc_value::${arrayType} END;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION '${message}: stored value % is not an array of its enum values (%)', quote_literal(disc_value), SQLERRM;
+    END;
+  END LOOP;
+END $$;`,
+      `UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`,
+      `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE ${arrayType} USING ${column}::${arrayType};`
+    ];
   }
 
   private generateRenameScalar(
@@ -1712,6 +1763,12 @@ END $$;`,
     const enumType = this.enumScalars.get(edgeqlType);
     if (enumType) {
       return this.escapeIdentifier(enumType);
+    }
+
+    // `array<Enum>` is an array of the enum type, like a multi enum property.
+    const enumArrayType = this.enumScalars.get(/^array<(.+)>$/.exec(edgeqlType)?.[1] ?? "");
+    if (enumArrayType) {
+      return `${this.escapeIdentifier(enumArrayType)}[]`;
     }
 
     return "TEXT";

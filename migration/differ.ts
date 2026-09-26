@@ -1241,6 +1241,41 @@ export class SchemaDiffer {
   }
 
   /**
+   * Every stored column of a schema typed `array<Enum>` — properties, and link
+   * properties on junction tables — with the enum's PG type. Used by the
+   * enum-array backfill (`reconcileEnumArrayColumns`): Disc created these
+   * columns as TEXT before it mapped `array<Enum>`, and the stored schema
+   * snapshot already declares the type, so diffing two snapshots never
+   * converts them.
+   */
+  declaredEnumArrayColumns(schema: Module[]): Types.DeclaredEnumArrayColumn[] {
+    const enumTypes = this.enumScalarNames(schema);
+    const types = this.extractTypes(qualifyEnumReferences(schema));
+    const columns = (tableName: string, properties: Types.PropertyDefinition[]): Types.DeclaredEnumArrayColumn[] =>
+      properties.flatMap(property => {
+        const pgTypeName = property.multi || property.computed ?
+          undefined :
+          enumTypes.get(/^array<(.+)>$/.exec(property.type)?.[1] ?? "");
+
+        return pgTypeName ?
+          [{ columnName: propNameToColumnName(property.name), pgTypeName, propertyType: property.type, tableName }] :
+          [];
+      });
+
+    return [...types.values()].flatMap(typeDef => {
+      const tableName = typeNameToTableName(typeDef.name.value);
+
+      return [
+        ...columns(tableName, this.extractPropertiesWithInheritance(typeDef, types)),
+        ...this
+          .extractLinksWithInheritance(typeDef, types)
+          .filter(link => link.multi)
+          .flatMap(link => columns(`${tableName}_${link.name}`, link.properties ?? []))
+      ];
+    });
+  }
+
+  /**
    * Indexes are read from a type's own members and created on its own table
    * only. On a type with subtypes that would silently leave every subtype
    * table unindexed (and an `exclusive` unenforced there), so refuse it.

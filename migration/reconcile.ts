@@ -30,8 +30,10 @@ import type {
   AddPropertyOperation,
   AlterLinkOperation,
   AlterTypeOperation,
+  ConvertEnumArrayColumnOperation,
   CreateIndexOperation,
   CreateTypeOperation,
+  DeclaredEnumArrayColumn,
   DeclaredLinkProperty,
   IndexDefinition,
   MigrationOperation
@@ -453,4 +455,38 @@ export async function reconcileDeclaredLinkProperties(
       propertyOperations: entries.map((entry): AddPropertyOperation => ({ kind: "AddProperty", property: entry.property }))
     } as AlterLinkOperation]
   }));
+}
+
+/**
+ * Convert the TEXT columns of declared `array<Enum>` properties to the enum's
+ * array type. Before Disc mapped `array<Enum>`, such a column was created as
+ * TEXT (holding the array's text form, e.g. `{Low,High}`), while the stored
+ * schema snapshot already declared `array<Enum>` — so the differ, comparing
+ * two snapshots that agree, diffs to nothing.
+ *
+ * Returns one `ConvertEnumArrayColumn` per declared column the database has
+ * as `text`. Tables and columns that don't exist yet are the pending
+ * migration's to create, with the right type. Idempotent: once converted, the
+ * column's type is `ARRAY` and it returns nothing.
+ */
+export async function reconcileEnumArrayColumns(
+  declared: DeclaredEnumArrayColumn[],
+  readExisting: ExistingColumnReader
+): Promise<ConvertEnumArrayColumnOperation[]> {
+  const columnsByTable = new Map<string, ExistingColumn[] | null>();
+  const operations: ConvertEnumArrayColumnOperation[] = [];
+
+  for (const column of declared) {
+    if (!columnsByTable.has(column.tableName)) {
+      columnsByTable.set(column.tableName, await readExisting(column.tableName));
+    }
+
+    const existing = columnsByTable.get(column.tableName)?.find(c => c.name === column.columnName);
+
+    if (existing?.dataType === "text") {
+      operations.push({ ...column, kind: "ConvertEnumArrayColumn" });
+    }
+  }
+
+  return operations;
 }

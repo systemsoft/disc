@@ -18,6 +18,7 @@ import {
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
+  reconcileEnumArrayColumns,
   withoutDropsOf,
   type ExistingColumn
 } from "./reconcile.ts";
@@ -246,7 +247,8 @@ export class MigrationEngine {
    * index `newSchema` declares that the database lacks and the plan does not
    * already create (see `reconcileDeclaredIndexes`), plus the junction columns
    * of declared link properties the database lacks (see
-   * `reconcileDeclaredLinkProperties`). The backfill travels as
+   * `reconcileDeclaredLinkProperties`), plus the conversion of `array<Enum>`
+   * columns created as TEXT (see `reconcileEnumArrayColumns`). The backfill travels as
    * ordinary operations of the plan, so preview, unsafe-op gating, execution,
    * history and rollback treat it like any other change — and a plan whose
    * diff is empty stops being a no-op exactly when there is something to fix.
@@ -271,6 +273,13 @@ export class MigrationEngine {
         await this.onExistingTables(this.differ.declaredIndexes(newSchema)),
         planned,
         names => this.readExistingIndexNames(names)
+      ),
+      // `array<Enum>` columns created as TEXT before Disc mapped the type (see
+      // `reconcileEnumArrayColumns`). Last, so any enum the plan creates or
+      // renames already has its final name.
+      ...await reconcileEnumArrayColumns(
+        this.differ.declaredEnumArrayColumns(newSchema),
+        tableName => this.readExistingColumns(tableName)
       )
     ];
 
