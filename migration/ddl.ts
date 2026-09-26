@@ -51,6 +51,12 @@ export class DDLGenerator {
    * work. (gh/geldata#8517)
    */
   private enumScalars = new Map<string, string>();
+  /**
+   * The type each user-declared non-enum scalar extends, so column emission
+   * resolves `Count` (`extending int64`) to BIGINT instead of the TEXT
+   * fallback. Populated via {@link setScalarBaseTypes}.
+   */
+  private scalarBaseTypes = new Map<string, string>();
 
   /**
    * Tell the generator which scalar names are enum-typed so column
@@ -66,6 +72,11 @@ export class DDLGenerator {
     this.enumScalars = names instanceof Map ?
       new Map(names) :
       new Map([...names].map(name => [name, this.scalarTypeName({ scalarName: name.slice(name.lastIndexOf(":") + 1) })]));
+  }
+
+  /*** Tell the generator the type each non-enum scalar extends (from `SchemaDiffer.scalarBaseTypes`). ***/
+  setScalarBaseTypes(bases: Map<string, string>): void {
+    this.scalarBaseTypes = new Map(bases);
   }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
@@ -225,8 +236,8 @@ export class DDLGenerator {
         const op = operation as Types.RenameScalarOperation;
         return this.generateRenameScalar({ ...op, fromTypeName: op.toTypeName, toTypeName: op.fromTypeName });
       }
-      case "ConvertEnumArrayColumn": {
-        const op = operation as Types.ConvertEnumArrayColumnOperation;
+      case "ConvertTextColumn": {
+        const op = operation as Types.ConvertTextColumnOperation;
         const column = this.escapeIdentifier(op.columnName);
         return [
           `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
@@ -297,9 +308,9 @@ export class DDLGenerator {
         return this.generateRenameScalar(
           operation as Types.RenameScalarOperation
         );
-      case "ConvertEnumArrayColumn":
-        return this.generateConvertEnumArrayColumn(
-          operation as Types.ConvertEnumArrayColumnOperation
+      case "ConvertTextColumn":
+        return this.generateConvertTextColumn(
+          operation as Types.ConvertTextColumnOperation
         );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
@@ -322,26 +333,35 @@ export class DDLGenerator {
   }
 
   /**
-   * Convert a legacy TEXT `array<Enum>` column (see
-   * `ConvertEnumArrayColumnOperation`). It holds what PostgreSQL's assignment
-   * cast to text wrote: an array literal (`{Low,"In Progress"}`) from array
-   * values, or a JSON array (`["Low"]`) from a `<json>` value. Every stored
-   * value is checked first, so one that isn't an array of the enum's values
-   * fails the migration naming the column and the value rather than being
-   * dropped; then JSON arrays are rewritten as array literals, which the
-   * column type change casts.
+   * Convert a legacy TEXT column (see `ConvertTextColumnOperation`). It holds
+   * what PostgreSQL's assignment cast to text wrote: the value's text form
+   * (`12`, `{Low,"In Progress"}`), or — for an array type — a JSON array
+   * (`["Low"]`) from a `<json>` value. Every stored value is checked first, so
+   * one that doesn't convert fails the migration naming the column and the
+   * value rather than being dropped; then JSON arrays are rewritten as array
+   * literals, which the column type change casts. PostgreSQL can't cast a
+   * text default to the new type, so a declared default is dropped for the
+   * change and set again.
    */
-  private generateConvertEnumArrayColumn(
-    operation: Types.ConvertEnumArrayColumnOperation
+  private generateConvertTextColumn(
+    operation: Types.ConvertTextColumnOperation
   ): string[] {
     const table = this.escapeIdentifier(operation.tableName);
     const column = this.escapeIdentifier(operation.columnName);
-    const arrayType = `${this.escapeIdentifier(operation.pgTypeName)}[]`;
+    const pgType = operation.pgType;
+    const element = pgType.endsWith("[]") ?
+      /^array<(.+)>$/.exec(operation.propertyType)?.[1] ?? operation.propertyType :
+      undefined;
     const jsonElements = (value: string): string =>
       `ARRAY(SELECT e.v FROM jsonb_array_elements_text(${value}::jsonb) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
     const isJsonArray = (value: string): string => `${value} ~ '^\\s*\\['`;
-    const message = `Cannot convert ${operation.tableName}.${operation.columnName} from text to ${operation.propertyType}`
+    const check = element === undefined ?
+      `disc_value::${pgType}` :
+      `CASE WHEN ${isJsonArray("disc_value")} THEN ${jsonElements("disc_value")}::${pgType} ELSE disc_value::${pgType} END`;
+    const expected = element === undefined ? `a valid ${operation.propertyType}` : `an array of ${element} values`;
+    const message = `Cannot convert ${operation.tableName}.${operation.columnName} from text to ${operation.propertyType}: stored value % is not ${expected}`
       .replace(/'/g, "''");
+    const alterType = `ALTER COLUMN ${column} TYPE ${pgType} USING ${column}::${pgType}`;
 
     return [
       `DO $$
@@ -350,14 +370,18 @@ DECLARE
 BEGIN
   FOR disc_value IN SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL LOOP
     BEGIN
-      PERFORM CASE WHEN ${isJsonArray("disc_value")} THEN ${jsonElements("disc_value")}::${arrayType} ELSE disc_value::${arrayType} END;
+      PERFORM ${check};
     EXCEPTION WHEN OTHERS THEN
-      RAISE EXCEPTION '${message}: stored value % is not an array of its enum values (%)', quote_literal(disc_value), SQLERRM;
+      RAISE EXCEPTION '${message} (%)', quote_literal(disc_value), SQLERRM;
     END;
   END LOOP;
 END $$;`,
-      `UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`,
-      `ALTER TABLE ${table} ALTER COLUMN ${column} TYPE ${arrayType} USING ${column}::${arrayType};`
+      ...(element === undefined ? [] : [`UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`]),
+      operation.default === undefined ?
+        `ALTER TABLE ${table} ${alterType};` :
+        `ALTER TABLE ${table} ALTER COLUMN ${column} DROP DEFAULT, ${alterType}, ALTER COLUMN ${column} SET DEFAULT ${
+          this.formatDefaultValue(operation.default, operation.propertyType)
+        };`
     ];
   }
 
@@ -1684,7 +1708,8 @@ END $$;`,
     }));
   }
 
-  private propertyColumnType(property: Types.PropertyDefinition): string {
+  /*** The column type of a stored property as the DDL emits it (public for the TEXT-column backfill). ***/
+  propertyColumnType(property: Types.PropertyDefinition): string {
     const pgType = this.mapEdgeQLTypeToPostgreSQL(property.type);
     return property.multi ? `${pgType}[]` : pgType;
   }
@@ -1698,6 +1723,7 @@ END $$;`,
       float32: "REAL",
       float64: "DOUBLE PRECISION",
       decimal: "DECIMAL",
+      bigint: "NUMERIC",
       bool: "BOOLEAN",
       uuid: "UUID",
       datetime: "TIMESTAMP WITH TIME ZONE",
@@ -1719,6 +1745,7 @@ END $$;`,
       "array<bool>": "BOOLEAN[]",
       "array<uuid>": "UUID[]",
       "array<datetime>": "TIMESTAMPTZ[]",
+      "array<duration>": "INTERVAL[]",
       "array<json>": "JSONB[]",
       "array<bytes>": "BYTEA[]",
       "array<bigint>": "NUMERIC[]",
@@ -1726,9 +1753,12 @@ END $$;`,
       "array<cal::local_date>": "DATE[]",
       "array<cal::local_time>": "TIME WITHOUT TIME ZONE[]",
       "array<cal::local_datetime>": "TIMESTAMP WITHOUT TIME ZONE[]",
+      "array<cal::relative_duration>": "INTERVAL[]",
+      "array<cal::date_duration>": "INTERVAL[]",
       // Range types
       "range<int32>": "INT4RANGE",
       "range<int64>": "INT8RANGE",
+      "range<float32>": "NUMRANGE",
       "range<float64>": "NUMRANGE",
       "range<decimal>": "NUMRANGE",
       "range<datetime>": "TSTZRANGE",
@@ -1737,6 +1767,7 @@ END $$;`,
       // Multirange types
       "multirange<int32>": "INT4MULTIRANGE",
       "multirange<int64>": "INT8MULTIRANGE",
+      "multirange<float32>": "NUMMULTIRANGE",
       "multirange<float64>": "NUMMULTIRANGE",
       "multirange<decimal>": "NUMMULTIRANGE",
       "multirange<datetime>": "TSTZMULTIRANGE",
@@ -1769,6 +1800,18 @@ END $$;`,
     const enumArrayType = this.enumScalars.get(/^array<(.+)>$/.exec(edgeqlType)?.[1] ?? "");
     if (enumArrayType) {
       return `${this.escapeIdentifier(enumArrayType)}[]`;
+    }
+
+    // A user scalar extending another type (`scalar type Count extending
+    // int64`) is stored as that type; `array<Count>` as an array of it.
+    const baseType = this.scalarBaseTypes.get(edgeqlType);
+    if (baseType) {
+      return this.mapEdgeQLTypeToPostgreSQL(baseType);
+    }
+
+    const arrayBaseType = this.scalarBaseTypes.get(/^array<(.+)>$/.exec(edgeqlType)?.[1] ?? "");
+    if (arrayBaseType) {
+      return this.mapEdgeQLTypeToPostgreSQL(`array<${arrayBaseType}>`);
     }
 
     return "TEXT";

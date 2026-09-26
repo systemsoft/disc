@@ -262,13 +262,14 @@ export interface RenameScalarOperation extends MigrationOperation {
 }
 
 /**
- * Convert the TEXT column of an `array<Enum>` property to the enum's array
- * type. Disc created such columns as TEXT before it mapped `array<Enum>`, and
- * the stored schema snapshot already says `array<Enum>`, so the differ never
- * sees the change; `reconcileEnumArrayColumns` finds them in the database.
+ * Convert the TEXT column of a property to its declared type's column type.
+ * Disc created such columns as TEXT before it mapped the type (`bigint`,
+ * `array<Enum>`, `array<duration>`, a scalar extending `int64`, …), and the
+ * stored schema snapshot already declares the type, so the differ never sees
+ * the change; `reconcileTextColumns` finds them in the database.
  */
-export interface ConvertEnumArrayColumnOperation extends MigrationOperation, DeclaredEnumArrayColumn {
-  kind: "ConvertEnumArrayColumn";
+export interface ConvertTextColumnOperation extends MigrationOperation, DeclaredColumn {
+  kind: "ConvertTextColumn";
 }
 
 // Global operations
@@ -471,12 +472,14 @@ export interface DeclaredLinkProperty {
   property: PropertyDefinition;
 }
 
-/** A column holding an `array<Enum>` property (or link property), and its enum's PostgreSQL type. */
-export interface DeclaredEnumArrayColumn {
+/** A column holding a stored property (or link property), and the column type its declared type maps to. */
+export interface DeclaredColumn {
   columnName: string;
-  /** The enum's type, without `[]` (e.g. `disc_enum_priority`). */
-  pgTypeName: string;
-  /** The property's type as declared, for error messages (e.g. `array<Priority>`). */
+  /** The property's declared default, set again on the column after a type conversion. */
+  default?: unknown;
+  /** The column type as the DDL emits it (e.g. `NUMERIC`, `disc_enum_priority[]`). */
+  pgType: string;
+  /** The property's type as declared, for error messages (e.g. `bigint`, `array<Priority>`). */
   propertyType: string;
   tableName: string;
 }

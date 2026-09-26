@@ -18,7 +18,7 @@ import {
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
-  reconcileEnumArrayColumns,
+  reconcileTextColumns,
   withoutDropsOf,
   type ExistingColumn
 } from "./reconcile.ts";
@@ -199,6 +199,16 @@ export class MigrationEngine {
   }
 
   /**
+   * Tell the DDL generator the column type of each scalar `schema` declares:
+   * an enum's PG enum type, and for a non-enum scalar (`scalar type Count
+   * extending int64`) the type it extends — either would otherwise be TEXT.
+   */
+  private primeScalarTypes(schema: Module[]): void {
+    this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(schema));
+    this.ddlGenerator.setScalarBaseTypes(this.differ.scalarBaseTypes(schema));
+  }
+
+  /**
    * Generate a migration plan from schema changes
    */
   planMigration(oldSchema: Module[] | null, newSchema: Module[]): Result<Types.MigrationPlan, MigrationError> {
@@ -210,7 +220,7 @@ export class MigrationEngine {
       // cascade reorder pass in the differ guarantees scalar
       // `CREATE TYPE`s fire before any column referencing them, so
       // setting the registry from `newSchema` is safe even mid-batch.
-      this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(newSchema));
+      this.primeScalarTypes(newSchema);
 
       // Route the no-baseline case through the differ with an empty old
       // schema rather than a separate `generateInitialMigration` path. The
@@ -247,8 +257,8 @@ export class MigrationEngine {
    * index `newSchema` declares that the database lacks and the plan does not
    * already create (see `reconcileDeclaredIndexes`), plus the junction columns
    * of declared link properties the database lacks (see
-   * `reconcileDeclaredLinkProperties`), plus the conversion of `array<Enum>`
-   * columns created as TEXT (see `reconcileEnumArrayColumns`). The backfill travels as
+   * `reconcileDeclaredLinkProperties`), plus the conversion of columns created
+   * as TEXT before Disc mapped their type (see `reconcileTextColumns`). The backfill travels as
    * ordinary operations of the plan, so preview, unsafe-op gating, execution,
    * history and rollback treat it like any other change — and a plan whose
    * diff is empty stops being a no-op exactly when there is something to fix.
@@ -261,6 +271,7 @@ export class MigrationEngine {
       return plan;
 
     const planned = plan.migrations.flatMap(m => m.operations);
+    this.primeScalarTypes(newSchema);
     const backfill: Types.MigrationOperation[] = [
       // Junction columns of link properties declared before Disc stored them
       // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
@@ -274,11 +285,12 @@ export class MigrationEngine {
         planned,
         names => this.readExistingIndexNames(names)
       ),
-      // `array<Enum>` columns created as TEXT before Disc mapped the type (see
-      // `reconcileEnumArrayColumns`). Last, so any enum the plan creates or
-      // renames already has its final name.
-      ...await reconcileEnumArrayColumns(
-        this.differ.declaredEnumArrayColumns(newSchema),
+      // Columns created as TEXT before Disc mapped their type (`bigint`,
+      // `array<Enum>`, … — see `reconcileTextColumns`). Last, so any enum the
+      // plan creates or renames already has its final name.
+      ...await reconcileTextColumns(
+        this.differ.declaredColumns(newSchema, property => this.ddlGenerator.propertyColumnType(property)),
+        planned,
         tableName => this.readExistingColumns(tableName)
       )
     ];

@@ -452,6 +452,30 @@ export class SchemaDiffer {
     return names;
   }
 
+  /**
+   * Every non-enum scalar declared in `schema` (`scalar type Count extending
+   * int64`), mapped to the type it extends. Used to prime
+   * `DDLGenerator.setScalarBaseTypes(...)` so a property of such a scalar
+   * gets the column type of the type it extends. Keyed like
+   * `enumScalarNames`: qualified, and bare (the default module's when
+   * scalars share a name).
+   */
+  scalarBaseTypes(schema: Module[]): Map<string, string> {
+    const bases = new Map<string, string>();
+    for (const [qualifiedName, { decl }] of this.extractScalars(schema)) {
+      const base = decl.extending?.[0];
+      if (!base || this.isEnumScalar(decl)) {
+        continue;
+      }
+      const bareName = qualifiedName.slice(qualifiedName.lastIndexOf("::") + 2);
+      bases.set(qualifiedName, this.typeToString(base));
+      if (qualifiedName.startsWith("default::") || !bases.has(bareName)) {
+        bases.set(bareName, this.typeToString(base));
+      }
+    }
+    return bases;
+  }
+
   private extractTypes(modules: Module[]): Map<string, AST.TypeDeclaration> {
     const types = new Map<string, AST.TypeDeclaration>();
 
@@ -1241,26 +1265,25 @@ export class SchemaDiffer {
   }
 
   /**
-   * Every stored column of a schema typed `array<Enum>` — properties, and link
-   * properties on junction tables — with the enum's PG type. Used by the
-   * enum-array backfill (`reconcileEnumArrayColumns`): Disc created these
-   * columns as TEXT before it mapped `array<Enum>`, and the stored schema
+   * Every stored column of a schema — properties, and link properties on
+   * junction tables — with the column type `columnType` gives its property.
+   * Used by the TEXT-column backfill (`reconcileTextColumns`): Disc created
+   * columns of types it didn't map yet as TEXT, and the stored schema
    * snapshot already declares the type, so diffing two snapshots never
    * converts them.
    */
-  declaredEnumArrayColumns(schema: Module[]): Types.DeclaredEnumArrayColumn[] {
-    const enumTypes = this.enumScalarNames(schema);
+  declaredColumns(schema: Module[], columnType: (property: Types.PropertyDefinition) => string): Types.DeclaredColumn[] {
     const types = this.extractTypes(qualifyEnumReferences(schema));
-    const columns = (tableName: string, properties: Types.PropertyDefinition[]): Types.DeclaredEnumArrayColumn[] =>
-      properties.flatMap(property => {
-        const pgTypeName = property.multi || property.computed ?
-          undefined :
-          enumTypes.get(/^array<(.+)>$/.exec(property.type)?.[1] ?? "");
-
-        return pgTypeName ?
-          [{ columnName: propNameToColumnName(property.name), pgTypeName, propertyType: property.type, tableName }] :
-          [];
-      });
+    const columns = (tableName: string, properties: Types.PropertyDefinition[]): Types.DeclaredColumn[] =>
+      properties
+        .filter(property => !property.computed)
+        .map(property => ({
+          columnName: propNameToColumnName(property.name),
+          ...(property.default !== undefined ? { default: property.default } : {}),
+          pgType: columnType(property),
+          propertyType: property.type,
+          tableName
+        }));
 
     return [...types.values()].flatMap(typeDef => {
       const tableName = typeNameToTableName(typeDef.name.value);

@@ -9,8 +9,8 @@
  * column is now the enum's array type (`disc_enum_priority[]`), like a
  * `multi` enum property. Databases migrated before keep their TEXT column
  * while the stored schema already says `array<Priority>`, so the diff sees no
- * change; `reconcileEnumArrayColumns` finds those columns and a
- * `ConvertEnumArrayColumn` operation converts them.
+ * change; `reconcileTextColumns` finds those columns and a
+ * `ConvertTextColumn` operation converts them.
  *
  * Real-PG coverage lives in `migration/enum-array-property-pg.test.ts`.
  */
@@ -21,7 +21,7 @@ import { SDLParser } from "../schema/parser.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { MigrationEngine } from "./engine.ts";
-import { reconcileEnumArrayColumns } from "./reconcile.ts";
+import { reconcileTextColumns } from "./reconcile.ts";
 import * as Types from "./types.ts";
 
 const TASKS = `module default {
@@ -139,8 +139,8 @@ Deno.test("array<Enum> property - a link property's junction column is the enum'
   assert(/CREATE TABLE team_members \(.*roles disc_enum_priority\[\]/.test(all), all);
 });
 
-Deno.test("SchemaDiffer.declaredEnumArrayColumns - properties and link properties typed array<Enum>, with their enum's type", () => {
-  const columns = new SchemaDiffer().declaredEnumArrayColumns(parseModules(`${AGENTS}\nmodule default {
+Deno.test("SchemaDiffer.declaredColumns - properties and link properties typed array<Enum>, with their enum's type", () => {
+  const schema = parseModules(`${AGENTS}\nmodule default {
   scalar type Priority extending enum<Low, High>;
   type Task {
     required title: str;
@@ -151,42 +151,48 @@ Deno.test("SchemaDiffer.declaredEnumArrayColumns - properties and link propertie
       roles: array<Priority>;
     };
   };
-};`));
+};`);
+  const differ = new SchemaDiffer();
+  const generator = new DDLGenerator();
+  generator.setEnumScalars(differ.enumScalarNames(schema));
+  const columns = differ
+    .declaredColumns(schema, property => generator.propertyColumnType(property))
+    .filter(column => column.propertyType.startsWith("array<") && column.pgType !== "TEXT[]");
 
   assertEquals(
     columns.sort((a, b) => a.tableName.localeCompare(b.tableName)),
     [
-      { columnName: "history", pgTypeName: "disc_enum_agentstatus", propertyType: "array<agents::AgentStatus>", tableName: "agent" },
-      { columnName: "tags", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "task" },
-      { columnName: "roles", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "task_owners" }
+      { columnName: "history", pgType: "disc_enum_agentstatus[]", propertyType: "array<agents::AgentStatus>", tableName: "agent" },
+      { columnName: "tags", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "task" },
+      { columnName: "roles", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "task_owners" }
     ]
   );
 });
 
-Deno.test("reconcileEnumArrayColumns - converts only existing TEXT columns", async () => {
-  const declared: Types.DeclaredEnumArrayColumn[] = [
-    { columnName: "tags", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "task" },
-    { columnName: "history", pgTypeName: "disc_enum_status", propertyType: "array<Status>", tableName: "agent" },
-    { columnName: "roles", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "missing" },
-    { columnName: "added", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "task" }
+Deno.test("reconcileTextColumns - converts only existing TEXT columns", async () => {
+  const declared: Types.DeclaredColumn[] = [
+    { columnName: "tags", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "task" },
+    { columnName: "history", pgType: "disc_enum_status[]", propertyType: "array<Status>", tableName: "agent" },
+    { columnName: "roles", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "missing" },
+    { columnName: "added", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "task" }
   ];
   const existing: Record<string, { name: string; dataType: string; }[]> = {
     agent: [{ dataType: "ARRAY", name: "history" }],
     task: [{ dataType: "text", name: "tags" }]
   };
 
-  const ops = await reconcileEnumArrayColumns(declared, async table => await Promise.resolve(existing[table] ?? null));
+  const ops = await reconcileTextColumns(declared, [], async table => await Promise.resolve(existing[table] ?? null));
 
   assertEquals(ops, [
-    { columnName: "tags", kind: "ConvertEnumArrayColumn", pgTypeName: "disc_enum_priority", propertyType: "array<Priority>", tableName: "task" }
+    { columnName: "tags", kind: "ConvertTextColumn", pgType: "disc_enum_priority[]", propertyType: "array<Priority>", tableName: "task" }
   ]);
 });
 
-Deno.test("ConvertEnumArrayColumn - checks every stored value, rewrites JSON arrays, then converts the column", () => {
-  const op: Types.ConvertEnumArrayColumnOperation = {
+Deno.test("ConvertTextColumn - checks every stored value, rewrites JSON arrays, then converts the column", () => {
+  const op: Types.ConvertTextColumnOperation = {
     columnName: "tags",
-    kind: "ConvertEnumArrayColumn",
-    pgTypeName: "disc_enum_priority",
+    kind: "ConvertTextColumn",
+    pgType: "disc_enum_priority[]",
     propertyType: "array<Priority>",
     tableName: "task"
   };
@@ -200,11 +206,11 @@ Deno.test("ConvertEnumArrayColumn - checks every stored value, rewrites JSON arr
   assertEquals(statements[2], "ALTER TABLE task ALTER COLUMN tags TYPE disc_enum_priority[] USING tags::disc_enum_priority[];");
 });
 
-Deno.test("ConvertEnumArrayColumn - rollback returns the column to text", () => {
-  const op: Types.ConvertEnumArrayColumnOperation = {
+Deno.test("ConvertTextColumn - rollback returns the column to text", () => {
+  const op: Types.ConvertTextColumnOperation = {
     columnName: "tags",
-    kind: "ConvertEnumArrayColumn",
-    pgTypeName: "disc_enum_priority",
+    kind: "ConvertTextColumn",
+    pgType: "disc_enum_priority[]",
     propertyType: "array<Priority>",
     tableName: "task"
   };

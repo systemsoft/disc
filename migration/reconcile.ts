@@ -24,16 +24,17 @@
  */
 
 import { MigrationError } from "../lib/errors.ts";
-import { propNameToColumnName } from "../lib/identifiers.ts";
+import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
 import type {
   AddLinkOperation,
   AddPropertyOperation,
   AlterLinkOperation,
+  AlterPropertyOperation,
   AlterTypeOperation,
-  ConvertEnumArrayColumnOperation,
+  ConvertTextColumnOperation,
   CreateIndexOperation,
   CreateTypeOperation,
-  DeclaredEnumArrayColumn,
+  DeclaredColumn,
   DeclaredLinkProperty,
   IndexDefinition,
   MigrationOperation
@@ -457,26 +458,57 @@ export async function reconcileDeclaredLinkProperties(
   }));
 }
 
+/*** The property changes whose DDL changes the column's type. ***/
+const RETYPING_CHANGES = new Set(["ChangeComputed", "ChangeMulti", "ChangeType"]);
+
 /**
- * Convert the TEXT columns of declared `array<Enum>` properties to the enum's
- * array type. Before Disc mapped `array<Enum>`, such a column was created as
- * TEXT (holding the array's text form, e.g. `{Low,High}`), while the stored
- * schema snapshot already declared `array<Enum>` — so the differ, comparing
- * two snapshots that agree, diffs to nothing.
+ * Convert TEXT columns to the column type of their property's declared type.
+ * Before Disc mapped a type (`bigint`, `array<Enum>`, `array<duration>`, a
+ * scalar extending `int64`, …), its column was created as TEXT (holding the
+ * value's text form, e.g. `12` or `{Low,High}`), while the stored schema
+ * snapshot already declared the type — so the differ, comparing two
+ * snapshots that agree, diffs to nothing.
  *
- * Returns one `ConvertEnumArrayColumn` per declared column the database has
- * as `text`. Tables and columns that don't exist yet are the pending
- * migration's to create, with the right type. Idempotent: once converted, the
- * column's type is `ARRAY` and it returns nothing.
+ * Returns one `ConvertTextColumn` per declared column whose type isn't TEXT
+ * and which the database has as `text`, skipping columns whose type the
+ * pending migration (`planned`) already changes (a property's type, `multi`
+ * or computed-ness, or a link's link properties). Tables and columns that
+ * don't exist yet are the pending migration's to create, with the right type.
+ * Idempotent: once converted, the column's type isn't `text` and it returns
+ * nothing.
  */
-export async function reconcileEnumArrayColumns(
-  declared: DeclaredEnumArrayColumn[],
+export async function reconcileTextColumns(
+  declared: DeclaredColumn[],
+  planned: MigrationOperation[],
   readExisting: ExistingColumnReader
-): Promise<ConvertEnumArrayColumnOperation[]> {
+): Promise<ConvertTextColumnOperation[]> {
+  const retyped = new Set<string>();
+  for (const op of planned) {
+    if (op.kind !== "AlterType") {
+      continue;
+    }
+    const tableName = typeNameToTableName((op as AlterTypeOperation).typeName);
+    for (const sub of (op as AlterTypeOperation).operations) {
+      if (sub.kind === "AlterProperty" && (sub as AlterPropertyOperation).changes.some(c => RETYPING_CHANGES.has(c.kind))) {
+        retyped.add(`${tableName}.${propNameToColumnName((sub as AlterPropertyOperation).propertyName)}`);
+      } else if (sub.kind === "AlterLink" && (sub as AlterLinkOperation).propertyOperations) {
+        retyped.add(`${tableName}_${(sub as AlterLinkOperation).linkName}.*`);
+      }
+    }
+  }
+
   const columnsByTable = new Map<string, ExistingColumn[] | null>();
-  const operations: ConvertEnumArrayColumnOperation[] = [];
+  const operations: ConvertTextColumnOperation[] = [];
 
   for (const column of declared) {
+    if (
+      column.pgType === "TEXT" ||
+      retyped.has(`${column.tableName}.${column.columnName}`) ||
+      retyped.has(`${column.tableName}.*`)
+    ) {
+      continue;
+    }
+
     if (!columnsByTable.has(column.tableName)) {
       columnsByTable.set(column.tableName, await readExisting(column.tableName));
     }
@@ -484,7 +516,7 @@ export async function reconcileEnumArrayColumns(
     const existing = columnsByTable.get(column.tableName)?.find(c => c.name === column.columnName);
 
     if (existing?.dataType === "text") {
-      operations.push({ ...column, kind: "ConvertEnumArrayColumn" });
+      operations.push({ ...column, kind: "ConvertTextColumn" });
     }
   }
 
