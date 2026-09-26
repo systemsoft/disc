@@ -70,7 +70,10 @@ export function schemaToIR(schema: Schema): CodegenIR {
   const multiModule = [...schema.types.values()].some(t => Boolean(t.module));
   const byModule = new Map<string, { enums: EnumType[]; objects: ObjectType[]; }>();
 
-  for (const typeDef of schema.types.values()) {
+  // A Set, because enums in a non-default module are registered under both
+  // their bare and `module::` names (same TypeDef) — iterating the map
+  // directly emitted them twice.
+  for (const typeDef of new Set(schema.types.values())) {
     const moduleName = typeDef.module ?? "default";
     const bucket = byModule.get(moduleName) ?? { enums: [], objects: [] };
     if (typeDef.kind === "enum" && typeDef.enumValues && typeDef.enumValues.length > 0) {

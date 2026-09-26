@@ -120,7 +120,7 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
  * top-level shape. Reserved keys nested inside link sub-objects are
  * silently dropped.
  */
-export function compileFilter<T extends Record<string, unknown>>(
+export function compileFilter<T extends object>(
   typeName: string,
   filter: FilterArg<T>,
   typeInfo: TypeInfo
@@ -159,7 +159,7 @@ export function compileFilter<T extends Record<string, unknown>>(
     }
   }
 
-  const clause = compileArg(filter, typeInfo, ctx);
+  const clause = compileArg(filter as FilterArg, typeInfo, ctx);
   return { clause, variables: ctx.vars, selectShape, orderBy, limit, offset };
 }
 

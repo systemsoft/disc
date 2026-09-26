@@ -266,16 +266,25 @@ export async function writeGeneratedFiles(result: Types.CodegenResult, basePath:
 
        Scoped to `writtenPaths` on purpose. This runs inside the *user's* project, so a bare
        `deno task format` would (a) name a task that only exists in the Disc repo and (b) reformat
-       their entire codebase as a side effect of `disc codegen`. ***/
+       their entire codebase as a side effect of `disc codegen`.
+
+       The project's fmt config is tried first so its options apply. When that fails — typically
+       because the config excludes the output dir, so fmt finds "No target files" — retry with
+       `--no-config` so the generated code is still formatted, with Deno's defaults. ***/
   if (runFmt && writtenPaths.length > 0) {
     try {
-      const cmd = new Deno.Command("deno", {
-        args: ["fmt", "--quiet", ...writtenPaths],
-        stderr: "piped",
-        stdout: "null"
-      });
+      const fmt = (extraArgs: string[]): Promise<Deno.CommandOutput> =>
+        new Deno.Command("deno", {
+          args: ["fmt", "--quiet", ...extraArgs, ...writtenPaths],
+          stderr: "piped",
+          stdout: "null"
+        })
+          .output();
 
-      const output = await cmd.output();
+      let output = await fmt([]);
+
+      if (!output.success)
+        output = await fmt(["--no-config"]);
 
       if (!output.success) {
         const stderr = new TextDecoder().decode(output.stderr).trim();
