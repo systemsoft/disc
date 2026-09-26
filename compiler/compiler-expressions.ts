@@ -11,6 +11,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import {
   backlinkIntersectionName,
+  compileEmptyOrder,
   CompilerBase,
   edgeqlTypeToPgType,
   renderEdgeQLTypeName
@@ -1201,7 +1202,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       orderBy = over.orderBy.map(item => ({
         kind: "OrderByItem" as const,
         expression: this.compileExpression(item.expr),
-        direction: item.direction || "ASC" as "ASC" | "DESC"
+        direction: item.direction || "ASC" as "ASC" | "DESC",
+        ...compileEmptyOrder(item)
       }));
     }
 
@@ -2046,8 +2048,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           return "NULL";
         }
       }
-      // For non-literal expressions, fall back to a placeholder
-      return "?";
+      // Parameters, casts, paths and other expressions render as themselves
+      // (`<uuid>$a` → `CAST($1 AS uuid)`).
+      return this.renderSqlExpr(elem);
     });
 
     return {

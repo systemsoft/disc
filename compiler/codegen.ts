@@ -180,10 +180,13 @@ export class SQLCodeGenerator {
   private generateOrderByClause(orderBy: SQL.OrderByClause): string {
     return orderBy
       .items
-      .map(item => {
-        return this.generateExpression(item.expression) + " " + item.direction;
-      })
+      .map(item => this.generateOrderByItem(item))
       .join(", ");
+  }
+
+  private generateOrderByItem(item: SQL.OrderByItem): string {
+    const nulls = item.nulls ? " NULLS " + item.nulls : "";
+    return this.generateExpression(item.expression) + " " + item.direction + nulls;
   }
 
   private generateInsertStatement(stmt: SQL.InsertStatement): string {
@@ -246,6 +249,9 @@ export class SQLCodeGenerator {
         onConflict.action.set.map(set => this.generateSetClause(set)).join(
           ", "
         );
+      if (onConflict.action.where) {
+        sql += " WHERE " + this.generateExpression(onConflict.action.where);
+      }
     }
 
     return sql;
@@ -444,7 +450,7 @@ export class SQLCodeGenerator {
     if (expr.orderBy && expr.orderBy.length > 0) {
       const order = expr
         .orderBy
-        .map(item => `${this.generateExpression(item.expression)} ${item.direction}`)
+        .map(item => this.generateOrderByItem(item))
         .join(", ");
       return `jsonb_agg(${inner} ORDER BY ${order})`;
     }
@@ -512,7 +518,7 @@ export class SQLCodeGenerator {
     if (expr.over.orderBy && expr.over.orderBy.length > 0) {
       overParts.push(
         "ORDER BY " +
-          expr.over.orderBy.map(item => `${this.generateExpression(item.expression)} ${item.direction}`).join(", ")
+          expr.over.orderBy.map(item => this.generateOrderByItem(item)).join(", ")
       );
     }
 

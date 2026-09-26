@@ -11,7 +11,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
-import { backlinkIntersectionName, edgeqlTypeToPgType, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
+import { backlinkIntersectionName, compileEmptyOrder, edgeqlTypeToPgType, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
@@ -72,7 +72,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         const items = query.orderBy.map(item => ({
           kind: "OrderByItem" as const,
           expression: this.compileExpression(item.expr),
-          direction: item.direction || "ASC" as "ASC" | "DESC"
+          direction: item.direction || "ASC" as "ASC" | "DESC",
+          ...compileEmptyOrder(item)
         }));
         orderByClause = { kind: "OrderByClause", items };
       }
@@ -1249,7 +1250,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         aggOrderBy = orderBy.map(item => ({
           kind: "OrderByItem" as const,
           expression: this.compileExpression(item.expr),
-          direction: item.direction || "ASC" as "ASC" | "DESC"
+          direction: item.direction || "ASC" as "ASC" | "DESC",
+          ...compileEmptyOrder(item)
         }));
       }
     } finally {

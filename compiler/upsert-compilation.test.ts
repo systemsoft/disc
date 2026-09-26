@@ -252,6 +252,36 @@ Deno.test("UNLESS CONFLICT - bare form (no target) is unchanged", () => {
   assertStringIncludes(sql, "ON CONFLICT DO NOTHING");
 });
 
+Deno.test("UPSERT - else-update filter becomes DO UPDATE … WHERE", () => {
+  // Regression: the filter was dropped, so the conflicting row was updated
+  // even when the filter excluded it.
+  const sql = oneLine(`
+    insert User { name := "a", email := "e" }
+    unless conflict on .email
+    else (update User filter not exists .age set { age := 1 })
+  `);
+
+  assertStringIncludes(sql, "ON CONFLICT (email) DO UPDATE SET age = 1 WHERE users.age IS NULL RETURNING *");
+});
+
+Deno.test("UPSERT - else-update without a filter has no WHERE", () => {
+  const sql = oneLine(`insert User { name := "a", email := "e" } unless conflict on .email else (update User set { age := 1 })`);
+
+  assertStringIncludes(sql, "DO UPDATE SET age = 1 RETURNING *");
+});
+
+Deno.test("UPSERT - paths in else-update set and filter qualify with the target table", () => {
+  // Regression: `.age` compiled to a bare `age`, which Postgres rejects in
+  // ON CONFLICT … DO UPDATE as ambiguous between the row and `excluded`.
+  const sql = oneLine(`
+    insert User { name := "a", email := "e", age := 1 }
+    unless conflict on .email
+    else (update User filter .age < 10 set { age := .age + 1, name := .name ++ "!" })
+  `);
+
+  assertStringIncludes(sql, "DO UPDATE SET age = users.age + 1, name = users.name || '!' WHERE users.age < 10");
+});
+
 Deno.test("UPSERT - composite target emits ON CONFLICT (c1, c2) DO UPDATE SET", () => {
   const sql = oneLine(`
     insert Post { title := "t", body := "b", author := <uuid>$a }

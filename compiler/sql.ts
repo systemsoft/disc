@@ -90,6 +90,7 @@ export interface OrderByItem extends SQLNode {
   kind: "OrderByItem";
   expression: SQLExpression;
   direction: "ASC" | "DESC";
+  nulls?: "FIRST" | "LAST";
 }
 
 export interface LimitClause extends SQLNode {
@@ -126,6 +127,8 @@ export interface OnConflictClause extends SQLNode {
 export interface UpdateAction extends SQLNode {
   kind: "UpdateAction";
   set: SetClause[];
+  /** `DO UPDATE … WHERE`: rows it excludes are neither updated nor returned. */
+  where?: SQLExpression;
 }
 
 export interface SetClause extends SQLNode {

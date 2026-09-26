@@ -48,6 +48,21 @@ export function renderEdgeQLTypeName(type: EdgeQLAST.TypeName): string {
   return `${label}${head}<${type.subtypes.map(renderEdgeQLTypeName).join(", ")}>`;
 }
 
+/**
+ * The `nulls` placement for an EdgeQL order key: `empty first|last` is SQL
+ * `NULLS FIRST|LAST`, since the empty set compiles to NULL. Without the
+ * clause the key keeps PG's default placement.
+ */
+export function compileEmptyOrder(item: EdgeQLAST.OrderByClause): Pick<SQL.OrderByItem, "nulls"> {
+  if (item.emptyOrder === "EMPTY FIRST") {
+    return { nulls: "FIRST" };
+  }
+  if (item.emptyOrder === "EMPTY LAST") {
+    return { nulls: "LAST" };
+  }
+  return {};
+}
+
 /** Maps EdgeQL type names to PostgreSQL type names */
 export function edgeqlTypeToPgType(edgeqlType: string): string {
   const typeMap: Record<string, string> = {

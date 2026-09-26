@@ -528,10 +528,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
 
         // The else branch overwrites an existing row, so it answers to the
-        // update policy (throws when denied). ON CONFLICT … DO UPDATE cannot
-        // carry a row predicate yet — UpdateAction has no WHERE and policy
-        // predicates use unqualified columns, ambiguous there between the
-        // target row and `excluded` — so a row-level policy fails closed.
+        // update policy (throws when denied). ON CONFLICT … DO UPDATE does not
+        // carry a policy's row predicate — policy predicates use unqualified
+        // columns, ambiguous there between the target row and `excluded` —
+        // so a row-level policy fails closed.
         if (this.mutationAccessCondition(typeDef.name, "update")) {
           throw new CompilationError(
             `Upsert (unless conflict … else update) is not supported on '${typeDef.name}' because it has a row-level update policy. ` +
@@ -539,44 +539,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           );
         }
 
-        const setClauses: SQL.SetClause[] = [];
-        for (const element of updateQuery.shape.elements) {
-          if (!element.name || !element.computable) {
-            throw new CompilationError(
-              "UPSERT else clause requires computed assignments (name := value)"
-            );
-          }
-
-          const propName = element.name.name;
-          const property = Context.getProperty(this.ctx, typeName, propName);
-          if (!property) {
-            const link = Context.getLink(this.ctx, typeName, propName);
-            if (link && link.columnName) {
-              setClauses.push({
-                kind: "SetClause",
-                column: link.columnName,
-                value: this.compileLinkAssignmentExpression(link, element.expr)
-              });
-            } else {
-              throw new CompilationError(
-                `Property '${propName}' not found on type '${typeName}'`
-              );
-            }
-          } else {
-            setClauses.push({
-              kind: "SetClause",
-              column: property.columnName,
-              value: property.multi && !property.computed ?
-                this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
-                this.compileExpression(element.expr)
-            });
-          }
-        }
-
-        const updateAction: SQL.UpdateAction = {
-          kind: "UpdateAction",
-          set: setClauses
-        };
+        // `set` and `filter` read the conflicting row, so they compile with the
+        // type in scope: paths qualify with the table name, which in ON
+        // CONFLICT … DO UPDATE is the existing row (`excluded` is the
+        // proposed one). Unqualified, a column is ambiguous between the two.
+        const updateAction = this.withMutationScope(
+          typeName,
+          typeDef,
+          () => this.compileUpsertUpdateAction(typeName, updateQuery)
+        );
 
         onConflict = {
           kind: "OnConflictClause",
@@ -636,6 +607,59 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     });
 
     return SQL.withCTEs(ctes, this.selectAllFrom("ins"));
+  }
+
+  // The DO UPDATE action of `unless conflict … else (update … filter … set
+  // …)`. The filter becomes the action's WHERE: when it excludes the
+  // conflicting row, nothing is updated and the statement returns no row.
+  private compileUpsertUpdateAction(
+    typeName: string,
+    updateQuery: EdgeQLAST.UpdateQuery
+  ): SQL.UpdateAction {
+    const setClauses: SQL.SetClause[] = [];
+    for (const element of updateQuery.shape.elements) {
+      if (!element.name || !element.computable) {
+        throw new CompilationError(
+          "UPSERT else clause requires computed assignments (name := value)"
+        );
+      }
+
+      const propName = element.name.name;
+      const property = Context.getProperty(this.ctx, typeName, propName);
+      if (!property) {
+        const link = Context.getLink(this.ctx, typeName, propName);
+        if (link && link.columnName) {
+          setClauses.push({
+            kind: "SetClause",
+            column: link.columnName,
+            value: this.compileLinkAssignmentExpression(link, element.expr)
+          });
+        } else {
+          throw new CompilationError(
+            `Property '${propName}' not found on type '${typeName}'`
+          );
+        }
+      } else {
+        setClauses.push({
+          kind: "SetClause",
+          column: property.columnName,
+          value: property.multi && !property.computed ?
+            this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
+            this.compileExpression(element.expr)
+        });
+      }
+    }
+
+    const action: SQL.UpdateAction = {
+      kind: "UpdateAction",
+      set: setClauses
+    };
+    // A filter here reads the conflicting row (e.g. `filter not exists .x`
+    // updates only while `.x` is still empty).
+    if (updateQuery.filter) {
+      action.where = this.compileExpression(updateQuery.filter);
+    }
+    return action;
   }
 
   // Columns of an `unless conflict on …` target: one path, or a tuple of paths,

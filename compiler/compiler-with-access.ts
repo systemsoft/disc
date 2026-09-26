@@ -15,6 +15,7 @@ import {
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
+import { compileEmptyOrder } from "./compiler-base.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
 
@@ -509,7 +510,8 @@ export class EdgeQLCompilerWithAccess {
     const items = orderBy.map(item => ({
       kind: "OrderByItem" as const,
       expression: this.compileExpression(item.expr),
-      direction: (item.direction === "DESC" ? "DESC" : "ASC") as "ASC" | "DESC"
+      direction: (item.direction === "DESC" ? "DESC" : "ASC") as "ASC" | "DESC",
+      ...compileEmptyOrder(item)
     }));
     return { kind: "OrderByClause", items };
   }

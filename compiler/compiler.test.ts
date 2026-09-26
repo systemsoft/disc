@@ -1877,6 +1877,18 @@ Deno.test("SQL Compiler - set-literal 'in {a, b}' membership is unchanged", () =
   assertEquals(sql.includes("ANY("), false, `unexpected ANY(: ${sql}`);
 });
 
+Deno.test("SQL Compiler - set literal of typed parameters in 'in' renders each element", () => {
+  // Regression: non-literal set elements compiled to `?` placeholders.
+  const sql = compileEdgeQL("select User { name } filter .id in {<uuid>$a, <uuid>$b}");
+  assertEquals(sql.includes("IN (CAST($1 AS uuid), CAST($2 AS uuid))"), true, `expected cast params: ${sql}`);
+  assertEquals(sql.includes("?"), false, `unexpected placeholder: ${sql}`);
+});
+
+Deno.test("SQL Compiler - set literal mixing a parameter and a path in 'not in'", () => {
+  const sql = compileEdgeQL("select User { name } filter .name not in {<str>$a, .email}");
+  assertEquals(/NOT IN \(CAST\(\$1 AS text\), user_\d+\.email\)/.test(sql), true, `expected rendered elements: ${sql}`);
+});
+
 Deno.test("SQL Compiler - subquery 'in (select ...)' membership is unchanged", () => {
   // Regression: subquery membership still compiles to `IN (subquery)`.
   const sql = compileEdgeQL(
@@ -1884,6 +1896,29 @@ Deno.test("SQL Compiler - subquery 'in (select ...)' membership is unchanged", (
   );
   assertEquals(/IN\s*\(\s*SELECT/i.test(sql), true, `expected IN (SELECT: ${sql}`);
   assertEquals(sql.includes("ANY("), false, `unexpected ANY(: ${sql}`);
+});
+
+// --- order by … empty first | empty last ---
+
+Deno.test("SQL Compiler - order by empty first/last emits NULLS FIRST/LAST for each direction", () => {
+  const sql = compileEdgeQL(
+    "select User { name } order by .name empty first then .email desc empty last then .age desc empty first then .active asc empty last"
+  );
+  assertEquals(
+    /name ASC NULLS FIRST, user_\d+\.email DESC NULLS LAST, user_\d+\.age DESC NULLS FIRST, user_\d+\.active ASC NULLS LAST/.test(sql),
+    true,
+    `expected NULLS placement per key: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - order by without empty first/last emits no NULLS clause", () => {
+  const sql = compileEdgeQL("select User { name } order by .name desc then .email");
+  assertEquals(sql.includes("NULLS"), false, `unexpected NULLS: ${sql}`);
+});
+
+Deno.test("SQL Compiler - link sub-shape order by empty last reaches jsonb_agg ORDER BY", () => {
+  const sql = compileEdgeQL("select User { posts: { title } order by .title desc empty last }");
+  assertEquals(sql.includes("ORDER BY posts.title DESC NULLS LAST)"), true, `expected NULLS LAST: ${sql}`);
 });
 
 // --- Link sub-shape ordering (jsonb_agg ORDER BY) ---
