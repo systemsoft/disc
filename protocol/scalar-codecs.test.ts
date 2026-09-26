@@ -63,6 +63,20 @@ Deno.test("int64 - 8 bytes BE round-trips", () => {
   assertEquals(decodeScalar("int64", bytes), 1n << 40n);
 });
 
+Deno.test("bigint - numeric wire format round-trips from a bigint or PostgreSQL's numeric text", () => {
+  // 12345 is two base-10000 digit groups: 1, 2345 (ndigits 2, weight 1).
+  assertEquals(encodeScalar("bigint", "12345"), new Uint8Array([0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0x09, 0x29]));
+  assertEquals(encodeScalar("bigint", 12345n), encodeScalar("bigint", "12345"));
+  assertEquals(decodeScalar("bigint", encodeScalar("bigint", "-12345678901234567890")), -12345678901234567890n);
+  assertEquals(decodeScalar("bigint", encodeScalar("bigint", "0")), 0n);
+});
+
+Deno.test("decimal - numeric wire format round-trips with its scale", () => {
+  assertEquals(decodeScalar("decimal", encodeScalar("decimal", "1.50")), "1.50");
+  assertEquals(decodeScalar("decimal", encodeScalar("decimal", "-2.5000000000000000")), "-2.5000000000000000");
+  assertEquals(decodeScalar("decimal", encodeScalar("decimal", "12345.6789")), "12345.6789");
+});
+
 Deno.test("uuid - encode is 16 raw bytes", () => {
   const value = "12345678-1234-5678-1234-567812345678";
   const bytes = encodeScalar("uuid", value) as Uint8Array;

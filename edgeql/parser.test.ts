@@ -9,7 +9,9 @@ import { assertEquals, assertThrows } from "@std/assert";
 import { SyntaxError } from "../lib/errors.ts";
 import { EdgeQLAnalyzer } from "./analyzer.ts";
 import type { Expression } from "./ast.ts";
+import { EdgeQLLexer } from "./lexer.ts";
 import { EdgeQLParser } from "./parser.ts";
+import { TokenType } from "./tokens.ts";
 
 Deno.test("EdgeQL Parser - Simple SELECT", () => {
   const source = `SELECT User`;
@@ -1293,5 +1295,89 @@ Deno.test("EdgeQL Parser - <required T> and generic optional casts parse", () =>
     assertEquals(generic.type.name.parts, ["array"]);
     assertEquals(generic.type.subtypes?.[0].name.parts, ["str"]);
     assertEquals(generic.cardinality?.required, false);
+  }
+});
+
+// --- A cast's operand may be a prefix-operator expression: <int64>-7 ---
+
+/*** `expr` as a fully parenthesized string, to read how it was grouped. ***/
+function grouping(expr: Expression): string {
+  switch (expr.kind) {
+    case "BinaryOp":
+      return `(${grouping(expr.left)} ${expr.op} ${grouping(expr.right)})`;
+    case "Literal":
+      return String(expr.value);
+    case "Path":
+      return expr.steps.map(step => `.${step.name}`).join("");
+    case "TypeCast":
+      return `(<${expr.type.name.parts.join("::")}>${grouping(expr.expr)})`;
+    case "UnaryOp":
+      return `(${expr.op} ${grouping(expr.operand)})`;
+    default:
+      return expr.kind;
+  }
+}
+
+Deno.test("EdgeQL Parser - a cast applies to a prefix-operator operand", () => {
+  const cases: [string, string][] = [
+    ["<int64>-7", "(<int64>(- 7))"],
+    ["<decimal>-7.5", "(<decimal>(- 7.5))"],
+    ["<str>-1", "(<str>(- 1))"],
+    ["<float64>+2", "(<float64>(+ 2))"],
+    ["<int64>- -7", "(<int64>(- (- 7)))"],
+    ["<bool>not true", "(<bool>(NOT true))"],
+    ["<bool>exists .a", "(<bool>(EXISTS .a))"],
+    ["<int64>-<str>.a", "(<int64>(- (<str>.a)))"]
+  ];
+  for (const [source, expected] of cases) {
+    assertEquals(grouping(new EdgeQLParser(source).parseExpressionOnly()), expected, source);
+  }
+});
+
+Deno.test("EdgeQL Parser - a cast over a prefix operator binds tighter than a binary operator", () => {
+  const cases: [string, string][] = [
+    // The prefix operator's own precedence decides how far its operand
+    // reaches; the cast then applies to that, as in Gel's grammar.
+    ["<int64>-7 + 1", "((<int64>(- 7)) + 1)"],
+    ["<int64>-7 * 2", "((<int64>(- 7)) * 2)"],
+    ["<str>-1 ++ 'a'", "((<str>(- 1)) ++ a)"],
+    ["1 - <int64>-7", "(1 - (<int64>(- 7)))"],
+    ["<bool>not true and false", "((<bool>(NOT true)) AND false)"],
+    ["<bool>not .a = 1", "(<bool>(NOT (.a = 1)))"],
+    // Unchanged forms: a cast's plain operand stops at the first operator.
+    ["<int64>7 + 1", "((<int64>7) + 1)"],
+    ["<decimal>(-7) + 1", "((<decimal>(- 7)) + 1)"],
+    ["-<int64>7 + 1", "((- (<int64>7)) + 1)"]
+  ];
+  for (const [source, expected] of cases) {
+    assertEquals(grouping(new EdgeQLParser(source).parseExpressionOnly()), expected, source);
+  }
+});
+
+// --- Numeric literal suffixes: 10n is a bigint, 1.5n a decimal ---
+
+Deno.test("EdgeQL Lexer - n-suffixed numbers are bigint and decimal tokens", () => {
+  const tokens = (source: string): [string, string][] => new EdgeQLLexer(source).tokenize().filter(t => t.type !== TokenType.EOF).map(t => [t.type, t.value]);
+
+  assertEquals(tokens("10n"), [[TokenType.BIGINT, "10"]]);
+  assertEquals(tokens("12345678901234567890n"), [[TokenType.BIGINT, "12345678901234567890"]]);
+  assertEquals(tokens("1.5n"), [[TokenType.DECIMAL, "1.5"]]);
+  assertEquals(tokens("1.50n"), [[TokenType.DECIMAL, "1.50"]]);
+  assertEquals(tokens("1e3n"), [[TokenType.DECIMAL, "1e3"]]);
+  // Without the suffix nothing changes.
+  assertEquals(tokens("10"), [[TokenType.INTEGER, "10"]]);
+  assertEquals(tokens("1.5"), [[TokenType.FLOAT, "1.5"]]);
+});
+
+Deno.test("EdgeQL Parser - bigint and decimal literals keep their digits as text", () => {
+  const cases: [string, Expression][] = [
+    ["10n", { kind: "Literal", type: "bigint", value: "10" }],
+    ["12345678901234567890n", { kind: "Literal", type: "bigint", value: "12345678901234567890" }],
+    ["1.5n", { kind: "Literal", type: "decimal", value: "1.5" }],
+    ["1.50n", { kind: "Literal", type: "decimal", value: "1.50" }],
+    ["-7n", { kind: "UnaryOp", op: "-", operand: { kind: "Literal", type: "bigint", value: "7" } }]
+  ];
+  for (const [source, expected] of cases) {
+    assertEquals(new EdgeQLParser(source).parseExpressionOnly(), expected, source);
   }
 });

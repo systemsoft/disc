@@ -378,10 +378,14 @@ function inferScalarType(
       return binaryOpType(e as AST.BinaryOp, bound.scope);
     case "Literal":
       switch ((e as AST.Literal).type) {
+        case "bigint":
+          return "bigint";
         case "boolean":
           return "bool";
         case "bytes":
           return "bytes";
+        case "decimal":
+          return "decimal";
         case "float":
           return "float64";
         case "integer":
@@ -411,7 +415,7 @@ function inferScalarType(
       }
       const operand = inferScalarType(unary.operand, bound.scope);
       return (unary.op === "+" || unary.op === "-") && operand !== null &&
-          [...INT_TYPES, ...FLOAT_TYPES].includes(operand) ?
+          [...INT_TYPES, ...FLOAT_TYPES, ...DECIMAL_TYPES].includes(operand) ?
         operand :
         null;
     }
@@ -424,7 +428,7 @@ function inferScalarType(
  * The result type of a binary operator over scalars: comparisons and
  * logic give bool, `++` joins two strs (or bytes), and arithmetic on ints
  * and floats follows Gel's implicit casts — `/` and `**` of two ints are
- * float64. Anything else is null.
+ * float64 (bigint and decimal: `decimalOpType`). Anything else is null.
  */
 function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
   if (COMPARISON_OPERATORS.has(op.op)) {
@@ -440,12 +444,15 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
       left :
       null;
   }
-  const numeric = [...INT_TYPES, ...FLOAT_TYPES];
+  const numeric = [...INT_TYPES, ...FLOAT_TYPES, ...DECIMAL_TYPES];
   if (
     !NUMERIC_OPERATORS.has(op.op) || !numeric.includes(left) ||
     !numeric.includes(right)
   ) {
     return null;
+  }
+  if (DECIMAL_TYPES.includes(left) || DECIMAL_TYPES.includes(right)) {
+    return decimalOpType(op.op, left, right);
   }
   if (
     (op.op === "/" || op.op === "**") && INT_TYPES.includes(left) &&
@@ -454,6 +461,20 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
     return "float64";
   }
   return unifyScalarTypes([left, right]);
+}
+
+/**
+ * The result type of arithmetic with a bigint or decimal operand: ints widen
+ * to bigint, and a decimal operand, `/` or `**` makes it decimal. Gel has no
+ * implicit cast between floats and either, so a float operand gives null.
+ */
+function decimalOpType(op: string, left: string, right: string): string | null {
+  if (FLOAT_TYPES.includes(left) || FLOAT_TYPES.includes(right)) {
+    return null;
+  }
+  return left === "decimal" || right === "decimal" || op === "/" || op === "**" ?
+    "decimal" :
+    "bigint";
 }
 
 /**
@@ -861,6 +882,7 @@ function unionCardinality(cardinalities: number[]): number {
 
 const INT_TYPES = ["int16", "int32", "int64"];
 const FLOAT_TYPES = ["float32", "float64"];
+const DECIMAL_TYPES = ["bigint", "decimal"];
 
 /**
  * The common type of a set literal's scalar elements, by Gel's implicit

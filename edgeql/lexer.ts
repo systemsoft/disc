@@ -902,12 +902,20 @@ export class EdgeQLLexer {
       }
     }
 
-    // Check for 'n' suffix (bigint)
-    if (this.peek() === "n" && !isFloat) {
-      this.advance();
-    }
-
     const value = this.source.slice(startPos, this.pos);
+
+    // An 'n' suffix makes an integer a bigint (`10n`) and a float a decimal
+    // (`1.5n`, `1e3n`). The token value is the digits without the suffix.
+    if (this.peek() === "n") {
+      this.advance();
+      return createToken(
+        isFloat ? TokenType.DECIMAL : TokenType.BIGINT,
+        value,
+        startLine,
+        startColumn,
+        startPos
+      );
+    }
 
     return createToken(
       isFloat ? TokenType.FLOAT : TokenType.INTEGER,

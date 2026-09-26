@@ -10,6 +10,8 @@ export enum TokenType {
   STRING = "STRING",
   INTEGER = "INTEGER",
   FLOAT = "FLOAT",
+  BIGINT = "BIGINT",
+  DECIMAL = "DECIMAL",
   BOOLEAN = "BOOLEAN",
   BYTES = "BYTES",
   UUID = "UUID",

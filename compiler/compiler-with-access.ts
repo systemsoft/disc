@@ -538,7 +538,7 @@ export class EdgeQLCompilerWithAccess {
     let sqlType: "string" | "number" | "boolean" | "null";
     if (lit.type === "string") {
       sqlType = "string";
-    } else if (lit.type === "integer" || lit.type === "float") {
+    } else if (lit.type === "integer" || lit.type === "float" || lit.type === "bigint" || lit.type === "decimal") {
       sqlType = "number";
     } else if (lit.type === "boolean") {
       sqlType = "boolean";

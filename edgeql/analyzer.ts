@@ -380,6 +380,10 @@ export class EdgeQLAnalyzer {
       case "float":
         typeName = "float64";
         break;
+      case "bigint":
+      case "decimal":
+        typeName = literal.type;
+        break;
       case "boolean":
         typeName = "bool";
         break;

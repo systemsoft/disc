@@ -10,6 +10,16 @@ import * as AST from "./ast.ts";
 import { EdgeQLLexer } from "./lexer.ts";
 import { KEYWORDS, RESERVED_KEYWORDS, Token, TokenType } from "./tokens.ts";
 
+/*** Prefix operators `parseUnaryExpression` parses, which may follow a cast: `<int64>-7`. ***/
+const CAST_PREFIX_OPERATORS = [
+  TokenType.DETACHED,
+  TokenType.DISTINCT,
+  TokenType.EXISTS,
+  TokenType.MINUS,
+  TokenType.PLUS,
+  TokenType.TILDE
+];
+
 export class EdgeQLParser {
   private tokens: Token[];
   private current = 0;
@@ -1472,6 +1482,14 @@ export class EdgeQLParser {
       return AST.createLiteral("float", parseFloat(value));
     }
 
+    if (this.check(TokenType.BIGINT)) {
+      return AST.createLiteral("bigint", this.advance().value);
+    }
+
+    if (this.check(TokenType.DECIMAL)) {
+      return AST.createLiteral("decimal", this.advance().value);
+    }
+
     if (this.check(TokenType.BOOLEAN)) {
       const value = this.advance().value === "true";
       return AST.createLiteral("boolean", value);
@@ -1496,7 +1514,10 @@ export class EdgeQLParser {
     // `<str>item['k']` is `<str>(item['k'])`, and `<str>f(x)` / `<str>.a.b`
     // parse — and stops at the first operator: `<str>x ++ 'a'` is
     // `(<str>x) ++ 'a'`. Gel's P_TYPECAST sits below P_BRACKET, P_PAREN and
-    // P_DOT and above every operator.
+    // P_DOT and above every operator. An operand that starts with a prefix
+    // operator is that operator's whole expression, as in Gel's grammar:
+    // `<int64>-7 + 1` is `(<int64>(-7)) + 1` and `<bool>not .a = 1` is
+    // `<bool>(not (.a = 1))`.
     if (this.match(TokenType.LESS)) {
       // Cardinality modifier: `<optional str>$x` may be bound to null / left
       // out; `<required str>$x` may not.
@@ -1508,7 +1529,11 @@ export class EdgeQLParser {
       const type = this.parseTypeName();
       this.consume(TokenType.GREATER, "Expected '>' after type");
 
-      const expr = this.parsePostfixExpression();
+      const expr = this.check(TokenType.NOT) ?
+        this.parseNotExpression() :
+        CAST_PREFIX_OPERATORS.some(op => this.check(op)) ?
+        this.parseUnaryExpression() :
+        this.parsePostfixExpression();
       return cardinality ? { kind: "TypeCast", type, expr, cardinality } : { kind: "TypeCast", type, expr };
     }
 

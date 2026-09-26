@@ -34,6 +34,14 @@ const INT_SQL_TYPES = new Map([
   ["int64", { sql: "bigint", width: 64 }]
 ]);
 
+/*** The EdgeQL type of each numeric literal: `7`, `7.0`, `7n`, `7.0n`. ***/
+const NUMERIC_LITERAL_TYPES = new Map<string, string>([
+  ["bigint", "bigint"],
+  ["decimal", "decimal"],
+  ["float", "float64"],
+  ["integer", "int64"]
+]);
+
 /*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
 function widestIntSqlType(types: (string | null)[]): string {
   const widths = types.map(type => (type !== null && INT_SQL_TYPES.get(type)?.width) || 64);
@@ -116,10 +124,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
   }
 
-  private compileLiteral(literal: EdgeQLAST.Literal): SQL.LiteralExpression {
+  private compileLiteral(literal: EdgeQLAST.Literal): SQL.SQLExpression {
     let sqlType: "string" | "number" | "boolean" | "null";
 
     switch (literal.type) {
+      // `10n` / `1.5n`: bigint and decimal are both numeric (Disc stores
+      // bigint as numeric). The cast keeps `10n` from being an integer.
+      case "bigint":
+      case "decimal":
+        return SQL.createCastExpression(SQL.createLiteral("number", literal.value), "numeric");
       case "string":
         sqlType = "string";
         break;
@@ -363,15 +376,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   /**
    * The EdgeQL scalar type of a numeric operand when it is known without
-   * running the query: a literal (`7` is int64, `7.0` float64), a cast, a
-   * property of a type in scope (the same lookup as `multiPropertyColumn`),
-   * a variable bound to one of these, or arithmetic over them. Null when
-   * unknown (a function call, subquery, untyped parameter, link path, …).
+   * running the query: a literal (`7` is int64, `7.0` float64, `7n` bigint,
+   * `7.5n` decimal), a cast, a property of a type in scope (the same lookup
+   * as `multiPropertyColumn`), a variable bound to one of these, or
+   * arithmetic over them. Null when unknown (a function call, subquery,
+   * untyped parameter, link path, …).
    */
   protected staticNumericType(expr: EdgeQLAST.Expression): string | null {
     switch (expr.kind) {
       case "Literal":
-        return expr.type === "integer" ? "int64" : expr.type === "float" ? "float64" : null;
+        return NUMERIC_LITERAL_TYPES.get(expr.type) ?? null;
       case "TypeCast":
         return expr.type.name.parts[expr.type.name.parts.length - 1];
       case "Path": {

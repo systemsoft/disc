@@ -442,7 +442,7 @@ function resolveTypeNameFromId(id: Uint8Array): string {
  *   dscale:  uint16 (number of digits after decimal point, 0 for bigint)
  *   digits:  ndigits * uint16 (each digit group is 0..9999)
  */
-function encodeBigInt(value: bigint): Uint8Array {
+export function encodeBigInt(value: bigint): Uint8Array {
   if (value === 0n) {
     // Special case: zero has ndigits=0, weight=0, sign=positive, dscale=0
     const buf = new Uint8Array(8);
@@ -481,7 +481,7 @@ function encodeBigInt(value: bigint): Uint8Array {
 /**
  * Decode a bigint from PostgreSQL numeric wire format.
  */
-function decodeBigInt(data: Uint8Array): bigint {
+export function decodeBigInt(data: Uint8Array): bigint {
   const view = new DataView(data.buffer, data.byteOffset);
   const ndigits = view.getUint16(0, false);
   const sign = view.getUint16(4, false);
@@ -506,7 +506,7 @@ function decodeBigInt(data: Uint8Array): bigint {
  * Accepts a string like "123.45" or a number.
  * Same format as bigint but with non-zero dscale.
  */
-function encodeDecimal(value: string | number): Uint8Array {
+export function encodeDecimal(value: string | number): Uint8Array {
   const str = typeof value === "number" ? value.toString() : value;
 
   // Handle zero
@@ -595,7 +595,7 @@ function encodeDecimal(value: string | number): Uint8Array {
  * Decode a decimal from PostgreSQL numeric wire format.
  * Returns a string representation to preserve precision.
  */
-function decodeDecimal(data: Uint8Array): string {
+export function decodeDecimal(data: Uint8Array): string {
   const view = new DataView(data.buffer, data.byteOffset);
   const ndigits = view.getUint16(0, false);
   const weight = view.getInt16(2, false);

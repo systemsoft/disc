@@ -238,7 +238,20 @@ Deno.test("scalar select reports its own type and result cardinality", () => {
     ["with a := 1, b := a + 1 select b", "int64", Cardinality.ONE],
     ["with x := <optional str>$x select x", "str", Cardinality.AT_MOST_ONE],
     ["with xs := {1, 2} select {xs, 3}", "int64", Cardinality.AT_LEAST_ONE],
-    ["with a := 1 select (with a := a + 1.5 select a)", "float64", Cardinality.ONE]
+    ["with a := 1 select (with a := a + 1.5 select a)", "float64", Cardinality.ONE],
+    ["select <int64>-7", "int64", Cardinality.ONE],
+    ["select 10n", "bigint", Cardinality.ONE],
+    ["select -10n", "bigint", Cardinality.ONE],
+    ["select 1.5n", "decimal", Cardinality.ONE],
+    ["select -1.5n", "decimal", Cardinality.ONE],
+    // Ints widen to bigint; `/` and `**` of bigints, and anything with a
+    // decimal, are decimal. A float does not mix with either.
+    ["select 10n + 1", "bigint", Cardinality.ONE],
+    ["select 10n // 4n", "bigint", Cardinality.ONE],
+    ["select 10n / 4n", "decimal", Cardinality.ONE],
+    ["select 2n ** 3n", "decimal", Cardinality.ONE],
+    ["select 1.5n * 2n", "decimal", Cardinality.ONE],
+    ["select 1.5n + 1", "decimal", Cardinality.ONE]
   ];
   for (const [query, type, cardinality] of cases) {
     assertEquals(

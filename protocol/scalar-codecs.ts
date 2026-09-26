@@ -21,8 +21,11 @@
  *   std::datetime     → 8 bytes BE i64 microseconds since 2000-01-01 UTC
  *   std::bytes        → raw bytes
  *   std::json         → [u8 format=1][UTF-8 bytes]
+ *   std::bigint       → PostgreSQL numeric wire format (dscale 0)
+ *   std::decimal      → PostgreSQL numeric wire format
  */
 
+import { decodeBigInt, decodeDecimal, encodeBigInt, encodeDecimal } from "./type-codec.ts";
 import { uuidToBytes } from "./types.ts";
 
 // 2000-01-01T00:00:00Z in epoch milliseconds; Gel datetime is microseconds
@@ -106,6 +109,15 @@ function encodeFloat64(value: unknown): Uint8Array {
   const buf = new Uint8Array(8);
   new DataView(buf.buffer).setFloat64(0, n, false);
   return buf;
+}
+
+// PostgreSQL hands a numeric (bigint is stored as one) back as its text.
+function encodeBigIntValue(value: unknown): Uint8Array {
+  return encodeBigInt(BigInt(value as bigint | number | string));
+}
+
+function encodeDecimalValue(value: unknown): Uint8Array {
+  return encodeDecimal(String(value));
 }
 
 function encodeBool(value: unknown): Uint8Array {
@@ -252,9 +264,11 @@ export type ScalarEncoder = (value: unknown) => Uint8Array;
 export type ScalarDecoder = (bytes: Uint8Array) => unknown;
 
 const ENCODERS: Record<string, ScalarEncoder> = {
+  "std::bigint": encodeBigIntValue,
   "std::bool": encodeBool,
   "std::bytes": encodeBytes,
   "std::datetime": encodeDatetime,
+  "std::decimal": encodeDecimalValue,
   "std::float32": encodeFloat32,
   "std::float64": encodeFloat64,
   "std::int16": encodeInt16,
@@ -266,9 +280,11 @@ const ENCODERS: Record<string, ScalarEncoder> = {
 };
 
 const DECODERS: Record<string, ScalarDecoder> = {
+  "std::bigint": decodeBigInt,
   "std::bool": decodeBool,
   "std::bytes": decodeBytes,
   "std::datetime": decodeDatetime,
+  "std::decimal": decodeDecimal,
   "std::float32": decodeFloat32,
   "std::float64": decodeFloat64,
   "std::int16": decodeInt16,
