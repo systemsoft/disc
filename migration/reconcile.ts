@@ -180,18 +180,25 @@ function canonicalType(type: string): string {
   return synonyms[type] ?? type;
 }
 
+/** The DDL left to run after reconciliation, and the tables whose CREATE it skipped. */
+export interface ReconciledStatements {
+  skippedTables: Set<string>;
+  statements: string[];
+}
+
 /**
  * Reconcile a list of DDL statements against the live database. `CREATE TABLE`
  * statements whose target already exists with a matching shape are removed;
  * a divergent existing table raises a descriptive `MigrationError`.
  *
  * All non-`CREATE TABLE` statements and CREATE TABLEs for not-yet-existing
- * tables pass through unchanged and in order.
+ * tables pass through unchanged and in order. The skipped tables are returned
+ * too: the migration did not create them, so its rollback must not drop them.
  */
 export async function reconcileCreateTables(
   statements: string[],
   readColumns: ExistingColumnReader
-): Promise<string[]> {
+): Promise<ReconciledStatements> {
   const reconciled: string[] = [];
   // Tables whose CREATE was skipped because they already exist and match.
   // Dependent statements (deferred FK / UNIQUE constraints, indexes) that
@@ -234,7 +241,23 @@ export async function reconcileCreateTables(
     reconciled.push(statement);
   }
 
-  return reconciled;
+  return { skippedTables, statements: reconciled };
+}
+
+/**
+ * Drop the `DROP TABLE` statements of a rollback that target `tables` — tables
+ * that existed before the migration (see `reconcileCreateTables`), so undoing
+ * it must leave them and their rows alone.
+ */
+export function withoutDropsOf(rollbackSql: string[], tables: Set<string>): string[] {
+  if (tables.size === 0) {
+    return rollbackSql;
+  }
+
+  return rollbackSql.filter(statement => {
+    const drop = /^DROP TABLE\s+(?:IF EXISTS\s+)?(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/i.exec(statement.trim());
+    return !drop || !tables.has(drop[1] ?? drop[2]);
+  });
 }
 
 /**

@@ -1624,7 +1624,9 @@ export class SchemaManager {
       );
     }
 
-    return await this.engine.executeRollback(await this.getLatestMigrationId());
+    return this.adoptRolledBackBaseline(
+      await this.engine.executeRollback(await this.getLatestMigrationId())
+    );
   }
 
   /**
@@ -1642,7 +1644,31 @@ export class SchemaManager {
       );
     }
 
-    return await this.engine.executeRollbackTo(migrationId);
+    return this.adoptRolledBackBaseline(await this.engine.executeRollbackTo(migrationId));
+  }
+
+  /**
+   * After a rollback, the applied baseline is the snapshot of the latest migration still
+   * recorded, so the next apply on this instance diffs against it instead of the rolled-back
+   * schema. A partial `rollback-to` failure has still removed some records, so this runs
+   * either way.
+   */
+  private adoptRolledBackBaseline(
+    result: Result<void, MigrationError>
+  ): Result<void, MigrationError> {
+    if (this.dryRun || !this.engine) {
+      return result;
+    }
+
+    const baseline = this.engine.getLatestAppliedModules();
+    this.currentModules = baseline === null ? null : normalizeModules(baseline);
+    this.currentSchema = this.currentModules === null ? null : this.modulesToSchema(this.currentModules);
+
+    if (this.currentSchema !== null) {
+      this.onSchemaChange?.(this.currentSchema);
+    }
+
+    return result;
   }
 
   /**

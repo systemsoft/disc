@@ -18,6 +18,7 @@ import {
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
+  withoutDropsOf,
   type ExistingColumn
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
@@ -112,23 +113,31 @@ export class MigrationEngine {
         }
       }
 
-      // Load the post-state schema of the latest applied migration so
-      // SchemaManager can prime its `currentModules` baseline. Without
-      // this, a fresh `disc migrate` against a previously-migrated DB
-      // diffs against null and emits "create everything" ops that
-      // collide with existing types/tables.
-      const modules = await this.tracker.getLatestSchemaModules();
-
-      if (modules.ok && modules.value !== null)
-        this.latestAppliedModules = modules.value;
-
-      // Also cache the latest schema_hash as a fallback baseline
-      // detector for rows that pre-date the schema_modules column.
-      const hash = await this.tracker.getLatestSchemaHash();
-
-      if (hash.ok && hash.value !== null)
-        this.latestAppliedSchemaHash = hash.value;
+      await this.loadLatestApplied();
     }
+  }
+
+  /**
+   * Cache the post-state schema and schema_hash of the latest applied migration.
+   * Called on initialize and again after a rollback removes the latest record, so the
+   * next plan diffs against the rolled-back-to snapshot.
+   */
+  private async loadLatestApplied(): Promise<void> {
+    if (!this.tracker)
+      return;
+
+    // Load the post-state schema of the latest applied migration so
+    // SchemaManager can prime its `currentModules` baseline. Without
+    // this, a fresh `disc migrate` against a previously-migrated DB
+    // diffs against null and emits "create everything" ops that
+    // collide with existing types/tables.
+    const modules = await this.tracker.getLatestSchemaModules();
+    this.latestAppliedModules = modules.ok ? modules.value : null;
+
+    // Also cache the latest schema_hash as a fallback baseline
+    // detector for rows that pre-date the schema_modules column.
+    const hash = await this.tracker.getLatestSchemaHash();
+    this.latestAppliedSchemaHash = hash.ok ? hash.value : null;
   }
 
   /**
@@ -354,7 +363,10 @@ export class MigrationEngine {
       });
 
       try {
-        // In a real implementation, this would execute against a database
+        /*** Stored with the record so `disc migrate --rollback` can undo this migration. Built
+             before the forward DDL, which resets the generator's per-batch state. ***/
+        let rollbackSql = this.rollbackSqlFor(migration);
+
         const generatedDDL = this.ddlGenerator.generateDDL(migration.operations);
 
         // Drift reconciliation: when the DB has diverged from migration
@@ -363,12 +375,18 @@ export class MigrationEngine {
         // exist. Skip CREATEs whose target already matches the intended
         // shape; fail loudly on a genuinely diverged table. (Never a blanket
         // CREATE TABLE IF NOT EXISTS, which would mask drift.)
-        const ddlStatements = this.pool ?
+        const reconciled = this.pool ?
           await reconcileCreateTables(
             generatedDDL,
             tableName => this.readExistingColumns(tableName)
           ) :
-          generatedDDL;
+          { skippedTables: new Set<string>(), statements: generatedDDL };
+        const ddlStatements = reconciled.statements;
+
+        /*** A table whose CREATE was skipped existed before this migration; rolling it back
+             must not drop it. ***/
+        if (rollbackSql)
+          rollbackSql = withoutDropsOf(rollbackSql, reconciled.skippedTables);
 
         if (ddlStatements.length > 0) {
           this.emit({
@@ -397,6 +415,7 @@ export class MigrationEngine {
           appliedAt: new Date(),
           durationMs: endTime - startTime,
           migrationId: migration.id,
+          rollbackSql,
           success: true
         });
 
@@ -489,6 +508,20 @@ export class MigrationEngine {
     } catch (error) {
       return Err(new MigrationError(`Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`));
     }
+  }
+
+  /**
+   * The rollback SQL to store with `migration`, or undefined (logged) when it can't be generated —
+   * the migration still applies; only a later rollback of it is refused.
+   */
+  private rollbackSqlFor(migration: Types.Migration): string[] | undefined {
+    const result = this.generateRollbackSQL(migration);
+
+    if (result.ok)
+      return result.value;
+
+    logger.warn(`Migration ${migration.id} will be recorded without rollback SQL: ${result.error.message}`);
+    return undefined;
   }
 
   /**
@@ -708,8 +741,9 @@ export class MigrationEngine {
       if (!removeResult.ok)
         return Err(removeResult.error);
 
-      // Update in-memory state
+      // Update in-memory state: the baseline is now the previous migration's snapshot.
       this.appliedMigrations.delete(migrationId);
+      await this.loadLatestApplied();
 
       logger.info(`Successfully rolled back migration ${migrationId}`);
       return Ok(void 0);

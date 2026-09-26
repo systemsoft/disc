@@ -114,12 +114,21 @@ export class SchemaDiffer {
       const oldTypeDef = oldTypes.get(typeName);
 
       if (oldTypeDef) {
-        const alterOps = this.diffType(
+        const typeOps = this.diffType(
           oldTypeDef,
           newTypeDef,
           oldTypes,
           newTypes
         );
+
+        // Diff indexes on the surviving type. Index changes are emitted
+        // as top-level CreateIndex/DropIndex ops (not TypeOperations) so
+        // they map straight onto PG's standalone CREATE INDEX/DROP INDEX
+        // statements. A changed definition surfaces as drop + create.
+        const indexOps = this.diffIndexes(oldTypeDef, newTypeDef, oldTypes, newTypes);
+        const tableName = typeNameToTableName(typeName);
+        const moved = this.movedExclusiveIndexes(tableName, typeOps, indexOps, this.extractIndexes(oldTypeDef, oldTypes, false));
+        const alterOps = this.withoutExclusiveChanges(tableName, typeOps, moved);
 
         if (alterOps.length > 0) {
           operations.push({
@@ -129,11 +138,7 @@ export class SchemaDiffer {
           } as Types.AlterTypeOperation);
         }
 
-        // Diff indexes on the surviving type. Index changes are emitted
-        // as top-level CreateIndex/DropIndex ops (not TypeOperations) so
-        // they map straight onto PG's standalone CREATE INDEX/DROP INDEX
-        // statements. A changed definition surfaces as drop + create.
-        operations.push(...this.diffIndexes(oldTypeDef, newTypeDef, oldTypes, newTypes));
+        operations.push(...indexOps.filter(op => !moved.has(this.indexOpName(op))));
       }
     }
 
@@ -1350,6 +1355,127 @@ export class SchemaDiffer {
     }
 
     return operations;
+  }
+
+  /**
+   * Names of the `uk_<table>_<column>` indexes whose exclusive constraint only moved between
+   * the type-level form (`constraint exclusive on (.x)`) and the member-level form
+   * (`x: … { constraint exclusive; }`). Both forms declare that same index, so the move is no
+   * change. Diffed as-is it was a drop of one form's index plus a create of the other's under
+   * the same name, and when the create ran first PostgreSQL refused it ("already exists").
+   *
+   * A type-level index counts only when its name is exactly the member form's name (it can
+   * differ when `fitIdentifier` shortened a long one); otherwise the drop + create stands.
+   */
+  private movedExclusiveIndexes(
+    tableName: string,
+    typeOps: Types.TypeOperation[],
+    indexOps: Types.MigrationOperation[],
+    oldIndexes: Types.IndexDefinition[]
+  ): Set<string> {
+    const isTypeLevelExclusive = (index: Types.IndexDefinition): boolean =>
+      index.unique && index.columns.length === 1 && index.name === `uk_${tableName}_${index.columns[0]}`;
+
+    const droppedNames = new Set(
+      indexOps.filter(op => op.kind === "DropIndex").map(op => (op as Types.DropIndexOperation).indexName)
+    );
+    const dropped = new Set(oldIndexes.filter(i => isTypeLevelExclusive(i) && droppedNames.has(i.name)).map(i => i.name));
+    const created = new Set(
+      indexOps
+        .filter(op => op.kind === "CreateIndex" && isTypeLevelExclusive((op as Types.CreateIndexOperation).index))
+        .map(op => (op as Types.CreateIndexOperation).index.name)
+    );
+
+    const moved = new Set<string>();
+
+    for (const op of typeOps) {
+      for (const change of this.memberExclusiveChanges(op)) {
+        const name = `uk_${tableName}_${change.column}`;
+
+        /*** Member form added while the type-level index goes, or the reverse. ***/
+        if ((change.added ? dropped : created).has(name)) {
+          moved.add(name);
+        }
+      }
+    }
+
+    return moved;
+  }
+
+  /** `typeOps` without the member-level exclusive changes whose index is in `moved`; ops left with no change are dropped. */
+  private withoutExclusiveChanges(
+    tableName: string,
+    typeOps: Types.TypeOperation[],
+    moved: Set<string>
+  ): Types.TypeOperation[] {
+    if (moved.size === 0) {
+      return typeOps;
+    }
+
+    return typeOps.flatMap(op => {
+      const movedChanges = this
+        .memberExclusiveChanges(op)
+        .filter(change => moved.has(`uk_${tableName}_${change.column}`))
+        .map(change => change.change);
+
+      if (movedChanges.length === 0) {
+        return [op];
+      }
+
+      if (op.kind === "AlterLink") {
+        const alter = op as Types.AlterLinkOperation;
+        const changes = alter.changes.filter(c => !movedChanges.includes(c));
+        return changes.length > 0 || (alter.propertyOperations?.length ?? 0) > 0 ? [{ ...alter, changes }] : [];
+      }
+
+      const alter = op as Types.AlterPropertyOperation;
+      const changes = alter.changes.filter(c => !movedChanges.includes(c));
+      return changes.length > 0 ? [{ ...alter, changes }] : [];
+    });
+  }
+
+  /**
+   * The member-level exclusive changes in `op` that map to a `uk_<table>_<column>` index on
+   * the type's own table: a single link's `constraint exclusive` (its `<link>_id` column) or a
+   * single property's. Multi links and multi properties keep their own index handling.
+   */
+  private memberExclusiveChanges(
+    op: Types.TypeOperation
+  ): { added: boolean; change: Types.LinkChange | Types.PropertyChange; column: string; }[] {
+    if (op.kind === "AlterLink") {
+      const alter = op as Types.AlterLinkOperation;
+
+      if (alter.link?.multi) {
+        return [];
+      }
+
+      return alter
+        .changes
+        .filter(c => c.kind === "ChangeExclusive")
+        .map(c => ({ added: c.newValue === true, change: c, column: linkColumnName(alter.linkName) }));
+    }
+
+    if (op.kind === "AlterProperty") {
+      const alter = op as Types.AlterPropertyOperation;
+
+      if (alter.oldProperty?.multi || alter.newProperty?.multi) {
+        return [];
+      }
+
+      return alter
+        .changes
+        .filter(c => (c.kind === "AddConstraint" && c.newValue === "exclusive") || (c.kind === "DropConstraint" && c.oldValue === "exclusive"))
+        .map(c => ({ added: c.kind === "AddConstraint", change: c, column: propNameToColumnName(alter.propertyName) }));
+    }
+
+    return [];
+  }
+
+  /** The index a CreateIndex / DropIndex op acts on. */
+  private indexOpName(op: Types.MigrationOperation): string {
+    return op.kind === "CreateIndex" ?
+      (op as Types.CreateIndexOperation).index.name :
+      (op as Types.DropIndexOperation).indexName;
   }
 
   private extractTriggers(
