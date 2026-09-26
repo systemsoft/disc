@@ -307,54 +307,153 @@ interface OutputShape {
   isScalar?: boolean;
   /**
    * The result cardinality, when the query's shape pins it down (a
-   * selected set literal). Otherwise the CommandDataDescription echoes the
-   * client's expected cardinality.
+   * selected scalar expression or set literal). Otherwise the
+   * CommandDataDescription echoes the client's expected cardinality.
    */
   cardinality?: number;
 }
 
 /**
- * Detect whether an expression resolves to a bare scalar at the top level
- * of a SELECT (i.e., the SELECT body is just `<bool>$x` or `42` or a
- * scalar function call, not a `SELECT Type { ... }` shape). Used by
- * `inferOutputShape` to decide between Object and BaseScalar typedesc.
- *
- * Returns the EdgeQL scalar type name (e.g., "bool", "int64") or null
- * if the expression isn't a known bare scalar form.
+ * What a `with` block brings into scope for the query it wraps: its
+ * aliases, and its `module`, which bare type names then refer to.
  */
-function detectBareScalarType(expr: unknown): string | null {
-  if (!expr || typeof expr !== "object") {
+interface WithScope {
+  aliases: Map<string, BoundAlias>;
+  module?: string;
+}
+
+/** A `with` alias: the expression it's bound to, in the scope it's bound in. */
+interface BoundAlias {
+  expr: AST.Expression;
+  scope: WithScope;
+}
+
+const EMPTY_SCOPE: WithScope = { aliases: new Map() };
+
+/** Follow `with` aliases from `expr` to the expression they're bound to. */
+function resolveAlias(expr: AST.Expression, scope: WithScope): BoundAlias {
+  let bound: BoundAlias = { expr, scope };
+  while (bound.expr.kind === "Identifier") {
+    const next = bound.scope.aliases.get((bound.expr as AST.Identifier).name);
+    if (!next) {
+      break;
+    }
+    bound = next;
+  }
+  return bound;
+}
+
+const COMPARISON_OPERATORS = new Set([
+  "!=",
+  "<",
+  "<=",
+  "=",
+  ">",
+  ">=",
+  "?!=",
+  "?=",
+  "AND",
+  "ILIKE",
+  "IN",
+  "LIKE",
+  "NOT IN",
+  "OR"
+]);
+const NUMERIC_OPERATORS = new Set(["%", "*", "**", "+", "-", "/", "//"]);
+
+/**
+ * The scalar type of an expression selected on its own (`select 42`,
+ * `select <str>$x`, `select x + 1` with `x` a `with` alias), so
+ * `inferOutputShape` can describe it as a BaseScalar instead of an Object.
+ * Returns null if the expression isn't a scalar form recognized here.
+ */
+function inferScalarType(
+  expr: AST.Expression,
+  scope: WithScope
+): string | null {
+  const bound = resolveAlias(expr, scope);
+  const e = bound.expr;
+  switch (e.kind) {
+    case "BinaryOp":
+      return binaryOpType(e as AST.BinaryOp, bound.scope);
+    case "Literal":
+      switch ((e as AST.Literal).type) {
+        case "boolean":
+          return "bool";
+        case "bytes":
+          return "bytes";
+        case "float":
+          return "float64";
+        case "integer":
+          return "int64";
+        case "string":
+          return "str";
+        case "uuid":
+          return "uuid";
+      }
+      return null;
+    case "Subquery": {
+      const shape = inferOutputShape(
+        (e as AST.Subquery).query,
+        undefined,
+        bound.scope
+      );
+      return shape.isScalar ? shape.fields[0].edgeqlType : null;
+    }
+    case "TypeCast": {
+      const parts = (e as AST.TypeCast).type?.name?.parts;
+      return parts && parts.length > 0 ? parts[parts.length - 1] : null;
+    }
+    case "UnaryOp": {
+      const unary = e as AST.UnaryOp;
+      if (unary.op === "EXISTS" || unary.op === "NOT") {
+        return "bool";
+      }
+      const operand = inferScalarType(unary.operand, bound.scope);
+      return (unary.op === "+" || unary.op === "-") && operand !== null &&
+          [...INT_TYPES, ...FLOAT_TYPES].includes(operand) ?
+        operand :
+        null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * The result type of a binary operator over scalars: comparisons and
+ * logic give bool, `++` joins two strs (or bytes), and arithmetic on ints
+ * and floats follows Gel's implicit casts — `/` and `**` of two ints are
+ * float64. Anything else is null.
+ */
+function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
+  if (COMPARISON_OPERATORS.has(op.op)) {
+    return "bool";
+  }
+  const left = inferScalarType(op.left, scope);
+  const right = inferScalarType(op.right, scope);
+  if (left === null || right === null) {
     return null;
   }
-  const e = expr as { kind?: string; };
-
-  if (e.kind === "TypeCast") {
-    const cast = expr as AST.TypeCast;
-    const parts = cast.type?.name?.parts;
-    if (parts && parts.length > 0) {
-      return parts[parts.length - 1];
-    }
+  if (op.op === "++") {
+    return left === right && (left === "str" || left === "bytes") ?
+      left :
+      null;
   }
-
-  if (e.kind === "Literal") {
-    const lit = expr as AST.Literal;
-    switch (lit.type) {
-      case "string":
-        return "str";
-      case "integer":
-        return "int64";
-      case "float":
-        return "float64";
-      case "boolean":
-        return "bool";
-      case "uuid":
-        return "uuid";
-      case "bytes":
-        return "bytes";
-    }
+  const numeric = [...INT_TYPES, ...FLOAT_TYPES];
+  if (
+    !NUMERIC_OPERATORS.has(op.op) || !numeric.includes(left) ||
+    !numeric.includes(right)
+  ) {
+    return null;
   }
-
-  return null;
+  if (
+    (op.op === "/" || op.op === "**") && INT_TYPES.includes(left) &&
+    INT_TYPES.includes(right)
+  ) {
+    return "float64";
+  }
+  return unifyScalarTypes([left, right]);
 }
 
 /**
@@ -426,7 +525,8 @@ export function inferOutputShape(
         links?: Map<string, { required?: boolean; multi?: boolean; }>;
       }
     >;
-  }
+  },
+  scope: WithScope = EMPTY_SCOPE
 ): OutputShape {
   // `id` is always required + single → ONE.
   const idField: OutputField = {
@@ -446,58 +546,83 @@ export function inferOutputShape(
     return { typeName: "Object", fields: [idField] };
   }
 
-  // `with xs := {…} select xs`: describe the aliased set literal.
+  // `with …`: describe the body like the same query without `with`, each
+  // alias standing for what it's bound to. A binding sees the aliases
+  // bound before it.
   if (q.kind === "WithBlock") {
     const block = q as AST.WithBlock;
-    const body = block.body as AST.SelectQuery;
-    if (
-      body.kind === "SelectQuery" && !body.shape &&
-      body.expr.kind === "Identifier"
-    ) {
-      const alias = (body.expr as AST.Identifier).name;
-      const binding = block.bindings.find(b => b.name.name === alias);
-      if (binding?.value.kind === "SetExpr") {
-        return inferOutputShape({ ...body, expr: binding.value }, schema);
-      }
+    let inner: WithScope = {
+      aliases: scope.aliases,
+      module: block.module ?? scope.module
+    };
+    for (const binding of block.bindings) {
+      inner = {
+        aliases: new Map(inner.aliases).set(binding.name.name, {
+          expr: binding.value,
+          scope: inner
+        }),
+        module: inner.module
+      };
     }
+    return inferOutputShape(block.body, schema, inner);
   }
 
   if (q.kind === "SelectQuery") {
     const sel = q as AST.SelectQuery;
+    const { expr, scope: exprScope } = resolveAlias(sel.expr, scope);
+    // A filter, offset or limit can drop every element.
+    const narrowed = Boolean(sel.filter || sel.offset || sel.limit);
+
+    // Selected subquery (`select (select …)`, or an alias bound to one): a
+    // shape re-selects the subquery's set; without one, the result is the
+    // subquery's own.
+    if (expr.kind === "Subquery") {
+      const inner = (expr as AST.Subquery).query;
+      if (!sel.shape) {
+        return dropLowerBound(
+          inferOutputShape(inner, schema, exprScope),
+          narrowed
+        );
+      }
+      if (inner.kind === "SelectQuery") {
+        return inferOutputShape({ ...sel, expr: inner.expr }, schema, exprScope);
+      }
+    }
 
     // Selected set literal (`select {1, 2}`): one element per row.
-    if (!sel.shape && sel.expr.kind === "SetExpr") {
-      const shape = inferSetShape(sel.expr as AST.SetExpr, schema);
-      // A filter, offset or limit can drop every element.
-      if (sel.filter || sel.offset || sel.limit) {
-        shape.cardinality = shape.cardinality === Cardinality.ONE ?
-          Cardinality.AT_MOST_ONE :
-          shape.cardinality === Cardinality.AT_LEAST_ONE ?
-          Cardinality.MANY :
-          shape.cardinality;
-      }
-      return shape;
+    if (!sel.shape && expr.kind === "SetExpr") {
+      return dropLowerBound(
+        inferSetShape(expr as AST.SetExpr, schema, exprScope),
+        narrowed
+      );
     }
 
-    // Bare-scalar SELECT (`SELECT <bool>$x`, `SELECT 42`, …): emit a
-    // BaseScalar shape so the descriptor doesn't wrap the value in an
-    // Object{id} on the wire. Only triggers when there's no shape and
-    // no filter against an Object type — `SELECT Item FILTER ...` still
-    // wants the Object path even with no shape.
+    // Bare-scalar SELECT (`SELECT <bool>$x`, `SELECT 42`, `SELECT 1 + 2`):
+    // emit a BaseScalar shape so the descriptor doesn't wrap the value in
+    // an Object{id} on the wire, with the expression's own cardinality.
+    // Only triggers when there's no shape and the expression is a scalar —
+    // `SELECT Item FILTER ...` still wants the Object path.
     if (!sel.shape) {
-      const scalar = detectBareScalarType(sel.expr);
+      const scalar = inferScalarType(expr, exprScope);
       if (scalar !== null) {
-        return {
-          typeName: scalar,
-          fields: [
-            { name: "_value", edgeqlType: scalar, cardinality: Cardinality.ONE }
-          ],
-          isScalar: true
-        };
+        const cardinality = expressionCardinality(expr, exprScope);
+        return dropLowerBound({
+          cardinality,
+          fields: [{ cardinality, edgeqlType: scalar, name: "_value" }],
+          isScalar: true,
+          typeName: scalar
+        }, narrowed);
       }
     }
 
-    const typeName = extractTypeNameFromExpr(sel.expr) ?? "Object";
+    // Under `with module m`, a bare type name is a type in `m`.
+    const name = extractTypeNameFromExpr(expr);
+    const typeName = name === null ?
+      "Object" :
+      exprScope.module && exprScope.module !== "default" &&
+        !name.includes("::") ?
+      `${exprScope.module}::${name}` :
+      name;
     const fields: OutputField[] = [];
     const typeDef = schema?.types?.get(typeName);
 
@@ -564,7 +689,8 @@ export function inferOutputShape(
  */
 function inferSetShape(
   set: AST.SetExpr,
-  schema: Parameters<typeof inferOutputShape>[1]
+  schema: Parameters<typeof inferOutputShape>[1],
+  scope: WithScope
 ): OutputShape {
   const cardinalities: number[] = [];
   const objects: OutputShape[] = [];
@@ -580,11 +706,11 @@ function inferSetShape(
       elements.forEach(visit);
       return;
     }
-    cardinalities.push(elementCardinality(expr));
+    cardinalities.push(expressionCardinality(expr, scope));
     // Each element is described as if it were selected on its own.
     const shape = expr.kind === "Subquery" ?
-      inferOutputShape((expr as AST.Subquery).query, schema) :
-      inferOutputShape({ kind: "SelectQuery", expr }, schema);
+      inferOutputShape((expr as AST.Subquery).query, schema, scope) :
+      inferOutputShape({ kind: "SelectQuery", expr }, schema, scope);
     if (shape.isScalar) {
       scalarTypes.push(shape.fields[0].edgeqlType);
     } else if (shape.typeName !== "Object") {
@@ -616,41 +742,101 @@ function inferSetShape(
 }
 
 /**
- * Cardinality of one set-literal element: a literal or a required
- * parameter is ONE, an `<optional T>$p` parameter is AT_MOST_ONE, a
- * scalar subquery takes its expression's cardinality, and anything else
- * (a type, a path, a query over objects) may be MANY.
+ * Cardinality of an expression, with `with` aliases resolved: a literal or
+ * a required parameter is ONE, an `<optional T>$p` parameter is
+ * AT_MOST_ONE, an element-wise operator combines its operands' (see
+ * `productCardinality`), a subquery takes its own result cardinality, and
+ * anything else (a type, a path, a query over objects) may be MANY.
  */
-function elementCardinality(expr: AST.Expression): number {
-  switch (expr.kind) {
+function expressionCardinality(
+  expr: AST.Expression,
+  scope: WithScope
+): number {
+  const bound = resolveAlias(expr, scope);
+  const e = bound.expr;
+  switch (e.kind) {
+    case "BinaryOp": {
+      const op = e as AST.BinaryOp;
+      // `x in S` tests membership: one result per `x`.
+      if (op.op === "IN" || op.op === "NOT IN") {
+        return expressionCardinality(op.left, bound.scope);
+      }
+      if (binaryOpType(op, bound.scope) === null) {
+        return Cardinality.MANY;
+      }
+      const operands = [
+        expressionCardinality(op.left, bound.scope),
+        expressionCardinality(op.right, bound.scope)
+      ];
+      // `?=` and `?!=` compare an empty operand too, rather than yielding
+      // nothing.
+      if (op.op === "?=" || op.op === "?!=") {
+        return productCardinality(operands.map(c =>
+          c === Cardinality.AT_MOST_ONE ?
+            Cardinality.ONE :
+            c === Cardinality.MANY ?
+            Cardinality.AT_LEAST_ONE :
+            c
+        ));
+      }
+      return productCardinality(operands);
+    }
     case "Literal":
       return Cardinality.ONE;
     case "Parameter":
       return Cardinality.ONE;
     case "SetExpr":
       return unionCardinality(
-        (expr as AST.SetExpr).elements.map(elementCardinality)
+        (e as AST.SetExpr).elements.map(el => expressionCardinality(el, bound.scope))
       );
+    case "Subquery":
+      return inferOutputShape((e as AST.Subquery).query, undefined, bound.scope)
+        .cardinality ?? Cardinality.MANY;
     case "TypeCast": {
-      const cast = expr as AST.TypeCast;
+      const cast = e as AST.TypeCast;
       if (cast.cardinality?.required === false) {
         return Cardinality.AT_MOST_ONE;
       }
-      return elementCardinality(cast.expr);
+      return expressionCardinality(cast.expr, bound.scope);
     }
-    case "Subquery": {
-      const query = (expr as AST.Subquery).query as AST.SelectQuery;
-      if (
-        query.kind === "SelectQuery" && !query.shape && !query.filter &&
-        !query.limit && !query.offset
-      ) {
-        return elementCardinality(query.expr);
-      }
-      return Cardinality.MANY;
+    case "UnaryOp": {
+      const unary = e as AST.UnaryOp;
+      return unary.op === "EXISTS" ?
+        Cardinality.ONE :
+        expressionCardinality(unary.operand, bound.scope);
     }
     default:
       return Cardinality.MANY;
   }
+}
+
+/**
+ * Cardinality of an element-wise operator: one result per combination of
+ * its operands, so it's empty when any operand is.
+ */
+function productCardinality(cardinalities: number[]): number {
+  const required = cardinalities.every(c => c === Cardinality.ONE || c === Cardinality.AT_LEAST_ONE);
+  const single = cardinalities.every(c => c === Cardinality.ONE || c === Cardinality.AT_MOST_ONE);
+  if (single) {
+    return required ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
+  }
+  return required ? Cardinality.AT_LEAST_ONE : Cardinality.MANY;
+}
+
+/**
+ * A filter, offset or limit can drop every element of a result whose
+ * cardinality is pinned down: ONE becomes AT_MOST_ONE, AT_LEAST_ONE MANY.
+ */
+function dropLowerBound(shape: OutputShape, narrowed: boolean): OutputShape {
+  if (!narrowed || shape.cardinality === undefined) {
+    return shape;
+  }
+  const cardinality = shape.cardinality === Cardinality.ONE ?
+    Cardinality.AT_MOST_ONE :
+    shape.cardinality === Cardinality.AT_LEAST_ONE ?
+    Cardinality.MANY :
+    shape.cardinality;
+  return { ...shape, cardinality };
 }
 
 /**

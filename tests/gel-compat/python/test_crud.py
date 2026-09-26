@@ -101,3 +101,26 @@ def test_delete_then_missing(client):
 def test_select_set_literal(client):
     assert list(client.query("SELECT {1, 2, 2}")) == [1, 2, 2]
     assert list(client.query("SELECT {<str>$a, <str>$b}", a="x", b="y")) == ["x", "y"]
+
+
+def test_with_select_shape(client):
+    name = f"echo-{uuid.uuid4()}"
+    client.query_single(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=5,
+    )
+    filtered = client.query(
+        "WITH n := <str>$n SELECT Item { name, count } FILTER .name = n",
+        n=name,
+    )
+    assert [(r.name, r.count) for r in filtered] == [(name, 5)]
+    aliased = client.query(
+        "WITH i := (SELECT Item FILTER .name = <str>$n) SELECT i { name }",
+        n=name,
+    )
+    assert [r.name for r in aliased] == [name]
+
+
+def test_query_single_scalar(client):
+    assert client.query_single("SELECT 42") == 42

@@ -92,3 +92,22 @@ test("SELECT of a set literal returns one element per member", async () => {
   assert.deepEqual(await client.query("SELECT {1, 2, 2}"), [1, 2, 2]);
   assert.deepEqual(await client.query("SELECT {<str>$a, <str>$b}", { a: "x", b: "y" }), ["x", "y"]);
 });
+
+test("WITH … SELECT Type { shape } is described like the query without WITH", async () => {
+  const name = `echo-${Date.now()}`;
+  await insertItem(name, 5);
+  const filtered = await client.query(
+    "WITH n := <str>$n SELECT Item { name, count } FILTER .name = n",
+    { n: name }
+  );
+  assert.deepEqual(filtered.map(r => [r.name, r.count]), [[name, 5]]);
+  const aliased = await client.query(
+    "WITH i := (SELECT Item FILTER .name = <str>$n) SELECT i { name }",
+    { n: name }
+  );
+  assert.deepEqual(aliased.map(r => r.name), [name]);
+});
+
+test("querySingle of a scalar literal returns the value", async () => {
+  assert.equal(await client.querySingle("SELECT 42"), 42);
+});

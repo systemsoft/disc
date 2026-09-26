@@ -44,6 +44,17 @@ const schema = {
         ["tags", { required: true, multi: true }],
         ["notes", { required: false, multi: true }]
       ])
+    }],
+    ["other::Widget", {
+      properties: new Map([
+        ["size", {
+          edgeqlType: "int32",
+          type: "integer",
+          required: true,
+          multi: false
+        }]
+      ]),
+      links: new Map()
     }]
   ])
 };
@@ -162,4 +173,78 @@ Deno.test("set literal of object queries is described like the object query", ()
     "title",
     "str"
   ]]);
+});
+
+/*** Type name, field names and field types described for `query`. ***/
+function inferObject(
+  query: string
+): { cardinality?: number; fields: string[][]; isScalar?: boolean; typeName: string; } {
+  const shape = inferOutputShape(new EdgeQLParser(query).parse(), schema);
+  return {
+    cardinality: shape.cardinality,
+    fields: shape.fields.map(f => [f.name, f.edgeqlType]),
+    isScalar: shape.isScalar,
+    typeName: shape.typeName
+  };
+}
+
+Deno.test("with block is described like its body, with aliases resolved", () => {
+  const cases: [string, string, string[][]][] = [
+    [
+      "with t := (select Thing filter .title = <str>$t) select t { title, nickname }",
+      "Thing",
+      [["title", "str"], ["nickname", "str"]]
+    ],
+    ["with t := <str>$t select Thing { title } filter .title = t", "Thing", [["title", "str"]]],
+    ["with module default select Thing { title }", "Thing", [["title", "str"]]],
+    ["with module other select Widget { size }", "other::Widget", [["size", "int32"]]],
+    ["with t := Thing select t { nickname }", "Thing", [["nickname", "str"]]],
+    ["with t := (select Thing { title }) select t", "Thing", [["title", "str"]]],
+    ["with t := (select Thing { title }) select t { nickname }", "Thing", [["nickname", "str"]]],
+    [
+      "with t := <str>$t, u := (select Thing filter .title = t) select u { title }",
+      "Thing",
+      [["title", "str"]]
+    ],
+    ["select (select Thing { nickname })", "Thing", [["nickname", "str"]]]
+  ];
+  for (const [query, typeName, fields] of cases) {
+    // Object results keep echoing the client's expected cardinality.
+    assertEquals(
+      inferObject(query),
+      { cardinality: undefined, fields, isScalar: undefined, typeName },
+      query
+    );
+  }
+});
+
+Deno.test("scalar select reports its own type and result cardinality", () => {
+  const cases: [string, string, number][] = [
+    ["select 42", "int64", Cardinality.ONE],
+    ["select <str>$x", "str", Cardinality.ONE],
+    ["select <optional str>$x", "str", Cardinality.AT_MOST_ONE],
+    ["select 1 + 2", "int64", Cardinality.ONE],
+    ["select -1", "int64", Cardinality.ONE],
+    ["select 1 + 2.5", "float64", Cardinality.ONE],
+    ["select 7 / 2", "float64", Cardinality.ONE],
+    ["select 2 > 1", "bool", Cardinality.ONE],
+    ["select <optional str>$a = 'b'", "bool", Cardinality.AT_MOST_ONE],
+    ["select <optional str>$a ?= 'b'", "bool", Cardinality.ONE],
+    ["select <str>$a ++ 'b'", "str", Cardinality.ONE],
+    ["select <optional int64>$a + 1", "int64", Cardinality.AT_MOST_ONE],
+    ["select 42 filter false", "int64", Cardinality.AT_MOST_ONE],
+    ["select (select 1)", "int64", Cardinality.ONE],
+    ["with x := 1 select x + 1", "int64", Cardinality.ONE],
+    ["with a := 1, b := a + 1 select b", "int64", Cardinality.ONE],
+    ["with x := <optional str>$x select x", "str", Cardinality.AT_MOST_ONE],
+    ["with xs := {1, 2} select {xs, 3}", "int64", Cardinality.AT_LEAST_ONE],
+    ["with a := 1 select (with a := a + 1.5 select a)", "float64", Cardinality.ONE]
+  ];
+  for (const [query, type, cardinality] of cases) {
+    assertEquals(
+      inferScalarSet(query),
+      { cardinality, isScalar: true, type },
+      query
+    );
+  }
 });
