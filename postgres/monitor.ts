@@ -100,40 +100,13 @@ export class PostgresMonitor {
     }
 
     try {
-      const pgBinDir = this.instance.getPgBinDir();
-
-      if (!pgBinDir) {
-        // No PG binaries available — instance reports running, trust process check
-        this.lastHealthStatus = {
-          connections: 0,
-          healthy: true,
-          lastCheck: new Date(),
-          latencyMs: Date.now() - startTime
-        };
-
-        this.restartAttempts = 0;
-        this.isFirstCheck = false;
-
-        return this.lastHealthStatus;
-      }
-
-      // Use pg_isready — works with Unix sockets natively
-      const pgIsReady = join(pgBinDir, "pg_isready");
-      const socketDir = this.instance.getSocketDir();
-      const port = this.instance.getPort();
-
-      // When port is 0, PG uses -p 5432 for the socket file name
-      const effectivePort = port === 0 ? 5432 : port;
-
-      const args: string[] = port === 0 ?
-        ["-h", socketDir, "-p", String(effectivePort), "-U", "disc", "-q"] :
-        ["-h", "localhost", "-p", String(port), "-U", "disc", "-q"];
-
-      const cmd = new Deno.Command(pgIsReady, { args });
-      const output = await cmd.output();
+      // Probe in-process rather than via `pg_isready`: the bundled PostgreSQL
+      // ships no client binaries, and a failed spawn read as "unhealthy"
+      // made the monitor restart a healthy server.
+      const accepting = await this.instance.isAcceptingConnections();
       const latencyMs = Date.now() - startTime;
 
-      if (output.success) {
+      if (accepting) {
         this.lastHealthStatus = {
           connections: 0,
           healthy: true,
@@ -147,9 +120,7 @@ export class PostgresMonitor {
         return this.lastHealthStatus;
       }
 
-      // pg_isready returned non-zero: not accepting connections
-      const stderr = new TextDecoder().decode(output.stderr).trim();
-      throw new Error(`pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`);
+      throw new Error("PostgreSQL is not accepting connections");
     } catch (error) {
       // On the first check, don't count toward restart attempts —
       // PG may still be finishing startup even after pg_ctl -w returns.

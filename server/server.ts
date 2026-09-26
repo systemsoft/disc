@@ -11,14 +11,13 @@
 import "../lib/bigint-json.ts";
 import { AuthRoutes } from "../auth/integration.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
-import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
+import { PgPoolDatabaseAdapter } from "../auth/pg-database-adapter.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import type { Schema } from "../compiler/context.ts";
 import { mergeSchemaAdditions } from "../compiler/context.ts";
 import { createExtensionContext } from "../extensions/context.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 import type { Extension } from "../extensions/types.ts";
-import { DatabaseConnection } from "../lib/database.ts";
 import { configureLogging } from "../lib/logger.ts";
 import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
@@ -27,7 +26,7 @@ import { BinaryProtocolServer } from "../protocol/binary-server.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { MigrationEngine } from "../migration/engine.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
-import type { ConnectionPool } from "../lib/connection-pool.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import type { Module } from "../schema/converter.ts";
 import type { SchemaDriftProvider } from "./http-base.ts";
 import { DatabaseRegistry } from "./database-registry.ts";
@@ -323,7 +322,7 @@ export class DiscServer {
   private authProvider?: AuthProvider;
   private authMiddleware?: AuthMiddleware;
   private authRoutes?: AuthRoutes;
-  private auth_db?: DatabaseConnection;
+  private auth_db?: ConnectionPool;
   private extensionRegistry: ExtensionRegistry;
   private databaseRegistry?: DatabaseRegistry;
   /**
@@ -783,7 +782,7 @@ export class DiscServer {
     // Close auth database connection
     if (this.auth_db) {
       await this.auth_db.close();
-      logger.debug("Auth database connection closed");
+      logger.debug("Auth database connection pool closed");
     }
 
     // Reap any temp PEM files materialized from TLS env vars.
@@ -836,12 +835,19 @@ export class DiscServer {
 
     logger.debug("Initializing authentication system");
 
-    // Create a dedicated database connection for auth
-    this.auth_db = new DatabaseConnection(this.config.databaseUrl);
-    await this.auth_db.connect();
+    // Create a dedicated connection pool for auth. A pool (not one long-lived
+    // client) so auth recovers when PostgreSQL restarts: dead connections are
+    // detected on acquire and replaced.
+    this.auth_db = new ConnectionPool({
+      applicationName: "disc-auth",
+      connectionString: this.config.databaseUrl,
+      maxConnections: 5,
+      minConnections: 1
+    });
 
-    // Wrap in PgDatabaseAdapter for ? -> $N placeholder conversion
-    const adapter = new PgDatabaseAdapter(this.auth_db);
+    // Wrap in PgPoolDatabaseAdapter for ? -> $N placeholder conversion
+    const adapter = new PgPoolDatabaseAdapter(this.auth_db);
+    await adapter.connect();
 
     // Build auth config
     const authConfig = {

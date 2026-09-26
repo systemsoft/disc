@@ -10,6 +10,7 @@
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 
@@ -89,6 +90,52 @@ export class PgDatabaseAdapter implements DatabaseInterface {
          SQL continues to get placeholder conversion. ***/
     return await this.connection.transaction(async () => {
       return await fn(this);
+    });
+  }
+}
+
+/**
+ * Pool-backed adapter. A single long-lived connection never recovers once its
+ * backend dies (e.g. a PostgreSQL restart leaves it failing with "Broken
+ * pipe"); the pool validates connections on acquire and replaces dead ones.
+ */
+export class PgPoolDatabaseAdapter implements DatabaseInterface {
+  private pool: ConnectionPool;
+
+  constructor(pool: ConnectionPool) {
+    this.pool = pool;
+  }
+
+  async close(): Promise<void> {
+    await this.pool.close();
+  }
+
+  async connect(): Promise<void> {
+    await this.pool.initialize();
+  }
+
+  async execute(sql: string, params?: any[]): Promise<void> {
+    await this.pool.execute(convertPlaceholders(sql), params);
+  }
+
+  isConnected(): boolean {
+    return !this.pool.isClosed();
+  }
+
+  async query(sql: string, params?: any[]): Promise<QueryResult> {
+    const result = await this.pool.query(convertPlaceholders(sql), params);
+
+    return {
+      rowCount: result.rowCount,
+      rows: result.rows
+    };
+  }
+
+  async transaction<T>(fn: (db: DatabaseInterface) => Promise<T>): Promise<T> {
+    /*** Every statement in the transaction must run on the connection that holds it, not on
+         whichever connection the pool hands out next. ***/
+    return await this.pool.transaction(async connection => {
+      return await fn(new PgDatabaseAdapter(connection));
     });
   }
 }

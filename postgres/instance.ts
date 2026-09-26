@@ -1,10 +1,12 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
+import { deadline } from "@std/async";
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { PostgresConfig } from "./config.ts";
+import { postgresErrorFields } from "../lib/errors.ts";
+import { PostgresConfig, pruneStaleLogFiles } from "./config.ts";
 import { PostgresBinaryDownloader } from "./downloader.ts";
 import { logger } from "./logger.ts";
 
@@ -165,6 +167,7 @@ export class PostgresInstance {
     //     "could not create lock file: File exists"
     // and has to `rm ~/.disc/instances/<name>/socket/.s.PGSQL.5432*` manually.
     await this.cleanupStaleSocket();
+    await this.prepareLogging();
 
     logger.debug(`Starting PostgreSQL instance: ${this.instanceName}`);
 
@@ -269,6 +272,68 @@ export class PostgresInstance {
     throw new Error(
       `Failed to create database "${this.instanceName}": ${detail}`
     );
+  }
+
+  /**
+   * Apply the current logging defaults to an instance created by an older
+   * Disc (postgresql.conf is otherwise only written at init), then drop log
+   * files outside the retention window. PostgreSQL reads its config at start,
+   * so this runs just before it.
+   */
+  private async prepareLogging(): Promise<void> {
+    const configPath = join(this.dataDir, "postgresql.conf");
+    let current: string | undefined;
+
+    try {
+      current = await Deno.readTextFile(configPath);
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound))
+        throw err;
+    }
+
+    if (current !== undefined) {
+      const upgraded = this.config.upgradeLegacyLogging(current);
+
+      if (upgraded !== current) {
+        await Deno.writeTextFile(configPath, upgraded);
+        logger.info(`Updated PostgreSQL logging defaults in ${configPath} (log_statement = 'ddl', one log file per weekday)`);
+      }
+    }
+
+    await pruneStaleLogFiles(join(this.dataDir, "log"));
+  }
+
+  /**
+   * Whether the server answers a connection attempt — the in-process
+   * equivalent of `pg_isready`, which the bundled PostgreSQL does not ship.
+   * Like `pg_isready`, any server response counts as accepting, except
+   * SQLSTATE 57P03 (cannot_connect_now: starting up / shutting down /
+   * in recovery). Connection-level failures (no socket, refused) do not,
+   * and neither does a server that stays silent past `timeoutMs` (the same
+   * 3 s default as `pg_isready`).
+   */
+  async isAcceptingConnections(timeoutMs = 3000): Promise<boolean> {
+    const client = new Client(this.adminClientConfig());
+
+    try {
+      await deadline(
+        (async () => {
+          await client.connect();
+          await client.queryArray("SELECT 1");
+        })(),
+        timeoutMs
+      );
+      return true;
+    } catch (err) {
+      const sqlState = postgresErrorFields(err)?.sqlState;
+      return sqlState !== undefined && sqlState !== "57P03";
+    } finally {
+      try {
+        await client.end();
+      } catch {
+        // Never connected, or already closed — nothing to release.
+      }
+    }
   }
 
   private adminClientConfig() {

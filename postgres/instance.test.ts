@@ -3,6 +3,7 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { join } from "@std/path";
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
 import { PostgresInstance } from "./instance.ts";
 
@@ -133,6 +134,34 @@ Deno.test({
   }
 });
 
+Deno.test("PostgresInstance - isAcceptingConnections times out on a server that never answers", async () => {
+  // Accepts TCP connections but never speaks the PG protocol, like a hung
+  // postmaster. The health check must give up instead of waiting forever.
+  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const conns: Deno.Conn[] = [];
+  const accepting = (async () => {
+    for await (const conn of listener)
+      conns.push(conn);
+  })();
+
+  const instance = new PostgresInstance({
+    dataDir: "/tmp/data",
+    instanceName: "test-db",
+    port: (listener.addr as Deno.NetAddr).port
+  });
+
+  try {
+    const started = Date.now();
+    assertEquals(await instance.isAcceptingConnections(200), false);
+    assertEquals(Date.now() - started < 2000, true);
+  } finally {
+    listener.close();
+    for (const conn of conns)
+      conn.close();
+    await accepting.catch(() => {});
+  }
+});
+
 Deno.test("PostgresInstance - DSN generation", () => {
   const instance1 = new PostgresInstance({
     dataDir: "/tmp/data",
@@ -245,4 +274,69 @@ Deno.test("PostgresInstance - socket path generation", () => {
 
   const socketPath2 = instance2.getSocketPath();
   assertEquals(socketPath2, "/tmp/socket/.s.PGSQL.5432");
+});
+
+Deno.test({
+  name: "PostgresInstance - isAcceptingConnections tracks a socket-only instance without client binaries",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const instanceName = "test-accepting";
+    const instanceDir = join(TEST_BASE_DIR, instanceName);
+    const instance = new PostgresInstance({
+      dataDir: join(instanceDir, "data"),
+      instanceName,
+      pgBinDir: PG_BIN_DIR!,
+      socketDir: join(instanceDir, "socket")
+    });
+
+    try {
+      await instance.init();
+      assertEquals(await instance.isAcceptingConnections(), false);
+
+      await instance.start();
+      assertEquals(await instance.isAcceptingConnections(), true);
+
+      await instance.stop();
+      assertEquals(await instance.isAcceptingConnections(), false);
+    } finally {
+      await instance.stop();
+      await Deno.remove(instanceDir, { recursive: true }).catch(() => {});
+    }
+  }
+});
+
+Deno.test({
+  name: "PostgresInstance - start applies the current logging defaults to an instance created by an older Disc",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const instanceName = "test-legacy-logging";
+    const instanceDir = join(TEST_BASE_DIR, instanceName);
+    const dataDir = join(instanceDir, "data");
+    const socketDir = join(instanceDir, "socket");
+    const instance = new PostgresInstance({ dataDir, instanceName, pgBinDir: PG_BIN_DIR!, socketDir });
+
+    try {
+      await instance.init();
+
+      const configPath = join(dataDir, "postgresql.conf");
+      const legacy = (await Deno.readTextFile(configPath))
+        .replace("log_statement = 'ddl'", "log_statement = 'all'");
+      await Deno.writeTextFile(configPath, legacy);
+
+      await instance.start();
+
+      const client = new Client({ database: "postgres", host_type: "socket", hostname: socketDir, port: 5432, user: "disc" });
+      await client.connect();
+
+      try {
+        const { rows } = await client.queryArray<[string]>("SHOW log_statement");
+        assertEquals(rows[0][0], "ddl");
+      } finally {
+        await client.end();
+      }
+    } finally {
+      await instance.stop();
+      await Deno.remove(instanceDir, { recursive: true }).catch(() => {});
+    }
+  }
 });

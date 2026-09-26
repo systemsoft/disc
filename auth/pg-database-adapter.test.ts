@@ -11,7 +11,7 @@ import { assertEquals, assertStrictEquals } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { convertPlaceholders, PgDatabaseAdapter } from "./pg-database-adapter.ts";
+import { convertPlaceholders, PgDatabaseAdapter, PgPoolDatabaseAdapter } from "./pg-database-adapter.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 
 /** Fake DatabaseConnection for testing delegation */
@@ -183,4 +183,87 @@ Deno.test("PgDatabaseAdapter - transaction passes adapter to callback", async ()
 
   /*** The callback should receive the adapter itself (for correct placeholder conversion) ***/
   assertStrictEquals(receivedDb, adapter);
+});
+
+/*** PgPoolDatabaseAdapter tests ***/
+
+/** Fake ConnectionPool: runs transactions on one dedicated connection, as the real pool does */
+class FakeConnectionPool {
+  calls: { args: any[]; method: string; }[] = [];
+  private closed = false;
+  transactionConnection = new FakeDatabaseConnection();
+
+  close(): Promise<void> {
+    this.calls.push({ args: [], method: "close" });
+    this.closed = true;
+
+    return Promise.resolve();
+  }
+
+  execute(sql: string, params?: any[]): Promise<void> {
+    this.calls.push({ args: [sql, params], method: "execute" });
+    return Promise.resolve();
+  }
+
+  initialize(): Promise<void> {
+    this.calls.push({ args: [], method: "initialize" });
+    return Promise.resolve();
+  }
+
+  isClosed(): boolean {
+    return this.closed;
+  }
+
+  query(sql: string, params?: any[]): Promise<QueryResult> {
+    this.calls.push({ args: [sql, params], method: "query" });
+    return Promise.resolve({ rowCount: 0, rows: [] });
+  }
+
+  transaction<T>(fn: (conn: FakeDatabaseConnection) => Promise<T>): Promise<T> {
+    this.calls.push({ args: [], method: "transaction" });
+    return this.transactionConnection.transaction(() => fn(this.transactionConnection));
+  }
+}
+
+Deno.test("PgPoolDatabaseAdapter - connect initializes the pool", async () => {
+  const pool = new FakeConnectionPool();
+  await new PgPoolDatabaseAdapter(pool as any).connect();
+
+  assertEquals(pool.calls.map(c => c.method), ["initialize"]);
+});
+
+Deno.test("PgPoolDatabaseAdapter - isConnected is false once the pool is closed", async () => {
+  const pool = new FakeConnectionPool();
+  const adapter = new PgPoolDatabaseAdapter(pool as any);
+
+  assertEquals(adapter.isConnected(), true);
+  await adapter.close();
+  assertEquals(adapter.isConnected(), false);
+});
+
+Deno.test("PgPoolDatabaseAdapter - query converts placeholders", async () => {
+  const pool = new FakeConnectionPool();
+  await new PgPoolDatabaseAdapter(pool as any).query("SELECT * FROM users WHERE email = ?", ["a@b.co"]);
+
+  assertEquals(pool.calls[0].args, ["SELECT * FROM users WHERE email = $1", ["a@b.co"]]);
+});
+
+Deno.test("PgPoolDatabaseAdapter - execute converts placeholders", async () => {
+  const pool = new FakeConnectionPool();
+  await new PgPoolDatabaseAdapter(pool as any).execute("DELETE FROM users WHERE id = ?", ["1"]);
+
+  assertEquals(pool.calls[0].args, ["DELETE FROM users WHERE id = $1", ["1"]]);
+});
+
+Deno.test("PgPoolDatabaseAdapter - transaction statements run on the transaction's own connection", async () => {
+  const pool = new FakeConnectionPool();
+  const adapter = new PgPoolDatabaseAdapter(pool as any);
+
+  await adapter.transaction(db => db.execute("UPDATE users SET name = ? WHERE id = ?", ["Ada", "1"]));
+
+  assertEquals(pool.transactionConnection.calls.filter(c => c.method === "execute").map(c => c.args[0]), [
+    "BEGIN",
+    "UPDATE users SET name = $1 WHERE id = $2",
+    "COMMIT"
+  ]);
 });
