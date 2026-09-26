@@ -12,7 +12,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { buildParameterIndex, flattenSetElements, isMutationQuery } from "./compiler-base.ts";
+import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
@@ -1199,29 +1199,30 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       let bindingQuery: SQL.SQLStatement;
       let underlyingTypeName: string | undefined;
+      const value = this.bindingSetValue(binding.value);
 
-      if (binding.value.kind === "Subquery") {
+      if (value.kind === "Subquery") {
         // Extract the underlying type name from the inner query for shape
         // resolution in the body query
-        underlyingTypeName = this.extractQueryTypeName(binding.value.query);
+        underlyingTypeName = this.extractQueryTypeName(value.query);
 
         // Compile the CTE inner query as raw columns (SELECT * FROM ...)
         // so the body query can reference individual columns by name
         if (
           underlyingTypeName &&
-          binding.value.query.kind === "SelectQuery"
+          value.query.kind === "SelectQuery"
         ) {
-          bindingQuery = this.compileSelectQueryRaw(binding.value.query);
+          bindingQuery = this.compileSelectQueryRaw(value.query);
         } else {
-          bindingQuery = this.compileQuery(binding.value.query);
+          bindingQuery = this.compileQuery(value.query);
         }
-      } else if (binding.value.kind === "SetExpr") {
+      } else if (value.kind === "SetExpr") {
         // A set literal selected from (`with xs := {1, 2} select xs`) is one
         // row per element. In expression position it is inlined instead.
-        bindingQuery = this.compileSelectQuery({ expr: binding.value, kind: "SelectQuery" });
+        bindingQuery = this.compileSelectQuery({ expr: value, kind: "SelectQuery" });
       } else {
         // Direct expression - wrap in a SELECT
-        const expr = this.compileExpression(binding.value);
+        const expr = this.compileExpression(value);
         bindingQuery = SQL.createSelectStatement({
           select: SQL.createSelectClause([SQL.createSelectItem(expr)])
         });
@@ -1236,16 +1237,16 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       const cteAlias: Context.CTEAlias = {
         cteName,
-        mutation: binding.value.kind === "Subquery" && isMutationQuery(binding.value.query),
+        mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         typeName: underlyingTypeName,
         typeDef
       };
       Context.addCTEAlias(this.ctx, cteName, cteAlias);
       registeredAliases.push(cteName);
 
-      if (binding.value.kind !== "Subquery") {
+      if (value.kind !== "Subquery") {
         shadowedVariables.set(cteName, variables.get(cteName));
-        variables.set(cteName, { name: cteName, type: "any", expression: binding.value });
+        variables.set(cteName, { name: cteName, type: "any", expression: value });
         inlinedAliases.set(cteName, cteAlias);
       }
 
@@ -1274,6 +1275,23 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
     // Combine CTEs with the main query
     return SQL.withCTEs(emitted, mainQuery);
+  }
+
+  /**
+   * A binding's value as the set it stands for. A bare object type or the name
+   * of another CTE binding (`with u := User`, `v := u`) is a select of it, as
+   * if written `u := (select User)`: a CTE of the objects' rows that the body
+   * can project a shape over. Compiled as an expression instead, a type name
+   * is `*` with no FROM ("SELECT * with no tables specified").
+   */
+  private bindingSetValue(value: EdgeQLAST.Expression): EdgeQLAST.Expression {
+    if (value.kind === "TypeName") {
+      const typeDef = Context.resolveTypeName(this.ctx, value.name.parts.join("::"));
+      return typeDef?.kind === "object" ?
+        { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: value.span } } :
+        value;
+    }
+    return this.bindingSetQuery(value) ?? value;
   }
 
   /**
@@ -1306,6 +1324,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         fromClause = SQL.createFromClause([
           SQL.createTableReference(typeDef.tableName, tableAlias)
         ]);
+      } else if (query.expr.kind === "Identifier" && Context.getCTEAlias(this.ctx, query.expr.name)?.typeName) {
+        // Another object binding (`v := (select u filter …)`): its CTE rows
+        // are the objects' rows, so paths resolve against its type.
+        const cteAlias = Context.getCTEAlias(this.ctx, query.expr.name)!;
+        cteAlias.referenced = true;
+        const tableAlias = Context.addTableAlias(
+          this.ctx,
+          cteAlias.cteName,
+          cteAlias.cteName,
+          cteAlias.typeName!
+        );
+        fromClause = SQL.createFromClause([
+          SQL.createTableReference(cteAlias.cteName, tableAlias)
+        ]);
       } else {
         // Fall back to the regular compile path for non-type expressions
         return this.compileSelectQuery(query) as SQL.SelectStatement;
@@ -1326,7 +1358,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return SQL.createSelectStatement({
         select: selectClause,
         from: fromClause,
-        where: whereClause
+        where: whereClause,
+        orderBy: query.orderBy?.length ?
+          {
+            kind: "OrderByClause",
+            items: query.orderBy.map(item => ({
+              direction: item.direction || "ASC",
+              expression: this.compileExpression(item.expr),
+              kind: "OrderByItem" as const,
+              ...compileEmptyOrder(item)
+            }))
+          } :
+          undefined,
+        limit: query.limit ? { count: this.compileExpression(query.limit), kind: "LimitClause" } : undefined,
+        offset: query.offset ? { count: this.compileExpression(query.offset), kind: "OffsetClause" } : undefined
       });
     } finally {
       Context.popScope(this.ctx);
@@ -1341,6 +1386,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (query.kind === "SelectQuery") {
       if (query.expr?.kind === "TypeName") {
         return query.expr.name.parts.join("::");
+      }
+      if (query.expr?.kind === "Identifier") {
+        return Context.getCTEAlias(this.ctx, query.expr.name)?.typeName;
       }
       if (query.expr?.kind === "Path") {
         const firstStep = query.expr.steps[0];

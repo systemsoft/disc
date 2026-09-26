@@ -25,6 +25,21 @@ function isUuidTypeName(typeName: string): boolean {
   return typeName === "uuid" || typeName === "std::uuid";
 }
 
+/*** Numeric EdgeQL types by how `/`, `//` and `%` treat them (Disc stores bigint as numeric). ***/
+const DECIMAL_TYPES = new Set(["bigint", "decimal"]);
+const FLOAT_TYPES = new Set(["float32", "float64"]);
+const INT_SQL_TYPES = new Map([
+  ["int16", { sql: "smallint", width: 16 }],
+  ["int32", { sql: "integer", width: 32 }],
+  ["int64", { sql: "bigint", width: 64 }]
+]);
+
+/*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
+function widestIntSqlType(types: (string | null)[]): string {
+  const widths = types.map(type => (type !== null && INT_SQL_TYPES.get(type)?.width) || 64);
+  return [...INT_SQL_TYPES.values()].find(int => int.width === Math.max(...widths))!.sql;
+}
+
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   // Implemented by higher layers of the compiler inheritance chain.
   protected abstract compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement;
@@ -241,6 +256,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return SQL.createFunctionCall("COALESCE", [left, right]);
     }
 
+    if (binOp.op === "/" || binOp.op === "//" || binOp.op === "%") {
+      return this.compileDivision(binOp, left, right);
+    }
+
     // Map EdgeQL operators to SQL operators
     let sqlOp: string = binOp.op;
     switch (binOp.op) {
@@ -286,6 +305,139 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
+  }
+
+  /**
+   * `/`, `//` and `%` with Gel's semantics, which PostgreSQL's operators do
+   * not share (PG `7 / 2` is 3, has no `//`, and its `%` takes the sign of the
+   * dividend):
+   *
+   *   decimal / decimal → l / r                          (bigint is numeric too)
+   *   other   / other   → l / CAST(r AS double precision) (int / int is float64)
+   *   decimal // …      → FLOOR(l / r)
+   *   float   // …      → FLOOR(l / CAST(r AS double precision))
+   *   int     // int    → CAST(FLOOR(CAST(l AS numeric) / r) AS <widest int>)
+   *   float   % …       → l - FLOOR(l / CAST(r AS double precision)) * r
+   *   int|decimal % …   → ((l % r) + r) % r               (sign of the divisor)
+   *
+   * An operand's type comes from `staticNumericType`. An operand of unknown
+   * type is taken as an int: an int column or parameter is by far the common
+   * case, and an unknown float or decimal still gets the right value from
+   * `/` and `//` (as a float64 and an int64); only `%` of an unknown float
+   * fails, as PG has no float `%`.
+   */
+  private compileDivision(
+    binOp: EdgeQLAST.BinaryOp,
+    left: SQL.SQLExpression,
+    right: SQL.SQLExpression
+  ): SQL.SQLExpression {
+    const types = [this.staticNumericType(binOp.left), this.staticNumericType(binOp.right)];
+    const decimal = types.some(type => type !== null && DECIMAL_TYPES.has(type));
+    const float = !decimal && types.some(type => type !== null && FLOAT_TYPES.has(type));
+    const floatDivision = (): SQL.SQLExpression => SQL.createBinaryExpression("/", left, SQL.createCastExpression(right, "double precision"));
+
+    switch (binOp.op) {
+      case "/":
+        return decimal ? SQL.createBinaryExpression("/", left, right) : floatDivision();
+      case "//": {
+        if (decimal) {
+          return SQL.createFunctionCall("FLOOR", [SQL.createBinaryExpression("/", left, right)]);
+        }
+        if (float) {
+          return SQL.createFunctionCall("FLOOR", [floatDivision()]);
+        }
+        const quotient = SQL.createBinaryExpression("/", SQL.createCastExpression(left, "numeric"), right);
+        return SQL.createCastExpression(SQL.createFunctionCall("FLOOR", [quotient]), widestIntSqlType(types));
+      }
+      default:
+        if (float) {
+          return SQL.createBinaryExpression("-", left, SQL.createBinaryExpression("*", SQL.createFunctionCall("FLOOR", [floatDivision()]), right));
+        }
+        return SQL.createBinaryExpression(
+          "%",
+          SQL.createBinaryExpression("+", SQL.createBinaryExpression("%", left, right), right),
+          right
+        );
+    }
+  }
+
+  /**
+   * The EdgeQL scalar type of a numeric operand when it is known without
+   * running the query: a literal (`7` is int64, `7.0` float64), a cast, a
+   * property of a type in scope (the same lookup as `multiPropertyColumn`),
+   * a variable bound to one of these, or arithmetic over them. Null when
+   * unknown (a function call, subquery, untyped parameter, link path, …).
+   */
+  protected staticNumericType(expr: EdgeQLAST.Expression): string | null {
+    switch (expr.kind) {
+      case "Literal":
+        return expr.type === "integer" ? "int64" : expr.type === "float" ? "float64" : null;
+      case "TypeCast":
+        return expr.type.name.parts[expr.type.name.parts.length - 1];
+      case "Path": {
+        if (expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+          return null;
+        }
+        const name = expr.steps[0].name;
+        for (const ta of this.ctx.currentScope.aliases.values()) {
+          const property = Context.resolveTypeName(this.ctx, ta.type)?.properties.get(name);
+          if (property) {
+            return property.multi ? null : property.edgeqlType ?? null;
+          }
+        }
+        return null;
+      }
+      case "Identifier": {
+        const variable = this.scopeVariable(expr.name);
+        return variable && !variable.sqlOverride ? this.staticNumericType(variable.expression) : null;
+      }
+      case "UnaryOp":
+        return expr.op === "-" || expr.op === "+" ? this.staticNumericType(expr.operand) : null;
+      case "BinaryOp": {
+        if (!["+", "-", "*", "/", "//", "%"].includes(expr.op)) {
+          return null;
+        }
+        const operands = [this.staticNumericType(expr.left), this.staticNumericType(expr.right)];
+        if (operands.some(type => type !== null && DECIMAL_TYPES.has(type))) {
+          return "decimal";
+        }
+        if (expr.op === "/" || operands.some(type => type !== null && FLOAT_TYPES.has(type))) {
+          return "float64";
+        }
+        const ints = operands.map(type => type !== null ? INT_SQL_TYPES.get(type) : undefined);
+        if (ints.some(int => !int)) {
+          return null;
+        }
+        return ints[0]!.width >= ints[1]!.width ? operands[0] : operands[1];
+      }
+      default:
+        return null;
+    }
+  }
+
+  /*** The variable `name` names in the current or an enclosing scope (a `for` variable, an inlined `with` binding). ***/
+  private scopeVariable(name: string): Context.VariableDef | undefined {
+    for (const scope of [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]) {
+      const variable = scope.variables.get(name);
+      if (variable) {
+        return variable;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * `select <name>` when `expr` names a `with` binding compiled to a CTE (and
+   * not a scope variable, which is inlined instead), else null. The name stands
+   * for the binding's rows, so aggregating it (`count(u)`, `exists u`) or
+   * binding it again (`v := u`) goes through a select of it, not through its
+   * expression form — a scalar subquery that fails on more than one row.
+   */
+  protected bindingSetQuery(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+    if (expr.kind !== "Identifier" || this.scopeVariable(expr.name) || !Context.getCTEAlias(this.ctx, expr.name)) {
+      return null;
+    }
+    return { kind: "Subquery", query: { distinct: false, expr, kind: "SelectQuery", span: expr.span } };
   }
 
   /**
@@ -474,8 +626,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * parameter — is at most one value: `<expr> IS NOT NULL`.
    */
   private compileExists(operand: EdgeQLAST.Expression): SQL.SQLExpression {
-    if (operand.kind === "Subquery") {
-      return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(operand) };
+    const set = operand.kind === "Subquery" ? operand : this.bindingSetQuery(operand);
+    if (set) {
+      return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(set) };
     }
     const multi = this.multiPropertyColumn(operand);
     if (multi) {
@@ -670,7 +823,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // no scalar column to wrap. Returns null (fall through) for ordinary
     // scalar arguments.
     if (funcCall.args.length === 1) {
-      const arg = funcCall.args[0].value;
+      const arg = this.bindingSetQuery(funcCall.args[0].value) ?? funcCall.args[0].value;
       const multi = functionName === "count" ? this.multiPropertyColumn(arg) : null;
       if (multi) {
         return SQL.createFunctionCall("CARDINALITY", [multi.column]);
