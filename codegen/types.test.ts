@@ -99,6 +99,12 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for collection types", () => {
     "{ path: string; shape: PFPShape; source: string } | null"
   );
 
+  /*** a module-qualified positional element is not mistaken for a `label: type` pair ***/
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("tuple<cal::local_date, str>", true, false),
+    "[string, string]"
+  );
+
   /*** Critically: never leak raw EdgeQL syntax (the `<…>` generic is invalid TS here). ***/
   const out = Types.mapEdgeQLTypeToTypeScript("tuple<name: str, url: str>", true, false);
   assertEquals(out.includes("tuple<"), false);

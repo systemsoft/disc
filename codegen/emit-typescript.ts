@@ -81,6 +81,22 @@ function typeRefToEdgeQL(ref: TypeRef): string {
   }
 }
 
+/** Whether an enum appears anywhere in `ref`, including inside arrays and tuples. */
+function containsEnum(ref: TypeRef): boolean {
+  switch (ref.kind) {
+    case "enum":
+      return true;
+    case "array":
+      return containsEnum(ref.element);
+    case "tuple":
+      return ref.elements.some(containsEnum);
+    case "named_tuple":
+      return ref.elements.some(e => containsEnum(e.type));
+    default:
+      return false;
+  }
+}
+
 /** Render a QualifiedName as the link/target display string (`module::Name`, bare for default). */
 function qualifiedToTarget(qn: QualifiedName): string {
   return qn.module === "default" ? qn.name : `${qn.module}::${qn.name}`;
@@ -175,30 +191,37 @@ class TypeScriptEmitter {
       this.getTypeScriptTypeName(qn.name);
   }
 
-  /** Base TS type of an enum (or an array of one), resolved like a link target; null for anything else. */
-  private enumTsBase(type: TypeRef, currentModule?: string): string | null {
-    if (type.kind === "enum")
-      return this.targetRef(type.name, currentModule);
-
-    if (type.kind === "array") {
-      const element = this.enumTsBase(type.element, currentModule);
-      return element === null ? null : `${element}[]`;
+  /**
+   * Base TS type of a ref, with every enum at any depth (inside arrays, tuples and
+   * named tuples) resolved like a link target; other leaves go through the EdgeQL
+   * type mapping.
+   */
+  private enumTsBase(type: TypeRef, currentModule?: string): string {
+    switch (type.kind) {
+      case "enum":
+        return this.targetRef(type.name, currentModule);
+      case "array":
+        return `${this.enumTsBase(type.element, currentModule)}[]`;
+      case "tuple":
+        return `[${type.elements.map(e => this.enumTsBase(e, currentModule)).join(", ")}]`;
+      case "named_tuple":
+        return `{ ${type.elements.map(e => `${e.name}: ${this.enumTsBase(e.type, currentModule)}`).join("; ")} }`;
+      default:
+        return Types.mapEdgeQLTypeToTypeScript(typeRefToEdgeQL(type), true, false);
     }
-
-    return null;
   }
 
   /**
    * TS type for a property. Enums resolve through `targetRef`, like link targets,
-   * so one declared in another module is namespace-qualified (`agents.AgentStatus`);
-   * everything else goes through the EdgeQL type mapping.
+   * so one declared in another module is namespace-qualified (`agents.AgentStatus`),
+   * including inside arrays and tuples; everything else goes through the EdgeQL
+   * type mapping.
    */
   private propertyTsType(type: TypeRef, sourceType: string, required: boolean, multi: boolean, currentModule?: string): string {
-    const base = this.enumTsBase(type, currentModule);
-
-    if (base === null)
+    if (!containsEnum(type))
       return Types.mapEdgeQLTypeToTypeScript(sourceType, required, multi);
 
+    const base = this.enumTsBase(type, currentModule);
     const withMulti = multi ? `${base}[]` : base;
     return required ? withMulti : `${withMulti} | null`;
   }

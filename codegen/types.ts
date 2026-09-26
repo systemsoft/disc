@@ -333,7 +333,8 @@ function edgeqlCollectionToTsBase(edgeqlType: string): string {
   if (t.startsWith("tuple<") && t.endsWith(">")) {
     const params = splitTopLevelParams(t.slice("tuple<".length, -1));
     const labeled = params.map(p => {
-      const m = p.match(/^([A-Za-z_$][\w$]*)\s*:\s*([\s\S]+)$/);
+      /*** `:(?!:)` so a qualified element (`agents::Status`) isn't read as a `label: type` pair. ***/
+      const m = p.match(/^([A-Za-z_$][\w$]*)\s*:(?!:)\s*([\s\S]+)$/);
       return m ? { name: m[1], type: m[2] } : { name: null, type: p };
     });
     /*** Named when every field carries a label (EdgeQL requires all-or-none). ***/
