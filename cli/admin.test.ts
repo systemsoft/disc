@@ -8,7 +8,7 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
@@ -97,18 +97,21 @@ Deno.test({
     cap.capture();
 
     try {
-      await adminCommand.createSuperuser({
-        "database-url": dsn,
-        email: "u@example.com",
-        "jwt-secret": JWT_SECRET,
-        password: ""
-      });
+      await assertRejects(
+        () =>
+          adminCommand.createSuperuser({
+            "database-url": dsn,
+            email: "u@example.com",
+            "jwt-secret": JWT_SECRET,
+            password: ""
+          }),
+        Error,
+        "--password must not be empty"
+      );
     } finally {
       cap.restore();
     }
 
-    const errors = cap.getErrors().join("\n");
-    assertStringIncludes(errors.toLowerCase(), "password");
     /*** Verify no user was created ***/
     const db = new DatabaseConnection(dsn);
     await db.connect();
@@ -189,19 +192,22 @@ Deno.test({
     const cap = new ConsoleCapture();
     cap.capture();
 
+    let error: Error;
+
     try {
-      await adminCommand.setPassword({
-        "database-url": dsn,
-        "jwt-secret": JWT_SECRET,
-        password: "LegitP4ssw0rd!!",
-        user: "ghost@example.com"
-      });
+      error = await assertRejects(() =>
+        adminCommand.setPassword({
+          "database-url": dsn,
+          "jwt-secret": JWT_SECRET,
+          password: "LegitP4ssw0rd!!",
+          user: "ghost@example.com"
+        })
+      ) as Error;
     } finally {
       cap.restore();
     }
 
-    const errors = cap.getErrors().join("\n").toLowerCase();
-    assertStringIncludes(errors, "not found");
+    assertStringIncludes(error.message.toLowerCase(), "not found");
   },
   ignore: !canRunPgTests(),
   name: "admin set-password - unknown user is reported as error"
@@ -265,19 +271,22 @@ Deno.test("admin commands - missing DSN reports a clear error", async () => {
     Deno.env.delete("DATABASE_URL");
 
   try {
-    await adminCommand.createSuperuser({
-      email: "x@example.com",
-      "jwt-secret": JWT_SECRET,
-      password: "EnoughP4ssw0rd!"
-    });
+    await assertRejects(
+      () =>
+        adminCommand.createSuperuser({
+          email: "x@example.com",
+          "jwt-secret": JWT_SECRET,
+          password: "EnoughP4ssw0rd!"
+        }),
+      Error,
+      "--database-url"
+    );
   } finally {
     if (saved !== undefined)
       Deno.env.set("DATABASE_URL", saved);
 
     cap.restore();
   }
-
-  assertStringIncludes(cap.getErrors().join("\n"), "--database-url");
 });
 
 /*** gh/geldata#6432 — `disc admin list-policies` is pure SDL introspection, no DB required. Tests

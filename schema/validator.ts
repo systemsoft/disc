@@ -403,9 +403,10 @@ export class SchemaValidator {
       );
     }
 
-    // A colon-form pointer with link properties must be a link: its target
-    // decides whether `multi x: T` is a multi scalar or a multi link.
-    const isLink = property.properties !== undefined && this.isObjectTypeName(property.type.name.parts.join("::"));
+    // A colon-form pointer's target decides whether it is a link: whether
+    // `multi x: T` is a multi scalar or a multi link, and whether it may
+    // carry link properties and delete policies.
+    const isLink = this.isObjectTypeName(property.type.name.parts.join("::"));
     if (property.properties && !isLink) {
       this.addError(
         `Property '${property.name.value}': only links can have link properties — '${property.type.name.parts.join("::")}' is not an object type`
@@ -413,6 +414,11 @@ export class SchemaValidator {
     }
     if (isLink) {
       this.validateLinkProperties(property.name.value, property.multi ?? false, property.properties ?? []);
+    }
+    if ((property.onTargetDelete || property.onSourceDelete) && !isLink) {
+      this.addError(
+        `Property '${property.name.value}': only links can have a delete policy — '${property.type.name.parts.join("::")}' is not an object type`
+      );
     }
 
     if (property.multi && !property.computed && !isLink) {

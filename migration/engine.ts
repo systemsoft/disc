@@ -23,6 +23,33 @@ import {
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
+/**
+ * Prefix of the comment `DDLGenerator.generateRollbackDDL` emits for a step it
+ * cannot generate (a dropped index, trigger, link or table has no stored
+ * definition to recreate).
+ */
+const MANUAL_ROLLBACK_MARKER = "-- MANUAL ROLLBACK REQUIRED";
+
+/**
+ * The steps of a stored rollback that have to be done by hand. Executing the
+ * rest skips them silently (comments are stripped before execution), so a
+ * rollback with any of these is refused.
+ */
+function manualRollbackSteps(rollbackSql: string[]): string[] {
+  return rollbackSql
+    .map(statement => statement.trim())
+    .filter(statement => statement.startsWith(MANUAL_ROLLBACK_MARKER))
+    .map(statement => statement.slice("-- ".length));
+}
+
+function manualRollbackError(migrationId: string, steps: string[]): MigrationError {
+  return new MigrationError(
+    `Migration ${migrationId} cannot be rolled back automatically — its rollback needs manual steps:\n` +
+      steps.map(step => `  - ${step}`).join("\n") +
+      `\nNothing was run and the migration record was kept. Handle these steps by hand or restore from a backup.`
+  );
+}
+
 export class MigrationEngine {
   private differ = new SchemaDiffer();
   private ddlGenerator = new DDLGenerator();
@@ -232,7 +259,7 @@ export class MigrationEngine {
         tableName => this.readExistingColumns(tableName)
       ),
       ...await reconcileDeclaredIndexes(
-        this.differ.declaredIndexes(newSchema),
+        await this.onExistingTables(this.differ.declaredIndexes(newSchema)),
         planned,
         names => this.readExistingIndexNames(names)
       )
@@ -651,6 +678,25 @@ export class MigrationEngine {
       );
     }
 
+    const manualSteps = manualRollbackSteps(rollbackSql);
+
+    /*** A dry run shows the whole rollback, comments and manual steps included, and neither runs
+         it nor removes the migration record. ***/
+    if (this.config.dryRun) {
+      logger.info(`DRY RUN - Rollback of migration ${migrationId} would execute:`);
+      rollbackSql.filter(s => s.trim()).forEach(stmt => logger.info(`  ${stmt}`));
+
+      if (manualSteps.length > 0)
+        logger.warn(`Migration ${migrationId} needs manual rollback steps; a real rollback will be refused.`);
+
+      return Ok(void 0);
+    }
+
+    /*** Running the rest and deleting the record would leave the schema out of step with the
+         recorded history. ***/
+    if (manualSteps.length > 0)
+      return Err(manualRollbackError(migrationId, manualSteps));
+
     try {
       // Execute rollback SQL statements in a transaction
       logger.info(`Rolling back migration ${migrationId}…`);
@@ -693,6 +739,23 @@ export class MigrationEngine {
     if (migrationsToRollback.length === 0) {
       logger.info(`No migrations to rollback after ${migrationId} — already at target`);
       return Ok(void 0);
+    }
+
+    /*** Refuse before running anything when any migration in range needs manual steps — stopping
+         partway would leave some of them rolled back and the rest not. A dry run shows them
+         instead. ***/
+    if (!this.config.dryRun) {
+      for (const migration of migrationsToRollback) {
+        const rollbackSqlResult = await this.tracker.getRollbackSQL(migration.id);
+
+        if (!rollbackSqlResult.ok)
+          return Err(rollbackSqlResult.error);
+
+        const manualSteps = manualRollbackSteps(rollbackSqlResult.value);
+
+        if (manualSteps.length > 0)
+          return Err(manualRollbackError(migration.id, manualSteps));
+      }
     }
 
     // Migrations are already in DESC order (most recent first) from getMigrationsAfter
@@ -1388,6 +1451,25 @@ export class MigrationEngine {
    * Names of the `pg_indexes` rows, among `indexNames`, that exist in the
    * schema new tables are created in. Feeds the index backfill.
    */
+  /**
+   * The indexes whose table already exists. A table the plan creates — a new
+   * type, or a junction for a new multi link — gets its indexes from CREATE,
+   * and backfilling them would run before that (deferred) table exists.
+   */
+  private async onExistingTables(indexes: Types.IndexDefinition[]): Promise<Types.IndexDefinition[]> {
+    if (indexes.length === 0) {
+      return indexes;
+    }
+
+    const result = await this.pool!.query(
+      `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1::text[])`,
+      [[...new Set(indexes.map(index => index.table))]]
+    );
+    const existing = new Set(result.rows.map(row => (row as { tablename: string; }).tablename));
+
+    return indexes.filter(index => existing.has(index.table));
+  }
+
   private async readExistingIndexNames(indexNames: string[]): Promise<Set<string>> {
     const result = await this.pool!.query(
       `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ANY($1::text[])`,

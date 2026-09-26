@@ -606,6 +606,10 @@ export class SDLParser {
           );
         } else if (this.match(TokenType.REWRITE)) {
           rewrites.push(this.parseRewriteDeclaration());
+        } else if (this.match(TokenType.ON)) {
+          // A colon-form link's delete policy; the validator rejects it when
+          // the target turns out to be a scalar.
+          this.parseDeletePolicyClause(property);
         } else {
           // A colon-form link (`multi members: User { role: str; }`) declares
           // its link properties in this body; the validator rejects them when
@@ -756,34 +760,7 @@ export class SDLParser {
             "Expected ';' after extending clause"
           );
         } else if (this.match(TokenType.ON)) {
-          // on target delete ... | on source delete ...
-          const directionToken = this.peek();
-          if (
-            directionToken.type !== TokenType.IDENT ||
-            (directionToken.value !== "target" &&
-              directionToken.value !== "source")
-          ) {
-            throw this.error(
-              `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`
-            );
-          }
-          this.advance(); // consume direction ident
-
-          if (directionToken.value === "target") {
-            this.consume(
-              TokenType.DELETE,
-              "Expected 'delete' after 'target'"
-            );
-            link.onTargetDelete = this.parseDeletePolicy();
-          } else {
-            // source
-            this.consume(
-              TokenType.DELETE,
-              "Expected 'delete' after 'source'"
-            );
-            link.onSourceDelete = this.parseSourceDeletePolicy();
-          }
-          this.consume(TokenType.SEMICOLON, "Expected ';' after delete policy");
+          this.parseDeletePolicyClause(link);
         } else {
           throw this.error(
             `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
@@ -810,6 +787,39 @@ export class SDLParser {
     }
 
     return link;
+  }
+
+  /*** `on target delete <policy>;` or `on source delete <policy>;` in a link body, after `on`. ***/
+  private parseDeletePolicyClause(
+    pointer: Pick<AST.LinkDeclaration, "onSourceDelete" | "onTargetDelete">
+  ): void {
+    const directionToken = this.peek();
+    if (
+      directionToken.type !== TokenType.IDENT ||
+      (directionToken.value !== "target" &&
+        directionToken.value !== "source")
+    ) {
+      throw this.error(
+        `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`
+      );
+    }
+    this.advance(); // consume direction ident
+
+    if (directionToken.value === "target") {
+      this.consume(
+        TokenType.DELETE,
+        "Expected 'delete' after 'target'"
+      );
+      pointer.onTargetDelete = this.parseDeletePolicy();
+    } else {
+      // source
+      this.consume(
+        TokenType.DELETE,
+        "Expected 'delete' after 'source'"
+      );
+      pointer.onSourceDelete = this.parseSourceDeletePolicy();
+    }
+    this.consume(TokenType.SEMICOLON, "Expected ';' after delete policy");
   }
 
   private parseConstraint(): AST.Constraint {
@@ -978,8 +988,8 @@ export class SDLParser {
     this.consume(TokenType.LBRACE, "Expected '{' after policy name");
 
     while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
-      if (this.match(TokenType.ALLOW) || this.match(TokenType.DENY)) {
-        const allow = this.previous().type === TokenType.ALLOW;
+      if (this.check(TokenType.IDENT) && (this.peek().value === "allow" || this.peek().value === "deny")) {
+        const allow = this.advance().value === "allow";
         const operations = this.parseAccessOperations();
         actions.push({ kind: "AccessAction", allow, operations });
         this.consume(TokenType.SEMICOLON, "Expected ';' after access action");
@@ -1385,11 +1395,6 @@ export class SDLParser {
     const token = this.peek();
 
     // "allow"
-    if (token.type === TokenType.ALLOW) {
-      this.advance();
-      return "allow";
-    }
-
     if (token.type === TokenType.IDENT && token.value === "allow") {
       this.advance();
       return "allow";

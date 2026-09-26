@@ -365,3 +365,27 @@ Deno.test("normalizeModules - colon-form link and explicit link keyword normaliz
   assertEquals(colonLink.required, keywordLink.required);
   assertEquals(colonLink.target.name.parts, keywordLink.target.name.parts);
 });
+
+Deno.test("normalizeModules - colon-form link with a block normalizes like the link keyword form", () => {
+  const block = `{
+        on target delete delete source;
+        on source delete delete target;
+        constraint exclusive;
+        annotation title := "owning program";
+      }`;
+  const normalized = (member: string) => {
+    const modules = normalizeModules(
+      new SDLConverter().convertToModules(new SDLParser(`type Program { required name: str; } type Bug { ${member} ${block}; }`).parse())
+    );
+    const bug = modules[0].items.find(i => (i as SDLAST.TypeDeclaration).name?.value === "Bug") as SDLAST.TypeDeclaration;
+    // Source spans differ between the two spellings; the declarations must not.
+    return JSON.parse(JSON.stringify(bug.members[0], (key, value) => key === "span" ? undefined : value));
+  };
+
+  const fromColon = normalized("required program: Program");
+  const fromKeyword = normalized("required link program -> Program");
+
+  assertEquals(fromColon.kind, "LinkDeclaration");
+  assertEquals(fromColon.onTargetDelete, "delete source");
+  assertEquals(fromColon, fromKeyword);
+});

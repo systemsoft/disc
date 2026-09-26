@@ -21,7 +21,6 @@
 
 import { AccessEvaluator } from "../access/evaluator.ts";
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
-import { AuthError } from "../auth/types.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
@@ -80,23 +79,16 @@ class AdminCommand {
   async assignRole(opts: AssignRoleOptions): Promise<void> {
     const ctx = await openAuth(opts);
 
-    if (!ctx)
-      return;
-
     try {
       const userId = await ctx.provider.resolveUserId(opts.user);
 
-      if (!userId) {
-        console.error(`❌ User not found: ${opts.user}`);
-        return;
-      }
+      if (!userId)
+        throw new Error(`User not found: ${opts.user}`);
 
       await ctx.provider.createRole(opts.role, opts.description);
       await ctx.provider.assignRole(userId, opts.role);
 
       console.log(`✅ Assigned role "${opts.role}" to ${opts.user}`);
-    } catch (err) {
-      reportError(err);
     } finally {
       await ctx.close();
     }
@@ -109,13 +101,8 @@ class AdminCommand {
    * apply), ensures the superuser role exists, then assigns it.
    */
   async createSuperuser(opts: CreateSuperuserOptions): Promise<void> {
-    if (rejectEmptyPassword(opts.password))
-      return;
-
+    rejectEmptyPassword(opts.password);
     const ctx = await openAuth(opts);
-
-    if (!ctx)
-      return;
 
     try {
       const roleName = opts.role ?? DEFAULT_SUPERUSER_ROLE;
@@ -138,8 +125,6 @@ class AdminCommand {
 
       await ctx.provider.assignRole(userId, roleName);
       console.log(`✅ Created superuser ${opts.email} with role "${roleName}"`);
-    } catch (err) {
-      reportError(err);
     } finally {
       await ctx.close();
     }
@@ -203,9 +188,6 @@ class AdminCommand {
   async listRoles(opts: BaseOptions): Promise<void> {
     const ctx = await openAuth(opts);
 
-    if (!ctx)
-      return;
-
     try {
       const roles = await ctx.provider.listRoles();
 
@@ -218,8 +200,6 @@ class AdminCommand {
         const desc = r.description ? ` — ${r.description}` : "";
         console.log(`${r.name}${desc}`);
       }
-    } catch (err) {
-      reportError(err);
     } finally {
       await ctx.close();
     }
@@ -232,19 +212,12 @@ class AdminCommand {
    * sessions are revoked so the new password is the only credential.
    */
   async setPassword(opts: SetPasswordOptions): Promise<void> {
-    if (rejectEmptyPassword(opts.password))
-      return;
-
+    rejectEmptyPassword(opts.password);
     const ctx = await openAuth(opts);
-
-    if (!ctx)
-      return;
 
     try {
       await ctx.provider.adminSetPassword(opts.user, opts.password);
       console.log(`✅ Password rotated for ${opts.user}`);
-    } catch (err) {
-      reportError(err);
     } finally {
       await ctx.close();
     }
@@ -470,22 +443,18 @@ function collectFromTypeDecls(decls: ReadonlyArray<{ kind: string; }>, out: Map<
   }
 }
 
-async function openAuth(opts: BaseOptions): Promise<AuthCtx | null> {
+async function openAuth(opts: BaseOptions): Promise<AuthCtx> {
   const dsn = opts["database-url"] ?? Deno.env.get("DATABASE_URL");
 
-  if (!dsn) {
-    console.error("❌ --database-url is required (or set DATABASE_URL env var)");
-    return null;
-  }
+  if (!dsn)
+    throw new Error("--database-url is required (or set DATABASE_URL env var)");
 
   const jwtSecret = opts["jwt-secret"] ??
     Deno.env.get("DISC_JWT_SECRET") ??
     Deno.env.get("JWT_SECRET");
 
-  if (!jwtSecret || jwtSecret.length < 32) {
-    console.error("❌ --jwt-secret is required (or set DISC_JWT_SECRET / JWT_SECRET); must be ≥32 bytes");
-    return null;
-  }
+  if (!jwtSecret || jwtSecret.length < 32)
+    throw new Error("--jwt-secret is required (or set DISC_JWT_SECRET / JWT_SECRET); must be ≥32 bytes");
 
   const db = new DatabaseConnection(dsn);
   await db.connect();
@@ -502,29 +471,11 @@ async function openAuth(opts: BaseOptions): Promise<AuthCtx | null> {
   };
 }
 
-function rejectEmptyPassword(pw: string): boolean {
+function rejectEmptyPassword(pw: string): void {
   /*** CLI-level guard so an empty `--password ""` doesn’t reach the provider as a 0-length string
        and trip an opaque error in bcrypt or downstream layers. (gh/geldata#4209) ***/
-  if (!pw || pw.length === 0) {
-    console.error("❌ --password must not be empty");
-    return true;
-  }
-
-  return false;
-}
-
-function reportError(err: unknown): void {
-  if (err instanceof AuthError) {
-    console.error(`❌ ${err.message}`);
-    return;
-  }
-
-  if (err instanceof Error) {
-    console.error(`❌ ${err.message}`);
-    return;
-  }
-
-  console.error(`❌ ${String(err)}`);
+  if (!pw || pw.length === 0)
+    throw new Error("--password must not be empty");
 }
 
 function stringifyExpr(expr: Record<string, unknown>): string {

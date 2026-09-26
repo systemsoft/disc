@@ -148,6 +148,9 @@ export interface PropertyDeclaration extends SDLNode {
    * `LinkDeclaration.properties` it builds.
    */
   properties?: PropertyDeclaration[];
+  /*** Delete policies of a colon-form link (`program: Program { on target delete allow; }`), moved onto its LinkDeclaration the same way. ***/
+  onTargetDelete?: LinkDeclaration["onTargetDelete"];
+  onSourceDelete?: LinkDeclaration["onSourceDelete"];
 }
 
 // Link declaration

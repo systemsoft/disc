@@ -350,6 +350,12 @@ export interface LinkDefinition {
   annotations: Record<string, any>;
   /** Link properties (`multi members: User { role: str; }`): columns of the junction table. */
   properties?: PropertyDefinition[];
+  /**
+   * `constraint exclusive` in the link body: no two sources link the same
+   * target — a unique index on `<link>_id`, or on a multi link's junction
+   * `target_id`. Set only when true.
+   */
+  exclusive?: boolean;
 }
 
 export interface PropertyChange {
@@ -378,7 +384,8 @@ export interface LinkChange {
     | "ChangeCardinality"
     | "ChangeExtending"
     | "ChangeOnDelete"
-    | "ChangeOnSourceDelete";
+    | "ChangeOnSourceDelete"
+    | "ChangeExclusive";
   oldValue?: any;
   newValue?: any;
 }

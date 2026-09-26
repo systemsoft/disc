@@ -432,3 +432,34 @@ Deno.test("Migration Engine - Restore From Checkpoint", async () => {
     assertEquals(currentState.appliedMigrations.length, 0);
   }
 });
+
+Deno.test("DDL Generator - rollback leaves the caller's operation order intact", () => {
+  // The engine builds rollback SQL before the forward DDL from the same
+  // array; reversing it in place ran multi-step migrations backwards.
+  const operations: Types.DropTypeOperation[] = [
+    { kind: "DropType", typeName: "First" },
+    { kind: "DropType", typeName: "Second" }
+  ];
+
+  new DDLGenerator().generateRollbackDDL(operations);
+
+  assertEquals(operations.map(operation => operation.typeName), ["First", "Second"]);
+});
+
+Deno.test("DDL Generator - rollback leaves nested alter operations in order", () => {
+  const operation: Types.AlterTypeOperation = {
+    kind: "AlterType",
+    operations: [
+      Types.dropPropertyOperation("first"),
+      Types.dropPropertyOperation("second")
+    ],
+    typeName: "User"
+  };
+
+  new DDLGenerator().generateRollbackDDL([operation]);
+
+  assertEquals(
+    operation.operations.map(typeOp => (typeOp as Types.DropPropertyOperation).propertyName),
+    ["first", "second"]
+  );
+});

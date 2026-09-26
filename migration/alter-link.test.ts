@@ -87,6 +87,21 @@ Deno.test("alter link - multi link re-adds its junction table's target FK", () =
   ]);
 });
 
+Deno.test("create type - multi link junction honours an explicit on-target-delete policy", () => {
+  const junction = initialDDL(bug("multi link programs: Program { on target delete restrict; };"))
+    .find(statement => statement.startsWith("CREATE TABLE bug_programs"))!;
+
+  assertStringIncludes(junction, "REFERENCES program (id) ON DELETE RESTRICT");
+});
+
+Deno.test("create type - multi link junction cascades when no policy is set", () => {
+  const junction = initialDDL(bug("multi link programs: Program;"))
+    .find(statement => statement.startsWith("CREATE TABLE bug_programs"))!;
+
+  assert(!junction.includes("RESTRICT"), junction);
+  assertStringIncludes(junction, "REFERENCES program (id) ON DELETE CASCADE");
+});
+
 Deno.test("alter link - multi link restrict keeps linked targets from being deleted", () => {
   assertStringIncludes(
     migrationDDL(bug("multi link programs: Program;"), bug("multi link programs: Program { on target delete restrict; };")).join("\n"),

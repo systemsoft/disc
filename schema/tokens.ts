@@ -43,8 +43,6 @@ export enum TokenType {
   // Access control
   ACCESS = "ACCESS",
   POLICY = "POLICY",
-  ALLOW = "ALLOW",
-  DENY = "DENY",
   SELECT = "SELECT",
   INSERT = "INSERT",
   UPDATE = "UPDATE",
@@ -121,8 +119,9 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["else", TokenType.ELSE],
   ["access", TokenType.ACCESS],
   ["policy", TokenType.POLICY],
-  ["allow", TokenType.ALLOW],
-  ["deny", TokenType.DENY],
+  // `allow` / `deny` are not keywords: they are policy words only inside an
+  // access policy body (and `allow` in `on target|source delete allow`), and
+  // are plain names everywhere else.
   ["select", TokenType.SELECT],
   ["insert", TokenType.INSERT],
   ["update", TokenType.UPDATE],

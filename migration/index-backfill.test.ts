@@ -48,7 +48,7 @@ function modulesOf(sdl: string) {
   return parsed.value;
 }
 
-/** A pool whose database holds `existingIndexes`, and whose DDL fails with `failWith` when set. */
+/** A pool whose database holds every table and `existingIndexes`, and whose DDL fails with `failWith` when set. */
 function fakePool(existingIndexes: string[], failWith?: unknown): { executed: string[]; pool: ConnectionPool; } {
   const executed: string[] = [];
 
@@ -57,6 +57,10 @@ function fakePool(existingIndexes: string[], failWith?: unknown): { executed: st
       if (sql.includes("pg_indexes")) {
         const asked = params![0] as string[];
         return Promise.resolve({ rowCount: 0, rows: existingIndexes.filter(n => asked.includes(n)).map(indexname => ({ indexname })) });
+      }
+      if (sql.includes("pg_tables")) {
+        // Every table the backfill asks about exists.
+        return Promise.resolve({ rowCount: 0, rows: (params![0] as string[]).map(tablename => ({ tablename })) });
       }
 
       return Promise.resolve({ rowCount: 0, rows: [] });

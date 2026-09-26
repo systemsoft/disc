@@ -174,6 +174,12 @@ export function normalizeObjectPropertiesToLinks(modules: Module[]): Module[] {
         if (property.properties !== undefined) {
           link.properties = property.properties;
         }
+        if (property.onTargetDelete !== undefined) {
+          link.onTargetDelete = property.onTargetDelete;
+        }
+        if (property.onSourceDelete !== undefined) {
+          link.onSourceDelete = property.onSourceDelete;
+        }
         return link;
       });
       return { ...typeDecl, members: newMembers };

@@ -265,7 +265,7 @@ export class CLICommands {
         if (rustResult.errors.length > 0) {
           getLogger("cli").error(`Generation failed with errors:`);
           rustResult.errors.forEach(error => getLogger("cli").error(`  ${error}`));
-          return;
+          throw new Error(`Generation failed with ${rustResult.errors.length} error(s)`);
         }
 
         /*** No SDK extraction or `deno fmt` for Rust — the emitted crate is self-contained. ***/
@@ -287,7 +287,7 @@ export class CLICommands {
         if (goResult.errors.length > 0) {
           getLogger("cli").error(`Generation failed with errors:`);
           goResult.errors.forEach(error => getLogger("cli").error(`  ${error}`));
-          return;
+          throw new Error(`Generation failed with ${goResult.errors.length} error(s)`);
         }
 
         /*** No SDK extraction or `deno fmt` for Go — the emitted package is self-contained. ***/
@@ -308,7 +308,7 @@ export class CLICommands {
       if (result.errors.length > 0) {
         getLogger("cli").error(`Generation failed with errors:`);
         result.errors.forEach(error => getLogger("cli").error(`  ${error}`));
-        return;
+        throw new Error(`Generation failed with ${result.errors.length} error(s)`);
       }
 
       /*** Materialize the embedded SDK alongside the generated client so the
@@ -610,9 +610,7 @@ export class CLICommands {
 
       if (!load) {
         const where = args.schema ?? args["schema-dir"] ?? "./dbschema";
-        console.error(`❌ No schema files found at ${where}. Pass --schema <file> or --schema-dir <dir>.`);
-
-        return;
+        throw new Error(`No schema files found at ${where}. Pass --schema <file> or --schema-dir <dir>.`);
       }
     }
 
@@ -628,10 +626,12 @@ export class CLICommands {
       this.makeMigrateProgressListener() :
       undefined;
 
+    /*** Failures throw: `main()` prints the message once and exits non-zero. ***/
     try {
-      if (dryRun && !needsSchema) {
-        /*** Rollback / squash dry-runs stay offline: a dry rollback against a live tracker would
-             skip the rollback SQL yet still delete the history rows. ***/
+      if (dryRun && args.squash) {
+        /*** Squash dry-runs stay offline. A rollback dry-run connects so it can show the stored
+             rollback SQL; the engine’s dry-run mode keeps it from running that SQL or touching the
+             history rows. ***/
         manager = new SchemaManager({ dryRun: true });
       } else {
         pool = new ConnectionPool({
@@ -681,9 +681,6 @@ export class CLICommands {
           quiet
         );
       }
-    } catch (error) {
-      console.error(`Migration failed: ${(error as Error).message}`);
-      throw error;
     } finally {
       if (manager)
         await manager.close();
@@ -711,16 +708,17 @@ export class CLICommands {
    * Restart PostgreSQL instance
    */
   async restart(args: CLIArgs): Promise<void> {
-    const projectName = this.getProjectName();
+    const ctx = resolveProjectContext();
+    const projectName = ctx?.instanceName || Deno.cwd().split("/").pop() || "default";
     console.log(`🔄 Restarting PostgreSQL for project: ${projectName}`);
 
     try {
+      /*** Discover instances so manager knows about on-disk instances ***/
+      await this.postgresManager.discoverInstances();
       const instance = this.postgresManager.getInstance(projectName);
 
-      if (!instance) {
-        console.error("❌ No PostgreSQL instance found for this project");
-        return;
-      }
+      if (!instance)
+        throw new Error("No PostgreSQL instance found for this project");
 
       await instance.restart();
       console.log("✅ PostgreSQL restarted successfully");
@@ -749,17 +747,13 @@ export class CLICommands {
     if (schemaFile) {
       schema = await this.readSchemaAsCompilerSchema(schemaFile);
 
-      if (!schema) {
-        console.error(`❌ Schema not found or failed to parse: ${schemaFile}`);
-        return;
-      }
+      if (!schema)
+        throw new Error(`Schema not found or failed to parse: ${schemaFile}`);
     } else {
       const files = await Codegen.discoverSchemaFiles(schemaDir);
 
-      if (files.length === 0) {
-        console.error(`❌ No schema files found in ${schemaDir}. Pass --schema <file> or --schema-dir <dir>.`);
-        return;
-      }
+      if (files.length === 0)
+        throw new Error(`No schema files found in ${schemaDir}. Pass --schema <file> or --schema-dir <dir>.`);
 
       schema = await Codegen.loadMultiFileSchema(files);
     }
@@ -786,10 +780,8 @@ export class CLICommands {
   ): Promise<void> {
     const dsn = args["database-url"] ?? Deno.env.get("DATABASE_URL");
 
-    if (!dsn) {
-      console.error("❌ --database-url is required (or set DATABASE_URL env var)");
-      return;
-    }
+    if (!dsn)
+      throw new Error("--database-url is required (or set DATABASE_URL env var)");
 
     const schemas = args.schemas ?
       args.schemas.split(",").map(s => s.trim()).filter(Boolean) :
@@ -1147,17 +1139,15 @@ export class CLICommands {
       /*** Check if UI is built ***/
       const isBuilt = await uiServer.isBuilt();
 
-      if (!isBuilt) {
-        console.error("❌ UI not built. Please run:");
-        /*** UI tooling uses Bun, not npm. ***/
-        console.error("   cd ui && bun install && bun run build");
-        return;
-      }
+      /*** UI tooling uses Bun, not npm. ***/
+      if (!isBuilt)
+        throw new Error("UI not built. Please run: cd ui && bun install && bun run build");
 
       /*** Open in browser ***/
       await uiServer.openInBrowser(port);
     } catch (error) {
       console.error(`❌ Failed to open UI: ${(error as Error).message}`);
+      throw error;
     }
   }
 
@@ -1188,10 +1178,8 @@ export class CLICommands {
       /*** Dry-run: plan and show DDL without executing ***/
       const planResult = manager.planModules(modules);
 
-      if (!planResult.ok) {
-        getLogger("cli").error(`Migration planning failed: ${planResult.error.message}`);
-        return;
-      }
+      if (!planResult.ok)
+        throw new Error(`Migration planning failed: ${planResult.error.message}`);
 
       const plan = planResult.value;
 
@@ -1210,12 +1198,10 @@ export class CLICommands {
       const ddlResult = manager.generateDDL(plan);
 
       /*** A change the migrator cannot make fails DDL generation, and `disc migrate` would fail
-           the same way — say so rather than preview nothing. Comment lines (warnings, per-migration
-           headers) are shown with the statements. ***/
-      if (!ddlResult.ok) {
-        getLogger("cli").error(`Migration would fail: ${ddlResult.error.message}`);
-        return;
-      }
+           the same way — say so (and exit non-zero) rather than preview nothing. Comment lines
+           (warnings, per-migration headers) are shown with the statements. ***/
+      if (!ddlResult.ok)
+        throw new Error(`Migration would fail: ${ddlResult.error.message}`);
 
       getLogger("cli").info("DDL that would be executed:");
 
@@ -1255,10 +1241,8 @@ export class CLICommands {
            `[i/N] name … done in Xms` and a final `✓ Applied N migrations in Yms` summary. ***/
       const applyResult = await manager.applyModules(modules, { allowUnsafe });
 
-      if (!applyResult.ok) {
-        getLogger("cli").error(`Migration execution failed: ${applyResult.error.message}`);
-        return;
-      }
+      if (!applyResult.ok)
+        throw new Error(`Migration execution failed: ${applyResult.error.message}`);
 
       const results = applyResult.value;
 
@@ -1352,10 +1336,8 @@ export class CLICommands {
       await manager.withIndexBackfill(diffResult.value, modules) :
       diffResult;
 
-    if (!planResult.ok) {
-      getLogger("cli").error(`Migration planning failed: ${planResult.error.message}`);
-      return;
-    }
+    if (!planResult.ok)
+      throw new Error(`Migration planning failed: ${planResult.error.message}`);
 
     const plan = planResult.value;
 
@@ -1377,10 +1359,8 @@ export class CLICommands {
     /*** Generate DDL for preview ***/
     const ddlResult = manager.generateDDL(plan);
 
-    if (!ddlResult.ok) {
-      getLogger("cli").error(`Migration would fail: ${ddlResult.error.message}`);
-      return;
-    }
+    if (!ddlResult.ok)
+      throw new Error(`Migration would fail: ${ddlResult.error.message}`);
 
     getLogger("cli").info("Generated DDL:");
 
@@ -1399,21 +1379,16 @@ export class CLICommands {
     getLogger("cli").info(`Run "disc migrate" to apply the migration`);
   }
 
-  /**
-   * Get the project name from disc.toml or current directory
-   */
-  private getProjectName(): string {
-    const ctx = resolveProjectContext();
-    return ctx?.projectName || Deno.cwd().split("/").pop() || "default";
-  }
-
   private async handleRollback(manager: SchemaManager, args: CLIArgs): Promise<void> {
-    if (!args.force) {
-      getLogger("cli").error("Error: Rollback is a destructive operation that may cause data loss.");
-      getLogger("cli").error("       Rolling back DROP TABLE cannot restore lost data.");
-      getLogger("cli").error("       Use --force to confirm you understand the risks.");
+    /*** A dry run only shows the stored rollback SQL (the manager is in dry-run mode), so it needs
+         no confirmation. ***/
+    const dryRun = args["dry-run"] === true;
 
-      return;
+    if (!args.force && !dryRun) {
+      throw new Error(
+        "Rollback is a destructive operation that may cause data loss. Rolling back DROP TABLE cannot restore lost data. " +
+          "Use --force to confirm you understand the risks."
+      );
     }
 
     if (args["rollback-to"]) {
@@ -1421,23 +1396,19 @@ export class CLICommands {
       console.log(`Rolling back all migrations after ${targetId}…`);
       const result = await manager.rollbackToMigration(targetId);
 
-      if (!result.ok) {
-        console.error(`Rollback failed: ${result.error.message}`);
-        return;
-      }
+      if (!result.ok)
+        throw new Error(`Rollback failed: ${result.error.message}`);
 
-      console.log(`Successfully rolled back to migration ${targetId}`);
+      console.log(dryRun ? "No changes applied (dry-run mode)" : `Successfully rolled back to migration ${targetId}`);
     } else {
       console.log("Rolling back the most recent migration…");
 
       const result = await manager.rollbackLastMigration();
 
-      if (!result.ok) {
-        console.error(`Rollback failed: ${result.error.message}`);
-        return;
-      }
+      if (!result.ok)
+        throw new Error(`Rollback failed: ${result.error.message}`);
 
-      console.log("Successfully rolled back the last migration");
+      console.log(dryRun ? "No changes applied (dry-run mode)" : "Successfully rolled back the last migration");
     }
   }
 
@@ -1448,10 +1419,8 @@ export class CLICommands {
     /*** Get migration history to build squashable list ***/
     const statusResult = await manager.getMigrationStatus();
 
-    if (!statusResult.ok) {
-      console.error(`Failed to get migration status: ${statusResult.error.message}`);
-      return;
-    }
+    if (!statusResult.ok)
+      throw new Error(`Failed to get migration status: ${statusResult.error.message}`);
 
     if (statusResult.value.applied === 0) {
       console.log("No migrations to squash.");
@@ -1463,10 +1432,8 @@ export class CLICommands {
          For now, we create entries from the history and rely on the squasher for validation. ***/
     const historyResult = await manager.getMigrationHistory();
 
-    if (!historyResult.ok) {
-      console.error(`Failed to get migration history: ${historyResult.error.message}`);
-      return;
-    }
+    if (!historyResult.ok)
+      throw new Error(`Failed to get migration history: ${historyResult.error.message}`);
 
     /*** History is DESC by default, reverse to ASC for squashing ***/
     const history = historyResult.value.reverse();
@@ -1499,7 +1466,7 @@ export class CLICommands {
 
       console.log("\nSquash preview complete. In production, this would replace the individual migrations with the squashed result.");
     } catch (error) {
-      console.error(`Squash failed: ${(error as Error).message}`);
+      throw new Error(`Squash failed: ${(error as Error).message}`);
     }
   }
 
@@ -1689,10 +1656,8 @@ export class CLICommands {
     console.log("Migration Status\n");
     const statusResult = await manager.getMigrationStatus();
 
-    if (!statusResult.ok) {
-      console.error(`Failed to get migration status: ${statusResult.error.message}`);
-      return;
-    }
+    if (!statusResult.ok)
+      throw new Error(`Failed to get migration status: ${statusResult.error.message}`);
 
     const status = statusResult.value;
     console.log(`  Applied migrations: ${status.applied}`);

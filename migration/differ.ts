@@ -690,11 +690,20 @@ export class SchemaDiffer {
           linkDef.properties = member.properties.map(p => this.propertyDefinition(p));
         }
 
+        if (this.isExclusiveLink(member)) {
+          linkDef.exclusive = true;
+        }
+
         links.push(linkDef);
       }
     }
 
     return links;
+  }
+
+  /*** `constraint exclusive;` in a link's body (a type-level `constraint exclusive on (…)` is an index, see extractIndexes). ***/
+  private isExclusiveLink(link: AST.LinkDeclaration): boolean {
+    return (link.constraints ?? []).some(c => c.name?.value === "exclusive" && !c.on);
   }
 
   private mapOnTargetDelete(
@@ -1062,12 +1071,12 @@ export class SchemaDiffer {
       if (resolved.length === 1) {
         /*** A single link already gets `idx_<table>_<link>_id` with its FK; the same index again
              would collide on that name. ***/
-        if (!unique && resolved[0].kind === "link") {
+        if (!unique && (resolved[0].kind === "link" || resolved[0].kind === "exclusive-link")) {
           continue;
         }
 
-        /*** The property-level constraint already owns this column's unique index. ***/
-        if (unique && resolved[0].kind === "exclusive-property") {
+        /*** The property- or link-level constraint already owns this column's unique index. ***/
+        if (unique && (resolved[0].kind === "exclusive-property" || resolved[0].kind === "exclusive-link")) {
           continue;
         }
       }
@@ -1107,7 +1116,48 @@ export class SchemaDiffer {
   declaredIndexes(schema: Module[]): Types.IndexDefinition[] {
     const types = this.extractTypes(schema);
 
-    return [...types.values()].flatMap(typeDef => this.extractIndexes(typeDef, types, true));
+    const indexes = [...types.values()].flatMap(typeDef => [
+      ...this.extractIndexes(typeDef, types, true),
+      ...this.exclusiveLinkIndexes(typeDef, types)
+    ]);
+
+    // A link can be exclusive both in its block and via `constraint exclusive
+    // on (.link)`; both declare the same index.
+    return [...new Map(indexes.map(index => [index.name, index])).values()];
+  }
+
+  /**
+   * Unique indexes backing link-level `constraint exclusive`, named as the DDL
+   * generator names them: `uk_<table>_<link>_id` on a single link's FK column,
+   * `uk_<junction>_target_id` on a multi link's junction. Declared here so
+   * databases migrated before Disc honoured the constraint get them backfilled.
+   */
+  private exclusiveLinkIndexes(
+    typeDef: AST.TypeDeclaration,
+    types: Map<string, AST.TypeDeclaration>
+  ): Types.IndexDefinition[] {
+    if (typeDef.abstract) {
+      return [];
+    }
+
+    const tableName = typeNameToTableName(typeDef.name.value);
+
+    return this
+      .extractLinksWithInheritance(typeDef, types)
+      .filter(link => link.exclusive)
+      .map(link => {
+        const table = link.multi ? `${tableName}_${link.name}` : tableName;
+        const column = link.multi ? "target_id" : linkColumnName(link.name);
+
+        return {
+          columns: [column],
+          declaration: `link ${link.name} { constraint exclusive; }`,
+          name: `uk_${table}_${column}`,
+          table,
+          typeName: typeDef.name.value,
+          unique: true
+        };
+      });
   }
 
   /**
@@ -1202,7 +1252,7 @@ export class SchemaDiffer {
     typeDef: AST.TypeDeclaration,
     allTypes: Map<string, AST.TypeDeclaration>,
     declaration: string | null
-  ): { column: string; kind: "exclusive-property" | "link" | "other"; }[] {
+  ): { column: string; kind: "exclusive-link" | "exclusive-property" | "link" | "other"; }[] {
     if (expr.kind === "TupleExpression") {
       return expr.elements.flatMap(el => this.resolveIndexColumns(el, typeDef, allTypes, declaration));
     }
@@ -1223,7 +1273,7 @@ export class SchemaDiffer {
       }
 
       if (member?.kind === "LinkDeclaration" && !unusable) {
-        return [{ column: linkColumnName(leaf), kind: "link" }];
+        return [{ column: linkColumnName(leaf), kind: this.isExclusiveLink(member) ? "exclusive-link" : "link" }];
       }
 
       const exclusive = member?.kind === "PropertyDeclaration" && this.extractConstraints(member.constraints || []).includes("exclusive");
@@ -1500,6 +1550,14 @@ export class SchemaDiffer {
         kind: "ChangeOnSourceDelete",
         oldValue: oldLink.onSourceDelete,
         newValue: newLink.onSourceDelete
+      });
+    }
+
+    if ((oldLink.exclusive ?? false) !== (newLink.exclusive ?? false)) {
+      changes.push({
+        kind: "ChangeExclusive",
+        oldValue: oldLink.exclusive ?? false,
+        newValue: newLink.exclusive ?? false
       });
     }
 

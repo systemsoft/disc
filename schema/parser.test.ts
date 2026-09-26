@@ -7,6 +7,7 @@
 
 import { assertEquals, assertThrows } from "@std/assert";
 import { SyntaxError } from "../lib/errors.ts";
+import type * as SDLAST from "./ast.ts";
 import { SDLParser } from "./parser.ts";
 import { SchemaValidator } from "./validator.ts";
 
@@ -1416,4 +1417,115 @@ Deno.test("SDL Validator - unknown non-computed type still errors", () => {
     result.errors?.some(e => e.message.includes("Type 'Bogus' is not defined")),
     true
   );
+});
+
+/*** The first member of the one type in `source`. ***/
+function onlyMember(source: string): SDLAST.TypeMember {
+  const typeDecl = new SDLParser(source).parse().declarations[0];
+  assertEquals(typeDecl.kind, "TypeDeclaration");
+  return (typeDecl as SDLAST.TypeDeclaration).members[0];
+}
+
+Deno.test("SDL Parser - on target delete allow parses", () => {
+  const link = onlyMember(`type Bug { link program -> Program { on target delete allow; }; }`);
+
+  assertEquals(link.kind, "LinkDeclaration");
+  assertEquals((link as SDLAST.LinkDeclaration).onTargetDelete, "allow");
+});
+
+Deno.test("SDL Parser - on source delete allow parses", () => {
+  const link = onlyMember(`type Bug { link program -> Program { on source delete allow; }; }`);
+
+  assertEquals((link as SDLAST.LinkDeclaration).onSourceDelete, "allow");
+});
+
+Deno.test("SDL Parser - allow and deny are usable as names", () => {
+  const typeDecl = new SDLParser(`type Deny { property allow: bool; deny: str; }`).parse().declarations[0] as SDLAST.TypeDeclaration;
+
+  assertEquals(typeDecl.name.value, "Deny");
+  assertEquals(typeDecl.members.map(m => (m as SDLAST.PropertyDeclaration).name.value), ["allow", "deny"]);
+});
+
+Deno.test("SDL Parser - access policy allow and deny actions still parse", () => {
+  const policy = onlyMember(`
+    type Document {
+      access policy mixed {
+        allow select, update;
+        deny delete;
+        using (true);
+      };
+    }
+  `) as SDLAST.AccessPolicy;
+
+  assertEquals(policy.kind, "AccessPolicy");
+  assertEquals(policy.actions.map(a => [a.allow, a.operations]), [[true, ["select", "update"]], [false, ["delete"]]]);
+});
+
+Deno.test("SDL Parser - colon-form link with a block takes delete policies, constraints and annotations", () => {
+  const member = onlyMember(`
+    type Bug {
+      required program: Program {
+        on target delete delete source;
+        on source delete delete target;
+        constraint exclusive;
+        annotation title := "owning program";
+      };
+    }
+  `) as SDLAST.PropertyDeclaration;
+
+  assertEquals(member.required, true);
+  assertEquals(member.onTargetDelete, "delete source");
+  assertEquals(member.onSourceDelete, "delete target");
+  assertEquals(member.constraints?.map(c => c.name?.value), ["exclusive"]);
+  assertEquals(member.annotations?.length, 1);
+});
+
+Deno.test("SDL Parser - colon-form link with an allow policy and link properties", () => {
+  const member = onlyMember(`
+    type Team {
+      multi members: User {
+        on target delete allow;
+        role: str;
+      };
+    }
+  `) as SDLAST.PropertyDeclaration;
+
+  assertEquals(member.onTargetDelete, "allow");
+  assertEquals(member.properties?.map(p => p.name.value), ["role"]);
+});
+
+Deno.test("SDL Parser - invalid delete policy in a colon-form block reports its location", () => {
+  const error = assertThrows(
+    () => new SDLParser(`type Bug {\n  program: Program {\n    on target delete bogus;\n  };\n}`).parse(),
+    SyntaxError
+  );
+
+  assertEquals(error.message.includes("Invalid delete policy: bogus"), true, error.message);
+  assertEquals(error.context?.location?.line, 3);
+});
+
+Deno.test("SDL Validator - a delete policy on a scalar property is rejected", () => {
+  const source = `
+    type Bug {
+      title: str { on target delete allow; };
+    }
+  `;
+
+  const result = new SchemaValidator().validate(new SDLParser(source).parse());
+
+  assertEquals(result.ok, false);
+  assertEquals(result.errors?.some(e => e.message.includes("only links can have a delete policy")), true, JSON.stringify(result.errors));
+});
+
+Deno.test("SDL Validator - a colon-form multi link may be exclusive (it is not a multi scalar)", () => {
+  const source = `
+    type Program { required name: str; }
+    type Bug {
+      multi programs: Program { constraint exclusive; on target delete allow; };
+    }
+  `;
+
+  const result = new SchemaValidator().validate(new SDLParser(source).parse());
+
+  assertEquals(result.errors, undefined);
 });

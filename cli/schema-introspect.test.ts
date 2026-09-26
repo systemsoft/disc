@@ -7,7 +7,7 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assertStringIncludes } from "@std/assert";
+import { assertRejects, assertStringIncludes } from "@std/assert";
 
 /*** IMPORT ------------------------------------------- ***/
 
@@ -90,16 +90,13 @@ Deno.test("schema introspect - missing DSN fails with clear message", async () =
     Deno.env.delete("DATABASE_URL");
 
   try {
-    await commands.schemaIntrospect({});
+    await assertRejects(() => commands.schemaIntrospect({}), Error, "--database-url");
   } finally {
     if (saved !== undefined)
       Deno.env.set("DATABASE_URL", saved);
 
     cap.restore();
   }
-
-  const errors = cap.getErrors().join("\n");
-  assertStringIncludes(errors, "--database-url");
 });
 
 /*** HELPER ------------------------------------------- ***/

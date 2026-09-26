@@ -88,7 +88,7 @@ export class DDLGenerator {
     const statements: string[] = [];
 
     // Process operations in reverse order for rollback
-    for (const operation of operations.reverse()) {
+    for (const operation of [...operations].reverse()) {
       statements.push(...this.generateRollbackOperationDDL(operation));
     }
 
@@ -435,7 +435,7 @@ END $$;`,
           type: "UUID",
           nullable: !link.required,
           primaryKey: false,
-          unique: false,
+          unique: link.exclusive === true,
           references: {
             table: typeNameToTableName(link.target),
             column: "id",
@@ -519,7 +519,7 @@ END $$;`,
             references: {
               table: targetTable,
               column: "id",
-              onDelete: "CASCADE"
+              onDelete: this.targetOnDelete(link)
             }
           },
           ...this.linkPropertyColumns(link)
@@ -543,6 +543,10 @@ END $$;`,
             this.escapeIdentifier(`uk_${junctionTableName}_source_target`)
           } UNIQUE (source_id, target_id);`
         );
+
+        if (link.exclusive) {
+          this.deferredStatements.push(this.generateExclusiveLinkIndex(tableName, link));
+        }
 
         // Link-property constraints are CHECKs on the junction's columns.
         this.deferredStatements.push(
@@ -989,6 +993,10 @@ END $$;`,
       );
     }
 
+    if (link.exclusive) {
+      statements.push(this.generateExclusiveLinkIndex(tableName, link));
+    }
+
     // Generate source delete trigger if needed
     if (link.onSourceDelete === "DELETE TARGET") {
       statements.push(
@@ -1073,6 +1081,15 @@ END $$;`,
             );
           }
           break;
+        case "ChangeExclusive": {
+          const link = this.alteredLink(subject, operation);
+          statements.push(
+            change.newValue ?
+              this.generateExclusiveLinkIndex(tableName, link) :
+              `DROP INDEX IF EXISTS ${this.escapeIdentifier(this.exclusiveLinkIndexName(tableName, link))};`
+          );
+          break;
+        }
       }
     }
 
@@ -1083,6 +1100,26 @@ END $$;`,
     }
 
     return statements;
+  }
+
+  /*** Table and column a link-level `constraint exclusive` makes unique: a single link's `<link>_id`, a multi link's junction `target_id`. ***/
+  private exclusiveLinkColumn(tableName: string, link: Types.LinkDefinition): { column: string; table: string; } {
+    return link.multi ?
+      { column: "target_id", table: `${tableName}_${link.name}` } :
+      { column: linkColumnName(link.name), table: tableName };
+  }
+
+  /*** Same `uk_<table>_<column>` name a property-level exclusive and a type-level `constraint exclusive on (.link)` use. ***/
+  private exclusiveLinkIndexName(tableName: string, link: Types.LinkDefinition): string {
+    const { column, table } = this.exclusiveLinkColumn(tableName, link);
+    return exclusiveIndexName(table, column);
+  }
+
+  private generateExclusiveLinkIndex(tableName: string, link: Types.LinkDefinition): string {
+    const { column, table } = this.exclusiveLinkColumn(tableName, link);
+    return `CREATE UNIQUE INDEX ${this.escapeIdentifier(exclusiveIndexName(table, column))} ON ${this.escapeIdentifier(table)} (${
+      this.escapeIdentifier(column)
+    });`;
   }
 
   /*** The link definition the differ attaches to an AlterLink; the DDL for most link changes needs its target and cardinality. ***/
@@ -1096,8 +1133,9 @@ END $$;`,
   /**
    * ON DELETE action of the FK from a link to its target. A single link's
    * `<link>_id` column defaults to RESTRICT. A multi link's junction row is the
-   * link itself, so it defaults to CASCADE, and `allow` / `set empty` cascade
-   * too: `target_id` is NOT NULL, so SET NULL could only fail.
+   * link itself, so it defaults to CASCADE (on create and alter alike), and
+   * `allow` / `set empty` cascade too: `target_id` is NOT NULL, so SET NULL
+   * could only fail.
    */
   private targetOnDelete(link: Types.LinkDefinition): NonNullable<Types.LinkDefinition["onTargetDelete"]> {
     if (!link.multi) {
@@ -1943,7 +1981,7 @@ END $$;`
     const tableName = typeNameToTableName(operation.typeName);
 
     // Process type operations in reverse order
-    for (const typeOp of operation.operations.reverse()) {
+    for (const typeOp of [...operation.operations].reverse()) {
       statements.push(...this.generateRollbackTypeOperation(tableName, typeOp));
     }
 
@@ -2079,7 +2117,7 @@ END $$;`
     const tableRef = this.escapeIdentifier(tableName);
 
     // Process changes in reverse order
-    for (const change of operation.changes.reverse()) {
+    for (const change of [...operation.changes].reverse()) {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
@@ -2209,7 +2247,7 @@ END $$;`
     const statements: string[] = [];
 
     // Process table operations in reverse order
-    for (const tableOp of operation.operations.reverse()) {
+    for (const tableOp of [...operation.operations].reverse()) {
       statements.push(
         ...this.generateRollbackTableOperation(operation.tableName, tableOp)
       );
@@ -2274,7 +2312,7 @@ END $$;`
     const tableRef = this.escapeIdentifier(tableName);
 
     // Process changes in reverse order
-    for (const change of operation.changes.reverse()) {
+    for (const change of [...operation.changes].reverse()) {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
