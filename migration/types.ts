@@ -117,6 +117,12 @@ export interface AlterLinkOperation extends TypeOperation {
   linkName: string;
   changes: LinkChange[];
   /**
+   * The link after the change. The differ sets it: re-adding the target FK or
+   * the source-delete trigger needs the link's target and cardinality, which
+   * the changes alone don't carry.
+   */
+  link?: LinkDefinition;
+  /**
    * Link-property changes on a `multi` link: AddProperty / DropProperty /
    * AlterProperty operations applied to the link's junction table, whose
    * columns are the link properties.

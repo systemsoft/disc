@@ -1006,7 +1006,8 @@ export class SchemaDiffer {
           const alter: Types.AlterLinkOperation = {
             kind: "AlterLink",
             linkName: linkName,
-            changes
+            changes,
+            link: newLink
           };
           if (propertyOperations.length > 0) {
             alter.propertyOperations = propertyOperations;

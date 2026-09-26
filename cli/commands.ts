@@ -1209,14 +1209,20 @@ export class CLICommands {
 
       const ddlResult = manager.generateDDL(plan);
 
-      if (ddlResult.ok) {
-        getLogger("cli").info("DDL that would be executed:");
-
-        ddlResult.value.forEach((stmt, i) => {
-          if (stmt.trim() && !stmt.startsWith("--"))
-            getLogger("cli").info(`  ${i + 1}. ${stmt}`);
-        });
+      /*** A change the migrator cannot make fails DDL generation, and `disc migrate` would fail
+           the same way — say so rather than preview nothing. Comment lines (warnings, per-migration
+           headers) are shown with the statements. ***/
+      if (!ddlResult.ok) {
+        getLogger("cli").error(`Migration would fail: ${ddlResult.error.message}`);
+        return;
       }
+
+      getLogger("cli").info("DDL that would be executed:");
+
+      ddlResult.value.forEach((stmt, i) => {
+        if (stmt.trim())
+          getLogger("cli").info(`  ${i + 1}. ${stmt}`);
+      });
 
       getLogger("cli").info("No changes applied (dry-run mode)");
     } else {
@@ -1371,14 +1377,17 @@ export class CLICommands {
     /*** Generate DDL for preview ***/
     const ddlResult = manager.generateDDL(plan);
 
-    if (ddlResult.ok) {
-      getLogger("cli").info("Generated DDL:");
-
-      ddlResult.value.forEach((stmt, i) => {
-        if (stmt.trim() && !stmt.startsWith("--"))
-          getLogger("cli").info(`  ${i + 1}. ${stmt}`);
-      });
+    if (!ddlResult.ok) {
+      getLogger("cli").error(`Migration would fail: ${ddlResult.error.message}`);
+      return;
     }
+
+    getLogger("cli").info("Generated DDL:");
+
+    ddlResult.value.forEach((stmt, i) => {
+      if (stmt.trim())
+        getLogger("cli").info(`  ${i + 1}. ${stmt}`);
+    });
 
     /*** Validate the migration ***/
     const validationResult = manager.validateMigration(plan);

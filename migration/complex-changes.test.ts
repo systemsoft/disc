@@ -5,7 +5,7 @@
  * Tests for Complex Schema Changes - renaming, type changes, constraint modifications
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { Module } from "../schema/converter.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
@@ -570,10 +570,10 @@ Deno.test("DDL Generator - Handle Link Changes to Multi", () => {
     ]
   };
 
-  const statements = generator.generateDDL([operation]);
-
-  // Should generate an ALTER LINK comment (since link alteration is complex)
-  assertEquals(statements.length >= 1, true);
+  // single → multi moves the link into a junction table; the generator
+  // refuses rather than emitting a comment that migrate would record as applied.
+  const error = assertThrows(() => generator.generateDDL([operation]), Error);
+  assertStringIncludes(error.message, "single → multi");
 });
 
 Deno.test("Migration Engine - Validate Complex Changes for Safety", () => {
@@ -660,6 +660,22 @@ Deno.test("Migration Engine - Complex Changes Integration Test", () => {
   assertEquals(planResult.ok, true);
 
   if (planResult.ok) {
+    // Post.author goes single → multi, which the generator refuses: the plan
+    // fails as a whole rather than recording a change the database never got.
+    const refused = engine.generateDDL(planResult.value);
+    assertEquals(refused.ok, false);
+    assertStringIncludes(refused.ok ? "" : refused.error.message, "link 'author' on 'post'");
+
+    // The rest of the plan still generates.
+    for (const migration of planResult.value.migrations) {
+      for (const op of migration.operations) {
+        if (op.kind === "AlterType") {
+          const alter = op as Types.AlterTypeOperation;
+          alter.operations = alter.operations.filter(sub => sub.kind !== "AlterLink");
+        }
+      }
+    }
+
     const ddlResult = engine.generateDDL(planResult.value);
     assertEquals(ddlResult.ok, true);
 

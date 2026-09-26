@@ -439,7 +439,7 @@ END $$;`,
           references: {
             table: typeNameToTableName(link.target),
             column: "id",
-            onDelete: link.onTargetDelete || "RESTRICT"
+            onDelete: this.targetOnDelete(link)
           }
         });
       }
@@ -953,7 +953,7 @@ END $$;`,
           references: {
             table: targetTable,
             column: "id",
-            onDelete: link.onTargetDelete || "CASCADE"
+            onDelete: this.targetOnDelete(link)
           }
         },
         ...this.linkPropertyColumns(link)
@@ -982,7 +982,7 @@ END $$;`,
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(`fk_${tableName}_${columnName}`)} FOREIGN KEY (${
           this.escapeIdentifier(columnName)
-        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${link.onTargetDelete || "RESTRICT"};`
+        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${this.targetOnDelete(link)};`
       );
       statements.push(
         `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${columnName}`)} ON ${this.escapeIdentifier(tableName)} (${this.escapeIdentifier(columnName)});`
@@ -1029,33 +1029,50 @@ END $$;`,
     // there exactly like a type's properties on its own table.
     const junctionTableName = `${tableName}_${operation.linkName}`;
     const statements: string[] = (operation.propertyOperations ?? []).flatMap(op => this.generateTypeOperationDDL(junctionTableName, op));
+    const subject = `link '${operation.linkName}' on '${tableName}'`;
 
+    // Changes with no DDL here throw rather than emit a comment: a comment
+    // lets `migrate` record the new schema while the database keeps the old one.
     for (const change of operation.changes) {
-      if (change.kind === "ChangeOnSourceDelete") {
-        // Drop existing source delete trigger if present
-        if (
-          change.oldValue === "DELETE TARGET"
-        ) {
-          statements.push(
-            ...this.dropSourceDeleteTrigger(tableName, operation.linkName)
-          );
-        }
-        // Create new source delete trigger if needed
-        if (
-          change.newValue === "DELETE TARGET"
-        ) {
-          // For alter operations the link target is not directly available,
-          // so we generate a comment about manual target check
-          statements.push(
-            `-- Source delete trigger for link '${operation.linkName}' on table '${tableName}' requires target table name`,
-            `-- Please verify the generated trigger targets the correct table`
-          );
-        }
-      } else {
-        // Other link changes still need manual handling
-        statements.push(
-          `-- ALTER LINK ${operation.linkName}: ${change.kind} requires manual handling`
+      if (change.kind === "ChangeTarget") {
+        throw new Error(
+          `Cannot migrate ${subject}: changing its target from '${change.oldValue}' to '${change.newValue}' is not supported — ` +
+            "existing rows reference the old target. Add a new link, copy the data over, then drop the old one."
         );
+      }
+      if (change.kind === "ChangeMulti" || change.kind === "ChangeCardinality") {
+        const direction = change.newValue === true || change.newValue === "many" ? "single → multi" : "multi → single";
+        throw new Error(
+          `Cannot migrate ${subject} from ${direction}: the link moves between a foreign-key column and a junction table. ` +
+            "Add a new link, copy the data over, then drop the old one."
+        );
+      }
+    }
+
+    // ChangeExtending needs no DDL: inheriting from an abstract link has no storage of its own.
+    for (const change of operation.changes) {
+      switch (change.kind) {
+        case "ChangeOnDelete":
+          statements.push(this.generateReplaceTargetForeignKey(tableName, this.alteredLink(subject, operation)));
+          break;
+        case "ChangeOnSourceDelete":
+          if (change.oldValue === "DELETE TARGET") {
+            statements.push(...this.dropSourceDeleteTrigger(tableName, operation.linkName));
+          }
+          if (change.newValue === "DELETE TARGET") {
+            statements.push(...this.generateSourceDeleteTrigger(tableName, this.alteredLink(subject, operation)));
+          }
+          break;
+        case "ChangeRequired":
+          // Like CREATE, only a single link's column carries `required`.
+          if (!this.alteredLink(subject, operation).multi) {
+            statements.push(
+              `ALTER TABLE ${this.escapeIdentifier(tableName)} ALTER COLUMN ${this.escapeIdentifier(linkColumnName(operation.linkName))} ${
+                change.newValue ? "SET" : "DROP"
+              } NOT NULL;`
+            );
+          }
+          break;
       }
     }
 
@@ -1066,6 +1083,52 @@ END $$;`,
     }
 
     return statements;
+  }
+
+  /*** The link definition the differ attaches to an AlterLink; the DDL for most link changes needs its target and cardinality. ***/
+  private alteredLink(subject: string, operation: Types.AlterLinkOperation): Types.LinkDefinition {
+    if (!operation.link) {
+      throw new Error(`Cannot migrate ${subject}: the AlterLink operation carries no link definition`);
+    }
+    return operation.link;
+  }
+
+  /**
+   * ON DELETE action of the FK from a link to its target. A single link's
+   * `<link>_id` column defaults to RESTRICT. A multi link's junction row is the
+   * link itself, so it defaults to CASCADE, and `allow` / `set empty` cascade
+   * too: `target_id` is NOT NULL, so SET NULL could only fail.
+   */
+  private targetOnDelete(link: Types.LinkDefinition): NonNullable<Types.LinkDefinition["onTargetDelete"]> {
+    if (!link.multi) {
+      return link.onTargetDelete || "RESTRICT";
+    }
+    return link.onTargetDelete === "RESTRICT" ? "RESTRICT" : "CASCADE";
+  }
+
+  /**
+   * Drop and re-add a link's target FK so it carries the link's current ON
+   * DELETE action. Same constraint and name CREATE emits: `fk_<table>_<link>_id`
+   * on a single link, `fk_<table>_<link>_target_id` on a multi link's junction.
+   */
+  private generateReplaceTargetForeignKey(tableName: string, link: Types.LinkDefinition): string {
+    const table = link.multi ? `${tableName}_${link.name}` : tableName;
+    const column: Types.ColumnDefinition = {
+      name: link.multi ? "target_id" : linkColumnName(link.name),
+      nullable: !link.multi && !link.required,
+      primaryKey: false,
+      references: {
+        column: "id",
+        onDelete: this.targetOnDelete(link),
+        table: typeNameToTableName(link.target)
+      },
+      type: "UUID",
+      unique: false
+    };
+
+    return `ALTER TABLE ${this.escapeIdentifier(table)} DROP CONSTRAINT ${this.escapeIdentifier(this.foreignKeyName(table, column.name))}, ADD ${
+      this.generateForeignKeyConstraint(table, column)
+    };`;
   }
 
   private generateCreateTable(operation: Types.CreateTableOperation): string[] {
@@ -1259,6 +1322,10 @@ END $$;`,
     return def;
   }
 
+  private foreignKeyName(tableName: string, columnName: string): string {
+    return `fk_${tableName}_${columnName}`;
+  }
+
   private generateForeignKeyConstraint(
     tableName: string,
     column: Types.ColumnDefinition
@@ -1267,7 +1334,7 @@ END $$;`,
       throw new Error("Column does not have foreign key reference");
     }
 
-    const constraintName = `fk_${tableName}_${column.name}`;
+    const constraintName = this.foreignKeyName(tableName, column.name);
     const onDelete = column.references.onDelete ?
       ` ON DELETE ${column.references.onDelete}` :
       "";
