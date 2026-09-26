@@ -11,7 +11,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
-import { backlinkIntersectionName, compileEmptyOrder, edgeqlTypeToPgType, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
+import { backlinkIntersectionName, compileEmptyOrder, edgeqlTypeToPgType, flattenSetElements, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
@@ -270,6 +270,10 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       return this.compilePathExpression(expr, shape);
     }
 
+    if (expr.kind === "SetExpr") {
+      return this.compileSetLiteralSource(expr, shape);
+    }
+
     if (expr.kind === "Subquery") {
       // A mutation operand never gets here (see compileSelectQuery). For any
       // other subquery the shape would be dropped without a trace.
@@ -337,6 +341,72 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     const fromClause = SQL.createFromClause([]); // No FROM clause needed
 
     return { selectItems, fromClause };
+  }
+
+  /**
+   * `select {a, b, …}` is the set of its elements — one row each, duplicates
+   * kept, nested set literals flattened, `{}` no rows — not one row holding a
+   * `(a, b, …)` record. Each element is selected on its own and the selects
+   * are joined by UNION ALL in the literal's order, so an element that is a
+   * set (`(select User { name } filter …)`) contributes all of its rows and
+   * keeps its column (`jsonb_build_object` for a shape). The union is a
+   * derived table the outer select's filter, order by, limit and offset apply
+   * to as a whole:
+   *
+   *   select {1, 2} limit 1
+   *   → SELECT set_1.* FROM (SELECT 1 UNION ALL SELECT 2) AS set_1 LIMIT 1
+   */
+  private compileSetLiteralSource(
+    set: EdgeQLAST.SetExpr,
+    shape?: EdgeQLAST.Shape
+  ): {
+    selectItems: SQL.SelectItem[];
+    fromClause: SQL.FromClause;
+  } {
+    const elements = flattenSetElements(set);
+    const branches: SQL.SQLStatement[] = elements.map(element => this.compileSetLiteralElement(element, shape));
+    if (branches.length === 0) {
+      branches.push(SQL.createSelectStatement({
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("null", null))]),
+        where: SQL.createWhereClause(SQL.createLiteral("boolean", false))
+      }));
+    }
+
+    const alias = Context.generateAlias(this.ctx, "set");
+    return {
+      fromClause: SQL.createFromClause([{
+        alias,
+        kind: "TableReference",
+        name: "",
+        subquery: branches.length === 1 ? branches[0] : SQL.unionAll(branches)
+      }]),
+      selectItems: [SQL.createSelectItem(SQL.createColumnReference("*", alias))]
+    };
+  }
+
+  /**
+   * One element of a selected set literal as a UNION ALL branch. A
+   * parenthesized query is used as it is (all of its rows); anything else is
+   * `select <element>`. A branch that orders, limits or is not a plain SELECT
+   * is wrapped as a derived table, since a bare UNION ALL operand cannot carry
+   * its own ORDER BY / LIMIT or WITH.
+   */
+  private compileSetLiteralElement(
+    element: EdgeQLAST.Expression,
+    shape?: EdgeQLAST.Shape
+  ): SQL.SQLStatement {
+    const statement = element.kind === "Subquery" && !shape ?
+      this.compileQuery(element.query) :
+      this.compileSelectQuery({ expr: element, kind: "SelectQuery", shape });
+    const plain = statement.kind === "SelectStatement" && !statement.orderBy && !statement.limit && !statement.offset;
+    if (plain) {
+      return statement;
+    }
+    const alias = Context.generateAlias(this.ctx, "set_element");
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias, kind: "TableReference", name: "", subquery: statement }]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*", alias))])
+    });
   }
 
   /**

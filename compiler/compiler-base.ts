@@ -63,6 +63,14 @@ export function compileEmptyOrder(item: EdgeQLAST.OrderByClause): Pick<SQL.Order
   return {};
 }
 
+/**
+ * The elements of a set literal with nested set literals spliced in:
+ * `{1, {2, 3}, {}}` is the set `{1, 2, 3}`.
+ */
+export function flattenSetElements(set: EdgeQLAST.SetExpr): EdgeQLAST.Expression[] {
+  return set.elements.flatMap(element => element.kind === "SetExpr" ? flattenSetElements(element) : [element]);
+}
+
 /** Maps EdgeQL type names to PostgreSQL type names */
 export function edgeqlTypeToPgType(edgeqlType: string): string {
   const typeMap: Record<string, string> = {

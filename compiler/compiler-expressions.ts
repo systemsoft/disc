@@ -14,6 +14,7 @@ import {
   compileEmptyOrder,
   CompilerBase,
   edgeqlTypeToPgType,
+  flattenSetElements,
   renderEdgeQLTypeName
 } from "./compiler-base.ts";
 import * as Context from "./context.ts";
@@ -535,7 +536,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return asArray(SQL.createLiteral("string", "{}"));
     }
     if (expr.kind === "SetExpr") {
-      return asArray(SQL.createFunctionCall("ARRAY", expr.elements.map(element => this.compileExpression(element))));
+      return asArray(SQL.createFunctionCall("ARRAY", flattenSetElements(expr).map(element => this.compileExpression(element))));
     }
     if (expr.kind === "FunctionCall" && expr.name.parts.join("_") === "array_unpack" && expr.args.length === 1) {
       return asArray(this.compileExpression(expr.args[0].value));
@@ -674,8 +675,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (multi) {
         return SQL.createFunctionCall("CARDINALITY", [multi.column]);
       }
+      // A set literal aggregates its elements as rows, like a subquery
+      // (`count({1, 2, 3})` is 3, not a count of one row value).
       const aggregated = arg.kind === "Subquery" ?
         this.compileAggregateOverSubquery(functionName, arg) :
+        arg.kind === "SetExpr" ?
+        this.compileAggregateOverSubquery(functionName, { kind: "Subquery", query: { kind: "SelectQuery", expr: arg } }) :
         this.compileAggregateOverLinkPath(functionName, arg);
       if (aggregated) {
         return aggregated;
@@ -2027,10 +2032,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // The empty set `{}` is the EdgeQL "no value" sentinel; in scalar/assignment
     // context (e.g. `update T set { col := {} }`) it must become SQL NULL, not
     // `()` — bare `()` is invalid Postgres syntax.
-    if (setExpr.elements.length === 0)
+    const flat = flattenSetElements(setExpr);
+    if (flat.length === 0)
       return { kind: "RawSQLExpression" as const, sql: "NULL" };
 
-    const elements = setExpr.elements.map(elem => this.compileExpression(elem));
+    const elements = flat.map(elem => this.compileExpression(elem));
 
     // Build a raw SQL expression for the tuple representation
     const parts = elements.map(elem => {

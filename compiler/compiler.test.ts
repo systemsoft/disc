@@ -1889,6 +1889,57 @@ Deno.test("SQL Compiler - set literal mixing a parameter and a path in 'not in'"
   assertEquals(/NOT IN \(CAST\(\$1 AS text\), user_\d+\.email\)/.test(sql), true, `expected rendered elements: ${sql}`);
 });
 
+Deno.test("SQL Compiler - nested set literal in 'in' is flattened", () => {
+  const sql = compileEdgeQL("select User { name } filter .name in {'a', {'b', 'c'}}");
+  assertEquals(sql.includes("IN ('a', 'b', 'c')"), true, `expected flat IN list: ${sql}`);
+});
+
+// --- select {a, b, …}: one row per element ---
+
+Deno.test("SQL Compiler - select of a set literal is one row per element, in order", () => {
+  const sql = compileEdgeQL("select {1, 2, 3}");
+  assertEquals(/SELECT\s+1\s+UNION ALL\s+SELECT\s+2\s+UNION ALL\s+SELECT\s+3/.test(sql), true, `expected UNION ALL rows: ${sql}`);
+  assertEquals(sql.includes("(1, 2, 3)"), false, `unexpected row constructor: ${sql}`);
+});
+
+Deno.test("SQL Compiler - select of a set literal of parameters renders each parameter as a row", () => {
+  const sql = compileEdgeQL("select {<str>$a, <str>$b}");
+  assertEquals(/SELECT\s+CAST\(\$1 AS text\)\s+UNION ALL\s+SELECT\s+CAST\(\$2 AS text\)/.test(sql), true, `expected one row per parameter: ${sql}`);
+});
+
+Deno.test("SQL Compiler - select {} is the empty set", () => {
+  const sql = compileEdgeQL("select {}");
+  assertEquals(/WHERE\s+FALSE/.test(sql), true, `expected no rows: ${sql}`);
+});
+
+Deno.test("SQL Compiler - select of a nested set literal flattens it", () => {
+  const sql = compileEdgeQL("select {1, {2, 3}}");
+  assertEquals(/SELECT\s+1\s+UNION ALL\s+SELECT\s+2\s+UNION ALL\s+SELECT\s+3/.test(sql), true, `expected flattened rows: ${sql}`);
+});
+
+Deno.test("SQL Compiler - select of a set literal keeps limit on the whole set", () => {
+  const sql = compileEdgeQL("select {1, 2, 3} limit 2");
+  assertEquals(/\)\s+AS set_\d+\s+LIMIT 2/.test(sql), true, `expected LIMIT over the set: ${sql}`);
+});
+
+Deno.test("SQL Compiler - select of a set literal of object subqueries unions their rows", () => {
+  const sql = compileEdgeQL("select {(select User { name } filter .name = 'a'), (select User { name } order by .name limit 1)}");
+  assertEquals(sql.includes("UNION ALL"), true, `expected UNION ALL: ${sql}`);
+  // Not a scalar subquery per element, which would fail on more than one row.
+  assertEquals(/SELECT\s+\(\s*\(/.test(sql), false, `unexpected scalar subqueries: ${sql}`);
+});
+
+Deno.test("SQL Compiler - aggregate over a set literal aggregates its rows", () => {
+  const sql = compileEdgeQL("select count({1, 2, 3})");
+  assertEquals(/COUNT\(\*\)\s+FROM\s+\(/.test(sql), true, `expected COUNT over rows: ${sql}`);
+  assertEquals(sql.includes("(1, 2, 3)"), false, `unexpected row constructor: ${sql}`);
+});
+
+Deno.test("SQL Compiler - with-bound set literal selected as rows", () => {
+  const sql = compileEdgeQL("with xs := {1, 2} select xs");
+  assertEquals(/SELECT\s+1\s+UNION ALL\s+SELECT\s+2/.test(sql), true, `expected CTE of rows: ${sql}`);
+});
+
 Deno.test("SQL Compiler - subquery 'in (select ...)' membership is unchanged", () => {
   // Regression: subquery membership still compiles to `IN (subquery)`.
   const sql = compileEdgeQL(

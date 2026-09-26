@@ -12,7 +12,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { buildParameterIndex, isMutationQuery } from "./compiler-base.ts";
+import { buildParameterIndex, flattenSetElements, isMutationQuery } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
@@ -1215,6 +1215,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         } else {
           bindingQuery = this.compileQuery(binding.value.query);
         }
+      } else if (binding.value.kind === "SetExpr") {
+        // A set literal selected from (`with xs := {1, 2} select xs`) is one
+        // row per element. In expression position it is inlined instead.
+        bindingQuery = this.compileSelectQuery({ expr: binding.value, kind: "SelectQuery" });
       } else {
         // Direct expression - wrap in a SELECT
         const expr = this.compileExpression(binding.value);
@@ -1363,7 +1367,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (query.iterator.kind === "SetExpr") {
       // Set literal iterator: FOR x IN {a, b, c} UNION (body)
       // Expand into UNION ALL of body compiled for each element
-      const elements = query.iterator.elements;
+      const elements = flattenSetElements(query.iterator);
 
       if (elements.length === 0) {
         throw new CompilationError("FOR query requires non-empty set iterator");
