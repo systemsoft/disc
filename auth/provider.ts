@@ -89,6 +89,23 @@ const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> = 
   webhooks: []
 };
 
+/**
+ * Every auth table with a `user_id` column referencing `users(id)`.
+ * `deleteUser` clears these before the `users` row. Keep in sync with
+ * `createTables()` when a new user-keyed table is added.
+ */
+const USER_OWNED_TABLES = [
+  "magic_code_tokens",
+  "magic_link_tokens",
+  "mfa_challenges",
+  "mfa_totp",
+  "recovery_codes",
+  "sessions",
+  "user_roles",
+  "webauthn_challenges",
+  "webauthn_credentials"
+];
+
 /*** EXPORT ------------------------------------------- ***/
 
 export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
@@ -307,6 +324,31 @@ export class AuthProvider extends AuthProviderMfa implements IAuthProvider {
   async deleteRole(name: string): Promise<void> {
     await this.db.execute("DELETE FROM roles WHERE name = ?", [name]);
     this.auditEvent("role_deleted", null, { role: name });
+  }
+
+  /**
+   * Admin delete: remove a user and every auth row keyed to them —
+   * sessions (so their tokens stop verifying immediately), roles, MFA,
+   * passkeys, and outstanding magic-link / magic-code tokens. The
+   * child rows are deleted explicitly rather than left to `ON DELETE
+   * CASCADE`, so the result doesn’t depend on the backend enforcing
+   * FKs or on legacy tables that pre-date a cascade rule. Throws
+   * `USER_NOT_FOUND` (404) for an unknown id.
+   */
+  async deleteUser(userId: string): Promise<void> {
+    const existing = await this.db.query("SELECT id FROM users WHERE id = ?", [userId]);
+
+    if (existing.rows.length === 0)
+      throw new AuthError("User not found", AuthErrorCode.USER_NOT_FOUND, 404);
+
+    await this.db.transaction(async tx => {
+      for (const table of USER_OWNED_TABLES)
+        await tx.execute(`DELETE FROM ${table} WHERE user_id = ?`, [userId]);
+
+      await tx.execute("DELETE FROM users WHERE id = ?", [userId]);
+    });
+
+    this.auditEvent("user_deleted", userId);
   }
 
   async getUser(userId: string): Promise<User | null> {

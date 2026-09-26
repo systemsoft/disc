@@ -554,3 +554,48 @@ Deno.test({
   sanitizeOps: false,
   sanitizeResources: false
 });
+
+Deno.test({
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider({ jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" }, adapter);
+      await provider.initialize();
+
+      const doomed = await provider.register({ email: "doomed@example.com", password: "securepassword123" });
+      const kept = await provider.register({ email: "kept@example.com", password: "securepassword123" });
+      await provider.createRole("pg-delete-user-role");
+      await provider.assignRole(doomed.user.id, "pg-delete-user-role");
+      await provider.enrollTOTP(doomed.user.id);
+
+      await provider.deleteUser(doomed.user.id);
+
+      for (const [table, column] of [["users", "id"], ["sessions", "user_id"], ["user_roles", "user_id"], ["mfa_totp", "user_id"]]) {
+        const remaining = await conn.query(`SELECT 1 FROM ${table} WHERE ${column} = $1`, [doomed.user.id]);
+        assertEquals(remaining.rowCount, 0, `${table} rows should be gone`);
+      }
+
+      await assertRejects(() => provider.verifyToken(doomed.token), AuthError);
+
+      /*** The other user is untouched. ***/
+      assertEquals((await provider.verifyToken(kept.token)).sub, kept.user.id);
+
+      /*** Deleting again is a 404, not a 500. ***/
+      const error = await assertRejects(() => provider.deleteUser(doomed.user.id), AuthError);
+      assertEquals(error.status_code, 404);
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+  ignore: !canRunPgTests(),
+  name: "PG Auth: deleteUser removes the user and their sessions, roles, and MFA",
+  sanitizeOps: false,
+  sanitizeResources: false
+});

@@ -518,6 +518,31 @@ Complete password reset with token.
 
 Verify email address with verification token.
 
+### POST /auth/admin/users/delete
+
+Delete an auth user and every auth row keyed to them: sessions (their tokens stop verifying immediately), role assignments, TOTP enrollment and challenges, recovery codes, passkeys and WebAuthn challenges, and outstanding magic-link / magic-code tokens. Rows in your own schema types that reference the user are not touched.
+
+**Auth:** service token only — `Authorization: Bearer <serviceToken>` (`ServerConfig.serviceToken` / `DISC_SERVICE_TOKEN`). A user JWT is never accepted, and the route is refused outright when no service token is configured.
+
+**Request:**
+
+```json
+{
+  "userId": "user_id"
+}
+```
+
+**Responses:**
+
+| Status | Body                                                           | When                                  |
+| ------ | -------------------------------------------------------------- | ------------------------------------- |
+| 200    | `{ "success": true }`                                          | User deleted                          |
+| 400    | `{ "code": "MISSING_USER_ID", "error": "userId is required" }` | No `userId` in the body               |
+| 401    | `{ "error": "Service token required" }`                        | Missing, wrong, or non-service bearer |
+| 404    | `{ "code": "USER_NOT_FOUND", "error": "USER_NOT_FOUND: ..." }` | No user with that id                  |
+
+Programmatic equivalent: `await provider.deleteUser(userId)`.
+
 ## Error Handling
 
 The auth module uses structured error codes:
@@ -556,6 +581,7 @@ Errors are returned as JSON:
 5. **Email Verification**: Optional email verification flow
 6. **CORS**: Configurable CORS policies for web applications
 7. **Security Headers**: Automatic security headers on responses
+8. **Rate Limiting**: Login, registration, reset, magic-link/code, MFA and passkey login routes are limited per client IP (burst 5, 10/min by default). The IP is the connection’s peer address; `X-Forwarded-For` / `X-Real-IP` are honored only when `trustProxy` (`--trust-proxy` / `DISC_TRUST_PROXY`) is on, so direct clients can’t pick their own bucket
 
 ## Database Schema
 

@@ -10,6 +10,7 @@
 import { AuthContext, AuthMiddleware, RequestHandler } from "./middleware.ts";
 import { AuthProvider } from "./provider.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { getClientIp } from "../server/proxy.ts";
 import { getLogger } from "../lib/logger.ts";
 import { RateLimiter } from "../server/rate-limiter.ts";
 import type { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
@@ -105,9 +106,24 @@ export const AUTH_AUTHENTICATED_ROUTES: ReadonlySet<string> = new Set([
   "webauthn/register/finish"
 ]);
 
-export type AuthRouteClassification = "authenticated" | "public" | "unknown";
+/**
+ * Admin operations on *other* users. The router accepts only the
+ * configured service token (`ServerConfig.serviceToken`) for these —
+ * never a user JWT — and refuses them when no service token is
+ * configured. The handlers themselves do no auth check, so they must
+ * only be mounted behind that gate.
+ */
+export const AUTH_SERVICE_ROUTES: ReadonlySet<string> = new Set([
+  "admin/users/delete"
+]);
+
+export type AuthRouteClassification = "authenticated" | "public" | "service" | "unknown";
 
 export class AuthRoutes {
+  /*** Per-request connection info, bound by the server before dispatch. Handlers only receive the
+       `Request`, so this is how the TCP peer reaches the rate limiter and session audit fields.
+       Weakly keyed: an entry lives exactly as long as its request. ***/
+  private connections = new WeakMap<Request, Deno.ServeHandlerInfo>();
   private rateLimiter: RateLimiter | null;
   private trustProxy: boolean;
 
@@ -170,6 +186,17 @@ export class AuthRoutes {
   }
 
   /**
+   * Associate `request` with the connection it arrived on, so the
+   * rate limiter and session audit fields see the caller’s address.
+   * The server calls this before dispatching to a handler; a request
+   * that was never bound (a handler invoked directly, outside
+   * `Deno.serve`) falls back to the shared "anonymous" bucket.
+   */
+  bindConnection(request: Request, info: Deno.ServeHandlerInfo): void {
+    this.connections.set(request, info);
+  }
+
+  /**
    * Confirm a pending TOTP enrollment. Body: `{ code: "123456" }`.
    * On success the user’s TOTP is active — subsequent logins must
    * include the second-factor step.
@@ -223,9 +250,39 @@ export class AuthRoutes {
           });
         }
 
-        const result = await this.provider.consumeMagicLink(String(body.token), extractRequestMeta(request, this.trustProxy));
+        const result = await this.provider.consumeMagicLink(String(body.token), this.extractRequestMeta(request));
 
         return new Response(JSON.stringify(result), {
+          headers: { "Content-Type": "application/json" },
+          status: 200
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /**
+   * Delete an auth user and everything keyed to them (sessions, roles,
+   * MFA, passkeys, outstanding tokens). Body: `{ userId: "..." }`.
+   * Service-token only: this handler does no auth check of its own —
+   * the router gates it via `AUTH_SERVICE_ROUTES`. Unknown user → 404.
+   */
+  deleteUser(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      try {
+        const body = await request.json();
+
+        if (!body.userId) {
+          return new Response(JSON.stringify({ code: "MISSING_USER_ID", error: "userId is required" }), {
+            headers: { "Content-Type": "application/json" },
+            status: 400
+          });
+        }
+
+        await this.provider.deleteUser(String(body.userId));
+
+        return new Response(JSON.stringify({ success: true }), {
           headers: { "Content-Type": "application/json" },
           status: 200
         });
@@ -328,7 +385,7 @@ export class AuthRoutes {
 
       try {
         const body = await request.json();
-        const result = await this.provider.finishWebAuthnLogin(body, extractRequestMeta(request, this.trustProxy));
+        const result = await this.provider.finishWebAuthnLogin(body, this.extractRequestMeta(request));
 
         return new Response(JSON.stringify(result), {
           headers: { "Content-Type": "application/json" },
@@ -428,7 +485,7 @@ export class AuthRoutes {
 
         const credentials: LoginCredentials = {
           email,
-          meta: extractRequestMeta(request, this.trustProxy),
+          meta: this.extractRequestMeta(request),
           password,
           username
         };
@@ -460,7 +517,7 @@ export class AuthRoutes {
         return limited;
 
       try {
-        const response = await this.provider.loginAnonymous(extractRequestMeta(request, this.trustProxy));
+        const response = await this.provider.loginAnonymous(this.extractRequestMeta(request));
 
         return new Response(JSON.stringify(response), {
           headers: { "Content-Type": "application/json" },
@@ -498,7 +555,7 @@ export class AuthRoutes {
         const response = await this.provider.loginWithRecoveryCode(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy)
+          this.extractRequestMeta(request)
         );
 
         return new Response(JSON.stringify(response), {
@@ -537,7 +594,7 @@ export class AuthRoutes {
         const response = await this.provider.loginWithTOTP(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy)
+          this.extractRequestMeta(request)
         );
 
         return new Response(JSON.stringify(response), {
@@ -640,7 +697,7 @@ export class AuthRoutes {
           });
         }
 
-        const response = await this.provider.refresh(refreshToken, extractRequestMeta(request, this.trustProxy));
+        const response = await this.provider.refresh(refreshToken, this.extractRequestMeta(request));
 
         return new Response(JSON.stringify(response), {
           headers: { "Content-Type": "application/json" },
@@ -673,7 +730,7 @@ export class AuthRoutes {
 
         const data: RegisterData = {
           email,
-          meta: extractRequestMeta(request, this.trustProxy),
+          meta: this.extractRequestMeta(request),
           metadata,
           password,
           username
@@ -723,7 +780,7 @@ export class AuthRoutes {
           });
         }
 
-        const code = await this.provider.requestMagicCode(String(body.email), extractRequestMeta(request, this.trustProxy));
+        const code = await this.provider.requestMagicCode(String(body.email), this.extractRequestMeta(request));
 
         return new Response(JSON.stringify({ magicCode: code, success: true }), {
           headers: { "Content-Type": "application/json" },
@@ -767,7 +824,7 @@ export class AuthRoutes {
           });
         }
 
-        const token = await this.provider.requestMagicLink(String(body.email), extractRequestMeta(request, this.trustProxy));
+        const token = await this.provider.requestMagicLink(String(body.email), this.extractRequestMeta(request));
 
         // The HTTP response body intentionally returns the token — it’s
         // the same pattern reset/verify use today, and lets local-dev
@@ -876,7 +933,7 @@ export class AuthRoutes {
 
           const data: RegisterData = {
             email,
-            meta: extractRequestMeta(request, this.trustProxy),
+            meta: this.extractRequestMeta(request),
             metadata,
             password,
             username
@@ -987,7 +1044,7 @@ export class AuthRoutes {
         const result = await this.provider.verifyMagicCode(
           String(body.email),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy)
+          this.extractRequestMeta(request)
         );
 
         return new Response(JSON.stringify(result), {
@@ -1036,7 +1093,7 @@ export class AuthRoutes {
       });
     }
 
-    const meta = extractRequestMeta(request, this.trustProxy);
+    const meta = this.extractRequestMeta(request);
     const result = await verifier.verify(token, meta.ipAddress);
 
     if (!result.success) {
@@ -1063,7 +1120,7 @@ export class AuthRoutes {
     if (!this.rateLimiter)
       return null;
 
-    const ip = extractClientIp(request, this.trustProxy);
+    const ip = this.extractClientIp(request);
 
     if (this.rateLimiter.allow(ip))
       return null;
@@ -1075,6 +1132,34 @@ export class AuthRoutes {
       },
       status: 429
     });
+  }
+
+  /**
+   * Client IP for rate-limiting and audit purposes. Honors
+   * `X-Forwarded-For` / `X-Real-IP` only when `trustProxy` is on (the
+   * server is configured to be behind a known reverse proxy); otherwise
+   * the TCP peer bound via `bindConnection`. Falls back to a stable
+   * "anonymous" bucket when neither is available, so the limiter still
+   * degrades gracefully for handlers invoked outside `Deno.serve`.
+   */
+  private extractClientIp(request: Request): string {
+    return getClientIp(request, this.connections.get(request), this.trustProxy) ?? "anonymous";
+  }
+
+  /**
+   * Build a `RequestMeta` payload for a session-creating call. Returns a
+   * concrete IP only when one is known (the "anonymous" bucket
+   * `extractClientIp` uses for rate-limiting would pollute the audit log
+   * if persisted as the session’s IP). (P2-21)
+   */
+  private extractRequestMeta(request: Request): { ipAddress?: string; userAgent?: string; } {
+    const ip = this.extractClientIp(request);
+    const ua = request.headers.get("user-agent") ?? undefined;
+
+    return {
+      ipAddress: ip === "anonymous" ? undefined : ip,
+      userAgent: ua
+    };
   }
 
   private handleError(error: unknown): Response {
@@ -1108,6 +1193,9 @@ export function classifyAuthRoute(route: string): AuthRouteClassification {
   if (AUTH_AUTHENTICATED_ROUTES.has(route))
     return "authenticated";
 
+  if (AUTH_SERVICE_ROUTES.has(route))
+    return "service";
+
   return "unknown";
 }
 
@@ -1125,57 +1213,5 @@ export async function initializeAuth(config: AuthConfig, db: DatabaseConnection)
     middleware,
     provider,
     routes
-  };
-}
-
-/*** HELPER ------------------------------------------- ***/
-
-/**
- * Extract a client IP for rate-limiting purposes. Honors
- * `X-Forwarded-For` / `X-Real-IP` only when `trustProxy` is on (the
- * server is configured to be behind a known reverse proxy). Falls back
- * to a stable "anonymous" bucket so the limiter still degrades
- * gracefully when no IP is available — the `info` parameter (TCP peer)
- * isn’t plumbed to AuthRoutes today, so direct-deploy scenarios use the
- * shared bucket.
- */
-function extractClientIp(request: Request, trustProxy: boolean): string {
-  if (trustProxy) {
-    const xff = request.headers.get("x-forwarded-for");
-
-    if (xff) {
-      const first = xff.split(",")[0].trim();
-
-      if (first)
-        return first;
-    }
-
-    const realIp = request.headers.get("x-real-ip");
-
-    if (realIp) {
-      const trimmed = realIp.trim();
-
-      if (trimmed)
-        return trimmed;
-    }
-  }
-
-  return "anonymous";
-}
-
-/**
- * Build a `RequestMeta` payload for a session-creating call. Returns a
- * concrete IP only when one was actually provided in headers (the
- * "anonymous" bucket extractClientIp uses for rate-limiting would
- * pollute the audit log if persisted as the session’s IP).
- * (P2-21)
- */
-function extractRequestMeta(request: Request, trustProxy: boolean): { ipAddress?: string; userAgent?: string; } {
-  const ip = extractClientIp(request, trustProxy);
-  const ua = request.headers.get("user-agent") ?? undefined;
-
-  return {
-    ipAddress: ip === "anonymous" ? undefined : ip,
-    userAgent: ua
   };
 }

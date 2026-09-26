@@ -24,12 +24,13 @@
  * back to `X-Real-IP`. Otherwise returns the TCP socket peer.
  *
  * Returns `null` when neither a trusted header nor a socket address is
- * available (caller decides whether to bucket as "anonymous", reject,
- * or log).
+ * available — including when `info` is absent because the caller was
+ * invoked outside `Deno.serve` (caller decides whether to bucket as
+ * "anonymous", reject, or log).
  */
 export function getClientIp(
   request: Request,
-  info: Deno.ServeHandlerInfo,
+  info: Deno.ServeHandlerInfo | undefined,
   trustProxy: boolean
 ): string | null {
   if (trustProxy) {
@@ -49,7 +50,7 @@ export function getClientIp(
     }
   }
 
-  const remote = info.remoteAddr;
+  const remote = info?.remoteAddr;
   if (remote && "hostname" in remote && remote.hostname) {
     return remote.hostname;
   }

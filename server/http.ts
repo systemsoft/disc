@@ -112,7 +112,7 @@ export class HttpServer extends HttpRouteHandlers {
 
       // Auth route handling
       if (url.pathname.startsWith("/auth/")) {
-        return await this.handle_auth_route(request, url);
+        return await this.handle_auth_route(request, url, info);
       }
 
       // Schema introspection route handling
@@ -399,11 +399,17 @@ export class HttpServer extends HttpRouteHandlers {
 
   private async handle_auth_route(
     request: Request,
-    url: URL
+    url: URL,
+    info: Deno.ServeHandlerInfo
   ): Promise<Response> {
     if (!this.authRoutes) {
       return this.create_error_response("Authentication not configured", 404);
     }
+
+    // Handlers only see the Request; bind the connection so the auth
+    // rate limiter keys on the caller's address instead of one shared
+    // bucket.
+    this.authRoutes.bindConnection(request, info);
 
     // Strip /auth/ prefix to get the route
     const route = url.pathname.slice(6); // "/auth/".length === 6
@@ -415,10 +421,24 @@ export class HttpServer extends HttpRouteHandlers {
     // than ship a quietly-public endpoint. For authenticated routes
     // the JWT is enforced here regardless of `config.requireAuth`,
     // independent of the global gate so logout/profile/password etc.
-    // are protected even in permissive mode.
+    // are protected even in permissive mode. Service routes (admin
+    // operations on other users) accept only the configured service
+    // token — never a user JWT — and are refused outright when no
+    // service token is configured.
     const classification = classifyAuthRoute(route);
     if (classification === "unknown") {
       return this.create_error_response("Unknown auth endpoint", 404);
+    }
+    if (
+      classification === "service" &&
+      !(await this.presentsServiceToken(request))
+    ) {
+      const headers = this.get_default_headers("application/json");
+      headers.set("WWW-Authenticate", "Bearer realm=\"disc\"");
+      return new Response(
+        JSON.stringify({ error: "Service token required" }),
+        { status: 401, headers }
+      );
     }
     if (classification === "authenticated") {
       if (!this.authMiddleware) {
@@ -498,6 +518,8 @@ export class HttpServer extends HttpRouteHandlers {
         return await this.authRoutes.listWebAuthnCredentials()(request);
       case "webauthn/credentials/delete":
         return await this.authRoutes.deleteWebAuthnCredential()(request);
+      case "admin/users/delete":
+        return await this.authRoutes.deleteUser()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

@@ -18,7 +18,7 @@ import { assert, assertEquals } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { AUTH_AUTHENTICATED_ROUTES, AUTH_PUBLIC_ROUTES, classifyAuthRoute } from "./integration.ts";
+import { AUTH_AUTHENTICATED_ROUTES, AUTH_PUBLIC_ROUTES, AUTH_SERVICE_ROUTES, classifyAuthRoute } from "./integration.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
 
@@ -62,6 +62,15 @@ Deno.test("classifyAuthRoute — privileged routes require auth", () => {
   }
 });
 
+Deno.test("classifyAuthRoute — admin operations on other users are service-only", () => {
+  assertEquals(classifyAuthRoute("admin/users/delete"), "service");
+
+  for (const route of AUTH_SERVICE_ROUTES) {
+    assert(!AUTH_PUBLIC_ROUTES.has(route), `${route} must not be public`);
+    assert(!AUTH_AUTHENTICATED_ROUTES.has(route), `${route} must not accept a user JWT`);
+  }
+});
+
 Deno.test("classifyAuthRoute — unknown routes fail closed", () => {
   assertEquals(classifyAuthRoute("admin/wipe"), "unknown");
   assertEquals(classifyAuthRoute(""), "unknown");
@@ -87,9 +96,8 @@ Deno.test("classifyAuthRoute — every dispatched route is classified", async ()
   assert(routes.length > 10, "expected multiple routes");
 
   for (const r of routes) {
-    assertEquals(
-      classifyAuthRoute(r),
-      AUTH_PUBLIC_ROUTES.has(r) ? "public" : "authenticated",
+    assert(
+      classifyAuthRoute(r) !== "unknown",
       `route "${r}" appears in dispatcher switch but is not classified`
     );
   }

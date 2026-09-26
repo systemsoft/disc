@@ -120,7 +120,7 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
    * two values are compared as SHA-256 digests in constant time, so the
    * comparison runs over 32 bytes whatever either input's length.
    */
-  private async presentsServiceToken(request: Request): Promise<boolean> {
+  protected async presentsServiceToken(request: Request): Promise<boolean> {
     const configured = this.config.serviceToken;
     if (!configured) {
       return false;
@@ -181,7 +181,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         webauthn_login_begin: "/auth/webauthn/login/begin",
         webauthn_login_finish: "/auth/webauthn/login/finish",
         webauthn_credentials: "/auth/webauthn/credentials",
-        webauthn_credentials_delete: "/auth/webauthn/credentials/delete"
+        webauthn_credentials_delete: "/auth/webauthn/credentials/delete",
+        admin_users_delete: "/auth/admin/users/delete"
       };
     }
 

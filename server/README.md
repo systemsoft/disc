@@ -132,6 +132,14 @@ Available when `jwtSecret` is configured and `enableAuth` is not `false`.
 | POST   | `/auth/reset/confirm` | Confirm password reset    |
 | GET    | `/auth/verify`        | Verify email address      |
 
+Admin operations on other users accept only the service token (`serviceToken` / `DISC_SERVICE_TOKEN`) as `Authorization: Bearer <token>`, never a user JWT, and are refused when no service token is configured:
+
+| Method | Path                       | Body                  | Description                                       |
+| ------ | -------------------------- | --------------------- | ------------------------------------------------- |
+| POST   | `/auth/admin/users/delete` | `{ "userId": "..." }` | Delete a user and their sessions (404 if unknown) |
+
+The login/register family is rate-limited per client IP by `AuthRoutes` (separate from `rateLimitRpm`); see `auth/README.md`.
+
 ### Extension Routes (`/ext/*`)
 
 Extensions register routes under `/ext/<extension-name>/<path>`. See the extensions module for details.
