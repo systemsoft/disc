@@ -24,6 +24,7 @@ import type { Schema } from "../compiler/context.ts";
 /*** EXPORT ------------------------------------------- ***/
 
 export interface ShellOptions {
+  backendDsn?: string;
   database?: string;
   execute?: string;
   host?: string;
@@ -31,6 +32,9 @@ export interface ShellOptions {
   port?: number;
   schemaFile?: string;
 }
+
+/*** What the REPL loop does after a line: keep reading, record a failed statement, or quit. ***/
+type InputResult = "continue" | "error" | "quit";
 
 export interface ShellSession {
   connected: boolean;
@@ -52,6 +56,8 @@ export class DiscShell {
    * resolved project context. Stays null when no schema can be located,
    * in which case `\d` falls back to listing PostgreSQL tables.
    */
+  /*** `--backend-dsn` or DATABASE_URL; when set it wins over disc.toml (CLAUDE.md DSN order). ***/
+  private explicitDsn?: string;
   private schema?: Schema;
   private session: ShellSession | null = null;
 
@@ -67,33 +73,42 @@ export class DiscShell {
     const ctx = resolveProjectContext();
     const database = options.database || ctx?.instanceName || "disc";
 
+    this.explicitDsn = options.backendDsn || Deno.env.get("DATABASE_URL") || undefined;
+
     try {
-      this.session = {
-        connected: false,
-        database,
-        host,
-        port,
-        timingEnabled: false,
-        user: Deno.env.get("USER") || "disc"
-      };
+      try {
+        this.session = {
+          connected: false,
+          database,
+          host,
+          port,
+          timingEnabled: false,
+          user: Deno.env.get("USER") || "disc"
+        };
 
-      /*** Connect to database ***/
-      await this.connectToDatabase(host, port, database);
-      console.log(`[CONN] Connected to database: ${this.session.database}`);
-      console.log("");
+        /*** Connect to database ***/
+        await this.connectToDatabase(host, port, database);
+        console.log(`[CONN] Connected to database: ${this.session.database}`);
+        console.log("");
 
-      if (options.schemaFile) {
-        await this.loadSchema(options.schemaFile);
-      } else {
-        /*** Auto-discover the project’s schema (./dbschema by default) so `\d` can describe types
-             without the user passing --schema. Failure here is non-fatal: the REPL still works,
-             `\d` just falls back to listing PG tables. ***/
-        await this.autoLoadSchema();
+        if (options.schemaFile) {
+          await this.loadSchema(options.schemaFile);
+        } else {
+          /*** Auto-discover the project’s schema (./dbschema by default) so `\d` can describe types
+               without the user passing --schema. Failure here is non-fatal: the REPL still works,
+               `\d` just falls back to listing PG tables. ***/
+          await this.autoLoadSchema();
+        }
+      } catch (error) {
+        console.error("[FAIL] Failed to start shell:", (error as Error).message);
+        throw error;
       }
 
       if (options.execute) {
-        /*** Execute single query and exit ***/
-        await this.executeSingleQuery(options.execute);
+        /*** Execute single query and exit; a failure is thrown so the CLI exits non-zero. ***/
+        if (!(await this.executeSingleQuery(options.execute)))
+          throw new Error("Query failed");
+
         console.log("");
         console.log("[ OK ] Query executed, exiting…");
 
@@ -105,11 +120,9 @@ export class DiscShell {
         return;
       }
 
-      /*** Start interactive mode ***/
-      await this.startInteractiveMode();
-    } catch (error) {
-      console.error("[FAIL] Failed to start shell:", (error as Error).message);
-      throw error;
+      /*** Start interactive mode. Piped input (not a terminal) runs as a script that stops at the
+           first failed statement. ***/
+      await this.startInteractiveMode(Deno.stdin.isTerminal());
     } finally {
       await this.cleanup();
     }
@@ -170,7 +183,17 @@ export class DiscShell {
   }
 
   private async connectToDatabase(host: string, port: number, database: string): Promise<void> {
-    /*** Try project context first (auto-discovery via disc.toml) ***/
+    if (this.explicitDsn) {
+      this.db = new DatabaseConnection(this.explicitDsn);
+      await this.db.connect();
+
+      if (this.session)
+        this.session.connected = true;
+
+      return;
+    }
+
+    /*** Then project context (auto-discovery via disc.toml) ***/
     const ctx = resolveProjectContext();
 
     if (ctx?.managed) {
@@ -229,25 +252,30 @@ export class DiscShell {
     console.log(out);
   }
 
-  private async executeFile(filename: string): Promise<void> {
+  /*** Run each statement in `filename`, stopping at the first failure. Returns false on failure. ***/
+  private async executeFile(filename: string): Promise<boolean> {
     try {
       const content = await Deno.readTextFile(filename);
       const queries = content.split(";").filter(q => q.trim());
       console.log(`Executing ${queries.length} queries from ${filename}…`);
 
       for (const query of queries) {
-        if (query.trim())
-          await this.executeRealQuery(query.trim() + ";");
+        if (!(await this.executeRealQuery(query.trim() + ";")))
+          return false;
       }
+
+      return true;
     } catch (error) {
       console.error(`[FAIL] Failed to execute file: ${(error as Error).message}`);
+      return false;
     }
   }
 
-  private async executeRealQuery(query: string): Promise<void> {
+  /*** Run a query and print its result or error. Returns false when it fails. ***/
+  private async executeRealQuery(query: string): Promise<boolean> {
     if (!this.db) {
       console.error("[FAIL] Not connected to database");
-      return;
+      return false;
     }
 
     const startTime = Date.now();
@@ -267,22 +295,27 @@ export class DiscShell {
         const duration = Date.now() - startTime;
         console.log(`[TIME]  Time: ${duration}ms`);
       }
+
+      return true;
     } catch (error) {
       console.error(`[FAIL] Query failed: ${(error as Error).message}`);
+      return false;
     }
   }
 
-  private async executeSingleQuery(query: string): Promise<void> {
+  private async executeSingleQuery(query: string): Promise<boolean> {
     console.log("[TASK] Executing query…");
     console.log("");
 
     const startTime = Date.now();
-    await this.executeRealQuery(query);
+    const ok = await this.executeRealQuery(query);
 
     if (this.session?.timingEnabled) {
       const duration = Date.now() - startTime;
       console.log(`[TIME]  Total time: ${duration}ms`);
     }
+
+    return ok;
   }
 
   private async listTables(detailed = false): Promise<void> {
@@ -364,18 +397,24 @@ export class DiscShell {
     }
   }
 
-  private async processInput(input: string): Promise<string> {
+  private async processInput(input: string): Promise<InputResult> {
     const trimmed = input.trim();
 
     /*** Handle shell commands ***/
     if (trimmed.startsWith("\\"))
       return await this.processShellCommand(trimmed);
 
+    /*** Bare `exit` / `quit` leave the shell, as in psql ***/
+    if (!this.isMultiline && (trimmed === "exit" || trimmed === "quit"))
+      return "quit";
+
     /*** Handle empty input ***/
     if (!trimmed && !this.isMultiline) {
       await Deno.stdout.write(new TextEncoder().encode("disc> "));
       return "continue";
     }
+
+    let ok: boolean;
 
     /*** Handle multiline input ***/
     if (this.isMultiline || !trimmed.endsWith(";")) {
@@ -387,7 +426,7 @@ export class DiscShell {
         this.multilineBuffer = "";
         this.isMultiline = false;
 
-        await this.executeRealQuery(query);
+        ok = await this.executeRealQuery(query);
         this.commandHistory.push(query);
       } else {
         /*** Continue multiline ***/
@@ -397,18 +436,19 @@ export class DiscShell {
       }
     } else {
       /*** Single line query ***/
-      await this.executeRealQuery(trimmed);
+      ok = await this.executeRealQuery(trimmed);
       this.commandHistory.push(trimmed);
     }
 
     /*** Show prompt ***/
     await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
-    return "continue";
+    return ok ? "continue" : "error";
   }
 
-  private async processShellCommand(command: string): Promise<string> {
+  private async processShellCommand(command: string): Promise<InputResult> {
     const parts = command.split(/\s+/);
     const cmd = parts[0];
+    let ok = true;
 
     switch (cmd) {
       case "\\c": {
@@ -454,7 +494,7 @@ export class DiscShell {
 
       case "\\i": {
         if (parts[1])
-          await this.executeFile(parts[1]);
+          ok = await this.executeFile(parts[1]);
         else
           console.log("Usage: \\i <file>");
 
@@ -487,7 +527,7 @@ export class DiscShell {
     }
 
     await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
-    return "continue";
+    return ok ? "continue" : "error";
   }
 
   private showHelp(): void {
@@ -518,7 +558,12 @@ export class DiscShell {
     });
   }
 
-  private async startInteractiveMode(): Promise<void> {
+  /**
+   * Read lines from stdin until `\q`, `exit` or end of input. At a terminal a failed statement
+   * is reported and the session continues; with piped input (`interactive` false) it stops the
+   * shell with an error so the CLI exits non-zero, like psql's ON_ERROR_STOP.
+   */
+  private async startInteractiveMode(interactive: boolean): Promise<void> {
     /*** Show welcome and help ***/
     console.log("[INIT] Welcome to Disc Interactive Shell");
     console.log("[READ] Type \\? for help, \\q to quit");
@@ -538,30 +583,23 @@ export class DiscShell {
       .pipeThrough(new TextLineStream());
 
     for await (const line of reader) {
-      try {
-        const result = await this.processInput(line as string);
+      let result: InputResult;
 
-        if (result === "quit") {
-          console.log("[EXIT] Goodbye!");
-          break;
-        }
+      try {
+        result = await this.processInput(line as string);
       } catch (error) {
         console.error(`[FAIL] Error: ${(error as Error).message}`);
         await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
+        result = "error";
       }
-    }
 
-    /*** Without an explicit close, the open DB connection keeps Deno’s event loop alive after the
-         REPL exits — `\q` would print "Goodbye!" but the process would hang until the
-         user Ctrl-C’d. ***/
-    if (this.db) {
-      try {
-        await this.db.close();
-        Deno.exit(1);
-      } catch {
-        /*** best-effort — already exiting ***/
-        Deno.exit(1);
+      if (result === "quit") {
+        console.log("[EXIT] Goodbye!");
+        break;
       }
+
+      if (result === "error" && !interactive)
+        throw new Error("Stopped at the first failed statement");
     }
   }
 }

@@ -591,6 +591,7 @@ const COMMAND_HELP: Record<string, string> = {
     ${inverse("  OPTIONS ")}
 
       --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} Connect to external PostgreSQL
+      -e, --execute ${gray("<query>")} ${gray(".".repeat(4))} Run a query and exit (non-zero if it fails)
   `,
 
   start: dedent`
@@ -713,6 +714,7 @@ async function main() {
     ],
     alias: {
       c: "config",
+      e: "execute",
       f: "follow",
       /*** gh/geldata#1030: pair `-h`/`--help` with `-H`/`--host` so the CLI matches standard Unix
            conventions (psql, ssh, curl). Lowercase `h` stays the help short flag; uppercase `H` is
@@ -1148,6 +1150,7 @@ async function main() {
 
       case "shell": {
         await commands.shell({
+          backendDsn: args["backend-dsn"],
           database: args.database,
           execute: args.execute,
           host: args.host,
