@@ -140,7 +140,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // There's no physical table, so this must be handled before the
       // object-table path that would emit `FROM account_login_method`.
       if (typeDef.kind === "enum") {
-        const sqlType = Context.getEnumSqlType(typeDef.name);
+        const sqlType = Context.enumSqlType(typeDef);
         return {
           selectItems: [
             SQL.createSelectItem(
@@ -827,7 +827,9 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         out.push(element);
         continue;
       }
-      const typeDef = this.ctx.schema.types.get(typeName);
+      // `typeName` is bare for a type outside the default module, which
+      // the schema keys `module::Name`.
+      const typeDef = Context.resolveTypeName(this.ctx, typeName);
       if (!typeDef) {
         throw new CompilationError(
           `splat shape '*' on unknown type '${typeName}'`
@@ -1842,7 +1844,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       );
     }
 
-    const sqlType = Context.getEnumSqlType(enumTypeName);
+    const sqlType = Context.enumSqlType(typeDef);
     return {
       kind: "RawSQLExpression",
       sql: `'${memberName}'::${sqlType}`

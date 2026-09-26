@@ -65,6 +65,20 @@ export function linkColumnName(linkName: string): string {
   return `${propNameToColumnName(linkName)}_id`;
 }
 
+/**
+ * The PostgreSQL type of the enum scalar `module::name`: `disc_enum_<name>`,
+ * or `disc_enum_<module>__<name>` when `qualified` and the module is not
+ * `default`. Callers qualify an enum only when another enum shares its name
+ * (see `enumPgTypeNames` in `schema/converter.ts`), so the types of existing
+ * databases keep their names.
+ */
+export function enumTypeName(module: string, name: string, qualified: boolean): string {
+  if (!qualified || module === "default")
+    return `disc_enum_${name.toLowerCase()}`;
+
+  return fitIdentifier(`disc_enum_${module.replaceAll("::", "__")}__${name}`.toLowerCase());
+}
+
 /** PostgreSQL truncates identifiers to `NAMEDATALEN - 1` bytes, silently. */
 export const PG_MAX_IDENTIFIER_BYTES = 63;
 

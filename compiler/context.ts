@@ -126,6 +126,8 @@ export interface TypeDef {
   triggers?: TriggerDef[];
   /** Enum member values for scalar enum types */
   enumValues?: string[];
+  /** PostgreSQL type of an enum scalar (`disc_enum_status`); see `enumSqlType()` */
+  enumSqlType?: string;
   /** Whether this is an abstract type (cannot be instantiated directly) */
   abstract?: boolean;
   /** Names of parent types (e.g., ["Shape"] or ["Timestamped", "Authored"] for multiple inheritance) */
@@ -328,30 +330,31 @@ export function getTypeDef(
  * Resolve a type name respecting the current module scope.
  *
  * Resolution order:
- * 1. Exact name (already qualified or known at top level)
- * 2. If unqualified and moduleScope is set: try moduleScope::name
+ * 1. If unqualified and moduleScope is set: try moduleScope::name (so
+ *    `with module agents` picks `agents::Status` over `default::Status`)
+ * 2. Exact name (already qualified or known at top level)
  * 3. If unqualified: try default::name
  */
 export function resolveTypeName(
   ctx: CompilationContext,
   name: string
 ): TypeDef | undefined {
-  // 1. Exact match
-  let typeDef = ctx.schema.types.get(name);
+  // 1. Module scope (set by WITH MODULE)
+  let typeDef = ctx.moduleScope && !name.includes("::") ?
+    ctx.schema.types.get(`${ctx.moduleScope}::${name}`) :
+    undefined;
+  if (typeDef) {
+    return typeDef;
+  }
+
+  // 2. Exact match
+  typeDef = ctx.schema.types.get(name);
   if (typeDef) {
     return typeDef;
   }
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
-    // 2. Module scope (set by WITH MODULE)
-    if (ctx.moduleScope) {
-      typeDef = ctx.schema.types.get(`${ctx.moduleScope}::${name}`);
-      if (typeDef) {
-        return typeDef;
-      }
-    }
-
     // 3. Default module
     typeDef = ctx.schema.types.get(`default::${name}`);
     if (typeDef) {
@@ -567,6 +570,15 @@ export function getEnumSqlType(name: string): string {
     name.slice(name.lastIndexOf("::") + 2) :
     name;
   return `disc_enum_${simpleName.toLowerCase()}`;
+}
+
+/**
+ * The PostgreSQL type of an enum: the one the schema recorded for it (which
+ * is module-qualified when another enum shares its name), else
+ * `getEnumSqlType(typeDef.name)`.
+ */
+export function enumSqlType(typeDef: TypeDef): string {
+  return typeDef.enumSqlType ?? getEnumSqlType(typeDef.name);
 }
 
 /**

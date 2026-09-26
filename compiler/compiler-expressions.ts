@@ -511,11 +511,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return null;
   }
 
-  /*** The SQL array type of a multi property's column: `text[]`, or the enum's `disc_enum_<name>[]`. ***/
+  /*** The SQL array type of a multi property's column: `text[]`, or the enum's array type (`disc_enum_<name>[]`). ***/
   protected multiPropertyArrayType(property: Context.PropertyDef): string {
     const element = property.edgeqlType ?? "";
     const resolved = element ? Context.resolveTypeName(this.ctx, element) : undefined;
-    return resolved?.enumValues?.length ? `${Context.getEnumSqlType(element)}[]` : property.type;
+    return resolved?.enumValues?.length ? `${Context.enumSqlType(resolved)}[]` : property.type;
   }
 
   /**
@@ -1391,13 +1391,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // Resolve them through the schema so casts like `<LogLevel>$level`
     // emit `::disc_enum_loglevel` instead of being passed through verbatim
     // (which PG would silently lowercase to `loglevel` — a type that
-    // doesn't exist).
+    // doesn't exist). `<array<LogLevel>>` casts to the enum's array type.
     const resolved = Context.resolveTypeName(this.ctx, typeName);
-    if (
-      resolved && Array.isArray(resolved.enumValues) &&
-      resolved.enumValues.length > 0
-    ) {
-      const enumType = Context.getEnumSqlType(typeName);
+    const arrayElement = /^array<(.+)>$/.exec(typeName)?.[1];
+    const enumDef = arrayElement ? Context.resolveTypeName(this.ctx, arrayElement) : resolved;
+    if (enumDef?.enumValues?.length) {
+      const enumType = `${Context.enumSqlType(enumDef)}${arrayElement ? "[]" : ""}`;
       return fromJson ? this.compileCastFromJson(expr, enumType, typeName) : SQL.createCastExpression(expr, enumType);
     }
 

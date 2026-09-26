@@ -7,13 +7,14 @@
 
 import { MigrationError } from "../lib/errors.ts";
 import {
+  enumTypeName,
   fitIdentifier,
   linkColumnName,
   propNameToColumnName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
 import * as AST from "../schema/ast.ts";
-import { Module } from "../schema/converter.ts";
+import { enumPgTypeNames, Module, qualifyEnumReferences } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 /**
@@ -73,6 +74,12 @@ export class SchemaDiffer {
   }
 
   diff(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
+    // `status: Status` inside `agents` names `agents::Status`; qualify it on
+    // both sides so column emission can't resolve it to `default::Status`.
+    return this.diffModules(qualifyEnumReferences(oldSchema), qualifyEnumReferences(newSchema));
+  }
+
+  private diffModules(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
     /*** Convert schemas to maps for easier comparison ***/
     const oldTypes = this.extractTypes(oldSchema);
@@ -147,6 +154,14 @@ export class SchemaDiffer {
     // migration plans instead of silent no-ops.
     const oldScalars = this.extractScalars(oldSchema);
     const newScalars = this.extractScalars(newSchema);
+    // An enum's PG type is module-qualified only while another enum shares
+    // its name, so the same enum can have a different type on each side.
+    const oldEnumTypes = enumPgTypeNames(oldSchema);
+    const newEnumTypes = enumPgTypeNames(newSchema);
+    const pgTypeName = (types: Map<string, string>, key: string): { pgTypeName?: string; } => {
+      const name = types.get(key);
+      return name ? { pgTypeName: name } : {};
+    };
 
     // Added scalars
     for (const [scalarName, scalarDef] of newScalars) {
@@ -155,6 +170,7 @@ export class SchemaDiffer {
           kind: "CreateScalar",
           scalarName: scalarDef.decl.name.value,
           module: scalarDef.module,
+          ...pgTypeName(newEnumTypes, scalarName),
           baseType: this.scalarBaseType(scalarDef.decl),
           enumValues: this.scalarEnumValues(scalarDef.decl)
         };
@@ -168,7 +184,24 @@ export class SchemaDiffer {
         const op: Types.DropScalarOperation = {
           kind: "DropScalar",
           scalarName: scalarDef.decl.name.value,
-          module: scalarDef.module
+          module: scalarDef.module,
+          ...pgTypeName(oldEnumTypes, scalarName)
+        };
+        operations.push(op);
+      }
+    }
+
+    // Renamed enum types: another enum with the same name was added/removed.
+    for (const [scalarName, toTypeName] of newEnumTypes) {
+      const fromTypeName = oldEnumTypes.get(scalarName);
+      if (fromTypeName && fromTypeName !== toTypeName) {
+        const scalarDef = newScalars.get(scalarName)!;
+        const op: Types.RenameScalarOperation = {
+          kind: "RenameScalar",
+          scalarName: scalarDef.decl.name.value,
+          module: scalarDef.module,
+          fromTypeName,
+          toTypeName
         };
         operations.push(op);
       }
@@ -194,12 +227,14 @@ export class SchemaDiffer {
       }
 
       operations.push(
-        ...this.diffEnumValues(
-          newScalarDef.decl.name.value,
-          newScalarDef.module,
-          oldValues,
-          newValues
-        )
+        ...this
+          .diffEnumValues(
+            newScalarDef.decl.name.value,
+            newScalarDef.module,
+            oldValues,
+            newValues
+          )
+          .map(op => ({ ...op, ...pgTypeName(newEnumTypes, scalarName) }))
       );
     }
 
@@ -352,15 +387,28 @@ export class SchemaDiffer {
    * enum-drops/recreates last. `AddEnumValue` sits in the create
    * bucket — it grows the enum's value set non-destructively, so
    * doing it before columns reference the new value is always safe.
+   *
+   * A `RenameScalar` to a module-qualified type frees the bare name for
+   * a new same-named enum, so it runs before the creates; one back to
+   * the bare name takes it over from a dropped enum, so it runs after
+   * the drops.
    */
   private reorderForCascade(
     operations: Types.MigrationOperation[]
   ): Types.MigrationOperation[] {
+    const renames: Types.MigrationOperation[] = [];
     const creates: Types.MigrationOperation[] = [];
     const middle: Types.MigrationOperation[] = [];
     const drops: Types.MigrationOperation[] = [];
+    const renamesBack: Types.MigrationOperation[] = [];
     for (const op of operations) {
       switch (op.kind) {
+        case "RenameScalar": {
+          const rename = op as Types.RenameScalarOperation;
+          const toBareName = rename.toTypeName === enumTypeName(rename.module, rename.scalarName, false);
+          (toBareName ? renamesBack : renames).push(op);
+          break;
+        }
         case "CreateScalar":
         case "AddEnumValue":
           creates.push(op);
@@ -373,30 +421,32 @@ export class SchemaDiffer {
           middle.push(op);
       }
     }
-    return [...creates, ...middle, ...drops];
+    return [...renames, ...creates, ...middle, ...drops, ...renamesBack];
   }
 
   /**
-   * Names of every enum-typed scalar declared in `schema`. Used to
-   * prime `DDLGenerator.setEnumScalars(...)` so column emission
-   * resolves user scalar names to their PG `disc_enum_<name>` type
-   * instead of the TEXT fallback. Non-enum scalars are excluded
+   * Every enum-typed scalar declared in `schema`, mapped to its PG enum
+   * type. Used to prime `DDLGenerator.setEnumScalars(...)` so column
+   * emission resolves user scalar names to their PG `disc_enum_<name>`
+   * type instead of the TEXT fallback. Non-enum scalars are excluded
    * because they map to the underlying PG type at column emission and
    * have no PG type of their own. (gh/geldata#8517)
    *
-   * Returns both qualified (`module::Name`) and unqualified (`Name`)
+   * Keys both qualified (`module::Name`) and unqualified (`Name`)
    * forms because property type strings can appear either way
    * depending on how the SDL referenced the scalar — properties in
    * the same module typically use the bare name; cross-module
-   * references use the qualified form.
+   * references use the qualified form. When enums share a name, the
+   * bare form is the default module's (`diff` qualifies a bare
+   * reference to another module's own enum).
    */
-  enumScalarNames(schema: Module[]): Set<string> {
-    const names = new Set<string>();
-    const scalars = this.extractScalars(schema);
-    for (const [qualifiedName, def] of scalars) {
-      if (this.isEnumScalar(def.decl)) {
-        names.add(qualifiedName);
-        names.add(def.decl.name.value);
+  enumScalarNames(schema: Module[]): Map<string, string> {
+    const names = new Map<string, string>();
+    for (const [qualifiedName, pgTypeName] of enumPgTypeNames(schema)) {
+      const bareName = qualifiedName.slice(qualifiedName.lastIndexOf("::") + 2);
+      names.set(qualifiedName, pgTypeName);
+      if (qualifiedName.startsWith("default::") || !names.has(bareName)) {
+        names.set(bareName, pgTypeName);
       }
     }
     return names;

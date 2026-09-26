@@ -195,6 +195,8 @@ export interface CreateScalarOperation extends MigrationOperation {
   kind: "CreateScalar";
   scalarName: string;
   module: string;
+  /** PostgreSQL enum type; absent on operations recorded before same-named enums (then `disc_enum_<name>`) */
+  pgTypeName?: string;
   /**
    * The base of the scalar (e.g. "enum", "str", "int64"). When `kind` is
    * `"enum"`, `enumValues` is non-empty.
@@ -207,6 +209,8 @@ export interface DropScalarOperation extends MigrationOperation {
   kind: "DropScalar";
   scalarName: string;
   module: string;
+  /** PostgreSQL enum type; absent on operations recorded before same-named enums (then `disc_enum_<name>`) */
+  pgTypeName?: string;
 }
 
 /**
@@ -217,6 +221,8 @@ export interface AddEnumValueOperation extends MigrationOperation {
   kind: "AddEnumValue";
   scalarName: string;
   module: string;
+  /** PostgreSQL enum type; absent on operations recorded before same-named enums (then `disc_enum_<name>`) */
+  pgTypeName?: string;
   value: string;
   before?: string;
   after?: string;
@@ -232,12 +238,27 @@ export interface RecreateScalarOperation extends MigrationOperation {
   kind: "RecreateScalar";
   scalarName: string;
   module: string;
+  /** PostgreSQL enum type; absent on operations recorded before same-named enums (then `disc_enum_<name>`) */
+  pgTypeName?: string;
   /** New, post-change enum value list (used to rebuild the type). */
   enumValues: string[];
   /** Old enum values, preserved for rollback / reasoning. */
   oldEnumValues: string[];
   /** Reason for recreate ("removed-values" | "reordered-values"). */
   reason: "removed-values" | "reordered-values";
+}
+
+/**
+ * `ALTER TYPE … RENAME TO`. An enum's PostgreSQL type is module-qualified
+ * only while another enum shares its name, so adding or removing that other
+ * enum renames the type in place; columns follow it.
+ */
+export interface RenameScalarOperation extends MigrationOperation {
+  kind: "RenameScalar";
+  scalarName: string;
+  module: string;
+  fromTypeName: string;
+  toTypeName: string;
 }
 
 // Global operations

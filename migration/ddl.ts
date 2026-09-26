@@ -6,6 +6,7 @@
  */
 
 import {
+  enumTypeName,
   isReservedPgKeyword,
   linkColumnName,
   propNameToColumnName,
@@ -49,7 +50,7 @@ export class DDLGenerator {
    * behavior so direct/test callers without a schema context still
    * work. (gh/geldata#8517)
    */
-  private enumScalars = new Set<string>();
+  private enumScalars = new Map<string, string>();
 
   /**
    * Tell the generator which scalar names are enum-typed so column
@@ -57,10 +58,14 @@ export class DDLGenerator {
    * schema's scalars — the cascade-ordering pass guarantees scalar
    * `CREATE TYPE`s fire before any column referencing them. Callers
    * who don't know (or don't need to know) about enum scalars can skip
-   * this; column emission falls back to TEXT.
+   * this; column emission falls back to TEXT. A Map (from
+   * `SchemaDiffer.enumScalarNames`) also gives each name its PG type;
+   * plain names get `disc_enum_<name>`.
    */
-  setEnumScalars(names: Iterable<string>): void {
-    this.enumScalars = new Set(names);
+  setEnumScalars(names: Iterable<string> | Map<string, string>): void {
+    this.enumScalars = names instanceof Map ?
+      new Map(names) :
+      new Map([...names].map(name => [name, this.scalarTypeName({ scalarName: name.slice(name.lastIndexOf(":") + 1) })]));
   }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
@@ -158,7 +163,7 @@ export class DDLGenerator {
             `-- Rollback: scalar ${op.module}::${op.scalarName} was compile-time only`
           ];
         }
-        const typeName = this.enumTypeName(op.scalarName);
+        const typeName = this.scalarTypeName(op);
         return [
           `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`
         ];
@@ -180,7 +185,7 @@ export class DDLGenerator {
       }
       case "RecreateScalar": {
         const op = operation as Types.RecreateScalarOperation;
-        const typeName = this.enumTypeName(op.scalarName);
+        const typeName = this.scalarTypeName(op);
         const escaped = this.escapeIdentifier(typeName);
         const values = op
           .oldEnumValues
@@ -191,6 +196,10 @@ export class DDLGenerator {
           `DROP TYPE IF EXISTS ${escaped};`,
           `CREATE TYPE ${escaped} AS ENUM (${values});`
         ];
+      }
+      case "RenameScalar": {
+        const op = operation as Types.RenameScalarOperation;
+        return this.generateRenameScalar({ ...op, fromTypeName: op.toTypeName, toTypeName: op.fromTypeName });
       }
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
@@ -253,6 +262,10 @@ export class DDLGenerator {
         return this.generateRecreateScalar(
           operation as Types.RecreateScalarOperation
         );
+      case "RenameScalar":
+        return this.generateRenameScalar(
+          operation as Types.RenameScalarOperation
+        );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -263,13 +276,22 @@ export class DDLGenerator {
   // ──────────────────────────────────────────────────────────────────────
 
   /**
-   * PG enum type name. Disc maps a Disc-side enum scalar to a PG type
-   * named by `enumTypeName(...)` so emitted DDL can reference it by a
-   * deterministic identifier. The `disc_enum_` prefix avoids colliding
-   * with any user-supplied PG type the operator might add via raw SQL.
+   * PG enum type name of a scalar operation. The differ records it
+   * (`pgTypeName`, module-qualified when another enum shares the name);
+   * operations recorded before that get `disc_enum_<name>`, the name
+   * every enum had then. The `disc_enum_` prefix avoids colliding with
+   * any user-supplied PG type the operator might add via raw SQL.
    */
-  private enumTypeName(scalarName: string): string {
-    return `disc_enum_${scalarName.toLowerCase()}`;
+  private scalarTypeName(operation: { pgTypeName?: string; scalarName: string; }): string {
+    return operation.pgTypeName ?? enumTypeName("default", operation.scalarName, false);
+  }
+
+  private generateRenameScalar(
+    operation: Types.RenameScalarOperation
+  ): string[] {
+    return [
+      `ALTER TYPE ${this.escapeIdentifier(operation.fromTypeName)} RENAME TO ${this.escapeIdentifier(operation.toTypeName)};`
+    ];
   }
 
   private generateCreateScalar(
@@ -282,7 +304,7 @@ export class DDLGenerator {
         `-- scalar ${operation.module}::${operation.scalarName} extends ${operation.baseType} (compile-time only)`
       ];
     }
-    const typeName = this.enumTypeName(operation.scalarName);
+    const typeName = this.scalarTypeName(operation);
     const values = (operation.enumValues ?? [])
       .map(v => `'${v.replace(/'/g, "''")}'`)
       .join(", ");
@@ -294,7 +316,7 @@ export class DDLGenerator {
   private generateDropScalar(
     operation: Types.DropScalarOperation
   ): string[] {
-    const typeName = this.enumTypeName(operation.scalarName);
+    const typeName = this.scalarTypeName(operation);
     return [
       `-- WARNING: DROP TYPE removes the enum and is destructive if any column still references it`,
       `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`
@@ -304,7 +326,7 @@ export class DDLGenerator {
   private generateAddEnumValue(
     operation: Types.AddEnumValueOperation
   ): string[] {
-    const typeName = this.enumTypeName(operation.scalarName);
+    const typeName = this.scalarTypeName(operation);
     const value = `'${operation.value.replace(/'/g, "''")}'`;
     let placement = "";
     if (operation.before) {
@@ -333,7 +355,7 @@ export class DDLGenerator {
   private generateRecreateScalar(
     operation: Types.RecreateScalarOperation
   ): string[] {
-    const typeName = this.enumTypeName(operation.scalarName);
+    const typeName = this.scalarTypeName(operation);
     const escaped = this.escapeIdentifier(typeName);
     const values = operation
       .enumValues
@@ -1664,13 +1686,10 @@ END $$;`,
     // by `generateCreateScalar`. (gh/geldata#8517) Falls through to
     // TEXT below when no scalar registry was supplied (back-compat).
     // The property's `type` string may be qualified (`module::Name`)
-    // or bare (`Name`); strip the module prefix when constructing the
-    // PG enum type name so we always get `disc_enum_<simplename>`.
-    if (this.enumScalars.has(edgeqlType)) {
-      const simpleName = edgeqlType.includes("::") ?
-        edgeqlType.slice(edgeqlType.lastIndexOf("::") + 2) :
-        edgeqlType;
-      return this.escapeIdentifier(this.enumTypeName(simpleName));
+    // or bare (`Name`); the registry maps both to the enum's PG type.
+    const enumType = this.enumScalars.get(edgeqlType);
+    if (enumType) {
+      return this.escapeIdentifier(enumType);
     }
 
     return "TEXT";

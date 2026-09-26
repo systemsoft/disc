@@ -50,8 +50,10 @@ import {
   TypeDeclaration
 } from "../schema/ast.ts";
 import {
+  enumPgTypeNames,
   Module,
   normalizeModules,
+  qualifySharedEnumReferences,
   SDLConverter
 } from "../schema/converter.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
@@ -536,7 +538,12 @@ export class SchemaManager {
    * each module's TypeDeclarations and converts them into TypeDef objects
    * with PropertyDef and LinkDef maps.
    */
-  modulesToSchema(modules: Module[]): Schema {
+  modulesToSchema(sdlModules: Module[]): Schema {
+    // `status: Status` inside `agents` names `agents::Status` even when
+    // `default::Status` exists; qualify it so the bare name can't resolve to
+    // the default one.
+    const modules = qualifySharedEnumReferences(sdlModules);
+    const enumSqlTypes = enumPgTypeNames(modules);
     const types = new Map<string, TypeDef>();
     const aliases = new Map<string, AliasDef>();
     const globals = new Map<string, GlobalDef>();
@@ -680,14 +687,17 @@ export class SchemaManager {
               tableName: typeNameToTableName(scalarName),
               properties: new Map(),
               links: new Map(),
+              enumSqlType: enumSqlTypes.get(`${module.name}::${scalarName}`),
               enumValues,
               module: module.name
             };
             // Store under the bare name so `<LogLevel>` lookups in cast
             // expressions resolve regardless of which module declared the
             // enum. Also store under the module-qualified name so existing
-            // call sites that pass `logger::LogLevel` still find it.
-            types.set(scalarName, enumDef);
+            // call sites that pass `logger::LogLevel` still find it. When
+            // enums share a name, the bare name is the default module's.
+            if (module.name === "default" || types.get(scalarName)?.module !== "default")
+              types.set(scalarName, enumDef);
             if (module.name !== "default") {
               types.set(`${module.name}::${scalarName}`, enumDef);
             }

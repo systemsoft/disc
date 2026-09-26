@@ -8,6 +8,7 @@
  * suitable for migration engine and other tools
  */
 
+import { enumTypeName } from "../lib/identifiers.ts";
 import * as AST from "./ast.ts";
 
 export interface Module {
@@ -240,6 +241,116 @@ export function inheritAbstractLinkProperties(modules: Module[]): Module[] {
         item
     )
   }));
+}
+
+function isEnumScalar(item: AST.Declaration): item is AST.ScalarTypeDeclaration {
+  return item.kind === "ScalarTypeDeclaration" && (item.extending ?? []).some(ext => ext.name.parts[0] === "enum");
+}
+
+/*** Every enum scalar in `modules`, keyed `module::Name`; `shared` when another enum has the same name (case-insensitively). ***/
+function enumScalars(modules: Module[]): Map<string, { module: string; name: string; shared: boolean; }> {
+  const enums = new Map<string, { module: string; name: string; shared: boolean; }>();
+  const counts = new Map<string, number>();
+
+  for (const module of modules) {
+    for (const item of module.items) {
+      if (!isEnumScalar(item) || enums.has(`${module.name}::${item.name.value}`))
+        continue;
+
+      const lower = item.name.value.toLowerCase();
+      enums.set(`${module.name}::${item.name.value}`, { module: module.name, name: item.name.value, shared: false });
+      counts.set(lower, (counts.get(lower) ?? 0) + 1);
+    }
+  }
+
+  for (const scalar of enums.values())
+    scalar.shared = counts.get(scalar.name.toLowerCase())! > 1;
+
+  return enums;
+}
+
+/**
+ * The PostgreSQL type of every enum scalar in `modules`, keyed `module::Name`.
+ * An enum outside the default module whose name another enum shares (case
+ * insensitively) gets a module-qualified type (`disc_enum_agents__status`);
+ * every other enum keeps `disc_enum_<name>`, the name every enum had before
+ * same-named enums were supported.
+ */
+export function enumPgTypeNames(modules: Module[]): Map<string, string> {
+  const names = new Map<string, string>();
+
+  for (const [key, { module, name, shared }] of enumScalars(modules))
+    names.set(key, enumTypeName(module, name, shared));
+
+  return names;
+}
+
+/**
+ * Qualify a bare property type that names an enum of its own (non-default)
+ * module when another enum shares that name: `status: Status` in module
+ * `agents` becomes `agents::Status`, which would otherwise resolve to
+ * `default::Status`. Covers link properties and collection parameters
+ * (`array<Status>`). Returns `modules` itself when no enum name is shared;
+ * inputs are not mutated.
+ */
+export function qualifySharedEnumReferences(modules: Module[]): Module[] {
+  return qualifyEnumReferencesTo(modules, scalar => scalar.shared);
+}
+
+/**
+ * Qualify every bare property type that names an enum of its own
+ * (non-default) module, shared name or not. The migration differ diffs
+ * both schemas this way, so an enum reference does not change when another
+ * enum starts or stops sharing its name.
+ */
+export function qualifyEnumReferences(modules: Module[]): Module[] {
+  return qualifyEnumReferencesTo(modules, () => true);
+}
+
+function qualifyEnumReferencesTo(modules: Module[], include: (scalar: { shared: boolean; }) => boolean): Module[] {
+  const enumKeys = new Set<string>();
+
+  for (const [key, scalar] of enumScalars(modules)) {
+    if (scalar.module !== "default" && include(scalar))
+      enumKeys.add(key);
+  }
+
+  if (enumKeys.size === 0)
+    return modules;
+
+  return modules.map(module => {
+    if (module.name === "default")
+      return module;
+
+    const qualify = (ref: AST.TypeRef): AST.TypeRef => {
+      const bare = ref.name.parts.length === 1 && enumKeys.has(`${module.name}::${ref.name.parts[0]}`);
+      const params = ref.params?.map(qualify);
+      return {
+        ...ref,
+        ...(bare ? { name: { ...ref.name, parts: [...module.name.split("::"), ref.name.parts[0]] } } : {}),
+        ...(params ? { params } : {})
+      };
+    };
+    const property = (p: AST.PropertyDeclaration): AST.PropertyDeclaration => ({ ...p, type: qualify(p.type) });
+
+    return {
+      name: module.name,
+      items: module.items.map(item =>
+        item.kind === "TypeDeclaration" ?
+          {
+            ...item,
+            members: item.members.map(member => {
+              if (member.kind === "PropertyDeclaration")
+                return property(member);
+              if (member.kind === "LinkDeclaration" && member.properties)
+                return { ...member, properties: member.properties.map(property) };
+              return member;
+            })
+          } :
+          item
+      )
+    };
+  });
 }
 
 /**
