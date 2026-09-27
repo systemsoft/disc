@@ -38,6 +38,13 @@
  * (RFC 4648, no line breaks) — the same one a shape renders in SQL and the one
  * the SDK's `parseBytes` decodes. Unshaped rows only: `RETURNING *`, a bare
  * path select, `select <bytes>$p`.
+ *
+ * local datetime / local date (`timestamp`, `date`): deno-postgres decodes
+ * both as a `Date` in the server's local time zone, which JSON.stringify writes
+ * as a UTC instant — a bare insert or update answered `cal::local_date`
+ * `2026-01-15` as `2026-01-15T08:00:00.000Z` on a server at UTC−8. By the
+ * column's type OID they are written as their wall-clock text instead, as a
+ * shape writes them (`2026-01-15T10:20:30`, `2026-01-15`).
  */
 
 import { encodeBase64 } from "@std/encoding/base64";
@@ -76,6 +83,39 @@ function numericValue(value: unknown): unknown {
   return Array.isArray(value) ? value.map(numericValue) : value;
 }
 
+/*** PostgreSQL type OIDs of `timestamp` and `timestamp[]` (`cal::local_datetime`). ***/
+const TIMESTAMP_OIDS = new Set([1114, 1115]);
+
+/*** PostgreSQL type OIDs of `date` and `date[]` (`cal::local_date`). ***/
+const DATE_OIDS = new Set([1082, 1182]);
+
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, "0");
+}
+
+/**
+ * A `timestamp` or `date` column (or array of them) as its wall-clock text.
+ * deno-postgres decodes both as a `Date` in the server's local time zone (and
+ * ±infinity as ±Infinity), which JSON.stringify would write as a UTC instant —
+ * another day or hour than the stored one. The local fields give the stored
+ * value back, written as a shape writes it (`2026-01-15T10:20:30.5`,
+ * `2026-01-15`); the driver keeps milliseconds, so microseconds are lost here.
+ */
+function localValue(value: unknown, withTime: boolean): unknown {
+  if (value instanceof Date) {
+    const date = `${pad(value.getFullYear(), 4)}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+    if (!withTime) {
+      return date;
+    }
+    const ms = value.getMilliseconds() === 0 ? "" : `.${pad(value.getMilliseconds(), 3)}`.replace(/0+$/, "");
+    return `${date}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}${ms}`;
+  }
+  if (value === Infinity || value === -Infinity) {
+    return value > 0 ? "infinity" : "-infinity";
+  }
+  return Array.isArray(value) ? value.map(item => localValue(item, withTime)) : value;
+}
+
 /*** Only column values and PostgreSQL arrays are visited: json/jsonb columns arrive already
      JSON-decoded and cannot hold a driver type, so they are passed through by reference. ***/
 function normalizeValue(value: unknown): unknown {
@@ -96,7 +136,13 @@ export function normalizeRows(rows: Record<string, unknown>[], columnTypes: Reco
     const out: Record<string, unknown> = {};
     for (const [column, value] of Object.entries(row)) {
       const oid = columnTypes[column];
-      out[column] = NUMERIC_OIDS.has(oid) ? numericValue(value) : FLOAT_OIDS.has(oid) ? floatValue(value) : normalizeValue(value);
+      out[column] = NUMERIC_OIDS.has(oid) ?
+        numericValue(value) :
+        FLOAT_OIDS.has(oid) ?
+        floatValue(value) :
+        TIMESTAMP_OIDS.has(oid) || DATE_OIDS.has(oid) ?
+        localValue(value, TIMESTAMP_OIDS.has(oid)) :
+        normalizeValue(value);
     }
     return out;
   });

@@ -228,10 +228,12 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     typescriptType: "unknown"
   },
   {
-    arrayType: "Date[]",
+    arrayType: "string[]",
+    /*** A local datetime has no time zone; a `Date` is an instant, so making one would pick a zone
+         (the reader's) and shift the value. It stays its ISO-8601 string, `2026-01-15T10:20:30`. ***/
     edgeqlType: "cal::local_datetime",
-    nullableType: "Date | null",
-    typescriptType: "Date"
+    nullableType: "string | null",
+    typescriptType: "string"
   },
   {
     arrayType: "string[]",

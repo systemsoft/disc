@@ -49,8 +49,8 @@ const ISO_DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[
 
 const NUMERIC_STRING_REGEX = /^-?\d+$/;
 
-/*** The casts of the fields codegen types `bigint`, which `reviveTyped` reads as one. ***/
-const BIGINT_CASTS = new Set(["<bigint>", "<array<bigint>>", "<int64>", "<array<int64>>"]);
+/*** A named tuple parameter, `label: type`; `(?!:)` keeps `cal::local_date` from reading as one. ***/
+const TUPLE_LABEL_REGEX = /^([A-Za-z_]\w*)\s*:(?!:)\s*([\s\S]+)$/;
 
 const HEX_BYTES_REGEX = /^\\x((?:[0-9a-fA-F]{2})*)$/;
 
@@ -237,14 +237,16 @@ export function reviveResponse<T = unknown>(
 }
 
 /**
- * Revive a typed query builder's result from its `TypeInfo`: every field cast
- * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, every `<int64>` and
- * `<bigint>` a `bigint` and every `<decimal>` a string of its digits (the TS
- * types codegen declares for them), recursing through `links`, and reading a
- * link's `@name` keys by its `linkProperties`. A single link arrives as a
+ * Revive a typed query builder's result from its `TypeInfo`, into the TS types
+ * codegen declares: every field cast `<bytes>` becomes a `Uint8Array`,
+ * `<int64>` and `<bigint>` a `bigint`, `<decimal>` a string of its digits and
+ * `<datetime>` a `Date` — inside arrays, tuples and named tuples too, and
+ * element by element for a multi property — recursing through `links`, and
+ * reading a link's `@name` keys by its `linkProperties`. The `cal::` types and
+ * `duration` stay the strings they arrive as. A single link arrives as a
  * one-element array of rows today, a multi link as a longer one; a plain
- * object works too. Returns a new structure — input is not mutated. Other wire
- * strings (datetime) are left to `reviveResponse`, as before.
+ * object works too. A value already revived is kept. Returns a new structure —
+ * input is not mutated.
  */
 export function reviveTyped<T>(data: T, typeInfo: TypeInfo): T {
   return reviveTypedValue(data, typeInfo) as T;
@@ -254,19 +256,16 @@ function reviveTypedValue(value: unknown, typeInfo: TypeInfo, linkCasts?: Record
   if (Array.isArray(value)) {
     return value.map(item => reviveTypedValue(item, typeInfo, linkCasts));
   }
-  if (value === null || typeof value !== "object" || value instanceof Uint8Array) {
+  if (value === null || typeof value !== "object" || value instanceof Uint8Array || value instanceof Date) {
     return value;
   }
   const out: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(value)) {
     const cast = key.startsWith("@") ? linkCasts?.[key.slice(1)] : typeInfo.casts[key];
     const link = typeInfo.links[key];
-    if (cast === "<bytes>" || cast === "<array<bytes>>") {
-      out[key] = reviveBytes(field);
-    } else if (cast !== undefined && BIGINT_CASTS.has(cast)) {
-      out[key] = reviveBigint(field);
-    } else if (cast === "<decimal>" || cast === "<array<decimal>>") {
-      out[key] = reviveDecimal(field);
+    if (cast !== undefined) {
+      const type = cast.slice(1, -1);
+      out[key] = typeInfo.multi?.includes(key) && Array.isArray(field) ? field.map(item => reviveAs(item, type)) : reviveAs(field, type);
     } else if (link) {
       out[key] = reviveTypedValue(field, link(), typeInfo.linkProperties?.[key]);
     } else {
@@ -274,6 +273,87 @@ function reviveTypedValue(value: unknown, typeInfo: TypeInfo, linkCasts?: Record
     }
   }
   return out;
+}
+
+/*** A wire value as the TS type codegen declares for the EdgeQL type `type` (`int64`, `array<datetime>`, `tuple<n: int64, s: str>`, …). ***/
+function reviveAs(value: unknown, type: string): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  const element = collectionParams(type, "array");
+  if (element !== undefined) {
+    return Array.isArray(value) ? value.map(item => reviveAs(item, element)) : value;
+  }
+  const tuple = collectionParams(type, "tuple");
+  if (tuple !== undefined) {
+    return reviveTuple(value, splitTupleParams(tuple));
+  }
+  switch (type) {
+    case "bytes":
+      return reviveBytes(value);
+    case "bigint":
+    case "int64":
+      return reviveBigint(value);
+    case "decimal":
+      return reviveDecimal(value);
+    case "datetime":
+      return reviveDateTime(value);
+    default:
+      return value;
+  }
+}
+
+/*** A positional tuple (a JSON array) element by element, a named one (a JSON object) field by field. ***/
+function reviveTuple(value: unknown, params: TupleParam[]): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, i) => params[i] ? reviveAs(item, params[i].type) : item);
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  const types = new Map(params.map(param => [param.name, param.type]));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, types.has(key) ? reviveAs(item, types.get(key)!) : item]));
+}
+
+/*** The parameter list of `kind<…>` (`array<int64>` → `int64`); undefined when `type` is not one. ***/
+function collectionParams(type: string, kind: "array" | "tuple"): string | undefined {
+  return type.startsWith(`${kind}<`) && type.endsWith(">") ? type.slice(kind.length + 1, -1) : undefined;
+}
+
+interface TupleParam {
+  /*** Its label in a named tuple; null in a positional one. ***/
+  name: string | null;
+  type: string;
+}
+
+/*** A tuple's parameters, split on top-level commas (`int64, tuple<a, b>`), each labeled when named (`n: int64`; `cal::local_date` is not a label). ***/
+function splitTupleParams(params: string): TupleParam[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < params.length; i++) {
+    if (params[i] === "<") {
+      depth++;
+    } else if (params[i] === ">") {
+      depth--;
+    } else if (params[i] === "," && depth === 0) {
+      parts.push(params.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(params.slice(start));
+  return parts.map(part => {
+    const match = TUPLE_LABEL_REGEX.exec(part.trim());
+    return match ? { name: match[1], type: match[2] } : { name: null, type: part.trim() };
+  });
+}
+
+/*** A datetime wire string as a `Date`, arrays element-wise; a string that is not an ISO-8601 datetime (`infinity`) is returned as is. ***/
+function reviveDateTime(value: unknown): unknown {
+  if (typeof value === "string") {
+    return parseDateTime(value) ?? value;
+  }
+  return Array.isArray(value) ? value.map(reviveDateTime) : value;
 }
 
 /*** A bytes wire string, or an array of them (`array<bytes>`, or the same field across rows). Anything else is returned as is. ***/

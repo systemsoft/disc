@@ -1290,7 +1290,7 @@ export interface Place {
   /** array<tuple<lat: float64, lng: float64>> */
   route?: { lat: number; lng: number }[] | null;
   /** cal::local_datetime */
-  openedAt?: Date | null;
+  openedAt?: string | null;
   /** (computed) */
   counts?: unknown | null;
   /** Link to Person (one, required) */
@@ -1380,7 +1380,7 @@ export interface PlaceInsert {
   tags?: string[];
   point: { a: number; b: number };
   route?: { lat: number; lng: number }[];
-  openedAt?: Date;
+  openedAt?: string;
   /** UUID of the linked Person */
   owner: string;
   /** UUIDs of linked Person (assigns the full set) */
@@ -1394,7 +1394,7 @@ export interface PlaceUpdate {
   tags?: string[];
   point?: { a: number; b: number };
   route?: { lat: number; lng: number }[];
-  openedAt?: Date;
+  openedAt?: string;
   /** UUID of the linked Person */
   owner?: string;
   /** UUIDs of linked Person: an array replaces the whole set; { add, remove } applies a delta */
@@ -1409,7 +1409,7 @@ export interface PlaceFilterVars {
   tags?: string[];
   point?: { a: number; b: number };
   route?: { lat: number; lng: number }[];
-  openedAt?: Date;
+  openedAt?: string;
   counts?: unknown;
   [key: string]: unknown;
 }
@@ -1422,7 +1422,7 @@ export interface PlaceFilter {
   tags?: string[] | Op<string[]>;
   point?: { a: number; b: number } | Op<{ a: number; b: number }>;
   route?: { lat: number; lng: number }[] | Op<{ lat: number; lng: number }[]>;
-  openedAt?: Date | OrdOp<Date>;
+  openedAt?: string | OrdOp<string>;
   counts?: { videos?: bigint | OrdOp<bigint>; total?: bigint | OrdOp<bigint>; score?: number | OrdOp<number> };
   owner?: PersonFilter;
   members?: PersonFilter;

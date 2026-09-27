@@ -343,17 +343,18 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
 // 3. Codegen type mapping
 // ============================================================
 
-Deno.test("Codegen - cal::local_datetime maps to Date (required)", () => {
+// A local datetime has no zone; a `Date` (an instant) would give it the reader's.
+Deno.test("Codegen - cal::local_datetime maps to string (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", true, false),
-    "Date"
+    "string"
   );
 });
 
-Deno.test("Codegen - cal::local_datetime maps to Date | null (optional)", () => {
+Deno.test("Codegen - cal::local_datetime maps to string | null (optional)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false),
-    "Date | null"
+    "string | null"
   );
 });
 

@@ -899,12 +899,13 @@ class TypeScriptEmitter {
     }
 
     // Link properties' casts, by link: `reviveTyped` reads a linked object's
-    // `"@name"` keys by them (an `int64` one becomes a `bigint`).
+    // `"@name"` keys by them (an `int64` one becomes a `bigint`, a user scalar
+    // by the built-in it extends).
     const typeInfoLinkProperties = obj
       .fields
       .filter(field => field.isLink && field.linkProperties && field.linkProperties.length > 0)
       .map(field => {
-        const casts = field.linkProperties!.map(p => `${p.name}: "${Types.mapEdgeQLTypeToEdgeQLCast(p.sourceType)}"`).join(", ");
+        const casts = field.linkProperties!.map(p => `${p.name}: "${Types.mapEdgeQLTypeToEdgeQLCast(valueType(p))}"`).join(", ");
         return `${field.name}: { ${casts} }`;
       });
     if (typeInfoLinkProperties.length > 0)

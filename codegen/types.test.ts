@@ -68,9 +68,14 @@ Deno.test("Types - arbitrary-precision types map to TS types that keep every dig
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for datetime types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("datetime", true, false), "Date");
-  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false), "Date | null");
+  // A local datetime has no time zone, so a `Date` (an instant) would give it one;
+  // it stays the ISO-8601 string it arrives as, like the other `cal::` types.
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false), "string | null");
   assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_date", true, false), "string");
   assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, true), "string[]");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("duration", true, false), "string");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::relative_duration", true, false), "string");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::date_duration", true, false), "string");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for special types", () => {

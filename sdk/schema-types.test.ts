@@ -176,7 +176,9 @@ declare const _resolveTypeChecks: [
   // otherwise. Full expansion happens via `ResolveSelected` instead.
   Expect<Equal<UserRow["posts"], LinkStub[]>>,
   Expect<Equal<PostRow["author"], LinkStub | null>>,
-  Expect<Equal<PostRow["publishedAt"], Date | null>>
+  Expect<Equal<PostRow["publishedAt"], Date | null>>,
+  // An int64 can exceed 2^53, so it is a bigint, as in the generated client.
+  Expect<Equal<PostRow["score"], bigint>>
 ];
 
 declare const _resolveSelectedChecks: [
@@ -230,18 +232,41 @@ Deno.test("typed filter predicate gets a typed FieldRef per field", async () => 
     }
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
-  // u.email.eq("a@b.c") — string accepted; u.score.gt(10) — number accepted.
+  // p.title.eq("hello") — string accepted; p.score.gt(10n) — bigint accepted,
+  // cast as the schema declares the field (`int64`), not as a JS bigint.
   await qb
     .Post
     .select({ title: true })
-    .filter(p => p.score.gt(10))
+    .filter(p => p.score.gt(10n))
     .filter(p => p.title.eq("hello"));
   assertEquals(calls.length, 1);
   assertEquals(
     calls[0].query,
     "select Post { title } filter (.score > <int64>$p0) and (.title = <str>$p1)"
   );
-  assertEquals(calls[0].variables, { p0: 10, p1: "hello" });
+  assertEquals(calls[0].variables, { p0: 10n, p1: "hello" });
+});
+
+Deno.test("typed results hold the declared types: int64 as bigint, datetime as Date, through links", async () => {
+  const fakeClient = {
+    query: <T = unknown>(): Promise<T> =>
+      Promise.resolve([{
+        author: [{ createdAt: "2026-01-15T10:20:30+00:00" }],
+        publishedAt: null,
+        score: "9007199254740993",
+        title: "x"
+      }] as T)
+  };
+  const qb = createQueryBuilder(fakeClient, blogSchema);
+  const rows = await qb.Post.select({ author: { createdAt: true }, publishedAt: true, score: true, title: true });
+  assertEquals(rows, [{
+    author: [{ createdAt: new Date("2026-01-15T10:20:30Z") }] as unknown as { createdAt: Date; },
+    publishedAt: null,
+    score: 9007199254740993n,
+    title: "x"
+  }]);
+  const first = await qb.Post.select({ score: true }).first();
+  assertEquals(first?.score, 9007199254740993n);
 });
 
 Deno.test("typed orderBy + limit + offset chain compose without losing type info", async () => {

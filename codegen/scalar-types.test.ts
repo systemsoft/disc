@@ -157,4 +157,6 @@ Deno.test("codegen scalars - the TypeScript client types and casts a shared scal
   assertStringIncludes(queries, "amounts: \"<array<decimal>>\"");
   assertStringIncludes(queries, "pair: \"<tuple<mine: decimal, theirs: int64>>\"");
   assertStringIncludes(queries, "pair: \"<tuple<int64, decimal>>\"");
+  // `reviveTyped` reads a link property by its built-in type, not the scalar's name.
+  assertStringIncludes(queries, "linkProperties: { accounts: { fee: \"<int64>\" } }");
 });

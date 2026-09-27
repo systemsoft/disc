@@ -270,6 +270,84 @@ Deno.test("reviveTyped - int64 fields of linked objects and link properties beco
   assertEquals(reviveTyped(wire({ tag: [{ "@weight": 5 }] }), item), { tag: [{ "@weight": 5 }] });
 });
 
+const TEMPORAL_INFO: TypeInfo = {
+  casts: {
+    at: "<datetime>",
+    ats: "<array<datetime>>",
+    day: "<cal::local_date>",
+    local: "<cal::local_datetime>",
+    marks: "<datetime>",
+    span: "<duration>",
+    time: "<cal::local_time>"
+  },
+  linkProperties: { next: { since: "<datetime>" } },
+  links: { next: () => TEMPORAL_INFO },
+  multi: ["marks"]
+};
+
+Deno.test("reviveTyped - <datetime> fields become Date, in arrays, multi properties, links and link properties", () => {
+  const out = reviveTyped(
+    wire([{
+      at: "2026-01-15T10:20:30.123456+00:00",
+      ats: ["2026-01-15T10:20:30+00:00", null],
+      marks: ["2026-01-15T10:20:30.000Z"],
+      next: [{ "@since": "2026-02-01T00:00:00+00:00", at: "2026-03-01T00:00:00+05:30" }]
+    }]),
+    TEMPORAL_INFO
+  );
+  assertEquals(out, [{
+    at: new Date("2026-01-15T10:20:30.123Z"),
+    ats: [new Date("2026-01-15T10:20:30Z"), null],
+    marks: [new Date("2026-01-15T10:20:30Z")],
+    next: [{ "@since": new Date("2026-02-01T00:00:00Z"), at: new Date("2026-02-28T18:30:00Z") }]
+  }]);
+  assertEquals(reviveTyped(wire({ at: null }), TEMPORAL_INFO), { at: null });
+  // Something that is not a datetime is left as is rather than made an Invalid Date.
+  assertEquals(reviveTyped(wire({ at: "infinity" }), TEMPORAL_INFO), { at: "infinity" });
+});
+
+Deno.test("reviveTyped - a value that is already revived is kept", () => {
+  const at = new Date("2026-01-15T10:20:30Z");
+  assertEquals(reviveTyped(wire({ at, ats: [at] }), TEMPORAL_INFO), { at, ats: [at] });
+});
+
+Deno.test("reviveTyped - local date/time and duration fields stay strings", () => {
+  const row = { day: "2026-01-15", local: "2026-01-15T10:20:30", span: "01:02:00", time: "10:20:30.5" };
+  assertEquals(reviveTyped(wire(row), TEMPORAL_INFO), row);
+});
+
+const TUPLE_INFO: TypeInfo = {
+  casts: {
+    pair: "<tuple<int64, str>>",
+    pairs: "<array<tuple<int64, str>>>",
+    stamp: "<tuple<n: bigint, at: datetime, day: cal::local_date>>",
+    tagged: "<tuple<int64, str>>"
+  },
+  links: {},
+  multi: ["tagged"]
+};
+
+Deno.test("reviveTyped - int64 and datetime inside tuples, named tuples and arrays of tuples", () => {
+  assertEquals(
+    reviveTyped(
+      wire({
+        pair: ["9007199254740993", "x"],
+        pairs: [[1, "a"], ["9007199254740993", "b"]],
+        stamp: { at: "2026-01-15T10:20:30+00:00", day: "2026-01-15", n: 5 },
+        tagged: [[1, "a"], [2, "b"]]
+      }),
+      TUPLE_INFO
+    ),
+    {
+      pair: [9007199254740993n, "x"],
+      pairs: [[1n, "a"], [9007199254740993n, "b"]],
+      stamp: { at: new Date("2026-01-15T10:20:30Z"), day: "2026-01-15", n: 5n },
+      tagged: [[1n, "a"], [2n, "b"]]
+    }
+  );
+  assertEquals(reviveTyped(wire({ pair: null, pairs: [null] }), TUPLE_INFO), { pair: null, pairs: [null] });
+});
+
 Deno.test("reviveTyped - accepts the hex form an older server sends", () => {
   assertEquals(reviveTyped(wire({ content: "\\x0102" }), OBJECT_INFO), { content: new Uint8Array([1, 2]) });
 });

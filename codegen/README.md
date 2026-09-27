@@ -370,24 +370,29 @@ Re-exports everything from `types.ts`, `queries.ts`, and `client.ts`.
 
 EdgeQL types are mapped to TypeScript types:
 
-| EdgeQL Type           | TypeScript Type | Nullable             |
-| --------------------- | --------------- | -------------------- |
-| `str`                 | `string`        | `string \| null`     |
-| `bool`                | `boolean`       | `boolean \| null`    |
-| `int16`, `int32`      | `number`        | `number \| null`     |
-| `int64`, `bigint`     | `bigint`        | `bigint \| null`     |
-| `float32`, `float64`  | `number`        | `number \| null`     |
-| `decimal`             | `string`        | `string \| null`     |
-| `uuid`                | `string`        | `string \| null`     |
-| `datetime`            | `Date`          | `Date \| null`       |
-| `duration`            | `string`        | `string \| null`     |
-| `bytes`               | `Uint8Array`    | `Uint8Array \| null` |
-| `json`                | `unknown`       | `unknown \| null`    |
-| `cal::local_datetime` | `Date`          | `Date \| null`       |
-| `cal::local_date`     | `string`        | `string \| null`     |
-| `cal::local_time`     | `string`        | `string \| null`     |
+| EdgeQL Type                                    | TypeScript Type | Nullable             |
+| ---------------------------------------------- | --------------- | -------------------- |
+| `str`                                          | `string`        | `string \| null`     |
+| `bool`                                         | `boolean`       | `boolean \| null`    |
+| `int16`, `int32`                               | `number`        | `number \| null`     |
+| `int64`, `bigint`                              | `bigint`        | `bigint \| null`     |
+| `float32`, `float64`                           | `number`        | `number \| null`     |
+| `decimal`                                      | `string`        | `string \| null`     |
+| `uuid`                                         | `string`        | `string \| null`     |
+| `datetime`                                     | `Date`          | `Date \| null`       |
+| `duration`                                     | `string`        | `string \| null`     |
+| `bytes`                                        | `Uint8Array`    | `Uint8Array \| null` |
+| `json`                                         | `unknown`       | `unknown \| null`    |
+| `cal::local_datetime`                          | `string`        | `string \| null`     |
+| `cal::local_date`                              | `string`        | `string \| null`     |
+| `cal::local_time`                              | `string`        | `string \| null`     |
+| `cal::relative_duration`, `cal::date_duration` | `string`        | `string \| null`     |
 
-`int64`, `bigint` and `decimal` keep every digit: the server sends them as exact JSON numbers and the query builders' `reviveTyped` returns an `int64` or `bigint` field as a `bigint` and a `decimal` field as a string of its digits -- in the rows `select`, `selectById`, `filter`, `insert` and `update` return, in arrays and multi properties, on linked objects and in link properties (`"@weight"`; `_typeInfo.linkProperties` lists their casts). Unlike Gel's JS client, which reads `int64` as a `number`, an `int64` is never rounded. A `bigint` works wherever a query builder takes a value (insert and update data, filter values): it is sent as its digits. Raw `client.query()` results are not revived by type — see `sdk/codecs.ts`.
+Collections map element-wise: `array<T>` is `T[]`, `tuple<T, U>` is `[T, U]` and `tuple<a: T, b: U>` is `{ a: T; b: U }`. A user scalar has the type of the built-in it extends (`scalar type Tally extending int64` is a `bigint`).
+
+A `datetime` is a `Date`: the query builders' `reviveTyped` turns the ISO-8601 string it arrives as into one. A `Date` works wherever a query builder takes a `datetime` (insert and update data, filter values); it is sent as its ISO-8601 string. A `Date` holds milliseconds, so a `datetime`'s microseconds are dropped when it is read. The local types have no time zone and a `Date` is an instant, so turning one into a `Date` would give it the reader's zone and shift it; like `duration`, they stay the strings they arrive as and are written as strings: `cal::local_datetime` as `2026-01-15T10:20:30`, `cal::local_date` as `2026-01-15`, `cal::local_time` as `10:20:30.5` (Gel's JS client has `LocalDateTime`/`LocalDate`/`LocalTime`/`Duration` classes for them; Disc keeps the text).
+
+`int64`, `bigint` and `decimal` keep every digit: the server sends them as exact JSON numbers and the query builders' `reviveTyped` returns an `int64` or `bigint` field as a `bigint` and a `decimal` field as a string of its digits -- in the rows `select`, `selectById`, `filter`, `insert` and `update` return, in arrays, tuples, named tuples and multi properties, for user scalars extending them, on linked objects and in link properties (`"@weight"`; `_typeInfo.linkProperties` lists their casts). The same holds for `datetime` (a `Date`) and `bytes` (a `Uint8Array`). Unlike Gel's JS client, which reads `int64` as a `number`, an `int64` is never rounded. A `bigint` works wherever a query builder takes a value (insert and update data, filter values): it is sent as its digits. Raw `client.query()` results are not revived by type — see `sdk/codecs.ts`.
 
 The Go and Rust clients read and send the same exact JSON numbers: in Go `bigint` and `decimal` are `json.Number` and `int64` is `int64`; in Rust they are `ExactNumber` (a `serde_json::Number`, with serde_json's `arbitrary_precision` feature enabled in the generated `Cargo.toml`) and `i64`.
 

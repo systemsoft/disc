@@ -56,7 +56,8 @@ export const t = {
   bool: (): Scalar<"bool", boolean> => ({ kind: "scalar", typeName: "bool" }),
   int16: (): Scalar<"int16", number> => ({ kind: "scalar", typeName: "int16" }),
   int32: (): Scalar<"int32", number> => ({ kind: "scalar", typeName: "int32" }),
-  int64: (): Scalar<"int64", number> => ({ kind: "scalar", typeName: "int64" }),
+  /*** An int64 can exceed `Number.MAX_SAFE_INTEGER`, so it is a `bigint` (as in the generated client). ***/
+  int64: (): Scalar<"int64", bigint> => ({ kind: "scalar", typeName: "int64" }),
   float32: (): Scalar<"float32", number> => ({
     kind: "scalar",
     typeName: "float32"

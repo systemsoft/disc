@@ -112,6 +112,39 @@ Deno.test("normalizeRows - the bytes form is the one the SDK decodes back to the
   assertEquals(parseBytes(wire[0].content), bytes);
 });
 
+/*** PostgreSQL type OIDs of `timestamp`, `timestamp[]`, `date` and `date[]`. ***/
+const TIMESTAMP = 1114;
+const TIMESTAMP_ARRAY = 1115;
+const DATE = 1082;
+const DATE_ARRAY = 1182;
+
+Deno.test("normalizeRows - timestamp (cal::local_datetime) and date (cal::local_date) keep their wall-clock text, as in a shape", () => {
+  // The driver decodes both as a Date in the server's local time zone, which
+  // JSON.stringify would shift to UTC; they are written back as the local text.
+  const columnTypes = { day: DATE, days: DATE_ARRAY, local: TIMESTAMP, locals: TIMESTAMP_ARRAY, whole: TIMESTAMP };
+  const [row] = normalizeRows([{
+    day: new Date(2026, 0, 15),
+    days: [new Date(2026, 11, 31), null],
+    local: new Date(2026, 0, 15, 10, 20, 30, 500),
+    locals: [new Date(2026, 0, 15, 23, 59, 59, 123)],
+    whole: new Date(2026, 0, 15, 10, 20, 30)
+  }], columnTypes);
+
+  assertEquals(row, {
+    day: "2026-01-15",
+    days: ["2026-12-31", null],
+    local: "2026-01-15T10:20:30.5",
+    locals: ["2026-01-15T23:59:59.123"],
+    whole: "2026-01-15T10:20:30"
+  });
+  assertEquals(normalizeRows([{ day: Infinity, local: -Infinity }], columnTypes), [{ day: "infinity", local: "-infinity" }]);
+});
+
+Deno.test("normalizeRows - timestamptz (datetime) stays a Date, written as an ISO-8601 instant", () => {
+  const at = new Date("2026-01-15T10:20:30Z");
+  assertStrictEquals(normalizeRows([{ at }], { at: 1184 })[0].at, at);
+});
+
 // --- Both protocol handlers, on a cache miss and on a cache hit ---
 
 function makeContext(): Types.QueryContext {

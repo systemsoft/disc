@@ -136,7 +136,7 @@ const rows = await client.query("select Post { created }", undefined, {
 });
 ```
 
-Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so name the fields instead: `{ revive: { bytes: ["content", "obj.content"] } }` (dot paths relative to a result row; arrays are transparent). Generated query builders revive `bytes` fields on their own, and return `bigint` fields as `bigint` and `decimal` fields as strings.
+Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so name the fields instead: `{ revive: { bytes: ["content", "obj.content"] } }` (dot paths relative to a result row; arrays are transparent). Generated query builders revive by the schema's types on their own: `bytes` fields as `Uint8Array`, `int64` and `bigint` fields as `bigint`, `decimal` fields as strings and `datetime` fields as `Date` (inside arrays and tuples too); `cal::` local types and durations stay strings.
 
 `revive` runs _before_ `validate`, so validators see real `Date` and `bigint` values.
 
@@ -281,6 +281,8 @@ const rows = await qb.User.select({ email: true, posts: { title: true } });
 ```
 
 Markers: `t.str()`, `t.bool()`, `t.int16/int32/int64()`, `t.float32/float64()`, `t.bigint()`, `t.datetime()`, `t.bytes()`, `t.uuid()`, `t.json()`, plus `t.optional(inner)`, `t.single(Target)`, and `t.multi(Target)`.
+
+Results hold the markers' TS types: an `int64` or `bigint` is a `bigint`, a `datetime` a `Date` and `bytes` a `Uint8Array`, on linked objects too, as in the generated client. A filter value is cast as its field's marker declares (`p.score.gt(10n)` compiles to `.score > <int64>$p0`).
 
 With a schema attached, `qb.Typo` throws at property access with the list of declared types, instead of sending a doomed query. `defineSchema()` itself rejects non-PascalCase type names and malformed field names at call time.
 

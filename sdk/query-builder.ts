@@ -17,6 +17,7 @@
 
 import type {
   DiscSchema,
+  FieldMarker,
   FieldType,
   ResolveSelected,
   ResolveType,
@@ -24,6 +25,8 @@ import type {
   SelectShape
 } from "./schema-types.ts";
 import type { QueryOptions } from "./types.ts";
+import type { TypeInfo } from "./filter-compiler.ts";
+import { reviveTyped } from "./codecs.ts";
 import { escapeEdgeQLIdent } from "./edgeql-ident.ts";
 
 /** Minimum surface a client must expose to be awaitable from the builder. */
@@ -155,6 +158,8 @@ function inferCast(value: unknown): string {
 }
 
 interface CompileCtx {
+  /** The schema's cast of each field (`<int64>`), when the chain has a schema; else a value's cast is inferred from its JS type. */
+  casts?: Record<string, string>;
   vars: Record<string, unknown>;
   nextN: number;
 }
@@ -179,7 +184,7 @@ function compileExpr(arg: FilterArg, ctx: CompileCtx): string {
     case "binop": {
       const param = `p${ctx.nextN++}`;
       ctx.vars[param] = arg.value;
-      return `.${escapeEdgeQLIdent(arg.field)} ${arg.op} <${inferCast(arg.value)}>$${param}`;
+      return `.${escapeEdgeQLIdent(arg.field)} ${arg.op} ${ctx.casts?.[arg.field] ?? `<${inferCast(arg.value)}>`}$${param}`;
     }
     case "exists":
       return `exists .${escapeEdgeQLIdent(arg.field)}`;
@@ -242,11 +247,14 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
   private limitN: number | null = null;
   private offsetN: number | null = null;
   private readonly client: QueryRunner | null;
+  /** From the schema (`createQueryBuilder(client, schema)`): casts filter values by field and revives results into the declared types. */
+  private readonly typeInfo: TypeInfo | null;
 
-  constructor(typeName: string, client: QueryRunner | null = null) {
+  constructor(typeName: string, client: QueryRunner | null = null, typeInfo: TypeInfo | null = null) {
     assertIdent(typeName, "type name");
     this.typeName = typeName;
     this.client = client;
+    this.typeInfo = typeInfo;
   }
 
   select(shape: Shape): this {
@@ -290,7 +298,7 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
   }
 
   toEdgeQL(): CompiledQuery {
-    const ctx: CompileCtx = { vars: {}, nextN: 0 };
+    const ctx: CompileCtx = { casts: this.typeInfo?.casts, vars: {}, nextN: 0 };
     const parts: string[] = [`select ${this.typeName}`];
 
     if (this.shape) {
@@ -330,11 +338,12 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
       );
     }
     const compiled = this.toEdgeQL();
-    return await this.client.query<R>(
+    const result = await this.client.query<R>(
       compiled.query,
       compiled.variables,
       options
     );
+    return this.typeInfo ? reviveTyped(result, this.typeInfo) : result;
   }
 
   /**
@@ -456,6 +465,7 @@ export function createQueryBuilder(
   schema?: DiscSchema<SchemaSpec>
   // deno-lint-ignore no-explicit-any
 ): any {
+  const typeInfos = schema ? schemaTypeInfos(schema.spec) : null;
   return new Proxy({} as QueryBuilder, {
     get(_target, prop) {
       if (typeof prop !== "string") {
@@ -468,7 +478,36 @@ export function createQueryBuilder(
           `Type ${JSON.stringify(prop)} is not defined in the schema. Available: ${Object.keys(schema.spec).join(", ")}`
         );
       }
-      return new SelectChain(prop, client);
+      return new SelectChain(prop, client, typeInfos?.get(prop) ?? null);
     }
   });
+}
+
+/**
+ * Each type's `TypeInfo`, from its field markers: a scalar's cast is its type
+ * name (`t.int64()` → `<int64>`), a link reads its target's. `reviveTyped`
+ * turns results into the markers' TS types by them (`int64` → `bigint`,
+ * `datetime` → `Date`, `bytes` → `Uint8Array`).
+ */
+function schemaTypeInfos(spec: SchemaSpec): Map<string, TypeInfo> {
+  const infos = new Map<string, TypeInfo>();
+  for (const typeName of Object.keys(spec)) {
+    infos.set(typeName, { casts: {}, links: {} });
+  }
+  for (const [typeName, fields] of Object.entries(spec)) {
+    const info = infos.get(typeName)!;
+    for (const [fieldName, marker] of Object.entries(fields)) {
+      let cursor: FieldMarker = marker;
+      while (cursor.kind === "optional") {
+        cursor = cursor.inner;
+      }
+      if (cursor.kind === "scalar") {
+        info.casts[fieldName] = `<${cursor.typeName}>`;
+      } else {
+        const target = infos.get(cursor.target)!;
+        info.links[fieldName] = () => target;
+      }
+    }
+  }
+  return infos;
 }
