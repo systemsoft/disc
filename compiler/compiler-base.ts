@@ -457,9 +457,17 @@ export abstract class CompilerBase {
       };
 
       this.accessEvaluator = new AccessEvaluator(config);
+      this.accessEvaluator.setGlobalResolver((name, objectType) => this.policyGlobalSql(name, objectType));
       this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
     }
   }
+
+  /**
+   * The SQL value of the custom global `name` read by a policy of
+   * `objectType` (resolved in that type's module), or undefined when the
+   * schema declares no such global.
+   */
+  protected abstract policyGlobalSql(name: string, objectType: string | undefined): string | undefined;
 
   /**
    * Register an access policy (only works if access control is enabled)
@@ -626,8 +634,9 @@ export abstract class CompilerBase {
 
   /**
    * A mutation's target table where the statement reads it as a table (the
-   * source rows of a multi-link update). Like `UPDATE <table>`, it carries
-   * the mutation's own policy, not the select policy.
+   * source rows of a multi-link update). Like `UPDATE <table>`, it is
+   * narrowed by the mutation's own row condition (select and update policy
+   * together), not by this pass.
    */
   protected mutationTargetTable(typeDef: Context.TypeDef): SQL.TableReference {
     const table = SQL.createTableReference(typeDef.tableName);
@@ -645,7 +654,8 @@ export abstract class CompilerBase {
    * a `with` binding, a `for` iterator, a path's hops, a sub-shape, a
    * subquery in a filter — whatever feature built the read. Mutation targets
    * (`UPDATE t`, `DELETE FROM t`, `INSERT INTO t`) are plain names, not
-   * table references, and keep their own update/delete/insert policy.
+   * table references: an update or delete narrows its target itself, by the
+   * select policy and its own (see `mutationRowCondition`).
    *
    * `shadowed` holds the CTE names in scope: a reference to one reads the
    * CTE, not a table of the same name. A non-recursive CTE sees only the

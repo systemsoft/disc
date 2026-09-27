@@ -1829,10 +1829,11 @@ export class SDLParser {
       return this.parseEdgeQLExpression();
     }
 
+    // `global name` or `global module::name`.
     if (this.check(TokenType.GLOBAL)) {
       this.advance();
-      const name = this.parseIdentifier();
-      return { kind: "PathExpression", path: ["global", name.value] };
+      const name = this.parseQualifiedName();
+      return { kind: "PathExpression", path: ["global", name.parts.join("::")] };
     }
 
     // Identifier or qualified name (could be function name)

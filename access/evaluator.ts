@@ -11,6 +11,7 @@
 
 import { assertSafeIdentifier, sqlStringLiteral } from "../lib/sql-escape.ts";
 import { ValidationError } from "../lib/errors.ts";
+import { globalSettingName } from "../lib/identifiers.ts";
 
 import type {
   AccessComparisonNode,
@@ -25,14 +26,23 @@ import {
   AccessConfig,
   AccessContext,
   AccessDecision,
+  AccessGlobalResolver,
   AccessOperation,
   AccessPolicy
 } from "./types.ts";
 
 /*** EXPORT ------------------------------------------- ***/
 
+/**
+ * The globals a policy reads from the request's access context (the caller's
+ * identity), decided at compile time. Every other global is a custom global:
+ * session state `set global` stores in PostgreSQL, read by the policy's SQL.
+ */
+export const BUILTIN_ACCESS_GLOBALS: ReadonlySet<string> = new Set(["current_role", "current_session", "current_user"]);
+
 export class AccessEvaluator {
   private config: AccessConfig;
+  private globalResolver?: AccessGlobalResolver;
   private policies: Map<string, AccessPolicy[]>;
 
   constructor(config: AccessConfig) {
@@ -150,12 +160,14 @@ export class AccessEvaluator {
 
   /**
    * Convert an access expression AST node to a SQL WHERE clause fragment.
+   * `objectType` is the type whose policy the expression belongs to; a custom
+   * global is resolved in its module.
    */
-  expressionToSQL(expr: AccessExpressionNode, context: AccessContext): string {
+  expressionToSQL(expr: AccessExpressionNode, context: AccessContext, objectType?: string): string {
     switch (expr.kind) {
       case "AccessComparison": {
-        const left = this.expressionToSQL(expr.left, context);
-        const right = this.expressionToSQL(expr.right, context);
+        const left = this.expressionToSQL(expr.left, context, objectType);
+        const right = this.expressionToSQL(expr.right, context, objectType);
 
         return `(${left} ${expr.operator} ${right})`;
       }
@@ -181,7 +193,7 @@ export class AccessEvaluator {
 
         const args = expr
           .args
-          .map(arg => this.expressionToSQL(arg, context))
+          .map(arg => this.expressionToSQL(arg, context, objectType))
           .join(", ");
 
         return `${expr.name}(${args})`;
@@ -209,12 +221,29 @@ export class AccessEvaluator {
           }
 
           default: {
-            /*** Custom globals use PG current_setting mechanism. The global
-                 name came from SDL and is validated to be a safe identifier
-                 before being composed into the setting key — avoids an
-                 injection via `current_setting('global default::…')`. ***/
-            assertSafeIdentifier(expr.name, "AccessGlobal");
-            return `current_setting('global default::${expr.name}', true)`;
+            /*** A custom global is the value the context supplies for it, if
+                 any (as in `evaluateGlobal`). Otherwise it is read from the
+                 setting `set global` writes: its declaration (type, default)
+                 resolved by the compiler when one is set, else the untyped
+                 setting of the global's name (default module when unqualified). An unset setting reads as '' once
+                 any transaction has set it, so '' is no value. Each part of the
+                 name is validated as a safe identifier before it is composed
+                 into the setting key. ***/
+            if (context.globals?.has(expr.name))
+              return globalValueToSQL(context.globals.get(expr.name));
+
+            const resolved = this.globalResolver?.(expr.name, objectType);
+
+            if (resolved !== undefined)
+              return resolved;
+
+            const separator = expr.name.lastIndexOf("::");
+            const module = separator === -1 ? "default" : expr.name.slice(0, separator);
+            const name = separator === -1 ? expr.name : expr.name.slice(separator + 2);
+
+            assertSafeIdentifier(module, "AccessGlobal");
+            assertSafeIdentifier(name, "AccessGlobal");
+            return `NULLIF(current_setting('${globalSettingName(module, name)}', true), '')`;
           }
         }
       }
@@ -228,9 +257,9 @@ export class AccessEvaluator {
 
       case "AccessLogical": {
         if (expr.operator === "not")
-          return `NOT (${this.expressionToSQL(expr.operands[0], context)})`;
+          return `NOT (${this.expressionToSQL(expr.operands[0], context, objectType)})`;
 
-        const parts = expr.operands.map(op => this.expressionToSQL(op, context));
+        const parts = expr.operands.map(op => this.expressionToSQL(op, context, objectType));
         return `(${parts.join(` ${expr.operator.toUpperCase()} `)})`;
       }
 
@@ -258,6 +287,13 @@ export class AccessEvaluator {
     }
 
     return all;
+  }
+
+  /**
+   * Set how a custom global in a policy becomes SQL (see `AccessGlobalResolver`).
+   */
+  setGlobalResolver(resolver: AccessGlobalResolver): void {
+    this.globalResolver = resolver;
   }
 
   /**
@@ -466,8 +502,10 @@ export class AccessEvaluator {
       if (!this.operationMatches(operation, action.operations))
         continue;
 
-      // Evaluate condition if present
-      if (policy.condition) {
+      /*** Evaluate condition if present. A custom global the context does not supply is
+           session state only the policy's SQL can read, so a condition over one is left to
+           the SQL. ***/
+      if (policy.condition && !readsSessionGlobal(policy.condition, context)) {
         const conditionMet = this.evaluateExpression(policy.condition, context);
 
         if (!conditionMet)
@@ -480,7 +518,7 @@ export class AccessEvaluator {
 
         // Generate SQL condition for row-level security
         if (policy.using && this.config.enableRLS)
-          sqlCondition = this.expressionToSQL(policy.using, context);
+          sqlCondition = this.expressionToSQL(policy.using, context, policy.objectType);
       } else {
         denied = true;
       }
@@ -510,5 +548,46 @@ export class AccessEvaluator {
     }
 
     return current;
+  }
+}
+
+/*** HELPER ------------------------------------------- ***/
+
+/*** A value from `AccessContext.globals` as a SQL literal. ***/
+function globalValueToSQL(value: unknown): string {
+  if (value === null || value === undefined)
+    return "NULL";
+
+  if (typeof value === "boolean")
+    return value ? "TRUE" : "FALSE";
+
+  if (typeof value === "number" && Number.isFinite(value))
+    return String(value);
+
+  return sqlStringLiteral(String(value));
+}
+
+/*** True when `expr` reads a custom global that `context.globals` does not supply. ***/
+function readsSessionGlobal(expr: AccessExpressionNode, context: AccessContext): boolean {
+  switch (expr.kind) {
+    case "AccessGlobal": {
+      return !BUILTIN_ACCESS_GLOBALS.has(expr.name) && !context.globals?.has(expr.name);
+    }
+
+    case "AccessComparison": {
+      return readsSessionGlobal(expr.left, context) || readsSessionGlobal(expr.right, context);
+    }
+
+    case "AccessLogical": {
+      return expr.operands.some(operand => readsSessionGlobal(operand, context));
+    }
+
+    case "AccessFunction": {
+      return expr.args.some(arg => readsSessionGlobal(arg, context));
+    }
+
+    default: {
+      return false;
+    }
   }
 }

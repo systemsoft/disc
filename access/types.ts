@@ -97,6 +97,13 @@ export interface AccessDecision {
 }
 
 /**
+ * The SQL value of the custom global `name` (bare or `module::name`) read by a
+ * policy of `objectType`, or undefined when the schema declares no such
+ * global. Supplied by the compiler, which knows the schema's globals.
+ */
+export type AccessGlobalResolver = (name: string, objectType: string | undefined) => string | undefined;
+
+/**
  * Policy evaluation mode
  */
 export type PolicyMode = "permissive" | "restrictive";

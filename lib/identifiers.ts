@@ -89,6 +89,16 @@ export function sequenceName(module: string, name: string): string {
   return fitIdentifier((module === "default" ? `disc_seq_${name}` : `disc_seq_${module.replaceAll("::", "__")}__${name}`).toLowerCase());
 }
 
+/**
+ * The PostgreSQL setting that holds the global `module::name` for a session:
+ * `disc.global_<module>__<name>`. `set global` writes it (`set_config`), and
+ * every read of the global — in a query or an access policy — reads it
+ * (`current_setting`), so both must take the name from here.
+ */
+export function globalSettingName(module: string, name: string): string {
+  return `disc.global_${module}__${name}`;
+}
+
 /** PostgreSQL truncates identifiers to `NAMEDATALEN - 1` bytes, silently. */
 export const PG_MAX_IDENTIFIER_BYTES = 63;
 

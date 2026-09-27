@@ -34,7 +34,7 @@ export class AccessSQLInjector {
    * denied INSERT/UPDATE/DELETE raises a generic
    * `new row violates row-level security policy` error. Custom
    * `errmessage` values therefore only apply to queries that go through
-   * the application-level evaluator (compiler.ts and compiler-with-access.ts).
+   * the application-level evaluator (compiler.ts).
    */
   generateRLSPolicies(tableName: string, objectType: string): string[] {
     const policies = this.evaluator.getPolicies(objectType);

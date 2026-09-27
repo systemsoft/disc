@@ -398,11 +398,15 @@ Deno.test({
         }
       );
 
+      // Both rows are visible: an object that cannot be selected cannot be
+      // updated either (Gel), so without a select policy nothing would change.
+      const visible = buildPolicy("visible", "UpdatableUser", true, ["select"]);
+
       // Compile UPDATE with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
         "update UpdatableUser set { status := \"inactive\" }",
         schema,
-        [policy],
+        [policy, visible],
         DEFAULT_ACCESS_CONFIG,
         { userId: uuid1 }
       );
@@ -483,11 +487,15 @@ Deno.test({
         }
       );
 
+      // Both rows are visible: an object that cannot be selected cannot be
+      // deleted either (Gel), so without a select policy nothing would go.
+      const visible = buildPolicy("visible", "DeletableUser", true, ["select"]);
+
       // Compile DELETE with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
         "delete DeletableUser",
         schema,
-        [policy],
+        [policy, visible],
         DEFAULT_ACCESS_CONFIG,
         { userId: uuid1 }
       );

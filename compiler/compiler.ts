@@ -9,10 +9,12 @@
  */
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
@@ -58,8 +60,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       // Select policies: every read of an object type's table — the top-level
       // select's, and those in a with binding, a for iterator, a path, a
       // sub-shape or a subquery — keeps only the rows the policy shows.
-      // Mutations apply their own policy where they are compiled (see
-      // mutationAccessCondition).
+      // Mutations apply their own policy where they are compiled — for an
+      // update or delete, together with the select policy (see
+      // mutationRowCondition).
       this.restrictObjectReads(statement, new Set());
 
       return Ok(statement);
@@ -117,18 +120,31 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   /**
-   * The update or delete policy's row predicate for a statement on `typeDef`
-   * (see `mutationAccessCondition`). In the body of a `for` over objects the
-   * statement also reads the iterator, whose columns have the table's names,
-   * so the policy's unqualified columns are read from the table's own rows:
-   * `"<table>"."id" IN (SELECT "id" FROM "<table>" WHERE <policy>)`.
+   * The rows of `typeDef` an update or delete may touch, as a predicate on the
+   * statement's target: those the select policy shows AND the update or
+   * delete policy allows — as in Gel, "any object that cannot be selected,
+   * cannot be modified either". Throws when the operation itself is denied
+   * (see `mutationAccessCondition`); a denied select leaves no rows (FALSE).
+   *
+   * The policies' columns are unqualified, which holds directly over the
+   * target table. Where the statement also reads other rows with the same
+   * column names — the iterator of a `for` over objects, or `excluded` in an
+   * upsert's ON CONFLICT … DO UPDATE (`qualified`) — they are read from the
+   * table's own rows instead:
+   * `"<table>"."id" IN (SELECT "id" FROM "<table>" WHERE <policies>)`.
    */
   private mutationRowCondition(
     typeDef: Context.TypeDef,
-    operation: "update" | "delete"
+    operation: "update" | "delete",
+    qualified = this.mutationReadsIterator
   ): SQL.SQLExpression | undefined {
-    const condition = this.mutationAccessCondition(typeDef.name, operation);
-    if (!condition || !this.mutationReadsIterator) {
+    const allowed = this.mutationAccessCondition(typeDef.name, operation);
+    const selectable = this.selectPolicyFilter(typeDef);
+    // An `allow all` policy gives select and the operation the same predicate; it is kept once.
+    const same = selectable && allowed &&
+      new SQLCodeGenerator().generateExpression(selectable) === new SQLCodeGenerator().generateExpression(allowed);
+    const condition = selectable && allowed && !same ? SQL.createBinaryExpression("AND", selectable, allowed) : selectable ?? allowed;
+    if (!condition || !qualified) {
       return condition;
     }
 
@@ -392,17 +408,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           );
         }
 
-        // The else branch overwrites an existing row, so it answers to the
-        // update policy (throws when denied). ON CONFLICT … DO UPDATE does not
-        // carry a policy's row predicate — policy predicates use unqualified
-        // columns, ambiguous there between the target row and `excluded` —
-        // so a row-level policy fails closed.
-        if (this.mutationAccessCondition(typeDef.name, "update")) {
-          throw new CompilationError(
-            `Upsert (unless conflict … else update) is not supported on '${typeDef.name}' because it has a row-level update policy. ` +
-              "Use a separate update, or the service credential."
-          );
-        }
+        // The else branch overwrites the conflicting row, so it answers to
+        // the select and update policies like any update (throws when update
+        // is denied): a conflicting row they exclude is left as it is, and
+        // the statement returns no row.
+        const updatable = this.mutationRowCondition(typeDef, "update", true);
 
         // `set` and `filter` read the conflicting row, so they compile with the
         // type in scope: paths qualify with the table name, which in ON
@@ -413,6 +423,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           typeDef,
           () => this.compileUpsertUpdateAction(typeName, updateQuery)
         );
+        if (updatable) {
+          updateAction.where = updateAction.where ? SQL.createBinaryExpression("AND", updatable, updateAction.where) : updatable;
+        }
 
         onConflict = {
           kind: "OnConflictClause",
@@ -1740,13 +1753,34 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   /**
-   * Compile a GlobalRef expression to SQL.
+   * The value of `globalDef` in this session, as queries and access policies
+   * read it: the setting `set global` wrote (`GlobalDef.pgSettingName`), cast
+   * to the global's type, else its default. `current_setting` with missing_ok
+   * gives NULL for a setting never set on the connection, and '' for one a
+   * finished transaction set locally — both mean the global has no value.
    *
-   * Produces: current_setting('disc.global_default__current_user_id', true)::uuid
-   *
-   * Uses PostgreSQL's current_setting() with the missing_ok flag set to true
-   * so that unset globals return NULL rather than raising an error.
+   * Produces: COALESCE(CAST(NULLIF(current_setting('<setting>', true), '') AS <type>), <default>)
    */
+  private globalValue(globalDef: Context.GlobalDef): SQL.SQLExpression {
+    const setting = SQL.createFunctionCall("current_setting", [
+      SQL.createLiteral("string", globalDef.pgSettingName),
+      SQL.createLiteral("boolean", true)
+    ]);
+    const value = SQL.createCastExpression(SQL.createFunctionCall("NULLIF", [setting, SQL.createLiteral("string", "")]), globalDef.pgType);
+    if (globalDef.default === undefined) {
+      return value;
+    }
+    const fallback = this.compileExpression(new EdgeQLParser(globalDef.default).parseExpressionOnly());
+    return SQL.createFunctionCall("COALESCE", [value, SQL.createCastExpression(fallback, globalDef.pgType)]);
+  }
+
+  protected policyGlobalSql(name: string, objectType: string | undefined): string | undefined {
+    const module = [...this.ctx.schema.types.values()].find(typeDef => typeDef.name === objectType)?.module;
+    const globalDef = Context.resolveGlobal(this.ctx.schema, name, module);
+    return globalDef ? new SQLCodeGenerator().generateExpression(this.globalValue(globalDef)) : undefined;
+  }
+
+  /*** Compile a GlobalRef expression to SQL: the global's value (see `globalValue`). ***/
   protected compileGlobalRef(expr: EdgeQLAST.GlobalRef): SQL.SQLExpression {
     const qualifiedName = expr.module ?
       `${expr.module}::${expr.name}` :
@@ -1760,12 +1794,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       throw new CompilationError(`Unknown global: ${qualifiedName}`);
     }
 
-    const functionCall = SQL.createFunctionCall("current_setting", [
-      SQL.createLiteral("string", globalDef.pgSettingName),
-      SQL.createLiteral("boolean", true)
-    ]);
-
-    return SQL.createCastExpression(functionCall, globalDef.pgType);
+    return this.globalValue(globalDef);
   }
 
   /**

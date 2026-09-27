@@ -337,18 +337,61 @@ Deno.test("AccessEvaluator - evaluateGlobal returns custom global value from con
   assertEquals(decision.appliedPolicies, ["check_custom_global"]);
 });
 
-Deno.test("AccessEvaluator - expressionToSQL generates current_setting for custom globals", () => {
+Deno.test("AccessEvaluator - expressionToSQL reads a custom global from the setting set global writes", () => {
   const evaluator = new AccessEvaluator(createTestConfig());
-
-  const expr = {
-    kind: "AccessGlobal" as const,
-    name: "tenant_id"
-  };
-
   const context: AccessContext = { userId: "user1" };
-  const sql = evaluator.expressionToSQL(expr, context);
 
-  assertEquals(sql, "current_setting('global default::tenant_id', true)");
+  assertEquals(
+    evaluator.expressionToSQL({ kind: "AccessGlobal", name: "tenant_id" }, context),
+    "NULLIF(current_setting('disc.global_default__tenant_id', true), '')"
+  );
+  assertEquals(
+    evaluator.expressionToSQL({ kind: "AccessGlobal", name: "billing::tenant_id" }, context),
+    "NULLIF(current_setting('disc.global_billing__tenant_id', true), '')"
+  );
+});
+
+Deno.test("AccessEvaluator - expressionToSQL takes a custom global's SQL from the resolver, in the policy's type", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const seen: [string, string | undefined][] = [];
+  evaluator.setGlobalResolver((name, objectType) => {
+    seen.push([name, objectType]);
+    return name === "tenant_id" ? "resolved_tenant" : undefined;
+  });
+
+  assertEquals(evaluator.expressionToSQL({ kind: "AccessGlobal", name: "tenant_id" }, {}, "Doc"), "resolved_tenant");
+  assertEquals(
+    evaluator.expressionToSQL({ kind: "AccessGlobal", name: "other" }, {}, "Doc"),
+    "NULLIF(current_setting('disc.global_default__other', true), '')"
+  );
+  assertEquals(seen, [["tenant_id", "Doc"], ["other", "Doc"]]);
+});
+
+Deno.test("AccessEvaluator - expressionToSQL inlines a custom global the context supplies", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const context: AccessContext = { globals: new Map<string, unknown>([["is_admin", false], ["tenant_id", "acme"]]) };
+
+  assertEquals(evaluator.expressionToSQL({ kind: "AccessGlobal", name: "is_admin" }, context), "FALSE");
+  assertEquals(evaluator.expressionToSQL({ kind: "AccessGlobal", name: "tenant_id" }, context), "E'acme'");
+});
+
+Deno.test("AccessEvaluator - a condition over a custom global the context lacks is left to the policy's SQL", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const isAdmin = { kind: "AccessGlobal" as const, name: "is_admin" };
+  evaluator.registerPolicy({
+    actions: [{ allow: true, operations: ["select"] }],
+    condition: isAdmin,
+    name: "admins",
+    objectType: "Tenant",
+    using: isAdmin
+  });
+
+  const decision = evaluator.evaluate("Tenant", "select", { userId: "user1" });
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.sqlConditions, ["NULLIF(current_setting('disc.global_default__is_admin', true), '')"]);
+
+  // Supplied by the context, it is decided in memory.
+  assertEquals(evaluator.evaluate("Tenant", "select", { globals: new Map([["is_admin", false]]) }).allowed, false);
 });
 
 Deno.test("AccessEvaluator - built-in globals still work with backward compatibility", () => {

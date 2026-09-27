@@ -19,6 +19,18 @@
  *   comments (no policy): A1 {c1}, A2 {c2}, B1 {c3};
  *   notes (select open to all, update/delete only while unlocked): n-open, n-locked.
  *
+ * Writes follow Gel's "any object that cannot be selected, cannot be modified
+ * either": tasks are visible while `visible` and editable while not `done`,
+ * so only t-edit (visible, not done) may be updated or deleted; drafts allow
+ * update and delete but not select, so none can be.
+ *
+ * Policies are inherited: docs and sheets extend AcpOwned (`owned`: all, for
+ * the owner); sheets add `shared` (select of the sheet titled 'shared').
+ *
+ * Custom globals (`acp_tenant`, `acp_label` with a default, required
+ * `acp_level` with a default, `acp::tenant` in another module) filter rows
+ * by the value `set global` gives them.
+ *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
 
@@ -58,6 +70,71 @@ const SDL = `module default {
       using (.published ?= true);
     };
   }
+  type AcpTask {
+    required name: str {
+      constraint exclusive;
+    };
+    body: str;
+    visible: bool;
+    done: bool;
+    multi tags: AcpComment;
+    access policy see {
+      allow select;
+      using (.visible ?= true);
+    };
+    access policy edit {
+      allow insert, update, delete;
+      using (.done ?= false);
+    };
+  }
+  type AcpDraft {
+    required body: str;
+    access policy write_only {
+      allow update, delete;
+    };
+  }
+  abstract type AcpOwned {
+    required title: str;
+    owner: uuid;
+    access policy owned {
+      allow all;
+      using (.owner ?= global current_user);
+    };
+  }
+  type AcpDoc extending AcpOwned {}
+  type AcpSheet extending AcpOwned {
+    access policy shared {
+      allow select;
+      using (.title ?= 'shared');
+    };
+  }
+  global acp_tenant: uuid;
+  global acp_label: str {
+    default := 'public';
+  };
+  global required acp_level: int64 {
+    default := 1;
+  };
+  type AcpTenantRow {
+    required label: str;
+    tenant: uuid;
+    access policy tenant_rows {
+      allow all;
+      using (.tenant ?= global acp_tenant);
+    };
+  }
+  type AcpLabelRow {
+    required label: str;
+    level: int64;
+    access policy by_label {
+      allow select;
+      using (.label ?= global acp_label);
+    };
+    access policy by_level {
+      allow update;
+      using (.level ?= global acp_level);
+    };
+  }
   type AcpUser {
     required name: str {
       constraint exclusive;
@@ -70,15 +147,49 @@ const SDL = `module default {
       using (.id ?= global current_user);
     };
   }
+}
+module acp {
+  global tenant: uuid;
+  type AcpModRow {
+    required label: str;
+    tenant: uuid;
+    access policy tenant_rows {
+      allow select;
+      using (.tenant ?= global tenant);
+    };
+  }
 }`;
 
-const TABLES = ["acp_user_posts", "acp_post_comments", "acp_user", "acp_post", "acp_comment", "acp_note"];
+const TABLES = [
+  "acp_user_posts",
+  "acp_post_comments",
+  "acp_task_tags",
+  "acp_user",
+  "acp_post",
+  "acp_comment",
+  "acp_note",
+  "acp_task",
+  "acp_draft",
+  "acp_doc",
+  "acp_sheet",
+  "acp_owned",
+  "acp_tenant_row",
+  "acp_label_row"
+];
+
+/*** The table of `acp::AcpModRow` (named by the migration engine for a non-default module). ***/
+async function modTables(pool: ConnectionPool): Promise<string[]> {
+  const result = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename LIKE '%acp_mod_row%'");
+  return result.rows.map(row => String(Object.values(row)[0]));
+}
 
 const ID = (n: number): string => `01234567-89ab-7cde-8f01-${n.toString().padStart(12, "0")}`;
 const [ANN, BOB] = [ID(1), ID(2)];
 const [A1, A2, B1, B2] = [ID(11), ID(12), ID(13), ID(14)];
 const [C1, C2, C3] = [ID(21), ID(22), ID(23)];
 const [N_OPEN, N_LOCKED] = [ID(31), ID(32)];
+const [T_EDIT, T_HIDDEN, T_DONE] = [ID(41), ID(42), ID(43)];
+const [TENANT_1, TENANT_2] = [ID(51), ID(52)];
 
 async function withSchema(run: (pool: ConnectionPool, schema: Schema) => Promise<void>): Promise<void> {
   const pool = makePool(await getTestDsn());
@@ -88,7 +199,7 @@ async function withSchema(run: (pool: ConnectionPool, schema: Schema) => Promise
     const manager = new SchemaManager({ pool });
     await manager.initialize();
     const applied = await manager.applySchema(SDL);
-    assertEquals(applied.ok, true, `applySchema failed: ${applied.ok ? "" : JSON.stringify(applied)}`);
+    assertEquals(applied.ok, true, `applySchema failed: ${applied.ok ? "" : applied.error.message}`);
     const schema = manager.getSchema();
     if (!schema) {
       throw new Error("no schema after applySchema");
@@ -105,6 +216,15 @@ async function withSchema(run: (pool: ConnectionPool, schema: Schema) => Promise
       `INSERT INTO acp_user_posts (source_id, target_id) VALUES ('${ANN}', '${A1}'), ('${ANN}', '${A2}'), ('${BOB}', '${B1}'), ('${BOB}', '${B2}')`
     );
     await pool.query(`INSERT INTO acp_post_comments (source_id, target_id) VALUES ('${A1}', '${C1}'), ('${A2}', '${C2}'), ('${B1}', '${C3}')`);
+    await pool.query(
+      `INSERT INTO acp_task (id, name, body, visible, done) VALUES
+        ('${T_EDIT}', 't-edit', 'b', true, false), ('${T_HIDDEN}', 't-hidden', 'b', false, false), ('${T_DONE}', 't-done', 'b', true, true)`
+    );
+    await pool.query("INSERT INTO acp_draft (body) VALUES ('d1')");
+    await pool.query(`INSERT INTO acp_doc (title, owner) VALUES ('ann-doc', '${ANN}'), ('bob-doc', '${BOB}')`);
+    await pool.query(`INSERT INTO acp_sheet (title, owner) VALUES ('ann-sheet', '${ANN}'), ('shared', '${BOB}'), ('bob-sheet', '${BOB}')`);
+    await pool.query(`INSERT INTO acp_tenant_row (label, tenant) VALUES ('r1', '${TENANT_1}'), ('r2', '${TENANT_2}')`);
+    await pool.query("INSERT INTO acp_label_row (label, level) VALUES ('public', 1), ('secret', 2)");
     await run(pool, schema);
     await manager.close();
   } finally {
@@ -114,8 +234,8 @@ async function withSchema(run: (pool: ConnectionPool, schema: Schema) => Promise
 }
 
 async function dropAll(pool: ConnectionPool): Promise<void> {
-  for (const table of TABLES) {
-    await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
+  for (const table of [...TABLES, ...await modTables(pool)]) {
+    await pool.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
   }
   await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
   await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
@@ -343,5 +463,157 @@ Deno.test({
         [{ author: null, title: "N" }]
       );
       assertEquals(await column(pool, "SELECT author_id FROM acp_post WHERE title = 'N'"), [null]);
+    })
+});
+
+/*** Run `edgeql` statements as ann in one transaction (so `set global` holds); the single column of the last one's rows. ***/
+async function inSession(pool: ConnectionPool, schema: Schema, ...edgeql: string[]): Promise<unknown[]> {
+  return await pool.transaction(async connection => {
+    let rows: Record<string, unknown>[] = [];
+    for (const statement of edgeql) {
+      rows = (await connection.query(compileAsAnn(statement, schema))).rows as Record<string, unknown>[];
+    }
+    return rows.map(row => Object.values(row)[0]);
+  });
+}
+
+Deno.test({
+  name: "PG access policy writes: update and delete reach only objects the select policy shows",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      // t-hidden passes the update policy but not the select policy.
+      assertEquals(await values(pool, schema, "select (update AcpTask set { body := 'u' }) { name }"), [{ name: "t-edit" }]);
+      assertEquals(await column(pool, "SELECT name FROM acp_task WHERE body = 'u'"), ["t-edit"]);
+
+      await run(pool, schema, "update AcpTask filter .name = 't-hidden' set { body := 'u2' }");
+      assertEquals(await column(pool, "SELECT body FROM acp_task WHERE name = 't-hidden'"), ["b"]);
+
+      assertEquals(await values(pool, schema, "with t := (delete AcpTask) select t { name }"), [{ name: "t-edit" }]);
+      assertEquals(await column(pool, "SELECT name FROM acp_task ORDER BY name"), ["t-done", "t-hidden"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy writes: objects that cannot be selected cannot be updated or deleted",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select (update AcpDraft set { body := 'x' }) { body }"), []);
+      await run(pool, schema, "delete AcpDraft");
+      assertEquals(await column(pool, "SELECT body FROM acp_draft"), ["d1"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy writes: a for body updates and deletes only selectable objects",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      await run(pool, schema, "for n in {'a'} union (update AcpTask set { body := n })");
+      assertEquals(await column(pool, "SELECT name FROM acp_task WHERE body = 'a'"), ["t-edit"]);
+
+      await run(pool, schema, "for c in (select AcpComment filter .body = 'c1') union (update AcpTask set { body := c.body })");
+      assertEquals(await column(pool, "SELECT name FROM acp_task WHERE body = 'c1'"), ["t-edit"]);
+
+      await run(pool, schema, "for n in {'a'} union (delete AcpTask)");
+      assertEquals(await column(pool, "SELECT name FROM acp_task ORDER BY name"), ["t-done", "t-hidden"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy writes: an upsert's else branch updates only a selectable, updatable conflicting object",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      const upsert = (name: string): string =>
+        `insert AcpTask { name := '${name}', visible := true } unless conflict on .name else (update AcpTask set { body := 'upserted' })`;
+      await run(pool, schema, upsert("t-edit"));
+      await run(pool, schema, upsert("t-hidden"));
+      await run(pool, schema, upsert("t-done"));
+      assertEquals(await column(pool, "SELECT name FROM acp_task WHERE body = 'upserted'"), ["t-edit"]);
+      assertEquals(await column(pool, "SELECT count(*)::int FROM acp_task"), [3]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy writes: a multi-link update writes links only from selectable, updatable objects",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      await run(pool, schema, "update AcpTask set { tags += (select AcpComment filter .body = 'c1') }");
+      assertEquals(await column(pool, "SELECT t.name FROM acp_task_tags j JOIN acp_task t ON t.id = j.source_id"), ["t-edit"]);
+
+      await run(pool, schema, "update AcpTask set { body := 'm', tags := (select AcpComment filter .body = 'c2') }");
+      assertEquals(await column(pool, "SELECT name FROM acp_task WHERE body = 'm'"), ["t-edit"]);
+      assertEquals(await column(pool, "SELECT source_id::text FROM acp_task_tags"), [T_EDIT]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy inheritance: a subtype is filtered by its parent's policies and its own",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select AcpDoc.title"), ["ann-doc"]);
+      assertEquals(await sorted(pool, schema, "select AcpSheet.title"), ["ann-sheet", "shared"]);
+      // The abstract parent reads each subtype's rows under that subtype's policies.
+      assertEquals(await sorted(pool, schema, "select AcpOwned { title }"), [{ title: "ann-doc" }, { title: "ann-sheet" }, { title: "shared" }]);
+      assertEquals(await values(pool, schema, "select count(AcpDoc)"), [1]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy inheritance: writes to a subtype answer to its parent's policies",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      await run(pool, schema, "update AcpDoc set { title := 'x' }");
+      assertEquals(await column(pool, "SELECT title FROM acp_doc ORDER BY title"), ["bob-doc", "x"]);
+
+      // 'shared' is visible through the sheet's own policy, but only the owner may delete (the parent's `owned`).
+      await run(pool, schema, "delete AcpSheet");
+      assertEquals(await column(pool, "SELECT title FROM acp_sheet ORDER BY title"), ["bob-sheet", "shared"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy globals: a row policy over a custom uuid global filters by the value set",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await inSession(pool, schema, "select AcpTenantRow.label"), []);
+      assertEquals(await inSession(pool, schema, `set global acp_tenant := <uuid>'${TENANT_1}'`, "select AcpTenantRow.label"), ["r1"]);
+      assertEquals(await inSession(pool, schema, `set global default::acp_tenant := <uuid>'${TENANT_2}'`, "select AcpTenantRow.label"), ["r2"]);
+      await inSession(pool, schema, `set global acp_tenant := <uuid>'${TENANT_2}'`, "update AcpTenantRow set { label := 'r2-edited' }");
+      assertEquals(await column(pool, "SELECT label FROM acp_tenant_row ORDER BY label"), ["r1", "r2-edited"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy globals: an unset global with a default reads as its default, in policies and queries",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await inSession(pool, schema, "select AcpLabelRow.label"), ["public"]);
+      assertEquals(await inSession(pool, schema, "set global acp_label := 'secret'", "select AcpLabelRow.label"), ["secret"]);
+      assertEquals(await inSession(pool, schema, "select global acp_label"), ["public"]);
+      // Updates need the row visible (acp_label) and at the level (the required acp_level, 1 unless set).
+      await inSession(pool, schema, "update AcpLabelRow set { label := 'public-edited' }");
+      await inSession(pool, schema, "set global acp_label := 'secret'", "update AcpLabelRow set { label := 'secret-edited' }");
+      await inSession(pool, schema, "set global acp_level := 2", "set global acp_label := 'secret'", "update AcpLabelRow set { label := 'secret-at-2' }");
+      assertEquals(await column(pool, "SELECT label FROM acp_label_row ORDER BY level"), ["public-edited", "secret-at-2"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy globals: a policy in another module reads that module's global",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      const [table] = await modTables(pool);
+      await pool.query(`INSERT INTO "${table}" (label, tenant) VALUES ('m1', '${TENANT_1}'), ('m2', '${TENANT_2}')`);
+      assertEquals(await inSession(pool, schema, "select acp::AcpModRow.label"), []);
+      assertEquals(await inSession(pool, schema, `set global acp::tenant := <uuid>'${TENANT_2}'`, "select acp::AcpModRow.label"), ["m2"]);
     })
 });

@@ -420,12 +420,14 @@ Deno.test("admin test-policy — denial surfaces the policy’s errmessage", asy
     const lines: string[] = [];
 
     /*** Force a deny path: the eval path defaults `defaultAllow: false`, and admin_override only
-         allows when `global is_admin` is set. Without that global, admin_override doesn’t allow →
-         permissive mode falls through to "no allow found". Pin the reason string path
-         stays intact. ***/
+         allows when `global is_admin` is true. With it false, admin_override doesn’t allow →
+         permissive mode falls through to "no allow found". (Left out, the global is session
+         state only the policy’s SQL can read, so the verdict is ALLOW with that SQL.) Pin the
+         reason string path stays intact. ***/
     await testPolicyImpl(
       {
         action: "delete",
+        globals: { is_admin: false },
         schema: path,
         target: "Doc.admin_override",
         userId: "u1"

@@ -471,9 +471,14 @@ Deno.test("object-type cast - an unknown type is a compile error naming it", asy
   assertStringIncludes(message, "Unknown type 'Progam'");
 });
 
-Deno.test("UPSERT - composite target on a type with a row-level update policy still fails closed (S12)", async () => {
+Deno.test("UPSERT - composite target on a type with a row-level update policy updates only rows the policies allow (S12)", async () => {
   const upsert = "insert Doc { owner_id := 'me', title := 't' } unless conflict on ((.owner_id, .title)) else (update Doc set { title := 'u' })";
 
-  assertStringIncludes(await compileError(upsert, { userId: USER_ID }), "row-level update policy");
+  // The conflicting row is updated only when the select and update policies allow it,
+  // read from the table's own rows (unqualified, a policy column would be ambiguous with `excluded`).
+  assertStringIncludes(
+    await compileGitForge(upsert, { userId: USER_ID }),
+    `ON CONFLICT (owner_id, title) DO UPDATE SET title = 'u' WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE (owner_id = E'${USER_ID}') ) RETURNING *`
+  );
   assertStringIncludes(await compileGitForge(upsert, { bypass: true, userId: USER_ID }), "ON CONFLICT (owner_id, title) DO UPDATE SET title = 'u'");
 });

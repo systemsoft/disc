@@ -10,6 +10,7 @@
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { BUILTIN_ACCESS_GLOBALS } from "./evaluator.ts";
 import { convertExpression } from "./expression-converter.ts";
 
 import type { AccessExpressionNode } from "./ast.ts";
@@ -52,11 +53,13 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
 }
 
 /**
- * Extracts a minimal condition guard from an expression by collecting all
- * referenced globals and combining them with AND. This checks that required
- * context values (e.g. current_user) are present before the SQL filter runs.
+ * Extracts a minimal condition guard from an expression by collecting the
+ * built-in globals it references (see `BUILTIN_ACCESS_GLOBALS`) and combining
+ * them with AND. This checks that required context values (e.g. current_user)
+ * are present before the SQL filter runs. Custom globals are left to the SQL,
+ * which reads them where `set global` stored them.
  *
- * Returns undefined if no globals are referenced (pure column expression).
+ * Returns undefined if no built-in globals are referenced.
  */
 export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpressionNode | undefined {
   const globals: AccessExpressionNode[] = [];
@@ -75,11 +78,12 @@ export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpression
   };
 }
 
+/*** Collects the built-in globals `expr` references, once each. ***/
 function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[]): void {
   switch (expr.kind) {
     case "AccessGlobal": {
       // Avoid duplicates
-      if (!out.some(g => g.kind === "AccessGlobal" && g.name === expr.name))
+      if (BUILTIN_ACCESS_GLOBALS.has(expr.name) && !out.some(g => g.kind === "AccessGlobal" && g.name === expr.name))
         out.push(expr);
 
       break;
@@ -124,7 +128,7 @@ function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[])
  * - `sdl.actions[]`   → `runtime.actions[]` (only `allow` and `operations` kept)
  * - `sdl.condition`   → `runtime.using` (always, for SQL WHERE generation)
  * - `sdl.condition`   → `runtime.condition` ONLY if no column references;
- *   otherwise a minimal global-presence guard is extracted
+ *   otherwise a minimal presence guard over its built-in globals is extracted
  *
  * Note on withCheck (P1-37): the SDL parser surfaces `with check (...)` as
  * `sdl.withCheck`; this adapter forwards the converted expression to

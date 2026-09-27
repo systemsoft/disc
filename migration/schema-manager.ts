@@ -28,6 +28,7 @@ import {
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
 import {
+  globalSettingName,
   linkColumnName,
   propNameToColumnName,
   typeNameToTableName
@@ -691,7 +692,7 @@ export class SchemaManager {
             required: globalDecl.required ?? false,
             multi: globalDecl.multi ?? false,
             readonly: globalDecl.readonly ?? false,
-            pgSettingName: `disc.global_${moduleName}__${globalName}`
+            pgSettingName: globalSettingName(moduleName, globalName)
           };
 
           if (globalDecl.default) {
@@ -1091,6 +1092,37 @@ export class SchemaManager {
             typeDef.links.set(linkName, { ...linkDef });
           }
         }
+      }
+    }
+
+    // Access policies are inherited (Gel: "any sub-type extending a type
+    // inherits all of its access policies"): a type answers to its own
+    // policies and every ancestor's, each registered under the type's own
+    // name. A policy the type (or a nearer ancestor) declares under the same
+    // name takes the place of the inherited one.
+    const ownPolicies = new Map([...types.values()].map(typeDef => [typeDef, typeDef.accessPolicies ?? []]));
+    const findType = (name: string): TypeDef | undefined =>
+      types.get(name) ?? (name.startsWith("default::") ? types.get(name.slice("default::".length)) : undefined);
+    for (const typeDef of types.values()) {
+      const policies = [...ownPolicies.get(typeDef)!];
+      const visited = new Set<TypeDef>([typeDef]);
+      const inherit = (child: TypeDef): void => {
+        for (const parent of (child.parentTypes ?? []).map(findType)) {
+          if (!parent || visited.has(parent)) {
+            continue;
+          }
+          visited.add(parent);
+          for (const policy of ownPolicies.get(parent)!) {
+            if (!policies.some(existing => existing.name === policy.name)) {
+              policies.push({ ...policy, objectType: typeDef.name });
+            }
+          }
+          inherit(parent);
+        }
+      };
+      inherit(typeDef);
+      if (policies.length > 0) {
+        typeDef.accessPolicies = policies;
       }
     }
 

@@ -16,7 +16,6 @@ import type { AccessContext } from "../access/types.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { EdgeQLCompilerWithAccess } from "./compiler-with-access.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";
 
@@ -39,6 +38,13 @@ module default {
     required title: str;
     access policy append_only {
       allow select, insert;
+    }
+  }
+
+  type Outbox {
+    required body: str;
+    access policy write_only {
+      allow update, delete;
     }
   }
 
@@ -152,6 +158,15 @@ Deno.test("nested mutation access - bare insert/update/delete on a using(false) 
   assertDenied(await asUser("delete Locked"), "DELETE");
 });
 
+// Gel: "any object that cannot be selected, cannot be modified either".
+Deno.test("nested mutation access - update and delete on a type whose objects cannot be selected touch no rows", async () => {
+  for (const edgeql of ["update Outbox set { body := 'x' }", "delete Outbox", "with o := (update Outbox set { body := 'x' }) select o"]) {
+    const compiled = await asUser(edgeql);
+    assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
+    assertStringIncludes(compiled.sql, "WHERE FALSE", `the select policy must narrow ${edgeql}: ${compiled.sql}`);
+  }
+});
+
 Deno.test("nested mutation access - bare mutations are unfiltered for a bypass caller", async () => {
   assertUnfiltered(await asBypass("update Doc filter .title = 'x' set { title := 'y' }"));
   assertUnfiltered(await asBypass("delete Doc filter .title = 'x'"));
@@ -174,9 +189,9 @@ Deno.test("nested mutation access - an allowed insert stays allow/deny only, wit
 });
 
 // ---------------------------------------------------------------------------
-// Upsert: `else (update …)` is an update, so it answers to the update policy
-// (S12). ON CONFLICT DO UPDATE cannot carry a row predicate yet, so a
-// row-level update policy fails closed instead of compiling unfiltered.
+// Upsert: `else (update …)` is an update, so it answers to the select and
+// update policies (S12): ON CONFLICT DO UPDATE carries their row predicate in
+// its WHERE, so a conflicting row they exclude is left as it is.
 // ---------------------------------------------------------------------------
 
 Deno.test("nested mutation access - upsert is denied when the update policy denies", async () => {
@@ -185,13 +200,14 @@ Deno.test("nested mutation access - upsert is denied when the update policy deni
   assertStringIncludes(compiled.error ?? "", "UPDATE not allowed on Journal");
 });
 
-Deno.test("nested mutation access - upsert on a type with a row-level update policy does not compile", async () => {
+Deno.test("nested mutation access - upsert on a type with a row-level update policy updates only rows the policies allow", async () => {
   const compiled = await asUser(
     "insert Doc { owner_id := 'me', title := 't' } unless conflict on .title else (update Doc set { owner_id := 'me' })"
   );
-  assertEquals(compiled.sql, undefined, `an upsert must not overwrite rows the update policy hides: ${compiled.sql}`);
-  assertStringIncludes(compiled.error ?? "", "row-level update policy");
-  assertStringIncludes(compiled.error ?? "", "Doc");
+  assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
+  const action = compiled.sql.slice(compiled.sql.indexOf("DO UPDATE"));
+  assertStringIncludes(action, `WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE (${OWNER_PREDICATE}) )`);
+  assertEquals(countOf(compiled.sql, OWNER_PREDICATE), 1, `an upsert must not overwrite rows the policies hide: ${compiled.sql}`);
 });
 
 Deno.test("nested mutation access - upsert compiles unchanged where update is allowed unconditionally", async () => {
@@ -337,29 +353,4 @@ Deno.test("nested mutation access - module-qualified select gets the same policy
   const bypassed = await asBypass("select default::Doc { title }");
   assert(bypassed.sql);
   assertEquals(bypassed.sql.includes("WHERE"), false);
-});
-
-// ---------------------------------------------------------------------------
-// The twin in compiler-with-access.ts
-// ---------------------------------------------------------------------------
-
-// EdgeQLCompilerWithAccess is a select-only prototype that nothing outside its
-// own test imports. It has the same top-level-only applyAccessControl, which is
-// harmless only as long as it cannot compile a mutation in any position. Pin
-// that, so whoever teaches it mutations has to bring the policy along.
-Deno.test("nested mutation access - the select-only twin compiler refuses every mutation form", async () => {
-  const twin = new EdgeQLCompilerWithAccess(await testSchema());
-
-  const forms = [
-    "insert Locked { name := 'x' }",
-    "update Doc set { title := 'y' }",
-    "delete Doc",
-    "with u := (update Doc set { title := 'y' }) select u",
-    "for n in {'a', 'b'} union (insert Locked { name := n })"
-  ];
-
-  for (const edgeql of forms) {
-    const result = twin.compile(new EdgeQLParser(edgeql).parse());
-    assertEquals(result.ok, false, `the twin compiled a mutation without a policy: ${edgeql}`);
-  }
 });
