@@ -159,6 +159,18 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         whereClause = SQL.createWhereClause(where);
       }
 
+      // `select distinct <tuple> order by <tuple>`: the key is not bound to the
+      // distinct subject, so it is a set; Gel 7.1 rejects it with this QueryError.
+      const setKey = query.distinct && !query.shape && this.staticTupleType(query.expr) ?
+        query.orderBy?.find(item => this.staticTupleType(item.expr)) :
+        undefined;
+      if (setKey) {
+        throw new CompilationError(
+          "possibly more than one element returned by an expression where only singletons are allowed",
+          locationOf(setKey.expr) ?? (setKey.expr.kind === "Path" ? locationOf(setKey.expr.steps[0]) : undefined)
+        );
+      }
+
       // Compile ORDER BY clause
       let orderByClause: SQL.OrderByClause | undefined;
       if (query.orderBy && query.orderBy.length > 0) {
@@ -188,6 +200,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         };
       }
 
+      // `select distinct <tuple>`: equal tuples stored as different JSON are one (`canonicalTuple`).
+      const tupleType = query.distinct && !query.shape && selectItems.length === 1 ? this.staticTupleType(query.expr) : null;
+      if (tupleType) {
+        selectItems[0] = { ...selectItems[0], expression: this.canonicalTuple(selectItems[0].expression, tupleType) };
+      }
       const selectClause = SQL.createSelectClause(selectItems, query.distinct);
 
       return SQL.createSelectStatement({

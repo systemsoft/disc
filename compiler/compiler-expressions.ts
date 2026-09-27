@@ -227,6 +227,26 @@ function dateArithmeticType(op: "+" | "-", left: string | null, right: string | 
   return null;
 }
 
+/*** The names of the tuple type's elements, a nested tuple's in parentheses: `tuple<a: int64, b: tuple<str, c: str>>` → `a,b(,c)`. ***/
+function tupleNames(typeName: string): string {
+  return (tupleTypeElements(typeName) ?? [])
+    .map(element => `${element.name ?? ""}${tupleTypeElements(element.type) ? `(${tupleNames(element.type)})` : ""}`)
+    .join(",");
+}
+
+/*** The key element `index` of a jsonb tuple is stored under: its name (an object's key), else its position (an array's index). ***/
+function tupleElementKey(element: { name?: string; }, index: number): SQL.LiteralExpression {
+  return element.name !== undefined ? SQL.createLiteral("string", element.name) : SQL.createLiteral("number", index);
+}
+
+/*** `built` from the jsonb tuple `sql`, or NULL when `sql` is (an empty tuple). ***/
+function unlessNullTuple(sql: SQL.SQLExpression, built: SQL.SQLExpression): SQL.SQLExpression {
+  return SQL.createCaseExpression(
+    [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
+    built
+  );
+}
+
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
@@ -693,8 +713,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   /**
    * `=`, `!=`, `?=`, `?!=`, `in` and `not in` on whole tuples, when either
    * operand's tuple type is known (`staticTupleType`): both sides compared as
-   * `canonicalTuple`, so tuples written as different JSON (a literal's and a
-   * parameter's datetime) are equal when their elements are. Null otherwise.
+   * positional `canonicalTuple`s, each read by its own type, so tuples written
+   * as different JSON (a literal's and a parameter's datetime) are equal when
+   * their elements are, and, as in Gel, whatever their elements' names
+   * (`(1, 'a') = (a := 1, b := 'a')` is true). Tuples of the same names whose
+   * values are stored as written are compared as stored. Null otherwise.
    *
    *   filter .t = (n := 1, at := <datetime>'2024-01-01T00:00:00Z')
    *   → canonical(t) = canonical(jsonb_build_object('n', 1, 'at', …))
@@ -703,27 +726,92 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (!EQUALITY_OPERATORS.has(binOp.op)) {
       return null;
     }
-    const typeName = this.staticTupleType(binOp.left) ?? this.staticTupleType(binOp.right);
-    if (!typeName || !this.hasCanonicalElements(typeName)) {
+    const rights = binOp.right.kind === "SetExpr" ? flattenSetElements(binOp.right) : [binOp.right];
+    const leftType = this.staticTupleType(binOp.left);
+    const rightTypes = rights.map(element => this.staticTupleType(element));
+    const typeName = leftType ?? rightTypes.find(type => type !== null);
+    if (!typeName) {
       return null;
     }
-    const left = this.canonicalTuple(this.compileExpression(binOp.left), typeName);
+    const known = [leftType, ...rightTypes].filter((type): type is string => type !== null);
+    if (known.every(type => !this.hasCanonicalElements(type) && tupleNames(type) === tupleNames(typeName))) {
+      return null;
+    }
+    // An operand of unknown type is read as the other's.
+    const operand = (expr: EdgeQLAST.Expression, type: string | null | undefined): SQL.SQLExpression =>
+      this.canonicalTuple(this.compileExpression(expr), type ?? typeName, true);
+    const left = operand(binOp.left, leftType);
     const sqlOp = binOp.op === "?=" ? "IS NOT DISTINCT FROM" : binOp.op === "?!=" ? "IS DISTINCT FROM" : binOp.op;
     if (binOp.right.kind !== "SetExpr") {
-      return SQL.createBinaryExpression(sqlOp, left, this.canonicalTuple(this.compileExpression(binOp.right), typeName));
+      return SQL.createBinaryExpression(sqlOp, left, operand(binOp.right, rightTypes[0]));
     }
     // `in {a, b}`: each element made canonical (see `compileSetExpr`).
-    const elements = flattenSetElements(binOp.right);
-    if (elements.length === 0) {
+    if (rights.length === 0) {
       return SQL.createBinaryExpression(sqlOp, left, this.compileExpression(binOp.right));
     }
-    const parts = elements.map(element => this.renderSqlExpr(this.canonicalTuple(this.compileExpression(element), typeName)));
+    const parts = rights.map((element, index) => this.renderSqlExpr(operand(element, rightTypes[index])));
     return SQL.createBinaryExpression(sqlOp, left, { kind: "RawSQLExpression", sql: `(${parts.join(", ")})` });
   }
 
-  /*** The tuple type of `expr` when known without running the query: a cast's, a property's, a variable's, a set literal's first known one. Null otherwise. ***/
-  private staticTupleType(expr: EdgeQLAST.Expression): string | null {
+  /**
+   * `<tuple> in array_unpack(<array of tuples>)` (and `not in`): the tuple
+   * compared as a positional `canonicalTuple` with each of the array's, read
+   * from the jsonb array such an array is (a literal's `jsonb[]` built as one,
+   * see `jsonbArrayLiteral`). Null when neither the tuple's nor the array's
+   * element type is known.
+   *
+   *   .t in array_unpack(<array<tuple<n: int64, at: datetime>>>$p)
+   *   → canonical(t) IN (SELECT canonical(__elem.value) FROM jsonb_array_elements(CAST($1 AS jsonb)) AS __elem(value))
+   */
+  private compileTupleArrayMembership(binOp: EdgeQLAST.BinaryOp, array: EdgeQLAST.Expression): SQL.SQLExpression | null {
+    const elementType = this.staticArrayElementType(array);
+    const arrayType = elementType !== null && tupleTypeElements(elementType) ?
+      elementType :
+      array.kind === "ArrayExpr" && array.elements.length > 0 ?
+      this.staticTupleType(array.elements[0]) :
+      null;
+    const leftType = this.staticTupleType(binOp.left);
+    const typeName = leftType ?? arrayType;
+    if (!typeName) {
+      return null;
+    }
+    const compiled = this.compileExpression(array);
+    const element = SQL.createColumnReference("value", "__elem");
+    const elements = SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(this.canonicalTuple(element, arrayType ?? typeName, true))]),
+      from: SQL.createFromClause([{
+        alias: "__elem",
+        columnAliases: ["value"],
+        expression: SQL.createFunctionCall("jsonb_array_elements", [this.jsonbArrayLiteral(compiled) ?? compiled]),
+        kind: "TableReference",
+        name: ""
+      }])
+    });
+    const left = this.canonicalTuple(this.compileExpression(binOp.left), leftType ?? typeName, true);
+    return SQL.createBinaryExpression(binOp.op, left, SQL.createSubqueryExpression(elements));
+  }
+
+  /**
+   * The tuple type of `expr` when known without running the query: a cast's,
+   * a property's, a variable's, a set literal's first known one, a tuple
+   * literal's (an element of unknown type as `json`, kept as it is by
+   * `canonicalTuple`). Null otherwise.
+   */
+  protected staticTupleType(expr: EdgeQLAST.Expression): string | null {
     let type: string | null = null;
+    if (expr.kind === "TupleExpr" || expr.kind === "NamedTuple") {
+      const elements: { name?: string; value: EdgeQLAST.Expression; }[] = expr.kind === "TupleExpr" ?
+        expr.elements.map(value => ({ value })) :
+        expr.elements;
+      return `tuple<${
+        elements
+          .map(({ name, value }) => {
+            const element = this.staticTupleType(value) ?? this.staticScalarType(value) ?? "json";
+            return name !== undefined ? `${name}: ${element}` : element;
+          })
+          .join(", ")
+      }>`;
+    }
     if (expr.kind === "TypeCast") {
       type = renderEdgeQLTypeName(expr.type);
     } else if (expr.kind === "Path") {
@@ -753,7 +841,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * The jsonb tuple `sql` of `typeName` rebuilt so equal tuples are equal
    * jsonb: each element of a type in CANONICAL_JSON_PG_TYPES read as that type
    * and made JSON again (`to_jsonb`), a nested tuple rebuilt the same way, any
-   * other element kept as is. An empty tuple (NULL) stays NULL.
+   * other element kept as is. An empty tuple (NULL) stays NULL. With
+   * `positional`, a named tuple is rebuilt as an array, as an unnamed one is:
+   * Gel compares tuples by position, whatever their names.
    *
    *   tuple<n: int64, at: datetime>
    *   → CASE WHEN t IS NULL THEN NULL ELSE jsonb_build_object(
@@ -762,27 +852,53 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * The operand stays a SQL AST node so a parameter in it is still found by
    * `buildParameterTypeMap`.
    */
-  private canonicalTuple(sql: SQL.SQLExpression, typeName: string): SQL.SQLExpression {
+  protected canonicalTuple(sql: SQL.SQLExpression, typeName: string, positional = false): SQL.SQLExpression {
     const elements = tupleTypeElements(typeName)!;
     const values = elements.map((element, index) => {
-      const key = element.name !== undefined ? SQL.createLiteral("string", element.name) : SQL.createLiteral("number", index);
       if (tupleTypeElements(element.type)) {
-        return this.canonicalTuple(SQL.createJsonbAccess(sql, "->", key), element.type);
+        return this.canonicalTuple(SQL.createJsonbAccess(sql, "->", tupleElementKey(element, index)), element.type, positional);
       }
-      const pgType = edgeqlTypeToPgType(element.type, this.ctx.schema.scalars);
-      if (!CANONICAL_JSON_PG_TYPES.has(pgType)) {
-        return SQL.createJsonbAccess(sql, "->", key);
-      }
-      return SQL.createFunctionCall("to_jsonb", [SQL.createCastExpression(SQL.createJsonbAccess(sql, "->>", key), pgType)]);
+      const typed = this.typedTupleElement(sql, element, index);
+      return typed ? SQL.createFunctionCall("to_jsonb", [typed]) : SQL.createJsonbAccess(sql, "->", tupleElementKey(element, index));
     });
-    const named = elements.every(element => element.name !== undefined);
-    const built = named ?
-      SQL.createJsonBuildObject(elements.map((element, index) => SQL.createJsonField(element.name!, values[index]))) :
-      SQL.createFunctionCall("jsonb_build_array", values);
-    return SQL.createCaseExpression(
-      [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
-      built
+    const named = !positional && elements.every(element => element.name !== undefined);
+    return unlessNullTuple(
+      sql,
+      named ?
+        SQL.createJsonBuildObject(elements.map((element, index) => SQL.createJsonField(element.name!, values[index]))) :
+        SQL.createFunctionCall("jsonb_build_array", values)
     );
+  }
+
+  /**
+   * The jsonb tuple `sql` of `typeName` as a key to order by: a row of its
+   * elements in declared order, each of a type in CANONICAL_JSON_PG_TYPES read
+   * as that type, a nested tuple as a row of its own, any other element as its
+   * jsonb, so tuples sort element by element as Gel sorts them (not as their
+   * stored JSON text, whose object keys jsonb orders shortest first). An empty
+   * tuple (NULL) stays NULL, for `empty first|last`.
+   *
+   *   tuple<n: int64, at: datetime>
+   *   → CASE WHEN t IS NULL THEN NULL ELSE ROW(CAST(t ->> 'n' AS bigint), CAST(t ->> 'at' AS timestamptz)) END
+   */
+  private tupleSortKey(sql: SQL.SQLExpression, typeName: string): SQL.SQLExpression {
+    const row = (tuple: SQL.SQLExpression, type: string): SQL.SQLExpression =>
+      SQL.createFunctionCall(
+        "ROW",
+        tupleTypeElements(type)!.map((element, index) => {
+          const value = SQL.createJsonbAccess(tuple, "->", tupleElementKey(element, index));
+          return tupleTypeElements(element.type) ? row(value, element.type) : this.typedTupleElement(tuple, element, index) ?? value;
+        })
+      );
+    return unlessNullTuple(sql, row(sql, typeName));
+  }
+
+  /*** Element `index` of the jsonb tuple `sql` read as its type, when that is in CANONICAL_JSON_PG_TYPES (`CAST(t ->> 'at' AS timestamptz)`); null for any other type. ***/
+  private typedTupleElement(sql: SQL.SQLExpression, element: { name?: string; type: string; }, index: number): SQL.SQLExpression | null {
+    const pgType = edgeqlTypeToPgType(element.type, this.ctx.schema.scalars);
+    return CANONICAL_JSON_PG_TYPES.has(pgType) ?
+      SQL.createCastExpression(SQL.createJsonbAccess(sql, "->>", tupleElementKey(element, index)), pgType) :
+      null;
   }
 
   /*** The select `in` reads for a right operand that is a type's objects or a path's set (see `membershipSelect`), else null. ***/
@@ -1429,7 +1545,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return this.compileExpression(arg);
   }
 
-  /*** An order by key. A set has no one value to order by; Gel rejects it too. ***/
+  /*** An order by key; a tuple's is its elements' (`tupleSortKey`). A set has no one value to order by; Gel rejects it too. ***/
   protected compileOrderExpression(expr: EdgeQLAST.Expression): SQL.SQLExpression {
     if (expr.kind !== "Path" && this.setArgument(expr)) {
       throw new CompilationError(
@@ -1437,7 +1553,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         this.expressionLocation(expr)
       );
     }
-    return this.compileExpression(expr);
+    const tupleType = this.staticTupleType(expr);
+    const sql = this.compileExpression(expr);
+    return tupleType ? this.tupleSortKey(sql, tupleType) : sql;
   }
 
   /**
@@ -1468,6 +1586,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     if (right.args.length !== 1) {
       return null;
+    }
+    const tupleMembership = this.compileTupleArrayMembership(binOp, right.args[0].value);
+    if (tupleMembership) {
+      return tupleMembership;
     }
 
     const left = this.renderSqlExpr(this.compileExpression(binOp.left));
@@ -2944,6 +3066,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const jsonbArray = pgType === "jsonb" && typeName.startsWith("array<") ? this.jsonbArrayLiteral(sql) : null;
     if (jsonbArray) {
       return jsonbArray;
+    }
+    // A tuple from a parameter, a cast or another tuple is stored as the JSON
+    // its literal writes (`canonicalTuple`; a literal is built of typed
+    // values already), however the client wrote its datetimes or numbers.
+    const valueType = pgType === "jsonb" && tupleTypeElements(typeName) && this.hasCanonicalElements(typeName) &&
+        expr.kind !== "TupleExpr" && expr.kind !== "NamedTuple" ?
+      this.staticTupleType(expr) :
+      null;
+    if (valueType !== null && tupleNames(valueType) === tupleNames(typeName)) {
+      return this.canonicalTuple(sql, typeName);
     }
     if (
       (pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr, this.numericBaseType(typeName) === "bigint") ||

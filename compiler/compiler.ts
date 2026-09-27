@@ -14,7 +14,7 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, ConfigurationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
-import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
+import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS, tupleTypeElements } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -2491,6 +2491,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       SQL.createTableReference(typeDef.tableName, tableAlias)
     ]);
 
+    // A property's column; a tuple's canonical, so equal tuples stored as
+    // different JSON are one group (`canonicalTuple`).
+    const groupKey = (property: Context.PropertyDef): SQL.SQLExpression => {
+      const column = SQL.createColumnReference(property.columnName, tableAlias);
+      const type = Context.propertyBaseType(property);
+      return type !== undefined && tupleTypeElements(type) ? this.canonicalTuple(column, type) : column;
+    };
+
     // Build GROUP BY expressions from the BY clause
     const groupByExprs: SQL.SQLExpression[] = [];
     const keyFields: SQL.JsonField[] = [];
@@ -2500,10 +2508,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         const propName = byExpr.steps[0].name;
         const property = Context.getProperty(this.ctx, typeName, propName);
         if (property) {
-          const colRef = SQL.createColumnReference(
-            property.columnName,
-            tableAlias
-          );
+          const colRef = groupKey(property);
           groupByExprs.push(colRef);
           keyFields.push(SQL.createJsonField(propName, colRef));
         } else {
@@ -2516,10 +2521,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         const propName = byExpr.name;
         const property = Context.getProperty(this.ctx, typeName, propName);
         if (property) {
-          const colRef = SQL.createColumnReference(
-            property.columnName,
-            tableAlias
-          );
+          const colRef = groupKey(property);
           groupByExprs.push(colRef);
           keyFields.push(SQL.createJsonField(propName, colRef));
         } else {

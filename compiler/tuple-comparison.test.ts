@@ -13,7 +13,7 @@
  * `ARRAY[…]` (jsonb[]).
  */
 
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { tupleTypeElements } from "./compiler-base.ts";
 import type { Schema } from "./context.ts";
@@ -116,4 +116,72 @@ Deno.test("array<tuple> literal - an empty cast is an empty jsonb array", () => 
 Deno.test("array<tuple> literal - update set writes a jsonb array", () => {
   const sql = compileEdgeQL(`update TupRow filter .name = "a" set { ts := [(n := 3, s := "c")] }`, schema);
   assertStringIncludes(sql, "jsonb_build_array(jsonb_build_object('n', 3, 's', 'c'))");
+});
+
+Deno.test("Tuple comparison - named and unnamed tuples compare by position", () => {
+  const literals = compileEdgeQL(`select (1, 'a') = (a := 1, b := 'a')`, schema);
+  assertStringIncludes(literals, "->> 0 AS bigint))");
+  assertStringIncludes(literals, "->> 'a' AS bigint))");
+
+  const stored = compileEdgeQL(`select TupRow { name } filter .u = (a := 1, b := <datetime>'2024-01-01T00:00:00Z')`, schema);
+  assertStringIncludes(stored, "to_jsonb(CAST(tuprow_1.u ->> 1 AS timestamptz))");
+  assertStringIncludes(stored, "->> 'b' AS timestamptz))");
+
+  // Strings only, but named differently: rebuilt by position all the same.
+  const strings = compileEdgeQL(`select TupRow { name } filter .s = ("x", "y")`, schema);
+  assertStringIncludes(strings, "jsonb_build_array(tuprow_1.s -> 'a', tuprow_1.s -> 'b')");
+});
+
+Deno.test("Tuple membership - `in array_unpack(<array<tuple<…>>>$p)` reads the jsonb array's elements", () => {
+  const sql = compileEdgeQL(`select TupRow { name } filter .t in array_unpack(<array<tuple<n: int64, at: datetime>>>$p)`, schema);
+  assertStringIncludes(sql, "jsonb_array_elements(CAST($1 AS jsonb))");
+  assertStringIncludes(sql, "->> 'at' AS timestamptz))");
+  assert(!sql.includes("ANY("), sql);
+
+  const literal = compileEdgeQL(`select (2, 'b') not in array_unpack([(1, 'a'), (2, 'b')])`, schema);
+  assertStringIncludes(literal, "NOT IN (");
+  assertStringIncludes(literal, "jsonb_array_elements(jsonb_build_array(");
+});
+
+Deno.test("Tuple order - `order by` a tuple sorts by its typed elements in declared order", () => {
+  const sql = compileEdgeQL(`select TupRow { name } order by .t desc`, schema);
+  assertStringIncludes(sql, "ROW(CAST(tuprow_1.t ->> 'n' AS bigint), CAST(tuprow_1.t ->> 'at' AS timestamptz))");
+  assertStringIncludes(sql, "END DESC");
+
+  const nested = compileEdgeQL(`select TupRow { name } order by .d`, schema);
+  assertStringIncludes(nested, "ROW(CAST(tuprow_1.d ->> 'x' AS numeric), ROW((tuprow_1.d -> 'inner') -> 's', CAST(");
+});
+
+Deno.test("Tuple distinct - `select distinct` of a tuple dedupes its canonical form", () => {
+  const sql = compileEdgeQL(`select distinct TupRow.t`, schema);
+  assertStringIncludes(sql, "SELECT DISTINCT");
+  assertStringIncludes(sql, "jsonb_build_object('n', to_jsonb(CAST(");
+});
+
+Deno.test("Tuple distinct - ordering a distinct set of tuples by a tuple is Gel's cardinality QueryError", () => {
+  // Gel 7.1: the order key is not bound to the distinct subject, so it is a set.
+  assertThrows(
+    () => compileEdgeQL(`select distinct TupRow.t order by TupRow.t`, schema),
+    Error,
+    "possibly more than one element returned by an expression where only singletons are allowed"
+  );
+});
+
+Deno.test("Tuple group - `group … by` a tuple property groups its canonical form", () => {
+  const sql = compileEdgeQL(`group TupRow by .t`, schema);
+  assertStringIncludes(sql, "GROUP BY\nCASE\nWHEN tuprow_1.t IS NULL THEN NULL\nELSE jsonb_build_object('n', to_jsonb(CAST(");
+  // The key too: the value the rows were grouped by.
+  assertStringIncludes(sql, "jsonb_build_object('t', CASE");
+});
+
+Deno.test("Tuple write - a parameter written to a tuple property is stored canonical", () => {
+  const insert = compileEdgeQL(`insert TupRow { name := "a", t := <tuple<n: int64, at: datetime>>$t }`, schema);
+  assertStringIncludes(insert, "to_jsonb(CAST(CAST($1 AS jsonb) ->> 'at' AS timestamptz))");
+
+  const update = compileEdgeQL(`update TupRow filter .name = "a" set { u := <tuple<int64, datetime>>$u }`, schema);
+  assertStringIncludes(update, "to_jsonb(CAST(CAST($1 AS jsonb) ->> 1 AS timestamptz))");
+
+  // A literal is built from typed values: canonical already.
+  const literal = compileEdgeQL(`insert TupRow { name := "a", t := (n := 1, at := <datetime>'2024-01-01T00:00:00Z') }`, schema);
+  assert(!literal.includes("to_jsonb"), literal);
 });
