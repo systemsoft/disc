@@ -54,6 +54,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected abstract compilePathInExpression(
     path: EdgeQLAST.Path
   ): SQL.SQLExpression;
+  protected abstract isSetPath(expr: EdgeQLAST.Expression): boolean;
   protected abstract compileGlobalRef(
     expr: EdgeQLAST.GlobalRef
   ): SQL.SQLExpression;
@@ -430,7 +431,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /*** The variable `name` names in the current or an enclosing scope (a `for` variable, an inlined `with` binding). ***/
-  private scopeVariable(name: string): Context.VariableDef | undefined {
+  protected scopeVariable(name: string): Context.VariableDef | undefined {
     for (const scope of [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]) {
       const variable = scope.variables.get(name);
       if (variable) {
@@ -652,6 +653,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (linkCount) {
       return SQL.createBinaryExpression(">", linkCount, SQL.createLiteral("number", 0));
     }
+    if (this.isSetPath(operand)) {
+      const select: EdgeQLAST.Subquery = { kind: "Subquery", query: { distinct: false, expr: operand, kind: "SelectQuery" } };
+      return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(select) };
+    }
     return SQL.isNotNull(this.compileExpression(operand));
   }
 
@@ -870,6 +875,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         this.compileAggregateOverLinkPath(functionName, arg);
       if (aggregated) {
         return aggregated;
+      }
+      // Any other path set (`User.posts`, `.posts.comments`) aggregates the
+      // rows of a select of it.
+      const pathSet = this.isSetPath(arg) ?
+        this.compileAggregateOverSubquery(functionName, { kind: "Subquery", query: { distinct: false, expr: arg, kind: "SelectQuery" } }) :
+        null;
+      if (pathSet) {
+        return pathSet;
       }
     }
 

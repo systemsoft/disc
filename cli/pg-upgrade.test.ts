@@ -3,10 +3,13 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import { join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { PostgresManager } from "../postgres/manager.ts";
+import { ConsoleCapture } from "../tests/test-utils.ts";
 import { PgUpgradeCommand } from "./pg-upgrade.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -83,4 +86,63 @@ Deno.test("PgUpgradeCommand - instance not found error", async () => {
     Error,
     "No PostgreSQL instance found"
   );
+});
+
+/**
+ * An on-disk instance with a PostgreSQL `major` data dir and no version.json
+ * (as created before it was recorded), plus fake cached server binaries.
+ * Returns a command wired to it. Nothing here runs PostgreSQL.
+ */
+async function withFakeInstance(
+  major: string,
+  fn: (command: PgUpgradeCommand, capture: ConsoleCapture) => Promise<void>
+): Promise<void> {
+  const root = await Deno.makeTempDir({ prefix: "disc-pgup-" });
+  const instancesDir = join(root, "instances");
+  const saved = { binaryDir: Deno.env.get("DISC_PG_BINARY_DIR"), offline: Deno.env.get("DISC_OFFLINE") };
+  const capture = new ConsoleCapture();
+
+  try {
+    for (const version of ["16.4", "18.4"]) {
+      await Deno.mkdir(join(root, "pg", version, "bin"), { recursive: true });
+      await Deno.writeTextFile(join(root, "pg", version, "bin", "postgres"), "fake");
+    }
+    await Deno.mkdir(join(instancesDir, "legacy", "data"), { recursive: true });
+    await Deno.writeTextFile(join(instancesDir, "legacy", "data", "PG_VERSION"), `${major}\n`);
+    Deno.env.set("DISC_PG_BINARY_DIR", join(root, "pg"));
+    Deno.env.set("DISC_OFFLINE", "1");
+
+    capture.start();
+    await fn(new PgUpgradeCommand({ postgresManager: new PostgresManager(instancesDir) }), capture);
+  } finally {
+    capture.stop();
+    for (const [key, value] of [["DISC_PG_BINARY_DIR", saved.binaryDir], ["DISC_OFFLINE", saved.offline]] as const) {
+      if (value === undefined)
+        Deno.env.delete(key);
+      else
+        Deno.env.set(key, value);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+}
+
+Deno.test("PgUpgradeCommand - dry run reports the version the instance's data dir actually runs", async () => {
+  await withFakeInstance("16", async (command, capture) => {
+    await command.execute({ dryRun: true, project: "legacy", targetVersion: "18.4" });
+
+    const output = capture.getLogs().join("\n");
+    assertStringIncludes(output, "Current version: 16.4");
+    assertStringIncludes(output, "Target version: 18.4");
+    assertStringIncludes(output, "No changes were made");
+  });
+});
+
+Deno.test("PgUpgradeCommand - an 18 data dir is not 'upgraded' to 18.4", async () => {
+  await withFakeInstance("18", async command => {
+    await assertRejects(
+      () => command.execute({ dryRun: true, project: "legacy", targetVersion: "18.4" }),
+      Error,
+      "not newer than current version 18.4"
+    );
+  });
 });

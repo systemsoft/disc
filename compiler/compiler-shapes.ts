@@ -11,15 +11,43 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
-import { backlinkIntersectionName, compileEmptyOrder, edgeqlTypeToPgType, flattenSetElements, isMutationQuery, renderEdgeQLTypeName } from "./compiler-base.ts";
-import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
+import {
+  backlinkIntersectionName,
+  compileEmptyOrder,
+  edgeqlTypeToPgType,
+  flattenSetElements,
+  isMutationQuery,
+  locationOf,
+  renderEdgeQLTypeName
+} from "./compiler-base.ts";
+import { PathCompilerLayer } from "./compiler-paths.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
+
+/*** A path as written, for error messages: `User.posts`, `.<author[is Post].title`. ***/
+function renderPath(path: EdgeQLAST.Path): string {
+  return path
+    .steps
+    .map((step, index) => {
+      if (step.type === "backlink") {
+        const intersection = backlinkIntersectionName(step.filter);
+        return `.<${step.name}${intersection ? `[is ${intersection}]` : ""}`;
+      }
+      if (step.type === "link_property") {
+        return `@${step.name}`;
+      }
+      if (step.type === "type_intersection") {
+        return `[is ${step.name}]`;
+      }
+      return index === 0 && path.rooted ? step.name : `.${step.name}`;
+    })
+    .join("");
+}
 
 /*** CTE name for the anonymous binding of `select (insert|update|delete …) { shape }`. ***/
 const MUTATION_CTE_NAME = "m";
 
-export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
+export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   // Implemented by the top compiler layer (compiler.ts).
   protected abstract compileSelectQueryRaw(
     query: EdgeQLAST.SelectQuery
@@ -54,16 +82,19 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
 
     try {
       // Handle the main expression and generate appropriate FROM clause
-      const { selectItems, fromClause } = this.compileSelectExpression(
+      const { selectItems, fromClause, where } = this.compileSelectExpression(
         query.expr,
         query.shape
       );
 
-      // Compile WHERE clause
+      // Compile WHERE clause: the source's own condition (a path's objects)
+      // and the filter.
       let whereClause: SQL.WhereClause | undefined;
       if (query.filter) {
         const condition = this.compileExpression(query.filter);
-        whereClause = SQL.createWhereClause(condition);
+        whereClause = SQL.createWhereClause(where ? SQL.createBinaryExpression("AND", where, condition) : condition);
+      } else if (where) {
+        whereClause = SQL.createWhereClause(where);
       }
 
       // Compile ORDER BY clause
@@ -116,6 +147,8 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
   ): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
+    /** A condition of the source itself, ANDed with the filter: which of the type's rows a path reaches. */
+    where?: SQL.SQLExpression;
   } {
     if (expr.kind === "TypeName") {
       // SELECT User -> SELECT * FROM users
@@ -214,6 +247,18 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     }
 
     if (expr.kind === "Identifier") {
+      // A `for` variable over objects is the iterator's current row: no FROM
+      // of its own, the shape reads the row's columns.
+      const row = this.scopeVariable(expr.name)?.row;
+      const rowType = row ? Context.resolveTypeName(this.ctx, row.type) : undefined;
+      if (row && rowType) {
+        this.ctx.currentScope.aliases.set(rowType.name.replace(/::/g, "_").toLowerCase(), row);
+        return {
+          fromClause: SQL.createFromClause([]),
+          selectItems: shape ? this.compileShape(shape, rowType.name, row.alias) : this.compileImplicitShape(rowType, row.alias)
+        };
+      }
+
       // Check if this identifier references a CTE alias
       const cteAlias = Context.getCTEAlias(this.ctx, expr.name);
       if (cteAlias) {
@@ -1005,8 +1050,12 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // Named element (alias or computed property)
       key = element.name.name;
       if (element.computable) {
-        // Computed property: name := expression
-        value = this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName));
+        // Computed property: name := expression. A path set is its select's
+        // rows as an array.
+        const pathSelect = this.shapePathSelect(element);
+        value = pathSelect ?
+          this.compileJsonArray(pathSelect) :
+          this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName));
       } else if (element.shape) {
         // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
@@ -1067,6 +1116,61 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     }
 
     return SQL.createJsonField(key, value);
+  }
+
+  /**
+   * The select a computed shape element stands for when its value is a set
+   * of a path's objects or values, else null (compiled as an expression):
+   *
+   *   titles := .posts.title                    → select .posts.title
+   *   r := .<manager[is Person] { name } filter … order by …
+   *                                             → select .<manager[is Person] { name } filter … order by …
+   *   r := (select .<manager[is Person] { name } filter …)
+   *
+   * Objects are always an array, like a link's sub-shape; values only when
+   * the path is multi (`boss := .manager.name` stays one value). A bare path
+   * to objects answers their ids (`[{ "id": … }]`). A lone backlink keeps its
+   * own compilation (compileBacklinkWithIntersection), which answers the same.
+   */
+  private shapePathSelect(element: EdgeQLAST.ShapeElement): EdgeQLAST.SelectQuery | null {
+    const { expr } = element;
+    if (expr.kind === "ShapeExpr" && expr.expr.kind === "Path") {
+      const resolved = this.resolvePath(expr.expr);
+      return resolved && !resolved.property ?
+        { distinct: false, expr: expr.expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy, shape: expr.shape } :
+        null;
+    }
+    if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && expr.query.expr.kind === "Path") {
+      const resolved = this.resolvePath(expr.query.expr);
+      return resolved && (resolved.multi || !resolved.property) ? expr.query : null;
+    }
+    if (expr.kind !== "Path") {
+      return null;
+    }
+    const resolved = this.resolvePath(expr);
+    const loneBacklink = resolved?.start.kind === "row" && resolved.hops.length === 1 && resolved.hops[0].kind === "backlink" &&
+      !resolved.property;
+    if (!resolved?.multi || loneBacklink) {
+      return null;
+    }
+    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    return { distinct: false, expr, kind: "SelectQuery", shape: resolved.property ? undefined : idShape };
+  }
+
+  /*** A select's rows as one JSON array, in the select's order (`[]` for none). ***/
+  private compileJsonArray(query: EdgeQLAST.SelectQuery): SQL.SQLExpression {
+    const rows = this.compileSelectQuery(query);
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias: "__agg", columnAliases: ["v"], kind: "TableReference", name: "", subquery: rows }]),
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(
+          SQL.createFunctionCall("COALESCE", [
+            SQL.createFunctionCall("jsonb_agg", [SQL.createColumnReference("v", "__agg")]),
+            { kind: "RawSQLExpression", sql: "'[]'::jsonb" }
+          ])
+        )
+      ])
+    }));
   }
 
   /**
@@ -1434,12 +1538,25 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     return subqueryExpr;
   }
 
+  /**
+   * `select <path>`: the objects the path reaches (see compiler-paths.ts), or
+   * their property when it ends in one. `select User.posts { title }` reads
+   * the post table, keeping the posts linked from some user:
+   *
+   *   SELECT jsonb_build_object('title', post_2.title) FROM post AS post_2
+   *   WHERE post_2.id IN (SELECT __j_posts_1.target_id FROM user_posts AS __j_posts_1
+   *                       WHERE __j_posts_1.source_id IN (SELECT user_3.id FROM "user" AS user_3))
+   *
+   * The reached type is the select's subject, so its filter, order by and
+   * limit apply to those objects.
+   */
   private compilePathExpression(
     path: EdgeQLAST.Path,
-    _shape?: EdgeQLAST.Shape
+    shape?: EdgeQLAST.Shape
   ): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
+    where?: SQL.SQLExpression;
   } {
     // Handle simple Type.property paths (e.g., User.email)
     if (path.steps.length === 2) {
@@ -1463,7 +1580,14 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
 
         const typeName = typeStep.name;
         const typeDef = Context.resolveTypeName(this.ctx, typeName);
-        if (typeDef) {
+        const property = typeDef && !shape ?
+          Context.getProperty(
+            this.ctx,
+            typeName,
+            propStep.name
+          ) :
+          undefined;
+        if (typeDef && property) {
           const tableAlias = Context.addTableAlias(
             this.ctx,
             typeName.toLowerCase(),
@@ -1473,29 +1597,69 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
           const fromClause = SQL.createFromClause([
             SQL.createTableReference(typeDef.tableName, tableAlias)
           ]);
-          const property = Context.getProperty(
-            this.ctx,
-            typeName,
-            propStep.name
-          );
-          if (property) {
-            const selectItems = [
-              SQL.createSelectItem(
-                SQL.createColumnReference(property.columnName, tableAlias)
-              )
-            ];
-            return { selectItems, fromClause };
-          }
+          const selectItems = [
+            SQL.createSelectItem(
+              SQL.createColumnReference(property.columnName, tableAlias)
+            )
+          ];
+          return { selectItems, fromClause };
         }
       }
     }
 
-    throw new CompilationError(
-      "Path expression compilation not yet fully implemented"
-    );
+    const resolved = this.resolvePath(path);
+    const rendered = renderPath(path);
+    if (!resolved) {
+      const unsupported = path.steps.find(step => step.type === "link_property" || step.type === "type_intersection");
+      if (unsupported) {
+        throw new CompilationError(
+          `Cannot select '${rendered}': ${
+            unsupported.type === "link_property" ? "a link property" : "a type intersection"
+          } in a selected path is not supported yet`,
+          locationOf(path.steps[0])
+        );
+      }
+      throw new CompilationError(
+        `Cannot select '${rendered}': it does not start at an object type, a \`with\` binding of objects, a \`for\` variable over objects ` +
+          `or the current object, or a step is not a link (or, last, a property) of the type before it`,
+        locationOf(path.steps[0])
+      );
+    }
+    if (resolved.property && shape) {
+      throw new CompilationError(
+        `A shape cannot be applied to '${rendered}': it ends in the property '${resolved.property.name}'`,
+        locationOf(path.steps.at(-1))
+      );
+    }
+
+    const source = this.compilePathSource(resolved);
+    const typeName = resolved.typeDef.name;
+    let selectItems: SQL.SelectItem[];
+    if (resolved.property) {
+      const value = this.compilePropertyReference(resolved.property, source.alias, typeName);
+      // A multi property is a set of values: one row each.
+      const multi = resolved.property.multi && !resolved.property.computed;
+      selectItems = [SQL.createSelectItem(multi ? SQL.createFunctionCall("unnest", [value]) : value, multi ? resolved.property.name : undefined)];
+    } else {
+      selectItems = shape ? this.compileShape(shape, typeName, source.alias) : this.compileImplicitShape(resolved.typeDef, source.alias);
+    }
+    return { fromClause: SQL.createFromClause(source.from), selectItems, where: source.where };
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
+    // `x.name`, where `x` is a `for` variable over objects: the rest of the
+    // path read from the iterator's current row, as `.name` is from a shape's.
+    const row = path.rooted ? this.scopeVariable(path.steps[0].name)?.row : undefined;
+    if (row) {
+      Context.pushScope(this.ctx);
+      try {
+        this.ctx.currentScope.aliases.set(row.type.replace(/::/g, "_").toLowerCase(), row);
+        return this.compilePathInExpression({ kind: "Path", span: path.span, steps: path.steps.slice(1) });
+      } finally {
+        Context.popScope(this.ctx);
+      }
+    }
+
     if (path.steps.some(step => step.type === "link_property")) {
       return this.compileLinkPropertyPath(path);
     }

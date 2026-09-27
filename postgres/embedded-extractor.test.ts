@@ -10,8 +10,9 @@
  * second time.
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
+import { sha256Hex } from "../lib/crypto.ts";
 import {
   extractEmbeddedPg,
   isEmbeddedPgExtracted,
@@ -165,6 +166,35 @@ Deno.test("extractEmbeddedPg - recreates symlink entries (macOS ICU libs)", asyn
     // Reading through the link resolves to the target file's bytes.
     const viaLink = await Deno.readFile(linkPath);
     assertEquals(Array.from(viaLink), [9, 9, 9]);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("extractEmbeddedPg - verifies each file against its build-time sha256", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-sha-" });
+  try {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const src = await makeSourceFile(tmp, "src/bin/postgres", bytes);
+    const target = join(tmp, "target");
+
+    const good = await extractEmbeddedPg(target, [
+      { mode: 0o755, relPath: "bin/postgres", sha256: await sha256Hex(bytes), sourceUrl: src }
+    ]);
+    assertEquals(good.extracted, 1);
+    assertEquals(await isEmbeddedPgExtracted(target), true);
+
+    /*** A mismatch fails loudly and leaves no (unmarked, half-verified) extraction behind. ***/
+    const badTarget = join(tmp, "bad");
+    await assertRejects(
+      () =>
+        extractEmbeddedPg(badTarget, [
+          { mode: 0o755, relPath: "bin/postgres", sha256: "0".repeat(64), sourceUrl: src }
+        ]),
+      Error,
+      "failed verification"
+    );
+    await assertRejects(() => Deno.stat(badTarget), Deno.errors.NotFound);
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }

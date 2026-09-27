@@ -141,6 +141,8 @@ export interface UpdateStatement extends SQLNode {
   kind: "UpdateStatement";
   table: string;
   set: SetClause[];
+  /** `UPDATE … FROM <tables>`: rows the SET and WHERE may read (a `for` loop's iterator). */
+  from?: TableReference[];
   where?: WhereClause;
   returning?: SelectItem[];
 }
@@ -148,6 +150,8 @@ export interface UpdateStatement extends SQLNode {
 export interface DeleteStatement extends SQLNode {
   kind: "DeleteStatement";
   table: string;
+  /** `DELETE … USING <tables>`: rows the WHERE may read (a `for` loop's iterator). */
+  using?: TableReference[];
   where?: WhereClause;
   returning?: SelectItem[];
 }

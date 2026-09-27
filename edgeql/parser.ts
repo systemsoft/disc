@@ -6,6 +6,7 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
+import type { Span } from "../lib/types.ts";
 import { stripStdModule } from "../lib/std-types.ts";
 import * as AST from "./ast.ts";
 import { EdgeQLLexer } from "./lexer.ts";
@@ -20,6 +21,17 @@ const CAST_PREFIX_OPERATORS = [
   TokenType.PLUS,
   TokenType.TILDE
 ];
+
+/*** Statements a `for` body may be, in parentheses: `union (insert …)`. ***/
+const FOR_BODY_STATEMENTS = new Set<TokenType>([
+  TokenType.DELETE,
+  TokenType.FOR,
+  TokenType.GROUP,
+  TokenType.INSERT,
+  TokenType.SELECT,
+  TokenType.UPDATE,
+  TokenType.WITH
+]);
 
 export class EdgeQLParser {
   private tokens: Token[];
@@ -288,7 +300,7 @@ export class EdgeQLParser {
   }
 
   private parseForQuery(): AST.ForQuery {
-    this.consume(TokenType.FOR, "Expected 'FOR'");
+    const span = this.spanOf(this.consume(TokenType.FOR, "Expected 'FOR'"));
 
     const variable = this.parseIdentifier();
     this.consume(TokenType.IN, "Expected 'IN' after variable");
@@ -297,13 +309,24 @@ export class EdgeQLParser {
     const iterator = this.parseIfElseExpression();
 
     this.consume(TokenType.UNION, "Expected 'UNION' after iterator");
+
+    // The body is a parenthesized statement, or any expression (Gel's
+    // `union Expr`): `union x.name`, `union (x.name ++ '!')`, `union x { name }`.
+    const statementBody = this.check(TokenType.LPAREN) && FOR_BODY_STATEMENTS.has(this.tokens[this.current + 1]?.type);
+    if (!statementBody) {
+      const expr = this.parseExpression();
+      const body: AST.SelectQuery = expr.kind === "ShapeExpr" ?
+        { distinct: false, expr: expr.expr, kind: "SelectQuery", shape: expr.shape, span: expr.span } :
+        { distinct: false, expr, kind: "SelectQuery", span: expr.span };
+      return { body, iterator, kind: "ForQuery", span, variable };
+    }
     this.consume(TokenType.LPAREN, "Expected '(' after UNION");
 
     const body = this.parseQuery();
 
     this.consume(TokenType.RPAREN, "Expected ')' after query body");
 
-    return { kind: "ForQuery", variable, iterator, body };
+    return { body, iterator, kind: "ForQuery", span, variable };
   }
 
   private parseSelectQuery(): AST.SelectQuery {
@@ -841,12 +864,15 @@ export class EdgeQLParser {
           shape = this.parseShape();
         }
 
+        // A shaped computed path may narrow and order its objects like a link
+        // sub-shape: `r := .<manager[is Person] { name } filter … order by …`.
         return AST.createShapeElement(expr, {
           name,
           computable,
           cardinality,
           operator,
-          shape
+          shape,
+          ...this.parseShapeModifiers(expr.kind === "ShapeExpr" ? expr.shape : shape)
         });
       } else if (this.match(TokenType.COLON)) {
         // Aliased property
@@ -1255,6 +1281,8 @@ export class EdgeQLParser {
   }
 
   private parsePostfixExpression(): AST.Expression {
+    // Where a rooted path (`User.posts`) starts: its first step's span.
+    const rootSpan = this.spanOf(this.peek());
     let expr = this.parsePrimaryExpression();
 
     while (true) {
@@ -1297,15 +1325,17 @@ export class EdgeQLParser {
               name: expr.kind === "Identifier" ?
                 expr.name :
                 expr.name.parts.join("::"),
-              optional: false
+              optional: false,
+              span: rootSpan
             };
-            expr = AST.createPath([firstStep, step]);
+            expr = { ...AST.createPath([firstStep, step]), rooted: true };
           } else {
             throw this.error("Cannot apply path access to this expression");
           }
         }
       } // Backward link
       else if (this.match(TokenType.BACKLINK)) {
+        const span = this.spanOf(this.previous());
         const name = this.parseIdentifier().name;
 
         let filter: AST.Expression | undefined;
@@ -1323,11 +1353,22 @@ export class EdgeQLParser {
           kind: "PathStep",
           type: "backlink",
           name,
-          filter
+          filter,
+          span
         };
 
         if (expr.kind === "Path") {
           expr.steps.push(step);
+        } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
+          // `User.<author[is Post]`: the backlink starts from `User`.
+          const rootStep: AST.PathStep = {
+            kind: "PathStep",
+            type: "property",
+            name: expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::"),
+            optional: false,
+            span: rootSpan
+          };
+          expr = { ...AST.createPath([rootStep, step]), rooted: true };
         } else {
           expr = AST.createPath([step]);
         }
@@ -1392,9 +1433,10 @@ export class EdgeQLParser {
               kind: "PathStep",
               type: "property",
               name: firstName,
-              optional: false
+              optional: false,
+              span: rootSpan
             };
-            expr = AST.createPath([firstStep, typeIntersectionStep]);
+            expr = { ...AST.createPath([firstStep, typeIntersectionStep]), rooted: true };
           } else {
             throw this.error(
               "Cannot apply type intersection to this expression"
@@ -1446,6 +1488,7 @@ export class EdgeQLParser {
   }
 
   private parsePathStep(): AST.PathStep {
+    const span = this.spanOf(this.peek());
     const name = this.parseIdentifier().name;
 
     let optional = false;
@@ -1457,7 +1500,8 @@ export class EdgeQLParser {
       kind: "PathStep",
       type: "property",
       name,
-      optional
+      optional,
+      span
     };
   }
 
@@ -2137,6 +2181,12 @@ export class EdgeQLParser {
       return this.advance();
     }
     throw this.error(message);
+  }
+
+  /*** Where `token` is in the source, as an AST node's span. ***/
+  private spanOf(token: Token): Span {
+    const start = { column: token.column, line: token.line, offset: token.offset };
+    return { end: { ...start, column: start.column + token.value.length, offset: start.offset + token.value.length }, start };
   }
 
   private error(message: string): SyntaxError {

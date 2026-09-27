@@ -12,22 +12,50 @@ import { PgLogCommand } from "./pg-log.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
 
-Deno.test("PgLogCommand - resolves log path from project name", () => {
-  const command = new PgLogCommand();
-  /*** Access the private method via prototype for testing ***/
-  const resolveLogPath = (command as any).resolveLogPath.bind(command);
-  const path = resolveLogPath("test-project");
+/*** Run `fn` with DISC_HOME pointing at a fresh directory holding `instances/<project>/`. ***/
+async function withDiscHome(fn: (instanceDir: (project: string) => string) => Promise<void>): Promise<void> {
+  const home = await Deno.makeTempDir();
+  const previous = Deno.env.get("DISC_HOME");
+  Deno.env.set("DISC_HOME", home);
 
-  const expected = join(
-    Deno.env.get("HOME")!,
-    ".disc",
-    "instances",
-    "test-project",
-    "logs",
-    "postgresql.log"
-  );
+  try {
+    await fn(project => join(home, "instances", project));
+  } finally {
+    if (previous === undefined)
+      Deno.env.delete("DISC_HOME");
+    else
+      Deno.env.set("DISC_HOME", previous);
+    await Deno.remove(home, { recursive: true });
+  }
+}
 
-  assertEquals(path, expected);
+Deno.test("PgLogCommand - reads the newest log the server's logging collector wrote, under DISC_HOME", async () => {
+  await withDiscHome(async instanceDir => {
+    const logDir = join(instanceDir("test-project"), "data", "log");
+    await Deno.mkdir(logDir, { recursive: true });
+    await Deno.mkdir(join(instanceDir("test-project"), "logs"));
+    await Deno.writeTextFile(join(instanceDir("test-project"), "logs", "postgresql.log"), "startup\n");
+    await Deno.writeTextFile(join(logDir, "postgresql-Mon.log"), "older\n");
+    await Deno.writeTextFile(join(logDir, "postgresql-Fri.log"), "newer\n");
+    await Deno.utime(join(logDir, "postgresql-Mon.log"), 1_000, 1_000);
+
+    // deno-lint-ignore no-explicit-any
+    const path = await (new PgLogCommand() as any).resolveLogPath("test-project");
+
+    assertEquals(path, join(logDir, "postgresql-Fri.log"));
+  });
+});
+
+Deno.test("PgLogCommand - falls back to pg_ctl's startup log before the collector has written one", async () => {
+  await withDiscHome(async instanceDir => {
+    await Deno.mkdir(join(instanceDir("test-project"), "logs"), { recursive: true });
+    await Deno.writeTextFile(join(instanceDir("test-project"), "logs", "postgresql.log"), "startup\n");
+
+    // deno-lint-ignore no-explicit-any
+    const path = await (new PgLogCommand() as any).resolveLogPath("test-project");
+
+    assertEquals(path, join(instanceDir("test-project"), "logs", "postgresql.log"));
+  });
 });
 
 Deno.test("PgLogCommand - filterByLevel matches correct levels", () => {

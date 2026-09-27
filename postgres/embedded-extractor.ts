@@ -19,6 +19,7 @@
 
 import { ensureDir } from "@std/fs";
 import { dirname, join } from "@std/path";
+import { sha256Hex } from "../lib/crypto.ts";
 
 const MARKER_FILE = ".disc-embedded-pg-marker";
 
@@ -34,6 +35,13 @@ export interface EmbeddedPgFileEntry {
    * `lib/postgresql/llvmjit.so`).
    */
   relPath: string;
+  /**
+   * SHA-256 (hex) of the file as `disc build` embedded it. The extractor
+   * refuses to write out bytes that don't match. Optional only so
+   * hand-built entries (tests) can omit it; generated manifests always
+   * carry it.
+   */
+  sha256?: string;
   /**
    * Source URL to read from. In the compiled binary this resolves
    * through Deno's embedded asset table; in development it's a normal
@@ -122,6 +130,18 @@ export async function extractEmbeddedPg(
     }
 
     const bytes = await Deno.readFile(entry.sourceUrl);
+    if (entry.sha256 !== undefined) {
+      const actual = await sha256Hex(bytes);
+      if (actual !== entry.sha256) {
+        // No marker was written, but drop what we did extract so nothing
+        // half-verified lingers on disk.
+        await Deno.remove(targetDir, { recursive: true }).catch(() => {});
+        throw new Error(
+          `Embedded PostgreSQL file ${entry.relPath} failed verification: expected sha256 ${entry.sha256}, ` +
+            `got ${actual}. The Disc binary may be corrupted; reinstall it.`
+        );
+      }
+    }
     await Deno.writeFile(dest, bytes, { mode: entry.mode });
     // Re-chmod after write because writeFile's mode arg is honored only
     // on creation; existing files keep their old mode. Belt-and-suspenders.

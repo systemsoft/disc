@@ -8,6 +8,7 @@ import { fromFileUrl, join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { sha256Hex } from "../lib/crypto.ts";
 import {
   AVAILABLE_PLATFORMS,
   BuildCommand,
@@ -255,6 +256,8 @@ Deno.test("generateEmbeddedPgManifest - emits import.meta.resolve URLs + correct
          module resolution. ***/
     assertStringIncludes(generated, `import.meta.resolve("../pg/bin/postgres")`);
     assertStringIncludes(generated, `import.meta.resolve("../pg/share/tz.txt")`);
+    /*** Each file carries the sha256 of the bytes embedded, for the extractor to verify. ***/
+    assertStringIncludes(generated, `sha256: "${await sha256Hex("fake")}"`);
     /*** The old absolute-file:// form must be gone. ***/
     assertEquals(generated.includes(`file://${sourceDir}`), false);
   } finally {

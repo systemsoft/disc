@@ -23,6 +23,7 @@
 import { join } from "@std/path";
 import {
   extractEmbeddedPg,
+  isEmbeddedPgExtracted,
   type EmbeddedPgEntry
 } from "./embedded-extractor.ts";
 import { logger } from "./logger.ts";
@@ -60,6 +61,32 @@ function defaultDiscHome(): string {
   }
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "/tmp";
   return join(home, ".disc");
+}
+
+/**
+ * `bin/` directories of fully extracted embedded distributions, by version
+ * (`<discHome>/embedded-postgres/<version>/bin`). Lets an instance recovered
+ * from disk reuse an extraction instead of downloading the same version.
+ */
+export async function extractedEmbeddedPgBinDirs(
+  discHome: string = defaultDiscHome()
+): Promise<Map<string, string>> {
+  const root = join(discHome, "embedded-postgres");
+  const found = new Map<string, string>();
+
+  try {
+    for await (const entry of Deno.readDir(root)) {
+      if (entry.isDirectory && await isEmbeddedPgExtracted(join(root, entry.name))) {
+        found.set(entry.name, join(root, entry.name, "bin"));
+      }
+    }
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) {
+      throw err;
+    }
+  }
+
+  return found;
 }
 
 /**

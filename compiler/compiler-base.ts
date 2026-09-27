@@ -15,10 +15,17 @@ import {
   AccessSQLInjector
 } from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import type { ErrorContext } from "../lib/errors.ts";
 import { normalizeStdTypeName } from "../lib/std-types.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
+
+/*** Where `node` is in the query, as a CompilationError's context (none when the parser recorded no span). ***/
+export function locationOf(node: EdgeQLAST.EdgeQLNode | undefined): ErrorContext | undefined {
+  const start = node?.span?.start;
+  return start ? { location: { column: start.column, line: start.line, offset: start.offset } } : undefined;
+}
 
 /**
  * Extract the intersection type name from a backlink step's optional

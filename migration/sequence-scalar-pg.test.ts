@@ -16,6 +16,7 @@
 
 import { assertEquals } from "@std/assert";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { unwrapExactNumbers } from "../lib/exact-json.ts";
 import { EdgeQLProtocolHandler } from "../server/edgeql-protocol.ts";
 import * as ServerTypes from "../server/types.ts";
 import { canRunPgTests, getTestDsn, makePool, resetTestDatabase } from "../tests/pg-test-harness.ts";
@@ -178,9 +179,9 @@ Deno.test({
       await reset(pool);
       await migrate(pool, SDL);
       const run = await handlerFor(pool, dsn);
-      // A scalar select returns one row with one column.
+      // A scalar select returns one row with one column; numeric values arrive as exact JSON numbers.
       const one = async (query: string, variables: Record<string, unknown>): Promise<unknown> =>
-        Object.values((await run(query, variables))[0] as Record<string, unknown>)[0];
+        unwrapExactNumbers(Object.values((await run(query, variables))[0] as Record<string, unknown>)[0]);
 
       assertEquals(Number(await one(`select <std::int64>$x + 1`, { x: 41 })), 42);
       assertEquals(await one(`select <std::str>$x ++ "!"`, { x: "hi" }), "hi!");

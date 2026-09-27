@@ -8,6 +8,7 @@ import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { postgresErrorFields } from "../lib/errors.ts";
 import { PostgresConfig, pruneStaleLogFiles } from "./config.ts";
 import { PostgresBinaryDownloader } from "./downloader.ts";
+import { parsePostgresVersion } from "./instance-version.ts";
 import { logger } from "./logger.ts";
 
 export interface PostgresInstanceOptions {
@@ -17,6 +18,8 @@ export interface PostgresInstanceOptions {
    *  When provided, Disc skips downloading PostgreSQL and uses these binaries instead. */
   pgBinDir?: string;
   port?: number;
+  /** Exact version of the binaries. Default "18.4"; with `pgBinDir` and no
+   *  version given, read from `<pgBinDir>/postgres --version` at init(). */
   postgresVersion?: string;
   socketDir?: string;
 }
@@ -42,6 +45,7 @@ export class PostgresInstance {
   private postgresVersion: string;
   private socketDir: string;
   private startedAt?: Date;
+  private versionFromBinary: boolean;
 
   constructor(options: PostgresInstanceOptions) {
     this.instanceName = options.instanceName;
@@ -51,6 +55,9 @@ export class PostgresInstance {
     this.postgresVersion = options.postgresVersion || "18.4";
     this.downloader = new PostgresBinaryDownloader();
     this.config = new PostgresConfig();
+    // Caller-supplied binaries without a stated version: ask them at init()
+    // rather than report the "18.4" default for, say, a system PG 16.
+    this.versionFromBinary = Boolean(options.pgBinDir) && !options.postgresVersion;
 
     // When a pre-existing PG binary directory is provided, use it directly
     // and skip the download step during init().
@@ -69,6 +76,11 @@ export class PostgresInstance {
       this.pgBinDir = join(pgDir, "bin");
     } else {
       logger.debug(`Using pre-existing PostgreSQL binaries at ${this.pgBinDir}`);
+    }
+
+    if (this.versionFromBinary) {
+      this.postgresVersion = await this.readBinaryVersion();
+      this.versionFromBinary = false;
     }
 
     // P2-02: if any of these paths already exists but is a regular
@@ -123,6 +135,20 @@ export class PostgresInstance {
     await Deno.writeTextFile(configPath, configContent);
 
     logger.debug(`PostgreSQL instance initialized at ${this.dataDir}`);
+  }
+
+  /** The exact version of the binaries in `pgBinDir`, from `postgres --version`. */
+  private async readBinaryVersion(): Promise<string> {
+    const postgresPath = join(this.pgBinDir!, "postgres");
+    const output = await new Deno.Command(postgresPath, { args: ["--version"], stderr: "piped", stdout: "piped" })
+      .output();
+    const text = new TextDecoder().decode(output.stdout);
+    const version = output.success ? parsePostgresVersion(text) : null;
+
+    if (!version)
+      throw new Error(`Could not determine the PostgreSQL version of ${postgresPath}: ${text.trim() || "no output"}`);
+
+    return version;
   }
 
   private async runInitDb(): Promise<void> {
@@ -337,11 +363,12 @@ export class PostgresInstance {
   }
 
   /**
-   * Run `sql` on this instance's own database (named after the instance) as
-   * the `disc` superuser, in-process — the bundled PostgreSQL ships no psql.
+   * Run `sql` on `database` (default: this instance's own database, named
+   * after the instance) as the `disc` superuser, in-process — the bundled
+   * PostgreSQL ships no psql.
    */
-  async query<T>(sql: string): Promise<T[]> {
-    const client = new Client({ ...this.adminClientConfig(), database: this.instanceName });
+  async query<T>(sql: string, database: string = this.instanceName): Promise<T[]> {
+    const client = new Client({ ...this.adminClientConfig(), database });
 
     await client.connect();
 
@@ -613,5 +640,10 @@ export class PostgresInstance {
 
   getSocketDir(): string {
     return this.socketDir;
+  }
+
+  /** Exact PostgreSQL version of this instance's binaries (e.g. "16.4"). */
+  getVersion(): string {
+    return this.postgresVersion;
   }
 }

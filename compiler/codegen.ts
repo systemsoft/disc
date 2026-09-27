@@ -262,6 +262,10 @@ export class SQLCodeGenerator {
     sql += "\nSET " +
       stmt.set.map(set => this.generateSetClause(set)).join(", ");
 
+    if (stmt.from?.length) {
+      sql += "\nFROM " + stmt.from.map(table => this.generateTableReference(table)).join(", ");
+    }
+
     if (stmt.where) {
       sql += "\nWHERE " + this.generateExpression(stmt.where.condition);
     }
@@ -281,6 +285,10 @@ export class SQLCodeGenerator {
 
   private generateDeleteStatement(stmt: SQL.DeleteStatement): string {
     let sql = "DELETE FROM " + this.escapeIdentifier(stmt.table);
+
+    if (stmt.using?.length) {
+      sql += "\nUSING " + stmt.using.map(table => this.generateTableReference(table)).join(", ");
+    }
 
     if (stmt.where) {
       sql += "\nWHERE " + this.generateExpression(stmt.where.condition);

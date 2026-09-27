@@ -1381,3 +1381,52 @@ Deno.test("EdgeQL Parser - bigint and decimal literals keep their digits as text
     assertEquals(new EdgeQLParser(source).parseExpressionOnly(), expected, source);
   }
 });
+
+Deno.test("EdgeQL Parser - a path from a name is rooted there, a relative path is not", () => {
+  const rooted = new EdgeQLParser("User.posts.title").parseExpressionOnly();
+  assertEquals(rooted.kind === "Path" && [rooted.rooted, rooted.steps.map(step => step.name)], [true, ["User", "posts", "title"]]);
+  const relative = new EdgeQLParser(".posts.title").parseExpressionOnly();
+  assertEquals(relative.kind === "Path" && [relative.rooted, relative.steps.map(step => step.name)], [undefined, ["posts", "title"]]);
+});
+
+Deno.test("EdgeQL Parser - a backlink from a name keeps the name as the path's root", () => {
+  const path = new EdgeQLParser("User.<author[is Post].title").parseExpressionOnly();
+  assertEquals(path.kind, "Path");
+  if (path.kind === "Path") {
+    assertEquals(path.rooted, true);
+    assertEquals(path.steps.map(step => [step.type, step.name]), [["property", "User"], ["backlink", "author"], ["property", "title"]]);
+  }
+});
+
+Deno.test("EdgeQL Parser - path steps record where they are", () => {
+  const path = new EdgeQLParser("User\n  .posts.<author[is Post]").parseExpressionOnly();
+  assertEquals(path.kind, "Path");
+  if (path.kind === "Path") {
+    assertEquals(path.steps.slice(1).map(step => [step.span?.start.line, step.span?.start.column]), [[2, 4], [2, 9]]);
+  }
+});
+
+Deno.test("EdgeQL Parser - a for body may be any expression", () => {
+  const bare = new EdgeQLParser("for x in User union x.name").parse();
+  assertEquals(bare.kind === "ForQuery" && bare.body.kind === "SelectQuery" && bare.body.expr.kind, "Path");
+
+  const shaped = new EdgeQLParser("for x in User union x { name }").parse();
+  assertEquals(shaped.kind === "ForQuery" && shaped.body.kind === "SelectQuery" && shaped.body.shape?.elements.length, 1);
+
+  const parenthesized = new EdgeQLParser("for x in User union (x.name ++ '!')").parse();
+  assertEquals(parenthesized.kind === "ForQuery" && parenthesized.body.kind === "SelectQuery" && parenthesized.body.expr.kind, "BinaryOp");
+
+  const statement = new EdgeQLParser("for x in User union (insert Post { title := x.name })").parse();
+  assertEquals(statement.kind === "ForQuery" && statement.body.kind, "InsertQuery");
+});
+
+Deno.test("EdgeQL Parser - a shaped computed path takes a filter and an order by", () => {
+  const ast = new EdgeQLParser("select Person { r := .<manager[is Person] { name } filter .name != '' order by .name desc }").parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const [element] = ast.shape!.elements;
+    assertEquals(element.expr.kind, "ShapeExpr");
+    assertEquals(element.filter?.kind, "BinaryOp");
+    assertEquals(element.orderBy?.map(item => item.direction), ["DESC"]);
+  }
+});

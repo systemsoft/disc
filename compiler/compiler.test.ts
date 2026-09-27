@@ -563,7 +563,15 @@ Deno.test("SQL Compiler - FOR with single-element set", () => {
   assertEquals(sql.includes("'Ada'"), true);
 });
 
-Deno.test("SQL Compiler - FOR with subquery iterator produces LATERAL", () => {
+Deno.test("SQL Compiler - FOR over objects with a select body runs it in LATERAL", () => {
+  const sql = compileEdgeQL(`FOR u IN (SELECT User) UNION (SELECT u { name })`);
+
+  assertEquals(sql.includes("LATERAL"), true);
+  assertEquals(sql.includes("for_sub"), true);
+  assertEquals(/jsonb_build_object\('name', for_iter_\d+\.name\)/.test(sql), true);
+});
+
+Deno.test("SQL Compiler - FOR over objects with a delete body is DELETE … USING the iterator", () => {
   const source = `
     FOR user IN (SELECT User)
     UNION (
@@ -573,9 +581,10 @@ Deno.test("SQL Compiler - FOR with subquery iterator produces LATERAL", () => {
   `;
   const sql = compileEdgeQL(source);
 
-  assertEquals(sql.includes("LATERAL"), true);
-  assertEquals(sql.includes("for_iter"), true);
-  assertEquals(sql.includes("for_sub"), true);
+  // PostgreSQL has no DELETE inside LATERAL.
+  assertEquals(sql.includes("LATERAL"), false);
+  assertEquals(/DELETE FROM users\s+USING \(/.test(sql), true);
+  assertEquals(/\) AS for_iter_\d+/.test(sql), true);
 });
 
 Deno.test("SQL Compiler - FOR with subquery iterator and insert body is INSERT … SELECT", () => {
@@ -583,19 +592,19 @@ Deno.test("SQL Compiler - FOR with subquery iterator and insert body is INSERT �
     FOR x IN (SELECT User)
     UNION (
       INSERT User {
-        name := x,
+        name := x.name,
         email := "copied@test.com"
       }
     )
   `;
   const sql = compileEdgeQL(source);
 
-  // An insert body is INSERT INTO … SELECT … FROM (iterator) AS for_iter(val):
+  // An insert body is INSERT INTO … SELECT … FROM (iterator) AS for_iter_N:
   // PostgreSQL has no INSERT inside LATERAL.
   assertEquals(sql.includes("LATERAL"), false);
   assertEquals(sql.includes("for_sub"), false);
   assertEquals(sql.includes("INSERT INTO"), true);
-  assertEquals(sql.includes("AS for_iter(val)"), true);
+  assertEquals(/SELECT\s+for_iter_\d+\.name/.test(sql), true);
 });
 
 // contains() and find() compilation tests

@@ -1,0 +1,339 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/**
+ * Path layer: a path over links as the set of objects it reaches.
+ *
+ * `User.posts`, `.posts.comments` and `.<author[is Post]` each stand for a
+ * set of distinct objects. The set is compiled to the SQL that selects their
+ * ids, one hop at a time from where the path starts:
+ *
+ *   User.posts.comments
+ *   → SELECT j2.target_id FROM post_comments j2 WHERE j2.source_id IN
+ *       (SELECT j1.target_id FROM user_posts j1 WHERE j1.source_id IN
+ *         (SELECT u.id FROM "user" u))
+ *
+ * Membership (`IN`) rather than joins keeps each object once, however many
+ * paths reach it, which is Gel's semantics for a path over links. A select
+ * of the path reads the reached type's table filtered to those ids, so a
+ * shape, filter, order by and limit apply to the objects themselves.
+ */
+
+import * as EdgeQLAST from "../edgeql/ast.ts";
+import { CompilationError } from "../lib/errors.ts";
+import { backlinkIntersectionName, locationOf } from "./compiler-base.ts";
+import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
+import * as Context from "./context.ts";
+import * as SQL from "./sql.ts";
+
+/*** Where a path starts: one row whose columns are an object's, or a set of objects. ***/
+type PathStart =
+  | { kind: "row"; row: Context.TableAlias; }
+  | { kind: "type"; }
+  | { kind: "binding"; cte: Context.CTEAlias; };
+
+/*** One step of a path from one object type to another. ***/
+interface PathHop {
+  /** A link of the step's source type (`.posts`), or of the target type pointing back (`.<author[is Post]`). */
+  kind: "link" | "backlink";
+  link: Context.LinkDef;
+  target: Context.TypeDef;
+}
+
+/*** A path resolved against the schema and the scope, before any SQL is emitted. ***/
+export interface ResolvedPath {
+  start: PathStart;
+  /** The type the path starts from. */
+  startType: Context.TypeDef;
+  hops: PathHop[];
+  /** The type of the objects the path reaches. */
+  typeDef: Context.TypeDef;
+  /** The property of those objects the path ends in (`.posts.title`), if any. */
+  property?: Context.PropertyDef;
+  /** More than one object (or value) per start row: the start is a set, or a hop is multi. */
+  multi: boolean;
+}
+
+/*** The ids of a path's objects: one value (compared with `=`) or a select of them (`IN`). ***/
+type PathIds = { value: SQL.SQLExpression; } | { select: SQL.SelectStatement; };
+
+/*** A path's objects as a row source: its FROM and the condition keeping the path's rows. ***/
+export interface PathSource {
+  alias: string;
+  from: SQL.TableReference[];
+  where?: SQL.SQLExpression;
+}
+
+export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
+  /**
+   * Resolve `path` to where it starts and the links it follows, or null when
+   * it is not a path over objects this layer compiles: no object to start
+   * from, a step that is neither a link nor (last) a property, a link
+   * property, or a tuple field.
+   */
+  protected resolvePath(path: EdgeQLAST.Path): ResolvedPath | null {
+    if (path.steps.length === 0 || path.steps.some(step => step.type === "link_property")) {
+      return null;
+    }
+    const origin = this.pathOrigin(path);
+    if (!origin) {
+      return null;
+    }
+
+    const hops: PathHop[] = [];
+    let typeDef = origin.startType;
+    let multi = origin.start.kind !== "row";
+    for (const [index, step] of origin.steps.entries()) {
+      const last = index === origin.steps.length - 1;
+      if (step.type === "property" && last) {
+        const property = typeDef.properties.get(step.name);
+        if (property) {
+          return { hops, multi: multi || property.multi, property, start: origin.start, startType: origin.startType, typeDef };
+        }
+      }
+      const hop = this.resolveHop(typeDef, step);
+      if (!hop) {
+        return null;
+      }
+      hops.push(hop);
+      multi = multi || hop.kind === "backlink" || hop.link.multi || !hop.link.columnName;
+      typeDef = hop.target;
+    }
+    return { hops, multi, start: origin.start, startType: origin.startType, typeDef };
+  }
+
+  /*** True when `path` reaches objects through at least one link, or from a type or a binding (not a property, not just the current row). ***/
+  protected isObjectPath(path: EdgeQLAST.Path): boolean {
+    const resolved = this.resolvePath(path);
+    return resolved !== null && !resolved.property && (resolved.hops.length > 0 || resolved.start.kind !== "row");
+  }
+
+  /**
+   * True when `expr` is a path whose value is a set with no column of its own
+   * — a path over multi links or backlinks, or a path from a type or a `with`
+   * binding — so an aggregate or `exists` over it reads the rows of a select
+   * of the path.
+   */
+  protected isSetPath(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind !== "Path") {
+      return false;
+    }
+    const resolved = this.resolvePath(expr);
+    return resolved !== null && resolved.multi;
+  }
+
+  /**
+   * The rows a select of `resolved` reads, registered in the current scope
+   * under the reached type so the select's shape, filter and order by resolve
+   * against them. A path that follows no link from a row is that row itself
+   * (no FROM); one from a type or a binding with no link is its table.
+   */
+  protected compilePathSource(resolved: ResolvedPath): PathSource {
+    const { start, typeDef } = resolved;
+    // An abstract type's objects live in its subtypes' tables; its own table
+    // is always empty, so reading it would answer nothing without an error.
+    const abstract = [...(start.kind === "type" ? [resolved.startType] : []), ...resolved.hops.map(hop => hop.target)].find(type => type.abstract);
+    if (abstract) {
+      throw new CompilationError(
+        `A path through the abstract type '${abstract.name}' is not supported yet: its objects are stored in its subtypes' tables. ` +
+          `Start from or link to a concrete type.`
+      );
+    }
+    let source: PathSource;
+    if (resolved.hops.length === 0 && start.kind === "row") {
+      source = { alias: start.row.alias, from: [] };
+    } else if (resolved.hops.length === 0 && start.kind === "binding") {
+      start.cte.referenced = true;
+      const alias = Context.generateAlias(this.ctx, start.cte.cteName);
+      source = { alias, from: [SQL.createTableReference(start.cte.cteName, alias)] };
+    } else {
+      const alias = Context.generateAlias(this.ctx, typeDef.tableName);
+      source = { alias, from: [SQL.createTableReference(typeDef.tableName, alias)] };
+      if (resolved.hops.length > 0) {
+        source.where = this.idIn(SQL.createColumnReference("id", alias), this.compilePathIds(resolved));
+      }
+    }
+    this.ctx.currentScope.aliases.set(typeDef.name.replace(/::/g, "_").toLowerCase(), {
+      alias: source.alias,
+      table: typeDef.tableName,
+      type: typeDef.name
+    });
+    return source;
+  }
+
+  /*** The ids of the objects `resolved` reaches, built hop by hop from its start. ***/
+  private compilePathIds(resolved: ResolvedPath): PathIds {
+    let ids: PathIds;
+    let row: string | undefined;
+    const { start } = resolved;
+    if (start.kind === "row") {
+      ids = { value: SQL.createColumnReference("id", start.row.alias) };
+      row = start.row.alias;
+    } else if (start.kind === "binding") {
+      start.cte.referenced = true;
+      ids = { select: this.selectColumn(start.cte.cteName, Context.generateAlias(this.ctx, start.cte.cteName), "id") };
+    } else {
+      ids = { select: this.selectColumn(resolved.startType.tableName, Context.generateAlias(this.ctx, resolved.startType.tableName), "id") };
+    }
+
+    let source = resolved.startType;
+    for (const hop of resolved.hops) {
+      ids = this.compileHop(source, hop, ids, row);
+      row = undefined;
+      source = hop.target;
+    }
+    return ids;
+  }
+
+  /*** The ids one hop reaches from the objects `ids` of type `source` (the row `row`, when the path starts at one). ***/
+  private compileHop(source: Context.TypeDef, hop: PathHop, ids: PathIds, row: string | undefined): PathIds {
+    const { link } = hop;
+    if (hop.kind === "backlink") {
+      if (link.junctionTable) {
+        const alias = Context.generateAlias(this.ctx, `__bj_${link.name}`);
+        return this.junctionHop(link.junctionTable, alias, link.junctionTargetColumn ?? "target_id", link.junctionSourceColumn ?? "source_id", ids);
+      }
+      const alias = Context.generateAlias(this.ctx, `__b_${link.name}`);
+      return this.tableHop(hop.target.tableName, alias, link.columnName!, "id", ids);
+    }
+
+    if (link.columnName) {
+      // A single link is a column of the source row: read it there when the
+      // path starts at that row, else through the source's table.
+      if (row) {
+        return { value: SQL.createColumnReference(link.columnName, row) };
+      }
+      const alias = Context.generateAlias(this.ctx, `__f_${link.name}`);
+      return this.tableHop(source.tableName, alias, "id", link.columnName, ids);
+    }
+    if (link.junctionTable) {
+      const alias = Context.generateAlias(this.ctx, `__j_${link.name}`);
+      return this.junctionHop(link.junctionTable, alias, link.junctionSourceColumn ?? "source_id", link.junctionTargetColumn ?? "target_id", ids);
+    }
+    // A computed backlink (`multi posts := .<author[is Post]`): the target's
+    // forward link holds the source's id.
+    const forward = link.backlink ? hop.target.links.get(link.backlink) : undefined;
+    if (forward?.columnName) {
+      const alias = Context.generateAlias(this.ctx, `__b_${link.name}`);
+      return this.tableHop(hop.target.tableName, alias, forward.columnName, "id", ids);
+    }
+    throw new CompilationError(`Link '${source.name}.${link.name}' cannot be followed in a path: it has no column, junction table or backlink`);
+  }
+
+  /*** `SELECT a.<out> FROM <table> a WHERE a.<match> IN/= <ids>`. ***/
+  private tableHop(table: string, alias: string, match: string, out: string, ids: PathIds): PathIds {
+    const select = this.selectColumn(table, alias, out);
+    select.where = SQL.createWhereClause(this.idIn(SQL.createColumnReference(match, alias), ids));
+    return { select };
+  }
+
+  private junctionHop(junction: string, alias: string, from: string, to: string, ids: PathIds): PathIds {
+    return this.tableHop(junction, alias, from, to, ids);
+  }
+
+  private selectColumn(table: string, alias: string, column: string): SQL.SelectStatement {
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([SQL.createTableReference(table, alias)]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference(column, alias))])
+    });
+  }
+
+  private idIn(column: SQL.SQLExpression, ids: PathIds): SQL.SQLExpression {
+    return "value" in ids ?
+      SQL.createBinaryExpression("=", column, ids.value) :
+      SQL.createBinaryExpression("IN", column, SQL.createSubqueryExpression(ids.select));
+  }
+
+  /**
+   * Where `path` starts and the steps that follow. A rooted path
+   * (`User.posts`, `u.posts`, `x.name`) starts at a `for` variable over
+   * objects, an object `with` binding or an object type, in that order; a
+   * relative one (`.posts`) at the implicit subject.
+   */
+  private pathOrigin(path: EdgeQLAST.Path): { start: PathStart; startType: Context.TypeDef; steps: EdgeQLAST.PathStep[]; } | null {
+    if (path.rooted) {
+      const [root, ...steps] = path.steps;
+      const variable = this.scopeVariable(root.name);
+      if (variable) {
+        const startType = variable.row ? Context.resolveTypeName(this.ctx, variable.row.type) : undefined;
+        return variable.row && startType ? { start: { kind: "row", row: variable.row }, startType, steps } : null;
+      }
+      const cte = Context.getCTEAlias(this.ctx, root.name);
+      if (cte) {
+        return cte.typeDef ? { start: { cte, kind: "binding" }, startType: cte.typeDef, steps } : null;
+      }
+      const typeDef = Context.resolveTypeName(this.ctx, root.name);
+      return typeDef?.kind === "object" ? { start: { kind: "type" }, startType: typeDef, steps } : null;
+    }
+
+    const subject = this.implicitSubject(path.steps[0]);
+    const startType = subject ? Context.resolveTypeName(this.ctx, subject.type) : undefined;
+    return subject && startType ? { start: { kind: "row", row: subject }, startType, steps: path.steps } : null;
+  }
+
+  /**
+   * The row a relative path starts from: in the innermost scope that has
+   * one, the table alias whose type has `step` as a link or property (the
+   * first alias for a backlink, or when none has it). A select of a
+   * relative path pushes an empty scope, so its path starts from the
+   * enclosing shape's or statement's row.
+   */
+  private implicitSubject(step: EdgeQLAST.PathStep): Context.TableAlias | undefined {
+    for (const scope of [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]) {
+      const aliases = [...scope.aliases.values()];
+      if (aliases.length === 0) {
+        continue;
+      }
+      if (step.type === "property") {
+        const owner = aliases.find(alias => {
+          const typeDef = Context.resolveTypeName(this.ctx, alias.type);
+          return typeDef?.links.has(step.name) || typeDef?.properties.has(step.name);
+        });
+        if (owner) {
+          return owner;
+        }
+      }
+      return aliases[0];
+    }
+    return undefined;
+  }
+
+  /*** The hop `step` takes from objects of type `source`, or null when it is not a link step. ***/
+  private resolveHop(source: Context.TypeDef, step: EdgeQLAST.PathStep): PathHop | null {
+    if (step.type === "property") {
+      const link = source.links.get(step.name);
+      const target = link ? Context.resolveTypeName(this.ctx, link.target) : undefined;
+      return link && target ? { kind: "link", link, target } : null;
+    }
+    if (step.type !== "backlink") {
+      return null;
+    }
+
+    const intersection = backlinkIntersectionName(step.filter);
+    if (!intersection) {
+      throw new CompilationError(
+        `Backlink '.<${step.name}' without a type intersection (e.g. \`.<${step.name}[is SomeType]\`) is not yet supported`,
+        locationOf(step)
+      );
+    }
+    const target = Context.resolveTypeName(this.ctx, intersection);
+    if (!target) {
+      throw new CompilationError(`Backlink intersection target '${intersection}' not found in schema`, locationOf(step));
+    }
+    const link = target.links.get(step.name);
+    if (!link || (!link.columnName && !link.junctionTable)) {
+      throw new CompilationError(
+        `Type '${target.name}' has no stored link '${step.name}' for the backlink '.<${step.name}[is ${intersection}]'`,
+        locationOf(step)
+      );
+    }
+    const linkTarget = Context.resolveTypeName(this.ctx, link.target);
+    if (linkTarget && linkTarget.name !== source.name) {
+      throw new CompilationError(
+        `Link '${target.name}.${step.name}' targets '${linkTarget.name}', not '${source.name}' — the backlink does not lead back from '${source.name}'`,
+        locationOf(step)
+      );
+    }
+    return { kind: "backlink", link, target };
+  }
+}

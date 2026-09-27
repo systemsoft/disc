@@ -103,7 +103,7 @@ disc build --platform linux-x64        # Cross-compile for Linux
 disc deploy --format <fmt>             # Generate deployment scaffolds (docker, compose, systemd, env)
 disc pg log                            # View PostgreSQL logs
 disc pg log -f                         # Follow log output
-disc pg upgrade --target-version 19.0  # Upgrade PostgreSQL
+disc pg upgrade --target-version 18.4  # Upgrade PostgreSQL
 ```
 
 ## Architecture

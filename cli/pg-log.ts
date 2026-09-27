@@ -12,7 +12,7 @@ import { join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { resolveProjectContext } from "../lib/project-context.ts";
+import { discHome, resolveProjectContext } from "../lib/project-context.ts";
 
 /*** EXPORT ------------------------------------------- ***/
 
@@ -29,7 +29,7 @@ export class PgLogCommand {
    */
   async execute(options: PgLogOptions): Promise<void> {
     const project = options.project || this.currentProjectName();
-    const logPath = this.resolveLogPath(project);
+    const logPath = await this.resolveLogPath(project);
 
     /*** Check if the log file exists ***/
     try {
@@ -128,17 +128,33 @@ export class PgLogCommand {
   }
 
   /**
-   * Resolve the path to the PostgreSQL log file for a given project.
+   * Resolve the PostgreSQL log file for a given project: the newest file the
+   * server's logging collector wrote to `data/log/` (one per weekday, see
+   * `postgres/config.ts`), else pg_ctl's startup log in `logs/`, which only
+   * holds output from before the collector starts.
    */
-  private resolveLogPath(project: string): string {
-    return join(
-      Deno.env.get("HOME")!,
-      ".disc",
-      "instances",
-      project,
-      "logs",
-      "postgresql.log"
-    );
+  private async resolveLogPath(project: string): Promise<string> {
+    const instanceDir = join(discHome(), "instances", project);
+    const collectorDir = join(instanceDir, "data", "log");
+    let newest: { mtime: number; path: string; } | undefined;
+
+    try {
+      for await (const entry of Deno.readDir(collectorDir)) {
+        if (!entry.isFile || !/^postgresql-.*\.log$/.test(entry.name))
+          continue;
+
+        const path = join(collectorDir, entry.name);
+        const mtime = (await Deno.stat(path)).mtime?.getTime() ?? 0;
+
+        if (!newest || mtime > newest.mtime)
+          newest = { mtime, path };
+      }
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound))
+        throw error;
+    }
+
+    return newest?.path ?? join(instanceDir, "logs", "postgresql.log");
   }
 }
 

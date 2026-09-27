@@ -4,8 +4,8 @@
 export { PostgresConfig } from "./config.ts";
 export type { PostgresConfigOptions } from "./config.ts";
 
-export { PostgresBinaryDownloader } from "./downloader.ts";
-export type { BinaryManifest } from "./downloader.ts";
+export { PostgresBinaryDownloader, SUPPORTED_POSTGRES_VERSIONS } from "./downloader.ts";
+export type { BinaryManifest, PostgresBinaryDownloaderOptions } from "./downloader.ts";
 
 export { clientToolsManifest, pgToolPath, PostgresClientTools, readDataDirVersion } from "./client-tools.ts";
 export type { ClientToolsManifest, PostgresClientToolsOptions } from "./client-tools.ts";
@@ -16,8 +16,11 @@ export type {
   PostgresInstanceStatus
 } from "./instance.ts";
 
+export { readInstanceVersionFile } from "./instance-version.ts";
+export type { InstanceVersionInfo } from "./instance-version.ts";
+
 export { PostgresManager } from "./manager.ts";
-export type { ManagedInstance } from "./manager.ts";
+export type { ManagedInstance, UpgradeInstanceOptions, UpgradeResult, UpgradeStep } from "./manager.ts";
 
 export { PostgresMonitor } from "./monitor.ts";
 export type { HealthStatus, MonitorOptions } from "./monitor.ts";

@@ -257,6 +257,12 @@ export interface VariableDef {
   type: string;
   expression: EdgeQLAST.Expression;
   sqlOverride?: SQL.SQLExpression;
+  /**
+   * A `for` variable over objects: the iterator row holding the current
+   * object's columns (`sqlOverride` is its `id`), so `x { name }`, `x.name`
+   * and `x.posts` read the object.
+   */
+  row?: TableAlias;
 }
 
 export function createContext(schema: Schema): CompilationContext {

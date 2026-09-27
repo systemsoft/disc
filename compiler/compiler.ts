@@ -12,7 +12,7 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery } from "./compiler-base.ts";
+import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
@@ -194,6 +194,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         if (query.expr?.kind === "TypeName") {
           return query.expr.name.parts.join("::");
         } else if (query.expr?.kind === "Path") {
+          // A path over links selects the objects it reaches (`User.posts`
+          // reads Post rows): their type's policy applies to the rows.
+          const resolved = this.resolvePath(query.expr);
+          if (resolved) {
+            return resolved.typeDef.name;
+          }
           // Handle path expressions that start with a type
           const firstStep = query.expr.steps[0];
           if (firstStep.type === "property") {
@@ -893,8 +899,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   private compileUpdateQuery(
-    query: EdgeQLAST.UpdateQuery
+    update: EdgeQLAST.UpdateQuery
   ): SQL.UpdateStatement | SQL.CTEStatement {
+    const query = this.mutationOfVariable(update);
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -1102,8 +1109,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   private compileDeleteQuery(
-    query: EdgeQLAST.DeleteQuery
+    deletion: EdgeQLAST.DeleteQuery
   ): SQL.DeleteStatement {
+    const query = this.mutationOfVariable(deletion);
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -1133,6 +1141,28 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           expression: SQL.createColumnReference("*")
         }
       ]
+    };
+  }
+
+  /**
+   * `update x …` / `delete x`, where `x` is a `for` variable over objects:
+   * the statement on x's type, narrowed to x — `update T filter .id = x and …`.
+   */
+  private mutationOfVariable<Q extends EdgeQLAST.UpdateQuery | EdgeQLAST.DeleteQuery>(query: Q): Q {
+    const [name, ...rest] = query.type.name.parts;
+    const row = rest.length === 0 ? this.scopeVariable(name)?.row : undefined;
+    if (!row) {
+      return query;
+    }
+    const isVariable = EdgeQLAST.createBinaryOp(
+      "=",
+      EdgeQLAST.createPath([{ kind: "PathStep", name: "id", type: "property" }]),
+      EdgeQLAST.createIdentifier(name)
+    );
+    return {
+      ...query,
+      filter: query.filter ? EdgeQLAST.createBinaryOp("AND", isVariable, query.filter) : isVariable,
+      type: EdgeQLAST.createTypeName(row.type.split("::"))
     };
   }
 
@@ -1307,6 +1337,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     try {
       // Resolve the type and create the FROM clause
       let fromClause: SQL.FromClause;
+      let sourceCondition: SQL.SQLExpression | undefined;
 
       if (query.expr.kind === "TypeName") {
         const typeName = query.expr.name.parts.join("::");
@@ -1338,6 +1369,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         fromClause = SQL.createFromClause([
           SQL.createTableReference(cteAlias.cteName, tableAlias)
         ]);
+      } else if (query.expr.kind === "Path" && this.isObjectPath(query.expr)) {
+        // A path's objects (`User.posts`): the reached type's rows the path
+        // keeps.
+        const source = this.compilePathSource(this.resolvePath(query.expr)!);
+        fromClause = SQL.createFromClause(source.from);
+        sourceCondition = source.where;
       } else {
         // Fall back to the regular compile path for non-type expressions
         return this.compileSelectQuery(query) as SQL.SelectStatement;
@@ -1347,7 +1384,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       let whereClause: SQL.WhereClause | undefined;
       if (query.filter) {
         const condition = this.compileExpression(query.filter);
-        whereClause = SQL.createWhereClause(condition);
+        whereClause = SQL.createWhereClause(sourceCondition ? SQL.createBinaryExpression("AND", sourceCondition, condition) : condition);
+      } else if (sourceCondition) {
+        whereClause = SQL.createWhereClause(sourceCondition);
       }
 
       // SELECT * (raw columns, no JSON wrapping)
@@ -1473,6 +1512,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return SQL.unionAll(compiledQueries);
     }
 
+    // Objects: `x` is each object, a row of the iterator.
+    const objects = this.objectIterator(query);
+    if (objects) {
+      return this.compileObjectFor(query, objects.select, objects.typeDef);
+    }
+
     // Row-source iterator: a subquery, or a set-returning function call
     // (`json_array_unpack(…)`, `array_unpack(…)`, `range_unpack(…)`). Either is a
     // FROM item `… AS for_iter(val)`, and the variable is its one column.
@@ -1535,7 +1580,99 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     return iterator.kind === "FunctionCall" && Context.lookupFunction(this.ctx.schema, iterator.name.parts)?.name === "json_array_unpack";
   }
 
+  /**
+   * The select of an iterator over objects — a select of a type, an object
+   * `with` binding or a path to objects, or one of those bare
+   * (`for u in User`) — and the objects' type; null for any other iterator.
+   */
+  private objectIterator(query: EdgeQLAST.ForQuery): { select: EdgeQLAST.SelectQuery; typeDef: Context.TypeDef; } | null {
+    const { iterator } = query;
+    let select: EdgeQLAST.SelectQuery | undefined;
+    if (iterator.kind === "Subquery" && iterator.query.kind === "SelectQuery") {
+      select = iterator.query;
+    } else if (iterator.kind === "TypeName" || iterator.kind === "Identifier" || iterator.kind === "Path") {
+      select = { distinct: false, expr: iterator, kind: "SelectQuery", span: iterator.span };
+    }
+    const expr = select?.expr;
+    let typeDef: Context.TypeDef | undefined;
+    if (expr?.kind === "TypeName") {
+      typeDef = Context.resolveTypeName(this.ctx, expr.name.parts.join("::"));
+    } else if (expr?.kind === "Identifier" && !this.scopeVariable(expr.name)) {
+      typeDef = Context.getCTEAlias(this.ctx, expr.name)?.typeDef;
+    } else if (expr?.kind === "Path" && this.isObjectPath(expr)) {
+      typeDef = this.resolvePath(expr)?.typeDef;
+    }
+    if (typeDef?.abstract) {
+      throw new CompilationError(
+        `A \`for\` over the abstract type '${typeDef.name}' is not supported yet: its objects are stored in its subtypes' tables. ` +
+          `Iterate a concrete type.`,
+        locationOf(query)
+      );
+    }
+    return select && typeDef?.kind === "object" ? { select, typeDef } : null;
+  }
+
+  /**
+   * `for x in <objects> union (<body>)`. The iterator is a derived table of
+   * the objects' rows (its filter, order by and limit applied), and `x` is its
+   * current row: `x.name` a column of it, `x` its id (a link target), `x { … }`
+   * a shape over it. A select body runs once per row in a LATERAL subquery. A
+   * statement body cannot sit in LATERAL, so it reads the iterator instead:
+   * an insert is `INSERT … SELECT … FROM <iterator>`, an update
+   * `UPDATE … FROM <iterator>` and a delete `DELETE … USING <iterator>`, where
+   * `update x` / `delete x` keeps the row that is `x`.
+   */
+  private compileObjectFor(query: EdgeQLAST.ForQuery, select: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): SQL.SQLStatement {
+    const rows = this.compileSelectQueryRaw(select);
+    const alias = Context.generateAlias(this.ctx, "for_iter");
+    const iteratorTable: SQL.TableReference = { alias, kind: "TableReference", name: "", subquery: rows };
+
+    Context.pushScope(this.ctx);
+    try {
+      this.ctx.currentScope.variables.set(query.variable.name, {
+        expression: { kind: "Literal", type: "empty", value: null },
+        name: query.variable.name,
+        row: { alias, table: typeDef.tableName, type: typeDef.name },
+        sqlOverride: SQL.createColumnReference("id", alias),
+        type: typeDef.name
+      });
+
+      const { body } = query;
+      if (body.kind === "InsertQuery") {
+        return this.compileBulkInsert(body, iteratorTable);
+      }
+      if (body.kind === "UpdateQuery") {
+        const update = this.compileUpdateQuery(body);
+        if (update.kind !== "UpdateStatement") {
+          throw new CompilationError(
+            "An update in a `for` over objects cannot assign a multi link yet. Update the link without the loop: `update T filter … set { link += … }`.",
+            locationOf(query)
+          );
+        }
+        return { ...update, from: [iteratorTable], returning: [SQL.createSelectItem(SQL.createColumnReference("*", update.table))] };
+      }
+      if (body.kind === "DeleteQuery") {
+        const deletion = this.compileDeleteQuery(body);
+        return { ...deletion, returning: [SQL.createSelectItem(SQL.createColumnReference("*", deletion.table))], using: [iteratorTable] };
+      }
+
+      return SQL.createSelectStatement({
+        from: SQL.createFromClause([
+          iteratorTable,
+          { alias: "for_sub", kind: "TableReference", lateral: true, name: "", subquery: this.compileQuery(body) }
+        ]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*", "for_sub"))])
+      });
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
   private compileForIteratorTable(iterator: EdgeQLAST.Expression): SQL.TableReference {
+    // A path to values (`for n in User.name`) is a select of them.
+    if (iterator.kind === "Path") {
+      return this.compileForIteratorTable({ kind: "Subquery", query: { distinct: false, expr: iterator, kind: "SelectQuery", span: iterator.span } });
+    }
     if (iterator.kind === "Subquery") {
       return {
         kind: "TableReference",

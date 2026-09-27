@@ -3,10 +3,13 @@
 
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
+import { sha256Hex } from "../lib/crypto.ts";
+import { discHome } from "../lib/project-context.ts";
 import { logger } from "./logger.ts";
 
 export interface BinaryManifest {
   platform: string;
+  sha256: string;
   url: string;
   version: string;
 }
@@ -27,27 +30,76 @@ function zonkyJar(platformSlug: string, version: string): string {
 // for `disc pg upgrade` compatibility and existing on-disk instances —
 // the data directory format is major-version-specific, so an instance
 // initialized under 16/17 can't be swapped in place to 18.
+//
+// Every JAR's SHA-256 is pinned: computed from the downloaded artifact and
+// cross-checked against Maven Central's `<jar>.sha256` sidecar. A download
+// that doesn't match is discarded before anything is written to disk.
 const POSTGRES_VERSIONS = {
   "16.4": {
-    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "16.4.0") },
-    "darwin-x64": { url: zonkyJar("darwin-amd64", "16.4.0") },
-    "linux-arm64": { url: zonkyJar("linux-arm64v8", "16.4.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") },
-    "windows-x64": { url: zonkyJar("windows-amd64", "16.4.0") }
+    "darwin-arm64": {
+      sha256: "ad810a174664012341f1c9c1ff9667f61930d054f34bd650ceb2bc0c8796ccf9",
+      url: zonkyJar("darwin-arm64v8", "16.4.0")
+    },
+    "darwin-x64": {
+      sha256: "e9a4d0de025426978d39087e2dfad265cb22a70ad19aa388857e4dcf6cf55f25",
+      url: zonkyJar("darwin-amd64", "16.4.0")
+    },
+    "linux-arm64": {
+      sha256: "5a281952dd35191be97809ce657d6cb1a7b42a8d8ca6195125dd368d47eb8c42",
+      url: zonkyJar("linux-arm64v8", "16.4.0")
+    },
+    "linux-x64": {
+      sha256: "14a5cf546aee7d327a2f5b46be6c571f2f724a2b485c270d46f3e44a1ac3df18",
+      url: zonkyJar("linux-amd64", "16.4.0")
+    },
+    "windows-x64": {
+      sha256: "5748a1b03f3771cd7a6d8aa624975e2777f62525694bf63af9640deaa48cc87a",
+      url: zonkyJar("windows-amd64", "16.4.0")
+    }
   },
   "17.0": {
-    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "17.0.0") },
-    "darwin-x64": { url: zonkyJar("darwin-amd64", "17.0.0") },
-    "linux-arm64": { url: zonkyJar("linux-arm64v8", "17.0.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") },
-    "windows-x64": { url: zonkyJar("windows-amd64", "17.0.0") }
+    "darwin-arm64": {
+      sha256: "258cc7212623632e5073c58d466242c7f0be445f7eaeb29ec323d27b4bacb223",
+      url: zonkyJar("darwin-arm64v8", "17.0.0")
+    },
+    "darwin-x64": {
+      sha256: "02f07b924268145e15c66640d5b411d3c6dffb13a27cf3fe3d7f916df0eee71a",
+      url: zonkyJar("darwin-amd64", "17.0.0")
+    },
+    "linux-arm64": {
+      sha256: "5ef32d7fe417af5b52115c8f7a1b2d7148ae6b6f21b6144135c54ee80891752a",
+      url: zonkyJar("linux-arm64v8", "17.0.0")
+    },
+    "linux-x64": {
+      sha256: "6f54b880a46e1ab2dab3615259f5534a4710a1cbc0093a590e96c18b9fc7f157",
+      url: zonkyJar("linux-amd64", "17.0.0")
+    },
+    "windows-x64": {
+      sha256: "e860224b69f7db12160a47af6495075e7aa6a43aba7f1f32f50e995d3ca0785d",
+      url: zonkyJar("windows-amd64", "17.0.0")
+    }
   },
   "18.4": {
-    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "18.4.0") },
-    "darwin-x64": { url: zonkyJar("darwin-amd64", "18.4.0") },
-    "linux-arm64": { url: zonkyJar("linux-arm64v8", "18.4.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "18.4.0") },
-    "windows-x64": { url: zonkyJar("windows-amd64", "18.4.0") }
+    "darwin-arm64": {
+      sha256: "ab698c4486a795d2aa8a158b3a41e1201a77e7ff72a6255094cd5900080853c2",
+      url: zonkyJar("darwin-arm64v8", "18.4.0")
+    },
+    "darwin-x64": {
+      sha256: "68381ed1488edd337345c6c4bc6ae0c823832a4dd7af8b04656ee5c218c291b5",
+      url: zonkyJar("darwin-amd64", "18.4.0")
+    },
+    "linux-arm64": {
+      sha256: "a9ec284923b9a7d2db41509bfb88c3d0eeb9f4aa5e2b29ea0aac5e8dbaf4c335",
+      url: zonkyJar("linux-arm64v8", "18.4.0")
+    },
+    "linux-x64": {
+      sha256: "401d4e69baba9072d3772607710df0d47b39a7632c6b01b2a5f5d85a9514e212",
+      url: zonkyJar("linux-amd64", "18.4.0")
+    },
+    "windows-x64": {
+      sha256: "1f71b4d67eeee94034ffbea7a9fae68ab34ff1e31ac01837acb6f56984350ece",
+      url: zonkyJar("windows-amd64", "18.4.0")
+    }
   }
 };
 
@@ -73,8 +125,19 @@ export function detectPgPlatform(): string {
   throw new Error(`Unsupported platform: ${os}-${arch}`);
 }
 
+/** PostgreSQL versions Disc can download (and `disc pg upgrade` can target), oldest first. */
+export const SUPPORTED_POSTGRES_VERSIONS: readonly string[] = Object.keys(POSTGRES_VERSIONS);
+
+export interface PostgresBinaryDownloaderOptions {
+  baseDir?: string;
+  /** Injected for tests. Default the global `fetch`. */
+  fetch?: typeof fetch;
+  platform?: string;
+}
+
 export class PostgresBinaryDownloader {
   private baseDir: string;
+  private fetchFn: typeof fetch;
   private platform: string;
 
   /**
@@ -94,18 +157,51 @@ export class PostgresBinaryDownloader {
    * follow-up: cross-platform reproducible builds).
    */
   constructor(
-    baseDirOrOpts: string | { baseDir?: string; platform?: string; } = Deno.env.get("DISC_PG_BINARY_DIR") ??
-      join(Deno.env.get("HOME")!, ".disc", "postgres")
+    baseDirOrOpts: string | PostgresBinaryDownloaderOptions = Deno.env.get("DISC_PG_BINARY_DIR") ??
+      join(discHome(), "postgres")
   ) {
-    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR") ??
-      join(Deno.env.get("HOME")!, ".disc", "postgres");
+    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR") ?? join(discHome(), "postgres");
     if (typeof baseDirOrOpts === "string") {
       this.baseDir = baseDirOrOpts;
+      this.fetchFn = fetch;
       this.platform = this.detectPlatform();
     } else {
       this.baseDir = baseDirOrOpts.baseDir ?? defaultBaseDir;
+      this.fetchFn = baseDirOrOpts.fetch ?? fetch;
       this.platform = baseDirOrOpts.platform ?? this.detectPlatform();
     }
+  }
+
+  /** The directory versions are cached under (`<baseDir>/<version>/`). */
+  getBaseDir(): string {
+    return this.baseDir;
+  }
+
+  /**
+   * Versions already on disk (`<baseDir>/<version>/bin/postgres` exists),
+   * whether downloaded by Disc or pre-staged by an operator.
+   */
+  async cachedVersions(): Promise<string[]> {
+    const versions: string[] = [];
+
+    try {
+      for await (const entry of Deno.readDir(this.baseDir)) {
+        if (!entry.isDirectory)
+          continue;
+
+        try {
+          if ((await Deno.stat(join(this.baseDir, entry.name, "bin", this.postgresBinName()))).isFile)
+            versions.push(entry.name);
+        } catch {
+          // Not a PostgreSQL install (or a partial one) — skip.
+        }
+      }
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound))
+        throw err;
+    }
+
+    return versions;
   }
 
   private detectPlatform(): string {
@@ -159,17 +255,43 @@ export class PostgresBinaryDownloader {
     logger.info(`Downloading PostgreSQL ${version} for ${this.platform}…`);
     logger.info(`Download URL: ${manifest.url}`);
 
-    // Ensure directory exists
-    await ensureDir(versionDir);
-
     // Download binary archive
-    const response = await fetch(manifest.url);
+    const response = await this.fetchFn(manifest.url);
     if (!response.ok) {
+      await response.body?.cancel();
       throw new Error(`Failed to download PostgreSQL: ${response.statusText}`);
     }
 
+    // Verify before anything touches the cache: a truncated or tampered
+    // download must never be extracted where later runs would trust it.
+    const data = new Uint8Array(await response.arrayBuffer());
+    const actual = await sha256Hex(data);
+    if (actual !== manifest.sha256) {
+      throw new Error(
+        `Checksum mismatch for ${manifest.url}: expected sha256 ${manifest.sha256}, got ${actual}. ` +
+          `The download was discarded.`
+      );
+    }
+
+    await ensureDir(versionDir);
+    try {
+      await this.install(data, manifest.url, versionDir);
+    } catch (err) {
+      // Don't leave a half-extracted version dir behind for the
+      // already-downloaded short-circuit to trust on the next run.
+      await Deno.remove(versionDir, { recursive: true }).catch(() => {});
+      throw err;
+    }
+
+    logger.info(
+      `PostgreSQL ${version} downloaded successfully to ${versionDir}`
+    );
+    return versionDir;
+  }
+
+  private async install(data: Uint8Array, url: string, versionDir: string): Promise<void> {
     // Preserve the original file extension so extractArchive can detect the format
-    const urlPath = new URL(manifest.url).pathname;
+    const urlPath = new URL(url).pathname;
     const archiveExt = urlPath.endsWith(".txz") ?
       ".txz" :
       urlPath.endsWith(".tgz") ?
@@ -186,7 +308,6 @@ export class PostgresBinaryDownloader {
       ".tar" :
       ".archive";
     const archivePath = join(versionDir, `postgres${archiveExt}`);
-    const data = new Uint8Array(await response.arrayBuffer());
     await Deno.writeFile(archivePath, data);
 
     // Extract archive, removing the downloaded archive even if extraction
@@ -202,11 +323,6 @@ export class PostgresBinaryDownloader {
 
     // Make binaries executable
     await this.makeExecutable(versionDir);
-
-    logger.info(
-      `PostgreSQL ${version} downloaded successfully to ${versionDir}`
-    );
-    return versionDir;
   }
 
   private async normalizeDirectoryStructure(versionDir: string): Promise<void> {

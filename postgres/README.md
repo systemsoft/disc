@@ -30,6 +30,7 @@ import {
       data/           # PostgreSQL data directory (PGDATA)
       logs/           # PostgreSQL log files
       socket/         # Unix domain socket
+      version.json    # Exact PostgreSQL version (and binaries) the data dir runs on
   postgres/
     18.4/             # Downloaded PostgreSQL version
       bin/            # pg_ctl, initdb, postgres (server only)
@@ -91,6 +92,14 @@ const status = await manager.getInstanceStatus("my-project");
 await manager.discoverInstances();
 ```
 
+A data directory can only be started by binaries of its own major version, so discovery works out which ones each instance needs:
+
+1. The data dir's `PG_VERSION` gives the major (e.g. `16`).
+2. `<instance>/version.json` gives the exact version — written when the data dir is created (from `postgres --version` when `pgBinDir` was supplied, together with that directory) and updated by `disc pg upgrade`. If its binary directory still exists and its major matches `PG_VERSION`, those binaries are used.
+3. Otherwise (instances created before `version.json` existed, or a data dir swapped in by hand): the recorded version if its major matches, else the newest cached binaries of that major (`~/.disc/postgres/<version>/`, or an extracted embedded distribution), else the newest supported version of that major, downloaded on demand.
+
+A data dir whose major Disc has no binaries for is not recovered (a warning names it) rather than started with the wrong binaries. `instance.getVersion()` and `status().version` report the resolved version.
+
 ### Backup and Restore
 
 ```typescript
@@ -104,9 +113,28 @@ await manager.restoreInstance("restored-project", "/backups/my-project.tar.gz");
 ### Upgrade
 
 ```typescript
-// Stop instance for upgrade to a target version
-await manager.upgradeInstance("my-project", "17.0");
+await manager.upgradeInstance("my-project", "18.4", {
+  backupPath: "/backups/my-project-16.4.tar.gz", // optional tar.gz of the old data dir
+  clientBinDir: await new PostgresClientTools().ensure("18.4"), // pg_dumpall + psql
+  onProgress: (step, message) => console.log(message), // optional; throwing aborts + rolls back
+  serverBinDir: join(
+    await new PostgresBinaryDownloader().ensurePostgres("18.4"),
+    "bin"
+  )
+});
 ```
+
+A dump-and-restore upgrade (`disc pg upgrade` wraps it, fetching the binaries first):
+
+1. **dump** — start the old server if needed, record every database's per-table row counts, `pg_dumpall` it (with the target version's client tools, which read older servers), stop it.
+2. **backup** — if `backupPath` is given, tar the old data dir.
+3. **init** — `initdb` a staging data dir (`data-upgrade-<target>/`) with the target server and start it.
+4. **restore** — replay the dump with `psql`. Any error other than the expected `role "disc" already exists` fails the upgrade.
+5. **verify** — the databases and every table's row count must match step 1.
+6. **switch** — rename `data/` to `data-<old>-pre-upgrade/`, the staging dir to `data/`, and record the new version in `version.json`.
+7. **start** — restart the instance on the new version if it was running.
+
+The upgrade never writes into the old data dir — it is only stopped and, at the switch, renamed. Any failure — including a throw from `onProgress` — rolls back: the new server is stopped, the staging dir removed, the original `data/` and `version.json` put back, and the old server restarted if it was running. On success the old data dir is deleted (the tarball, if requested, is the copy). A leftover `data-<old>-pre-upgrade/` (from a process killed mid-switch) is never deleted automatically; the next upgrade refuses to start until it is moved away.
 
 ## PostgresInstance
 
@@ -178,7 +206,10 @@ All binaries come from [Zonky](https://github.com/zonkyio/embedded-postgres-bina
 | Linux (arm64) | `linux-arm64v8`  |
 | Windows (x64) | `windows-amd64`  |
 
-Supported versions: `16.4`, `17.0`, `18.4` (default). Downloads are SHA-256 checksummed.
+Supported versions: `16.4`, `17.0`, `18.4` (default).
+
+- **Verification**: the SHA-256 of every JAR (3 versions × 5 platforms) is pinned in `downloader.ts`, computed from the downloaded artifacts and cross-checked against Maven Central's `.sha256` sidecars. The download is checked before anything is written; a mismatch discards it and fails with both digests. A failed extraction removes the partial version dir, so the cache never holds an unverified or half-extracted install.
+- **Embedded builds**: `disc build` records the SHA-256 of every file it embeds in `embedded-pg-manifest.ts` (the files come from the verified download cache), and the first-run extractor checks each file before writing it; a mismatch removes the extraction and fails.
 
 Zonky's builds contain only the server: `bin/` holds `initdb`, `pg_ctl` and `postgres` — no `pg_dump`, `pg_restore`, `psql` or `pg_dumpall`. Those come from `PostgresClientTools` below.
 
@@ -304,7 +335,8 @@ disc stop                  # Stop server + PostgreSQL
 disc status                # Show instance status (running, port, data dir)
 disc pg log                # View PostgreSQL logs
 disc pg log -f             # Follow log output
-disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL version
+disc pg upgrade --target-version 18.4  # Dump/restore upgrade; rolls back on failure
+disc pg upgrade --target-version 18.4 --dry-run  # Show the plan only
 disc db dump my_app > backup.sql       # pg_dump (client tools downloaded on first use)
 disc db restore my_app --input backup.sql  # psql / pg_restore (same client tools)
 ```

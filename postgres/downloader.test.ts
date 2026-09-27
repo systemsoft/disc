@@ -4,7 +4,8 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
-import { PostgresBinaryDownloader } from "./downloader.ts";
+import { sha256Hex } from "../lib/crypto.ts";
+import { PostgresBinaryDownloader, SUPPORTED_POSTGRES_VERSIONS } from "./downloader.ts";
 
 const TEST_BASE_DIR = join(
   Deno.makeTempDirSync(),
@@ -266,5 +267,118 @@ Deno.test("PostgresBinaryDownloader - DISC_OFFLINE=1 throws with actionable mess
       Deno.env.set("DISC_OFFLINE", offlineOriginal);
     }
     await Deno.remove(tempDir, { recursive: true });
+  }
+});
+
+/*** Checksums ------------------------------------------------------------ ***/
+
+/** A Zonky-shaped JAR (zip) wrapping `postgres-<platform>.txz` with a fake `bin/postgres`. */
+async function buildFakeZonkyJar(dir: string): Promise<Uint8Array> {
+  const tree = join(dir, "tree");
+  await ensureDir(join(tree, "bin"));
+  await Deno.writeTextFile(join(tree, "bin", "postgres"), "#!/bin/sh\necho fake\n");
+
+  const run = async (cmd: string, args: string[]): Promise<void> => {
+    const out = await new Deno.Command(cmd, { args, stderr: "piped", stdout: "piped" }).output();
+    if (!out.success)
+      throw new Error(`${cmd} failed: ${new TextDecoder().decode(out.stderr)}`);
+  };
+
+  await run("tar", ["-cJf", join(dir, "postgres-fake.txz"), "-C", tree, "."]);
+  await run("zip", ["-q", "-j", join(dir, "fake.jar"), join(dir, "postgres-fake.txz")]);
+  return await Deno.readFile(join(dir, "fake.jar"));
+}
+
+function fetchReturning(body: Uint8Array): { calls: string[]; fetch: typeof fetch; } {
+  const calls: string[] = [];
+  const fakeFetch = (input: string | URL | Request): Promise<Response> => {
+    calls.push(String(input));
+    return Promise.resolve(new Response(body.slice()));
+  };
+  return { calls, fetch: fakeFetch as typeof fetch };
+}
+
+Deno.test("PostgresBinaryDownloader - pins a SHA-256 for every supported version × platform", () => {
+  for (const version of SUPPORTED_POSTGRES_VERSIONS) {
+    for (const platform of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"]) {
+      const downloader = new PostgresBinaryDownloader({ baseDir: "/nonexistent", platform });
+      const manifest = (downloader as any).getManifest(version);
+      assertExists(manifest, `${version} ${platform}`);
+      assertEquals(/^[0-9a-f]{64}$/.test(manifest.sha256), true, `${version} ${platform}: ${manifest.sha256}`);
+    }
+  }
+});
+
+Deno.test("PostgresBinaryDownloader - checksum mismatch discards the download and caches nothing", async () => {
+  const baseDir = await Deno.makeTempDir({ prefix: "disc-dl-mismatch-" });
+  const offline = Deno.env.get("DISC_OFFLINE");
+
+  try {
+    Deno.env.delete("DISC_OFFLINE");
+    const { calls, fetch } = fetchReturning(new TextEncoder().encode("not the real jar"));
+    const downloader = new PostgresBinaryDownloader({ baseDir, fetch });
+
+    await assertRejects(() => downloader.download("16.4"), Error, "Checksum mismatch");
+    assertEquals(calls.length, 1);
+    /*** Nothing was written: no version dir, so the next run downloads again. ***/
+    assertEquals([...Deno.readDirSync(baseDir)].length, 0);
+    assertEquals(await downloader.cachedVersions(), []);
+  } finally {
+    if (offline !== undefined)
+      Deno.env.set("DISC_OFFLINE", offline);
+    await Deno.remove(baseDir, { recursive: true });
+  }
+});
+
+Deno.test("PostgresBinaryDownloader - a download matching the pinned checksum is extracted and cached", async () => {
+  const baseDir = await Deno.makeTempDir({ prefix: "disc-dl-match-" });
+  const workDir = await Deno.makeTempDir({ prefix: "disc-dl-jar-" });
+  const offline = Deno.env.get("DISC_OFFLINE");
+
+  try {
+    Deno.env.delete("DISC_OFFLINE");
+    const jar = await buildFakeZonkyJar(workDir);
+    const { calls, fetch } = fetchReturning(jar);
+    const downloader = new PostgresBinaryDownloader({ baseDir, fetch });
+    const real = (downloader as any).getManifest("16.4");
+    /*** Pin the fake JAR's digest the way the real manifest pins Zonky's. ***/
+    const sha256 = await sha256Hex(jar);
+    (downloader as any).getManifest = () => ({ ...real, sha256 });
+
+    const versionDir = await downloader.download("16.4");
+
+    assertEquals(versionDir, join(baseDir, "16.4"));
+    assertEquals(calls.length, 1);
+    assertEquals((await Deno.stat(join(versionDir, "bin", "postgres"))).isFile, true);
+    /*** The archive itself isn't left behind. ***/
+    assertEquals([...Deno.readDirSync(versionDir)].map(e => e.name).sort(), ["bin"]);
+    assertEquals(await downloader.cachedVersions(), ["16.4"]);
+
+    /*** Cached: a second call doesn't fetch. ***/
+    await downloader.download("16.4");
+    assertEquals(calls.length, 1);
+  } finally {
+    if (offline !== undefined)
+      Deno.env.set("DISC_OFFLINE", offline);
+    await Deno.remove(baseDir, { recursive: true });
+    await Deno.remove(workDir, { recursive: true });
+  }
+});
+
+Deno.test("PostgresBinaryDownloader - default cache honours DISC_HOME like the rest of Disc", () => {
+  const previous = { discHome: Deno.env.get("DISC_HOME"), override: Deno.env.get("DISC_PG_BINARY_DIR") };
+  Deno.env.set("DISC_HOME", "/tmp/disc-home-probe");
+  Deno.env.delete("DISC_PG_BINARY_DIR");
+
+  try {
+    // deno-lint-ignore no-explicit-any
+    assertEquals((new PostgresBinaryDownloader() as any).baseDir, "/tmp/disc-home-probe/postgres");
+  } finally {
+    for (const [name, value] of [["DISC_HOME", previous.discHome], ["DISC_PG_BINARY_DIR", previous.override]] as const) {
+      if (value === undefined)
+        Deno.env.delete(name);
+      else
+        Deno.env.set(name, value);
+    }
   }
 });

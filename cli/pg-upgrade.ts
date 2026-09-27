@@ -6,19 +6,20 @@
  * CLI PgUpgrade Command Implementation - PostgreSQL version upgrade functionality
  *
  * Handles upgrading the bundled PostgreSQL instance from one version to another
- * using a pg_dumpall/pg_restore strategy with automatic backup and rollback.
+ * using a pg_dumpall/psql restore strategy with automatic backup and rollback
+ * (see `PostgresManager.upgradeInstance`).
  */
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { pgToolPath, PostgresClientTools } from "../postgres/client-tools.ts";
-import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
-import { PostgresInstance } from "../postgres/instance.ts";
+import { resolveProjectContext } from "../lib/project-context.ts";
+import { PostgresClientTools } from "../postgres/client-tools.ts";
+import { PostgresBinaryDownloader, SUPPORTED_POSTGRES_VERSIONS } from "../postgres/downloader.ts";
+import { compareVersions } from "../postgres/instance-version.ts";
 import { PostgresManager } from "../postgres/mod.ts";
 
 /*** EXPORT ------------------------------------------- ***/
@@ -30,15 +31,18 @@ export interface PgUpgradeOptions {
   targetVersion: string;
 }
 
-export class PgUpgradeCommand {
-  private clientTools: PostgresClientTools;
-  private downloader: PostgresBinaryDownloader;
-  private postgresManager: PostgresManager;
+/** Collaborators, injectable for tests. Defaults are built per run, from the environment at that time. */
+export interface PgUpgradeDependencies {
+  clientTools?: PostgresClientTools;
+  downloader?: PostgresBinaryDownloader;
+  postgresManager?: PostgresManager;
+}
 
-  constructor() {
-    this.postgresManager = new PostgresManager();
-    this.clientTools = new PostgresClientTools();
-    this.downloader = new PostgresBinaryDownloader();
+export class PgUpgradeCommand {
+  private deps: PgUpgradeDependencies;
+
+  constructor(deps: PgUpgradeDependencies = {}) {
+    this.deps = deps;
   }
 
   /**
@@ -46,10 +50,10 @@ export class PgUpgradeCommand {
    *
    * Steps:
    *   1. Validate target version
-   *   2. Discover and locate the current instance
+   *   2. Discover and locate the current instance (its version comes from the data dir)
    *   3. Compare versions to ensure upgrade direction
    *   4. Print upgrade plan
-   *   5. If not dry-run, perform the actual upgrade with rollback on failure
+   *   5. If not dry-run, fetch the target server + client tools and upgrade (rolled back on failure)
    */
   async execute(options: PgUpgradeOptions): Promise<void> {
     const project = options.project || this.currentProjectName();
@@ -62,31 +66,34 @@ export class PgUpgradeCommand {
     if (!availableVersions.includes(targetVersion))
       throw new Error(`Unknown PostgreSQL version: ${targetVersion}. Available versions: ${availableVersions.join(", ")}`);
 
+    const postgresManager = this.deps.postgresManager ?? new PostgresManager();
+
     /*** Discover existing instances ***/
-    await this.postgresManager.discoverInstances();
+    await postgresManager.discoverInstances();
 
     /*** Get current instance ***/
-    const instance = this.postgresManager.getInstance(project);
+    const instance = postgresManager.getInstance(project);
 
     if (!instance)
       throw new Error(`No PostgreSQL instance found for project "${project}". Run "disc init" first.`);
 
-    /*** Get current version ***/
-    const instanceStatus = await instance.status();
-    const currentVersion = instanceStatus.version;
-    /*** Compare versions ***/
-    const comparison = this.compareVersions(currentVersion, targetVersion);
+    /*** The version the instance actually runs (data dir major + recorded exact version) ***/
+    const currentVersion = instance.getVersion();
 
-    if (comparison >= 0)
+    if (this.compareVersions(currentVersion, targetVersion) >= 0)
       throw new Error(`Target version ${targetVersion} is not newer than current version ${currentVersion}`);
+
+    const instanceDir = postgresManager.getInstanceDir(project);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupPath = backup ? join(instanceDir, `backup-${currentVersion}-${timestamp}.tar.gz`) : undefined;
 
     /*** Print upgrade plan ***/
     console.log("PostgreSQL Upgrade Plan:");
     console.log(`  Project: ${project}`);
     console.log(`  Current version: ${currentVersion}`);
     console.log(`  Target version: ${targetVersion}`);
-    console.log(`  Strategy: pg_dump/pg_restore`);
-    console.log(`  Backup: ${backup ? "yes" : "no"}`);
+    console.log(`  Strategy: pg_dumpall + psql restore into a new data directory`);
+    console.log(`  Backup: ${backupPath ?? "no"}`);
 
     /*** Dry run stops here ***/
     if (dryRun) {
@@ -94,187 +101,37 @@ export class PgUpgradeCommand {
       return;
     }
 
-    /*** Resolve paths ***/
-    const homeDir = Deno.env.get("HOME")!;
-    const instanceDir = join(homeDir, ".disc", "instances", project);
-    const dataDir = join(instanceDir, "data");
-    const socketDir = join(instanceDir, "socket");
-    const dumpFile = join(instanceDir, `upgrade-dump-${currentVersion}.sql`);
-    const dataBackupDir = join(instanceDir, `data-${currentVersion}-backup`);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupPath = join(instanceDir, `backup-${currentVersion}-${timestamp}.tar.gz`);
-    let upgradeStarted = false;
+    /*** Everything that can fail without touching the instance happens first. ***/
+    console.log(`\nResolving PostgreSQL ${targetVersion} server binaries…`);
+    const downloader = this.deps.downloader ?? new PostgresBinaryDownloader();
+    const serverBinDir = join(await downloader.ensurePostgres(targetVersion), "bin");
+
+    /*** pg_dumpall/psql come from the TARGET version's client tools: the bundled server builds
+         ship no client utilities, and PostgreSQL recommends dumping with the newer version's
+         pg_dumpall when upgrading (it reads older servers). ***/
+    console.log(`Resolving PostgreSQL ${targetVersion} client tools…`);
+    const clientTools = this.deps.clientTools ?? new PostgresClientTools();
+    const clientBinDir = await clientTools.ensure(targetVersion);
 
     try {
-      /*** Step a: Download target version binary ***/
-      console.log(`\nDownloading PostgreSQL ${targetVersion} binary…`);
-      const newPgDir = await this.downloader.ensurePostgres(targetVersion);
-      const newPgBinDir = join(newPgDir, "bin");
-      console.log("Binary downloaded successfully.");
-
-      /*** pg_dumpall/psql come from the TARGET version's client tools: the bundled server builds
-           ship no client utilities, and PostgreSQL recommends dumping with the newer version's
-           pg_dumpall when upgrading (it reads older servers). Fetched before anything is touched. ***/
-      console.log(`\nResolving PostgreSQL ${targetVersion} client tools…`);
-      const clientBinDir = await this.clientTools.ensure(targetVersion);
-
-      /*** Step b: Backup if enabled ***/
-      if (backup) {
-        console.log(`\nBacking up instance to ${backupPath}…`);
-        await this.postgresManager.backupInstance(project, backupPath);
-        console.log("Backup completed.");
-      }
-
-      /*** Step c: Run pg_dumpall from current instance ***/
-      console.log("\nDumping database with pg_dumpall…");
-      const pgDumpAllPath = pgToolPath(clientBinDir, "pg_dumpall");
-
-      const dumpCmd = new Deno.Command(pgDumpAllPath, {
-        args: ["-h", socketDir, "-U", "disc"],
-        stderr: "piped",
-        stdout: "piped"
+      await postgresManager.upgradeInstance(project, targetVersion, {
+        backupPath,
+        clientBinDir,
+        onProgress: (_step, message) => console.log(`\n${message}`),
+        serverBinDir
       });
-
-      const dumpOutput = await dumpCmd.output();
-
-      if (!dumpOutput.success) {
-        const stderr = new TextDecoder().decode(dumpOutput.stderr);
-        throw new Error(`pg_dumpall failed: ${stderr}`);
-      }
-
-      await Deno.writeFile(dumpFile, dumpOutput.stdout);
-      console.log("Database dump completed.");
-
-      upgradeStarted = true;
-
-      /*** Step d: Stop the instance ***/
-      console.log("\nStopping current PostgreSQL instance…");
-      await this.postgresManager.upgradeInstance(project, targetVersion);
-      console.log("Instance stopped.");
-
-      /*** Step e: Rename data dir to backup ***/
-      console.log(`\nRenaming data directory to ${dataBackupDir}…`);
-      await Deno.rename(dataDir, dataBackupDir);
-
-      /*** Step f: Init new data dir with new version ***/
-      console.log(`\nInitializing new data directory with PostgreSQL ${targetVersion}…`);
-      await ensureDir(join(instanceDir, "socket"));
-
-      const newInstance = new PostgresInstance({
-        dataDir: dataDir,
-        instanceName: project,
-        pgBinDir: newPgBinDir,
-        postgresVersion: targetVersion,
-        socketDir: socketDir
-      });
-
-      await newInstance.init();
-      console.log("New data directory initialized.");
-
-      /*** Step g: Start new instance ***/
-      console.log("\nStarting new PostgreSQL instance…");
-      await newInstance.start();
-      console.log("New instance started.");
-
-      /*** Step h: Restore via psql ***/
-      console.log("\nRestoring database from dump…");
-      const psqlPath = pgToolPath(clientBinDir, "psql");
-
-      const restoreCmd = new Deno.Command(psqlPath, {
-        args: ["-h", socketDir, "-U", "disc", "-f", dumpFile],
-        stderr: "piped",
-        stdout: "piped"
-      });
-
-      const restoreOutput = await restoreCmd.output();
-
-      if (!restoreOutput.success) {
-        const stderr = new TextDecoder().decode(restoreOutput.stderr);
-        /*** psql may emit warnings that are non-fatal; log but don’t fail ***/
-        console.log(`psql output: ${stderr}`);
-      }
-
-      console.log("Database restore completed.");
-
-      /*** Step i: Verify health ***/
-      console.log("\nVerifying instance health…");
-      const newStatus = await newInstance.status();
-
-      if (!newStatus.running)
-        throw new Error("New PostgreSQL instance is not running after restore");
-
-      console.log("Instance is running and healthy.");
-
-      /*** Step j: Write version.json ***/
-      const versionInfo = {
-        previousVersion: currentVersion,
-        upgradedAt: new Date().toISOString(),
-        version: targetVersion
-      };
-
-      await Deno.writeTextFile(join(instanceDir, "version.json"), JSON.stringify(versionInfo, null, 2));
-      /*** Step k: Clean up dump file ***/
-      await Deno.remove(dumpFile);
-
-      /*** Step l: Prune old upgrade backups (keep the most recent few) ***/
-      if (backup) {
-        await this.pruneOldBackups(instanceDir);
-      }
-
-      console.log(`\nPostgreSQL upgraded successfully from ${currentVersion} to ${targetVersion}.`);
     } catch (error) {
-      console.error(`\nUpgrade failed: ${(error as Error).message}`);
-
-      /*** Attempt rollback if upgrade had started ***/
-      if (upgradeStarted) {
-        console.log("\nAttempting rollback…");
-
-        try {
-          /*** Stop new instance if running ***/
-          try {
-            await this.postgresManager.stopInstance(project).catch(() => {});
-          } catch {
-            /*** Instance may not be running ***/
-          }
-
-          /*** Restore original data directory ***/
-          try {
-            await Deno.stat(dataBackupDir);
-            /*** Remove failed new data dir if it exists ***/
-
-            try {
-              await Deno.remove(dataDir, { recursive: true });
-            } catch {
-              /*** May not exist ***/
-            }
-
-            await Deno.rename(dataBackupDir, dataDir);
-            console.log("Data directory restored from backup.");
-          } catch {
-            console.error("Could not restore data directory from backup.");
-          }
-
-          /*** Restart old instance ***/
-          try {
-            await this.postgresManager.startInstance(project);
-            console.log("Old PostgreSQL instance restarted.");
-          } catch (restartError) {
-            console.error(`Failed to restart old instance: ${(restartError as Error).message}`);
-          }
-        } catch (rollbackError) {
-          console.error(`Rollback failed: ${(rollbackError as Error).message}`);
-        }
-      }
-
-      /*** Clean up dump file if it exists ***/
-      try {
-        await Deno.remove(dumpFile);
-      } catch {
-        /*** Dump file may not exist ***/
-      }
-
+      console.error(`\n${(error as Error).message}`);
       throw error;
     }
+
+    /*** Prune old upgrade backups (keep the most recent few) ***/
+    if (backupPath) {
+      await this.pruneOldBackups(instanceDir);
+      console.log(`\nBackup of the PostgreSQL ${currentVersion} data directory: ${backupPath}`);
+    }
+
+    console.log(`\nPostgreSQL upgraded successfully from ${currentVersion} to ${targetVersion}.`);
   }
 
   /*** PRIVATE ------------------------------------------ ***/
@@ -322,30 +179,19 @@ export class PgUpgradeCommand {
    * Returns -1 if a < b, 0 if a === b, 1 if a > b.
    */
   private compareVersions(current: string, target: string): number {
-    const currentParts = current.split(".").map(Number);
-    const targetParts = target.split(".").map(Number);
-    const maxLen = Math.max(currentParts.length, targetParts.length);
-
-    for (let i = 0; i < maxLen; i++) {
-      const a = currentParts[i] || 0;
-      const b = targetParts[i] || 0;
-
-      if (a < b)
-        return -1;
-
-      if (a > b)
-        return 1;
-    }
-
-    return 0;
+    return compareVersions(current, target);
   }
 
   /**
-   * Derive the project name from the current working directory.
+   * The project's instance name from disc.toml, else the current directory's name.
    */
   private currentProjectName(): string {
-    const cwd = Deno.cwd();
-    const parts = cwd.split("/");
+    const ctx = resolveProjectContext();
+
+    if (ctx)
+      return ctx.instanceName;
+
+    const parts = Deno.cwd().split("/");
 
     return parts[parts.length - 1];
   }
@@ -354,7 +200,7 @@ export class PgUpgradeCommand {
    * Return the list of known PostgreSQL versions available for download.
    */
   private getAvailableVersions(): string[] {
-    return ["16.4", "17.0", "18.4"];
+    return [...SUPPORTED_POSTGRES_VERSIONS];
   }
 }
 

@@ -267,6 +267,12 @@ export interface Identifier extends EdgeQLNode {
 export interface Path extends EdgeQLNode {
   kind: "Path";
   steps: PathStep[];
+  /**
+   * `steps[0]` names where the path starts — a type, a `with` binding or a
+   * `for` variable (`User.posts`, `x.name`) — rather than a link of the
+   * implicit subject (`.posts`).
+   */
+  rooted?: boolean;
 }
 
 export interface PathStep extends EdgeQLNode {

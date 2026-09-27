@@ -21,6 +21,7 @@ import { join, relative } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { sha256Hex } from "../lib/crypto.ts";
 import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 
 /**
@@ -583,6 +584,14 @@ export async function generateEmbeddedPgManifest(options: { manifestDir: string;
     entries.sort((a, b) => a.rel.localeCompare(b.rel));
   }
 
+  /*** Record each embedded file's digest so the runtime extractor can verify what it writes out. ***/
+  const digests = new Map<string, string>();
+
+  for (const e of entries) {
+    if (e.linkTarget === undefined)
+      digests.set(e.rel, await sha256Hex(await Deno.readFile(e.abs)));
+  }
+
   /*** Fugly identation is to ensure generated files look good ***/
   const body = entries.length === 0 ? "[]" : `[\n${
     entries
@@ -601,6 +610,7 @@ export async function generateEmbeddedPgManifest(options: { manifestDir: string;
         return `  {
     mode: 0o${e.mode!.toString(8)},
     relPath: ${JSON.stringify(e.rel)},
+    sha256: ${JSON.stringify(digests.get(e.rel))},
     sourceUrl: new URL(import.meta.resolve(${JSON.stringify(relFromManifest)}))
   }${trailing}`;
       })
