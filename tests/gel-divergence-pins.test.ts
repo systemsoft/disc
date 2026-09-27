@@ -2104,3 +2104,64 @@ Deno.test("Gel simple_scoping: comparisons of one multi path in a filter are ind
   const readme = await Deno.readTextFile(new URL("../codegen/README.md", import.meta.url));
   assert(readme.includes("simple_scoping"), "codegen/README.md must document the filter scoping (simple_scoping pin).");
 });
+
+// ---------------------------------------------------------------------------
+// Gel single-link results — Gel returns a single link selected with a
+// sub-shape as the object itself (`author: { name }`). Disc aggregates every
+// linked set, single or multi, with one `jsonb_agg` subquery, so a single link
+// arrives as a one-element array of its row (`author: [{ name }]`), and an
+// empty optional one as `null` (the aggregate of no rows, not `[]`).
+//
+// Decided: keep that runtime shape and declare it. Codegen's result
+// interfaces declare `author: [User]` / `editor?: [User] | null` (Rust
+// `Vec<User>` / `Option<Vec<User>>`, Go `[]User`) and the schema-driven
+// `createQueryBuilder` infers `[{ … }]`, so `row.author.name` does not
+// type-check. Returning the object itself would have to change the compiler,
+// these declared types, `codegen/single-link-results.test.ts`,
+// `codegen/single-link-results-pg.test.ts`, `sdk/schema-types.test.ts`, the
+// note in `codegen/README.md`, and this pin.
+// ---------------------------------------------------------------------------
+Deno.test("Gel single-link results: a single link arrives as a one-element array, declared as one", async () => {
+  const { EdgeQLParser } = await import("../edgeql/parser.ts");
+  const { EdgeQLCompiler } = await import("../compiler/compiler.ts");
+  const { SQLCodeGenerator } = await import("../compiler/codegen.ts");
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+  const { emitTypeScript } = await import("../codegen/emit-typescript.ts");
+  const { schemaToIR } = await import("../codegen/schema-to-ir.ts");
+
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    "module default { type User { required name: str; } type Post { required title: str; required author: User; editor: User; } }",
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+
+  const result = new EdgeQLCompiler(schema, { enableAccessControl: false }).compile(
+    new EdgeQLParser("select Post { author: { name }, editor: { name } }").parse()
+  );
+  if (!result.ok)
+    throw result.error;
+  const sql = new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " ");
+  assertEquals(sql.match(/'(author|editor)', \( SELECT jsonb_agg\(/g)?.length, 2, `a single link is aggregated into an array (single-link pin): ${sql}`);
+  assert(!sql.includes("COALESCE(jsonb_agg"), `an empty optional single link is null, not [] (single-link pin): ${sql}`);
+
+  const files = emitTypeScript(schemaToIR(schema), {
+    formatOutput: true,
+    includeClient: false,
+    includeMutations: false,
+    includeQueryBuilders: false,
+    interfaceSuffix: "",
+    outputDir: ".",
+    schemaSource: "gel-divergence-pins.test.ts",
+    target: "client",
+    typePrefix: ""
+  });
+  const types = files.map(file => file.content).join("\n");
+  assert(types.includes(" author: [User];"), "codegen declares a required single link as [User] (single-link pin).");
+  assert(types.includes(" editor?: [User] | null;"), "codegen declares an optional single link as [User] | null (single-link pin).");
+
+  const readme = await Deno.readTextFile(new URL("../codegen/README.md", import.meta.url));
+  assert(readme.includes("post.author[0].name"), "codegen/README.md must document the single-link result shape (single-link pin).");
+});

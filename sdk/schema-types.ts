@@ -164,7 +164,8 @@ export type LinkCardinality<F> = F extends Link<string, infer C> ? C : never;
  *   without a sub-shape would emit `posts: { ... }` with no fields).
  */
 export type SelectShape<S extends SchemaSpec, K extends keyof S> = {
-  [F in keyof S[K]]?: S[K][F] extends Link<infer Target, "single" | "multi"> ? Target extends keyof S ? SelectShape<S, Target> | true : never :
+  [F in keyof S[K]]?: S[K][F] extends Link<infer Target, "single" | "multi"> | Optional<Link<infer Target, "single" | "multi">> ?
+    Target extends keyof S ? SelectShape<S, Target> | true : never :
     true;
 };
 
@@ -175,7 +176,11 @@ export type SelectShape<S extends SchemaSpec, K extends keyof S> = {
  */
 export type ResolveSelected<S extends SchemaSpec, K extends keyof S, Sh> = {
   [F in keyof Sh & keyof S[K]]: Sh[F] extends true ? FieldType<S, S[K][F]> :
-    Sh[F] extends Record<string, unknown> ? S[K][F] extends Link<infer T, "single"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]> | null : never :
+    // A single link arrives as a one-element array of its row (`null` when an
+    // optional one is empty): Disc returns it wrapped, where Gel returns the
+    // object itself.
+    Sh[F] extends Record<string, unknown> ? S[K][F] extends Link<infer T, "single"> ? T extends keyof S ? [ResolveSelected<S, T, Sh[F]>] : never :
+      S[K][F] extends Optional<Link<infer T, "single">> ? T extends keyof S ? [ResolveSelected<S, T, Sh[F]>] | null : never :
       S[K][F] extends Link<infer T, "multi"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]>[] : never :
       never :
     never;

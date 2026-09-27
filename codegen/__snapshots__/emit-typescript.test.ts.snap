@@ -65,7 +65,7 @@ export interface Post {
    */
   createdAt: Date;
   /** Link to User (one, required) */
-  author: User;
+  author: [User];
 }
 
 /**
@@ -639,7 +639,7 @@ export namespace api {
      */
     active: boolean;
     /** Link to Merchant (one, required) */
-    merchant: \$default.Merchant;
+    merchant: [\$default.Merchant];
   }
 
   export interface ApiKeyInsert {
@@ -706,7 +706,7 @@ export namespace payment {
     /** str */
     status?: string | null;
     /** Link to Merchant (one, required) */
-    merchant: \$default.Merchant;
+    merchant: [\$default.Merchant];
   }
 
   export interface PaymentInsert {
@@ -1294,7 +1294,7 @@ export interface Place {
   /** (computed) */
   counts?: unknown | null;
   /** Link to Person (one, required) */
-  owner: Person;
+  owner: [Person];
   /** Link to Person (many) */
   members?: Person[] | null;
 }
@@ -1830,7 +1830,7 @@ export namespace \$default {
     /** Unique identifier */
     id: string;
     /** Link to default::Person (one, required) */
-    owner: Person;
+    owner: [Person];
     /** Link to default::Person (many) */
     friends?: Person[] | null;
   }

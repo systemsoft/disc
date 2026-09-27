@@ -217,9 +217,10 @@ class GoEmitter {
   }
 
   /**
-   * Base-struct field type with cardinality applied. Single OBJECT links become
-   * `*T` (pointer — needed for nullability and recursive object graphs); scalars
-   * stay by value. Multi -> slice; AtMostOne -> pointer.
+   * Base-struct field type with cardinality applied. A single OBJECT link
+   * arrives as a one-element array of rows (`null` when an optional one is
+   * empty), so it is `[]T` (nil for null; a slice also keeps recursive object
+   * graphs finite); scalars stay by value. Multi -> slice; an AtMostOne scalar -> pointer.
    */
   private goFieldType(ref: TypeRef, cardinality: string): string {
     const inner = this.goInner(ref);
@@ -228,9 +229,9 @@ class GoEmitter {
       case "Empty":
         throw new Error("Go emitter: field cardinality 'Empty' has no representation");
       case "One":
-        return obj ? `*${inner}` : inner;
+        return obj ? `[]${inner}` : inner;
       case "AtMostOne":
-        return `*${inner}`;
+        return obj ? `[]${inner}` : `*${inner}`;
       case "Many":
       case "AtLeastOne":
         return `[]${inner}`;

@@ -440,7 +440,10 @@ class TypeScriptEmitter {
       targetType = `(${targetType} & { ${keys.join(" ")} })`;
     }
 
-    let tsType = targetType;
+    // A single link selected with a shape arrives as a one-element array of
+    // rows (`null` when an optional one is empty), not the object itself -- a
+    // divergence from Gel.
+    let tsType = `[${targetType}]`;
 
     if (multi)
       tsType = `${targetType}[]`;

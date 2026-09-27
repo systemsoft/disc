@@ -238,8 +238,10 @@ class RustEmitter {
   }
 
   /**
-   * Field type with cardinality applied. Single object refs are boxed so cyclic
-   * object graphs (e.g. A.b: B / B.a: A) remain finite-sized and compile.
+   * Field type with cardinality applied. A single object link arrives as a
+   * one-element array of rows (`null` when an optional one is empty), so it is
+   * a `Vec` -- which also keeps cyclic object graphs (e.g. A.b: B / B.a: A)
+   * finite-sized.
    */
   private rustFieldType(ref: TypeRef, cardinality: string): string {
     const inner = this.rustInner(ref);
@@ -248,9 +250,9 @@ class RustEmitter {
       case "Empty":
         throw new Error("Rust emitter: field cardinality 'Empty' has no representation");
       case "One":
-        return obj ? `Box<${inner}>` : inner;
+        return obj ? `Vec<${inner}>` : inner;
       case "AtMostOne":
-        return obj ? `Option<Box<${inner}>>` : `Option<${inner}>`;
+        return obj ? `Option<Vec<${inner}>>` : `Option<${inner}>`;
       case "Many":
       case "AtLeastOne":
         return `Vec<${inner}>`;

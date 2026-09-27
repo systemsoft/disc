@@ -244,7 +244,7 @@ export function reviveResponse<T = unknown>(
  * element by element for a multi property — recursing through `links`, and
  * reading a link's `@name` keys by its `linkProperties`. The `cal::` types and
  * `duration` stay the strings they arrive as. A single link arrives as a
- * one-element array of rows today, a multi link as a longer one; a plain
+ * one-element array of rows (as codegen declares it), a multi link as a longer one; a plain
  * object works too. A value already revived is kept. Returns a new structure —
  * input is not mutated.
  */

@@ -31,6 +31,7 @@ const blogSchema = defineSchema({
     active: t.bool(),
     createdAt: t.datetime(),
     bio: t.optional(t.str()),
+    manager: t.optional(t.single("User")),
     posts: t.multi("Post")
   },
   Post: {
@@ -165,6 +166,21 @@ type MultiRow = ResolveSelected<
   "User",
   { name: true; posts: { title: true; }; }
 >;
+type OptionalNestedRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "User",
+  { manager: { name: true; }; }
+>;
+type DeepRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "Post",
+  { author: { manager: { name: true; }; }; }
+>;
+type SingleInMultiRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "User",
+  { posts: { author: { name: true; }; }; }
+>;
 type Builder = TypedQueryBuilder<typeof blogSchema.spec>;
 
 declare const _resolveTypeChecks: [
@@ -183,9 +199,21 @@ declare const _resolveTypeChecks: [
 
 declare const _resolveSelectedChecks: [
   Expect<Equal<FlatRow, { email: string; name: string; }>>,
-  Expect<Equal<NestedRow, { title: string; author: { email: string; } | null; }>>,
-  Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>
+  // A single link arrives as a one-element array (null when an optional one
+  // is empty), not the object itself — a divergence from Gel.
+  Expect<Equal<NestedRow, { title: string; author: [{ email: string; }]; }>>,
+  Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>,
+  Expect<Equal<OptionalNestedRow, { manager: [{ name: string; }] | null; }>>,
+  Expect<Equal<DeepRow, { author: [{ manager: [{ name: string; }] | null; }]; }>>,
+  Expect<Equal<SingleInMultiRow, { posts: { author: [{ name: string; }]; }[]; }>>
 ];
+
+Deno.test("typed single link is read through its one-element array, not as an object", () => {
+  const row: NestedRow = { author: [{ email: "a@b.c" }], title: "x" };
+  // @ts-expect-error a single link is a one-element array
+  assertEquals(row.author.email, undefined);
+  assertEquals(row.author[0].email, "a@b.c");
+});
 
 declare const _builderShapeCheck: Expect<
   Equal<Builder["User"], TypedSelectChain<typeof blogSchema.spec, "User">>
@@ -260,7 +288,7 @@ Deno.test("typed results hold the declared types: int64 as bigint, datetime as D
   const qb = createQueryBuilder(fakeClient, blogSchema);
   const rows = await qb.Post.select({ author: { createdAt: true }, publishedAt: true, score: true, title: true });
   assertEquals(rows, [{
-    author: [{ createdAt: new Date("2026-01-15T10:20:30Z") }] as unknown as { createdAt: Date; },
+    author: [{ createdAt: new Date("2026-01-15T10:20:30Z") }],
     publishedAt: null,
     score: 9007199254740993n,
     title: "x"

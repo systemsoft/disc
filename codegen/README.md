@@ -151,6 +151,8 @@ export interface User {
 }
 ```
 
+A single link selected with a sub-shape arrives as a one-element array of its row, or `null` when an optional one is empty, so `Post` declares `author: [User]` (and an optional link `editor?: [User] | null`): read `post.author[0].name`, not `post.author.name`. This diverges from Gel, which returns the object itself. The Rust and Go emitters declare the same as `Vec<User>` / `Option<Vec<User>>` and `[]User`, and the schema-driven `createQueryBuilder` infers `[{ … }]` for a selected single link. Without a sub-shape a single link is its target's id.
+
 ### Insert and Update Types
 
 Insert types exclude `id` (auto-generated), computed properties, and readonly properties with defaults. Properties with defaults are optional even if marked `required` in the schema.
