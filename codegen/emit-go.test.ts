@@ -16,11 +16,12 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assert } from "@std/assert";
+import { assert, assertStringIncludes } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
 import { createMultiModuleTestSchema } from "../compiler/context.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import type { CodegenConfig } from "./types.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -87,6 +88,23 @@ async function goAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Schema with every exact numeric kind, bare, optional and in arrays. */
+function preciseSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(`module default {
+  type PreciseItem {
+    required label: str;
+    required big: bigint;
+    bigs: array<bigint>;
+    dec: decimal;
+    i64: int64;
+  };
+};`);
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
 }
 
 // --- tests -----------------------------------------------------------------
@@ -189,4 +207,19 @@ Deno.test("emitGo: includeMutations=false drops write methods, keeps reads", asy
 
   if (await goAvailable())
     await assertCompiles(createMultiModuleTestSchema(), config);
+});
+
+Deno.test("emitGo: bigint and decimal are json.Number, int64 is int64", async () => {
+  // The server sends these as exact JSON numbers; a Go string cannot decode a
+  // JSON number, and json.Number keeps every digit both ways.
+  const models = emitGo(schemaToIR(preciseSchema()), goConfig())
+    .find(f => f.path.endsWith("models.go"))!
+    .content;
+  assertStringIncludes(models, "\tBig json.Number `json:\"big\"`");
+  assertStringIncludes(models, "\tBigs *[]json.Number `json:\"bigs,omitempty\"`");
+  assertStringIncludes(models, "\tDec *json.Number `json:\"dec,omitempty\"`");
+  assertStringIncludes(models, "\tI64 *int64 `json:\"i64,omitempty\"`");
+
+  if (await goAvailable())
+    await assertCompiles(preciseSchema());
 });

@@ -131,7 +131,18 @@
           break;
         }
 
-        case "decimal":
+        case "bigint":
+        case "decimal": {
+          /*** Numeric range as below, cast from the typed digits: a bare `0.1…` literal is a
+               float64 and would round. ***/
+          const clause = rangeClause(col, raw, (v) => exactLiteral(p.type, v), (v) => !Number.isNaN(Number(v)));
+
+          if (clause)
+            parts.push(clause);
+
+          break;
+        }
+
         case "float32":
         case "float64":
         case "int16":
@@ -253,8 +264,14 @@
     return v.replace(/'/g, "\\'");
   }
 
+  /** EdgeQL literal for a `bigint`/`decimal` value typed as `v`, cast from its digits so none are lost. */
+  function exactLiteral(type: string, v: string): string {
+    return `<${type}>"${v.trim()}"`;
+  }
+
   function filterPlaceholder(type: string): string {
     switch (type) {
+      case "bigint":
       case "decimal":
       case "float32":
       case "float64":
@@ -284,6 +301,7 @@
 
   function filterTitle(type: string): string {
     switch (type) {
+      case "bigint":
       case "datetime":
       case "decimal":
       case "float32":
@@ -421,7 +439,14 @@
       throw new Error(`"${prop.name}" is required`);
 
     switch (prop.type) {
-      case "decimal":
+      case "bigint":
+      case "decimal": {
+        if (Number.isNaN(Number(v)))
+          throw new Error(`"${prop.name}" must be numeric`);
+
+        return exactLiteral(prop.type, v);
+      }
+
       case "float32":
       case "float64":
       case "int16":

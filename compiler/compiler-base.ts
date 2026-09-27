@@ -416,6 +416,9 @@ export function buildParameterTypeMap(node: unknown): Map<number, string> {
   return out;
 }
 
+/*** The alias of a policy-filtered table inside its own subquery (see `tableRowsWhere`). ***/
+const POLICY_ROWS = "__policy_rows";
+
 export abstract class CompilerBase {
   protected ctx: Context.CompilationContext;
   protected accessEvaluator?: AccessEvaluator;
@@ -430,6 +433,12 @@ export abstract class CompilerBase {
    * `parameterMap`) supplies in that same order.
    */
   protected parameterIndex: Map<string, number> = new Map();
+  /**
+   * The table references the pass that narrows object reads leaves as they
+   * are: those `tableRowsWhere` filters itself, and mutation targets read as
+   * a table (see `mutationTargetTable`).
+   */
+  private exemptTables = new WeakSet<SQL.TableReference>();
 
   constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
@@ -473,9 +482,234 @@ export abstract class CompilerBase {
     return op === "UNION" || op === "INTERSECT" || op === "EXCEPT";
   }
 
-  /** Renders a SQL AST expression to a SQL string (for RawSQLExpression construction) */
+  /**
+   * Renders a SQL AST expression to a SQL string (for RawSQLExpression
+   * construction). Its reads of object tables are narrowed to the rows the
+   * select policies show first: once text, they are out of the final pass's
+   * reach.
+   */
   protected renderSqlExpr(expr: SQL.SQLExpression): string {
+    this.restrictObjectReads(expr, new Set(this.ctx.cteAliases.keys()));
     return new SQLCodeGenerator().generateExpression(expr);
+  }
+
+  /*** Renders a whole statement to SQL text, its object reads narrowed as `renderSqlExpr` does. ***/
+  protected renderSqlStatement(statement: SQL.SQLStatement): string {
+    this.restrictObjectReads(statement, new Set(this.ctx.cteAliases.keys()));
+    return new SQLCodeGenerator().generate(statement);
+  }
+
+  /**
+   * Access policy SQL conditions combined into one expression: any one
+   * allowing policy is enough (permissive mode; restrictive mode's denials
+   * are decided by the evaluator).
+   */
+  protected parseAccessConditions(
+    sqlConditions: string[]
+  ): SQL.SQLExpression | null {
+    if (sqlConditions.length === 0) {
+      return null;
+    }
+
+    // For now, create raw SQL expressions
+    // In a production system, we'd parse these properly
+    const conditions = sqlConditions.map(sql => ({
+      kind: "RawSQLExpression" as const,
+      sql: sql
+    }));
+
+    // Combine multiple conditions with OR (permissive mode)
+    // In restrictive mode we'd use AND, but that's handled by the evaluator
+    return conditions.slice(1).reduce<SQL.SQLExpression>((acc, cond) => ({
+      kind: "BinaryExpression",
+      operator: "OR",
+      left: acc,
+      right: cond
+    }), conditions[0]);
+  }
+
+  /**
+   * The select policy's row filter on `typeDef`: undefined when the query may
+   * read every row (access control off, a bypass caller, no policy narrowing
+   * select), FALSE when select is denied. The filter is policy SQL over the
+   * type's own columns, unqualified, so it only holds directly over the
+   * type's table (see `tableRowsWhere`). Policy expressions reference no other
+   * object type, so applying them never recurses into another policy — as in
+   * Gel, where policy expressions ignore other policies.
+   */
+  protected selectPolicyFilter(typeDef: Context.TypeDef): SQL.SQLExpression | undefined {
+    if (!this.enableAccessControl || !this.accessEvaluator || this.accessContext.bypass || typeDef.kind !== "object") {
+      return undefined;
+    }
+    const decision = this.accessEvaluator.evaluate(typeDef.name, "select", this.accessContext);
+    if (!decision.allowed) {
+      return SQL.createLiteral("boolean", false);
+    }
+    return this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+  }
+
+  /**
+   * `SELECT * FROM "<table>" AS "__policy_rows" WHERE <filter>`: the rows of
+   * `typeDef` a policy filter keeps. The filter's unqualified columns resolve
+   * against the table; the alias keeps an outer reference qualified by the
+   * table's name (a mutation's target, a self link) pointing outward. The
+   * pass that narrows object reads leaves this table as it is.
+   */
+  protected tableRowsWhere(typeDef: Context.TypeDef, filter: SQL.SQLExpression): SQL.SelectStatement {
+    const table = SQL.createTableReference(typeDef.tableName, POLICY_ROWS);
+    this.exemptTables.add(table);
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([table]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*"))]),
+      where: SQL.createWhereClause(filter)
+    });
+  }
+
+  /**
+   * `typeDef`'s table as SQL text, for the SQL the compiler writes as text:
+   * `"<table>"`, or `(SELECT * FROM "<table>" WHERE <filter>)` when a select
+   * policy narrows it.
+   */
+  protected readableTableSql(typeDef: Context.TypeDef): string {
+    const filter = this.selectPolicyFilter(typeDef);
+    return filter ?
+      `(${new SQLCodeGenerator().generate(this.tableRowsWhere(typeDef, filter))})` :
+      `"${typeDef.tableName}"`;
+  }
+
+  /**
+   * `<id> IN (SELECT "id" FROM <readable rows>)` when a select policy narrows
+   * `typeDef`, else undefined: for an id read without its row (a junction's
+   * target column, a single link's column), which only counts when the policy
+   * shows that object.
+   */
+  protected readableIdCondition(typeDef: Context.TypeDef, id: SQL.SQLExpression): SQL.SQLExpression | undefined {
+    const filter = this.selectPolicyFilter(typeDef);
+    if (!filter) {
+      return undefined;
+    }
+    const rows = this.tableRowsWhere(typeDef, filter);
+    rows.select = SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("id"))]);
+    return SQL.createBinaryExpression("IN", id, SQL.createSubqueryExpression(rows));
+  }
+
+  /**
+   * The object `id` (a single link's column) names, or NULL when the select
+   * policy hides it: `(SELECT "id" FROM <readable rows> WHERE "id" = <id>)`.
+   * `id` itself when `typeDef` is not narrowed.
+   */
+  protected readableId(typeDef: Context.TypeDef, id: SQL.SQLExpression): SQL.SQLExpression {
+    const filter = this.selectPolicyFilter(typeDef);
+    if (!filter) {
+      return id;
+    }
+    const rows = this.tableRowsWhere(
+      typeDef,
+      SQL.createBinaryExpression("AND", filter, SQL.createBinaryExpression("=", SQL.createColumnReference("id", POLICY_ROWS), id))
+    );
+    rows.select = SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("id", POLICY_ROWS))]);
+    return SQL.createSubqueryExpression(rows);
+  }
+
+  /*** `readableId` as SQL text. ***/
+  protected readableIdSql(typeDef: Context.TypeDef, idSql: string): string {
+    const id: SQL.SQLExpression = { kind: "RawSQLExpression", sql: idSql };
+    const readable = this.readableId(typeDef, id);
+    return readable === id ? idSql : new SQLCodeGenerator().generateExpression(readable);
+  }
+
+  /*** `readableIdCondition` as SQL text, prefixed ` AND `; empty when the type is not narrowed. ***/
+  protected readableIdConditionSql(typeDef: Context.TypeDef, idSql: string): string {
+    const condition = this.readableIdCondition(typeDef, { kind: "RawSQLExpression", sql: idSql });
+    return condition ? ` AND ${new SQLCodeGenerator().generateExpression(condition)}` : "";
+  }
+
+  /**
+   * A mutation's target table where the statement reads it as a table (the
+   * source rows of a multi-link update). Like `UPDATE <table>`, it carries
+   * the mutation's own policy, not the select policy.
+   */
+  protected mutationTargetTable(typeDef: Context.TypeDef): SQL.TableReference {
+    const table = SQL.createTableReference(typeDef.tableName);
+    this.exemptTables.add(table);
+    return table;
+  }
+
+  /**
+   * Narrow every read of an object type's table under `node` to the rows its
+   * select policy shows: a `FROM "<table>" [AS a]` becomes
+   * `FROM (SELECT * FROM "<table>" WHERE <filter>) AS a` (aliased by the
+   * table name when it had no alias, so `"<table>".col` still resolves).
+   *
+   * This is the one place select policies meet the objects a query reaches —
+   * a `with` binding, a `for` iterator, a path's hops, a sub-shape, a
+   * subquery in a filter — whatever feature built the read. Mutation targets
+   * (`UPDATE t`, `DELETE FROM t`, `INSERT INTO t`) are plain names, not
+   * table references, and keep their own update/delete/insert policy.
+   *
+   * `shadowed` holds the CTE names in scope: a reference to one reads the
+   * CTE, not a table of the same name. A non-recursive CTE sees only the
+   * CTEs before it; a recursive WITH sees all of its own.
+   */
+  protected restrictObjectReads(node: unknown, shadowed: ReadonlySet<string>): void {
+    if (this.enableAccessControl && this.accessEvaluator && !this.accessContext.bypass) {
+      this.restrictReads(node, shadowed);
+    }
+  }
+
+  private restrictReads(node: unknown, shadowed: ReadonlySet<string>): void {
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        this.restrictReads(item, shadowed);
+      }
+      return;
+    }
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    const sqlNode = node as { kind?: string; };
+
+    if (sqlNode.kind === "CTEStatement") {
+      const statement = node as SQL.CTEStatement;
+      const recursive = statement.ctes.some(cte => cte.recursive);
+      const inScope = new Set(shadowed);
+      if (recursive) {
+        statement.ctes.forEach(cte => inScope.add(cte.name));
+      }
+      for (const cte of statement.ctes) {
+        this.restrictReads(cte.query, inScope);
+        inScope.add(cte.name);
+      }
+      this.restrictReads(statement.query, inScope);
+      return;
+    }
+
+    if (sqlNode.kind === "TableReference") {
+      const table = node as SQL.TableReference;
+      if (!this.exemptTables.has(table) && !table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
+        const typeDef = this.objectTypeOfTable(table.name);
+        const filter = typeDef ? this.selectPolicyFilter(typeDef) : undefined;
+        if (typeDef && filter) {
+          table.subquery = this.tableRowsWhere(typeDef, filter);
+          table.alias = table.alias ?? table.name;
+          table.name = "";
+        }
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      this.restrictReads(value, shadowed);
+    }
+  }
+
+  /*** The object type stored in `table`, if any. ***/
+  private objectTypeOfTable(table: string): Context.TypeDef | undefined {
+    for (const typeDef of this.ctx.schema.types.values()) {
+      if (typeDef.kind === "object" && typeDef.tableName === table) {
+        return typeDef;
+      }
+    }
+    return undefined;
   }
 
   /** Comparison operators that drive EdgeQL set-vs-scalar semantics. */

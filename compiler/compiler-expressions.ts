@@ -9,6 +9,7 @@
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { sequenceName } from "../lib/identifiers.ts";
 import {
   backlinkIntersectionName,
   compileEmptyOrder,
@@ -41,6 +42,13 @@ const NUMERIC_LITERAL_TYPES = new Map<string, string>([
   ["float", "float64"],
   ["integer", "int64"]
 ]);
+
+/**
+ * Functions returning a set of rows (`array_unpack` is SQL `UNNEST`), which
+ * PostgreSQL rejects inside an aggregate or a WHERE clause. `enumerate` counts
+ * as one: it numbers its argument's rows with a window function.
+ */
+const SET_RETURNING_FUNCTIONS = new Set(["array_unpack", "enumerate", "json_array_unpack", "json_object_unpack", "range_unpack", "re_match_all"]);
 
 /*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
 function widestIntSqlType(types: (string | null)[]): string {
@@ -456,6 +464,22 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
+   * `select <expr>` when `expr` is a set SQL cannot aggregate or test in
+   * place: a call to a set-returning function (`array_unpack(…)`), a non-empty
+   * set literal, or a `with` name inlined as a scope variable bound to either.
+   * Else null. Aggregating or testing the select's rows instead of the
+   * expression avoids `COUNT(UNNEST(…))` and `UNNEST(…) IS NOT NULL`.
+   */
+  protected setQuery(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+    const variable = expr.kind === "Identifier" ? this.scopeVariable(expr.name) : undefined;
+    const value = variable && !variable.sqlOverride && !variable.row ? variable.expression : expr;
+    const isSet = value.kind === "SetExpr" ?
+      value.elements.length > 0 :
+      value.kind === "FunctionCall" && SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "");
+    return isSet ? { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: expr.span } } : null;
+  }
+
+  /**
    * Lower `<scalar> IN array_unpack(<array<T>>$p)` (and the `NOT IN` form) to a
    * valid Postgres array comparison. `array_unpack` maps to SQL `UNNEST`, but
    * `<x> IN UNNEST(...)` is not valid syntax — the correct lowering is:
@@ -641,7 +665,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * parameter — is at most one value: `<expr> IS NOT NULL`.
    */
   private compileExists(operand: EdgeQLAST.Expression): SQL.SQLExpression {
-    const set = operand.kind === "Subquery" ? operand : this.bindingSetQuery(operand);
+    // A type (`exists User`) is the set of its objects.
+    const typeSet: EdgeQLAST.Subquery | null = operand.kind === "TypeName" ?
+      { kind: "Subquery", query: { distinct: false, expr: operand, kind: "SelectQuery", span: operand.span } } :
+      null;
+    const set = operand.kind === "Subquery" ? operand : typeSet ?? this.bindingSetQuery(operand) ?? this.setQuery(operand);
     if (set) {
       return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(set) };
     }
@@ -856,22 +884,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileIntrospectionFunction(qualifiedName, funcCall);
     }
 
+    if ((functionName === "sequence_next" || functionName === "sequence_reset") && funcCall.args[0]?.value.kind === "Introspection") {
+      return this.compileSequenceFunction(functionName, funcCall);
+    }
+
     // Set-aggregates (`count`/`sum`/…) over a link-set path must become a
     // correlated subquery — a forward multi-link / backlink is a *set* with
     // no scalar column to wrap. Returns null (fall through) for ordinary
     // scalar arguments.
     if (funcCall.args.length === 1) {
-      const arg = this.bindingSetQuery(funcCall.args[0].value) ?? funcCall.args[0].value;
+      const value = funcCall.args[0].value;
+      const arg = this.bindingSetQuery(value) ?? this.setQuery(value) ?? value;
       const multi = functionName === "count" ? this.multiPropertyColumn(arg) : null;
       if (multi) {
         return SQL.createFunctionCall("CARDINALITY", [multi.column]);
       }
-      // A set literal aggregates its elements as rows, like a subquery
-      // (`count({1, 2, 3})` is 3, not a count of one row value).
+      // A set literal or a set-returning call aggregates its elements as rows,
+      // like a subquery (`count({1, 2, 3})` is 3, not a count of one row
+      // value; PostgreSQL rejects `COUNT(UNNEST(…))`).
       const aggregated = arg.kind === "Subquery" ?
         this.compileAggregateOverSubquery(functionName, arg) :
-        arg.kind === "SetExpr" ?
-        this.compileAggregateOverSubquery(functionName, { kind: "Subquery", query: { kind: "SelectQuery", expr: arg } }) :
         this.compileAggregateOverLinkPath(functionName, arg);
       if (aggregated) {
         return aggregated;
@@ -890,6 +922,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     // Special compilation for functions that aren't simple 1:1 mappings
     switch (functionName) {
+      case "len":
+        if (args.length !== 1) {
+          throw new CompilationError("len() requires exactly 1 argument");
+        }
+        return SQL.createFunctionCall(this.lengthFunction(funcCall.args[0].value), args);
+
       case "contains": {
         // Overloaded: string contains vs range contains
         // String: contains(str, sub) → STRPOS(str, sub) > 0
@@ -1196,17 +1234,22 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         };
 
       // Set functions with special compilation
-      case "enumerate":
+      case "enumerate": {
         // enumerate(val) → ROW_NUMBER() OVER () paired with val as jsonb array
         if (args.length !== 1) {
           throw new CompilationError(
             "enumerate() requires exactly 1 argument"
           );
         }
+        const set = this.setQuery(funcCall.args[0].value);
+        if (set) {
+          return this.compileEnumerateSet(set);
+        }
         return {
           kind: "RawSQLExpression" as const,
           sql: `jsonb_build_array(ROW_NUMBER() OVER () - 1, ${this.renderSqlExpr(args[0])})`
         };
+      }
 
       case "distinct":
         // distinct(expr) → wraps expression with DISTINCT keyword
@@ -1349,6 +1392,115 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const sqlName = funcDef.sqlName ?? funcDef.name.replaceAll("::", "_");
 
     return SQL.createFunctionCall(sqlName, args);
+  }
+
+  /**
+   * The PostgreSQL function `len(expr)` compiles to, by `expr`'s static type
+   * (`staticNumericType` reads any scalar or array type it can see, and an
+   * array literal or a call to a function returning an array or bytes adds to
+   * it; a user scalar is taken as the built-in it extends):
+   *
+   *   array<T> → CARDINALITY   (PG `LENGTH` has no array form)
+   *   bytes    → OCTET_LENGTH
+   *   str      → LENGTH        (characters, as Gel counts them)
+   *
+   * An argument of unknown type also gets `LENGTH`: str is the common case,
+   * and PostgreSQL's `LENGTH` takes bytea too, so only an array PostgreSQL
+   * cannot see statically still fails there.
+   */
+  private lengthFunction(expr: EdgeQLAST.Expression): string {
+    const staticType = expr.kind === "ArrayExpr" ?
+      "array" :
+      expr.kind === "FunctionCall" ?
+      Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType :
+      this.staticNumericType(expr);
+    const type = staticType ? this.ctx.schema.scalars?.get(staticType) ?? staticType : null;
+    if (type?.startsWith("array")) {
+      return "CARDINALITY";
+    }
+    return type === "bytes" || type === "std::bytes" ? "OCTET_LENGTH" : "LENGTH";
+  }
+
+  /**
+   * `enumerate(<set>)` over a set-returning call or set literal: the set's rows
+   * numbered in a subquery, as an array unpacked again, so the result is
+   * still a set wherever the argument could be one:
+   *
+   *   UNNEST(ARRAY(SELECT jsonb_build_array(ROW_NUMBER() OVER () - 1, __set.value)
+   *                FROM (SELECT UNNEST(…)) AS __set(value)))
+   *
+   * Numbering next to the set-returning call instead (`ROW_NUMBER() OVER ()`
+   * beside `UNNEST(…)`) numbers the one row the call expands, giving every
+   * element index 0.
+   */
+  private compileEnumerateSet(set: EdgeQLAST.Subquery): SQL.SQLExpression {
+    const value = SQL.createColumnReference("value", "__set");
+    const index = SQL.createBinaryExpression("-", SQL.windowFunction("ROW_NUMBER", [], { kind: "WindowClause" }), SQL.createLiteral("number", 1));
+    const numbered = SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias: "__set", columnAliases: ["value"], kind: "TableReference", name: "", subquery: this.compileQuery(set.query) }]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createFunctionCall("jsonb_build_array", [index, value]))])
+    });
+    // `ARRAY (SELECT …)`, the array of the subquery's rows (a FunctionCall named
+    // ARRAY renders as the `ARRAY[…]` constructor).
+    return SQL.createFunctionCall("UNNEST", [{ kind: "UnaryExpression", operator: "ARRAY", operand: SQL.createSubqueryExpression(numbered) }]);
+  }
+
+  /**
+   * `sequence_next(introspect T)` / `sequence_reset(introspect T[, value])` on
+   * the PostgreSQL sequence of the sequence scalar `T`:
+   *
+   *   sequence_next(introspect T)      → NEXTVAL('<seq>')  (the next value, int64)
+   *   sequence_reset(introspect T, v)  → SETVAL('<seq>', v) (the next is v + 1)
+   *   sequence_reset(introspect T)     → SETVAL('<seq>', <start>, false)
+   *                                      (the next is the start value again)
+   *
+   * `<seq>` is named by `sequenceName`, as the migrator names it.
+   */
+  private compileSequenceFunction(functionName: string, funcCall: EdgeQLAST.FunctionCall): SQL.SQLExpression {
+    const [target, ...rest] = funcCall.args.map(arg => arg.value);
+    if (functionName === "sequence_next" && rest.length !== 0) {
+      throw new CompilationError("sequence_next() takes 1 argument: sequence_next(introspect <sequence scalar type>)");
+    }
+    if (rest.length > 1) {
+      throw new CompilationError("sequence_reset() takes 1 or 2 arguments: sequence_reset(introspect <sequence scalar type>[, value])");
+    }
+
+    const sequence = this.sequenceOf((target as EdgeQLAST.Introspection).type);
+    const name = SQL.createLiteral("string", sequence);
+    if (functionName === "sequence_next") {
+      return SQL.createFunctionCall("NEXTVAL", [name]);
+    }
+    if (rest.length === 1) {
+      return SQL.createFunctionCall("SETVAL", [name, this.compileExpression(rest[0])]);
+    }
+    const start: SQL.RawSQLExpression = {
+      kind: "RawSQLExpression",
+      sql: `( SELECT seqstart FROM pg_catalog.pg_sequence WHERE seqrelid = '${sequence.replaceAll("'", "''")}'::regclass )`
+    };
+    return SQL.createFunctionCall("SETVAL", [name, start, SQL.createLiteral("boolean", false)]);
+  }
+
+  /**
+   * The PostgreSQL sequence of the sequence scalar `type` names. A bare name
+   * is looked up in the `with module` scope, then `default`, then any module
+   * declaring it.
+   */
+  private sequenceOf(type: EdgeQLAST.TypeName): string {
+    const parts = type.name.parts;
+    const name = parts[parts.length - 1];
+    const scalars = this.ctx.schema.scalars ?? new Map<string, string>();
+    const qualified = parts.length > 1 ?
+      parts.join("::") :
+      [this.ctx.moduleScope, "default"].map(module => `${module}::${name}`).find(key => scalars.has(key)) ??
+        [...scalars.keys()].find(key => key.endsWith(`::${name}`));
+
+    if (!qualified || scalars.get(qualified) !== "sequence") {
+      throw new CompilationError(
+        `'${parts.join("::")}' is not a sequence scalar type. sequence_next() and sequence_reset() take ` +
+          "`introspect T` of a scalar declared `scalar type T extending sequence`."
+      );
+    }
+    return sequenceName(qualified.slice(0, qualified.lastIndexOf("::")), name);
   }
 
   /**
@@ -1691,8 +1843,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
       if (link.junctionTable) {
         const srcCol = link.junctionSourceColumn ?? "source_id";
+        const tgtCol = link.junctionTargetColumn ?? "target_id";
+        const targetTd = Context.resolveTypeName(this.ctx, link.target);
+        // Only the targets the select policy shows are counted.
+        const readable = targetTd ? this.readableIdConditionSql(targetTd, `"${link.junctionTable}"."${tgtCol}"`) : "";
         const sql = `(SELECT COUNT(*) FROM "${link.junctionTable}" ` +
-          `WHERE "${link.junctionTable}"."${srcCol}" = "${parent.alias}"."id")`;
+          `WHERE "${link.junctionTable}"."${srcCol}" = "${parent.alias}"."id"${readable})`;
         return { kind: "RawSQLExpression", sql };
       }
       if (link.backlink) {
@@ -1703,7 +1859,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           return null;
         }
         const rowAlias = `__bl_${first.name}`;
-        const sql = `(SELECT COUNT(*) FROM "${targetTd.tableName}" "${rowAlias}" ` +
+        const sql = `(SELECT COUNT(*) FROM ${this.readableTableSql(targetTd)} "${rowAlias}" ` +
           `WHERE "${rowAlias}"."${fkCol}" = "${parent.alias}"."id")`;
         return { kind: "RawSQLExpression", sql };
       }
@@ -1736,12 +1892,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     let fromSql: string;
     let correlation: string;
     if (fwd.columnName && !fwd.junctionTable) {
-      fromSql = `"${targetType.tableName}" "${rowAlias}"`;
+      fromSql = `${this.readableTableSql(targetType)} "${rowAlias}"`;
       correlation = `"${rowAlias}"."${fwd.columnName}" = "${parent.alias}"."id"`;
     } else if (fwd.junctionTable) {
       const srcCol = fwd.junctionSourceColumn ?? "source_id";
       const tgtCol = fwd.junctionTargetColumn ?? "target_id";
-      fromSql = `"${targetType.tableName}" "${rowAlias}" ` +
+      fromSql = `${this.readableTableSql(targetType)} "${rowAlias}" ` +
         `JOIN "${fwd.junctionTable}" ON "${fwd.junctionTable}"."${srcCol}" = ` +
         `"${rowAlias}"."id"`;
       correlation = `"${fwd.junctionTable}"."${tgtCol}" = "${parent.alias}"."id"`;
@@ -1904,7 +2060,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
         if (secondStep.name === "id") {
           const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
-            `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
+            `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id"${this.readableIdConditionSql(targetType, `"${jAlias}"."${targetCol}"`)} ` +
             `AND ${this.renderInnerPredicate(`"${jAlias}"."${targetCol}"`, op, rhsExpr)})`;
           return { kind: "RawSQLExpression", sql };
         }
@@ -1916,7 +2072,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         }
 
         const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
-          `INNER JOIN "${targetType.tableName}" "${tAlias}" ` +
+          `INNER JOIN ${this.readableTableSql(targetType)} "${tAlias}" ` +
           `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" ` +
           `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
           `AND ${this.renderInnerPredicate(`"${tAlias}"."${prop.columnName}"`, op, rhsExpr)})`;
@@ -1946,7 +2102,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
 
       const subAlias = `__sub_${firstStep.name}`;
-      const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" ` +
+      const sql = `EXISTS (SELECT 1 FROM ${this.readableTableSql(targetType)} "${subAlias}" ` +
         `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" ` +
         `AND ${this.renderInnerPredicate(`"${subAlias}"."${targetColName}"`, op, rhsExpr)})`;
       return { kind: "RawSQLExpression", sql };
@@ -1984,14 +2140,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const srcCol = forward.junctionSourceColumn ?? "source_id";
       const tgtCol = forward.junctionTargetColumn ?? "target_id";
       const sql = `EXISTS (SELECT 1 FROM "${forward.junctionTable}" "${jAlias}" ` +
-        `INNER JOIN "${sourceType.tableName}" "${rowAlias}" ON "${rowAlias}"."id" = "${jAlias}"."${srcCol}" ` +
+        `INNER JOIN ${this.readableTableSql(sourceType)} "${rowAlias}" ON "${rowAlias}"."id" = "${jAlias}"."${srcCol}" ` +
         `WHERE "${jAlias}"."${tgtCol}" = "${current.alias}"."id" AND ${predicate})`;
       return { kind: "RawSQLExpression", sql };
     }
     if (!forward.columnName) {
       return null;
     }
-    const sql = `EXISTS (SELECT 1 FROM "${sourceType.tableName}" "${rowAlias}" ` +
+    const sql = `EXISTS (SELECT 1 FROM ${this.readableTableSql(sourceType)} "${rowAlias}" ` +
       `WHERE "${rowAlias}"."${forward.columnName}" = "${current.alias}"."id" AND ${predicate})`;
     return { kind: "RawSQLExpression", sql };
   }
@@ -2118,7 +2274,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const srcCol = link.junctionSourceColumn ?? "source_id";
       const tgtCol = link.junctionTargetColumn ?? "target_id";
       const jAlias = `__hj${depth}_${linkName}`;
-      fromSql = `"${targetType.tableName}" "${tAlias}" ` +
+      fromSql = `${this.readableTableSql(targetType)} "${tAlias}" ` +
         `INNER JOIN "${link.junctionTable}" "${jAlias}" ` +
         `ON "${jAlias}"."${tgtCol}" = "${tAlias}"."id"`;
       correlation = `"${jAlias}"."${srcCol}" = ${parentRef}."id"`;
@@ -2132,12 +2288,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (!fkCol) {
         return null;
       }
-      fromSql = `"${targetType.tableName}" "${tAlias}"`;
+      fromSql = `${this.readableTableSql(targetType)} "${tAlias}"`;
       correlation = `"${tAlias}"."${fkCol}" = ${parentRef}."id"`;
     } else if (!link.multi && link.columnName) {
       // Single forward link: the FK lives on the parent row; the target is the
       // row whose id it points at.
-      fromSql = `"${targetType.tableName}" "${tAlias}"`;
+      fromSql = `${this.readableTableSql(targetType)} "${tAlias}"`;
       correlation = `"${tAlias}"."id" = ${parentRef}."${link.columnName}"`;
     } else {
       return null;
@@ -2237,8 +2393,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
 
       const sourceCol = link.junctionSourceColumn ?? "source_id";
+      const targetCol = link.junctionTargetColumn ?? "target_id";
+      const target = Context.resolveTypeName(this.ctx, link.target);
+      const readable = target ? this.readableIdConditionSql(target, `"${jAlias}"."${targetCol}"`) : "";
       const sql = `${negate ? "NOT " : ""}EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
-        `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" AND ${predicate})`;
+        `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id"${readable} AND ${predicate})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;

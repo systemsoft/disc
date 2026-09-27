@@ -171,6 +171,12 @@
     if (t === "int64")
       return "int64";
 
+    if (t === "bigint")
+      return "bigint";
+
+    if (t === "decimal")
+      return "decimal";
+
     if (t === "float32")
       return "float32";
 

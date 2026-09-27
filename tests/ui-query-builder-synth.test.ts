@@ -210,3 +210,38 @@ Deno.test("coerceValue error message names the field for UI surfacing", () => {
     "score: expected int64"
   );
 });
+
+Deno.test("coerceValue: int64 past 2^53 keeps every digit as an exact JSON number", () => {
+  const value = coerceValue("9007199254740993", "int64", "x");
+  assertEquals(JSON.stringify({ p0: value }), `{"p0":9007199254740993}`);
+});
+
+Deno.test("coerceValue: bigint takes any integer and sends it as an exact JSON number", () => {
+  assertEquals(coerceValue("42", "bigint", "x"), 42);
+  assertEquals(JSON.stringify({ p0: coerceValue("-12345678901234567890", "bigint", "x") }), `{"p0":-12345678901234567890}`);
+  assertThrows(() => coerceValue("1.5", "bigint", "x"), Error, "x: expected bigint");
+  assertThrows(() => coerceValue("12n", "bigint", "x"), Error, "bigint");
+});
+
+Deno.test("coerceValue: decimal takes any number and sends its digits as an exact JSON number", () => {
+  assertEquals(coerceValue("0.5", "decimal", "x"), 0.5);
+  assertEquals(
+    JSON.stringify({ p0: coerceValue(" 0.1000000000000000055511151231257827 ", "decimal", "x") }),
+    `{"p0":0.1000000000000000055511151231257827}`
+  );
+  assertThrows(() => coerceValue("nope", "decimal", "x"), Error, "x: expected decimal");
+  assertThrows(() => coerceValue("1.", "decimal", "x"), Error, "decimal");
+});
+
+Deno.test("bigint and decimal filters cast their parameter", () => {
+  const out = synthesize(
+    spec({
+      filters: [
+        { field: "big", op: "=", value: "12345678901234567890", cast: "bigint" },
+        { field: "price", op: ">", value: "1.50", cast: "decimal" }
+      ]
+    })
+  );
+  assertEquals(out.query, "select User filter (.big = <bigint>$p0) and (.price > <decimal>$p1)");
+  assertEquals(JSON.stringify(out.variables), `{"p0":12345678901234567890,"p1":1.50}`);
+});

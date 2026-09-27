@@ -67,7 +67,11 @@ function scalarGo(kind: ScalarKind): string {
       return "float64";
     case "json":
       return "json.RawMessage";
-    // decimal/bigint/uuid/datetime/durations/bytes/memory: lossless as JSON strings.
+    // Exact JSON numbers on the wire; json.Number keeps every digit both ways.
+    case "bigint":
+    case "decimal":
+      return "json.Number";
+    // uuid/datetime/durations/bytes/memory: lossless as JSON strings.
     default:
       return "string";
   }

@@ -320,27 +320,77 @@ interface OutputShape {
 interface WithScope {
   aliases: Map<string, BoundAlias>;
   module?: string;
+  schema?: DescribedSchema;
 }
 
-/** A `with` alias: the expression it's bound to, in the scope it's bound in. */
+/**
+ * A `with` alias: the expression it's bound to, in the scope it's bound in.
+ * A `for` variable is bound to its iterator as an `element`: it stands for
+ * one element of that set at a time.
+ */
 interface BoundAlias {
+  element?: boolean;
   expr: AST.Expression;
   scope: WithScope;
 }
 
+/** The parts of the schema an output description reads. */
+interface DescribedSchema {
+  /** Each user scalar mapped to the built-in type it extends (`Schema.scalars`). */
+  scalars?: Map<string, string>;
+  types?: Map<
+    string,
+    {
+      kind?: string;
+      properties: Map<
+        string,
+        { edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
+      >;
+      links?: Map<string, { required?: boolean; multi?: boolean; target?: string; }>;
+    }
+  >;
+}
+
 const EMPTY_SCOPE: WithScope = { aliases: new Map() };
 
-/** Follow `with` aliases from `expr` to the expression they're bound to. */
+/**
+ * Follow `with` aliases from `expr` to the expression they're bound to,
+ * stopping at a `for` variable (which is one element of what it's bound to).
+ */
 function resolveAlias(expr: AST.Expression, scope: WithScope): BoundAlias {
   let bound: BoundAlias = { expr, scope };
   while (bound.expr.kind === "Identifier") {
     const next = bound.scope.aliases.get((bound.expr as AST.Identifier).name);
-    if (!next) {
+    if (!next || next.element) {
       break;
     }
     bound = next;
   }
   return bound;
+}
+
+/** The `for` variable `expr` names after `resolveAlias`, if it names one. */
+function elementBinding(expr: AST.Expression, scope: WithScope): BoundAlias | undefined {
+  return expr.kind === "Identifier" ? scope.aliases.get((expr as AST.Identifier).name) : undefined;
+}
+
+/** `name` in the scope's `with module`, unless it is already qualified. */
+function qualifyTypeName(name: string, scope: WithScope): string {
+  return scope.module && scope.module !== "default" && !name.includes("::") ? `${scope.module}::${name}` : name;
+}
+
+/**
+ * The built-in type a scalar type is sent as: a user scalar
+ * (`scalar type Count extending int64`) as the type it extends, a sequence
+ * as int64, an enum as str.
+ */
+function builtinScalarType(name: string, scope: WithScope): string {
+  const bare = name.replace(/^default::/, "");
+  const base = scope.schema?.scalars?.get(bare) ?? scope.schema?.scalars?.get(name) ?? bare;
+  if (base === "sequence") {
+    return "int64";
+  }
+  return scope.schema?.types?.get(base)?.kind === "enum" ? "str" : base;
 }
 
 const COMPARISON_OPERATORS = new Set([
@@ -376,6 +426,26 @@ function inferScalarType(
   switch (e.kind) {
     case "BinaryOp":
       return binaryOpType(e as AST.BinaryOp, bound.scope);
+    case "FunctionCall":
+      return functionType(e as AST.FunctionCall, bound.scope);
+    case "Identifier": {
+      // A `for` variable: an element of its iterator.
+      const element = elementBinding(e, bound.scope);
+      return element ? inferScalarType(element.expr, element.scope) : null;
+    }
+    case "IfElse": {
+      const ifElse = e as AST.IfElse;
+      const branches = [inferScalarType(ifElse.then, bound.scope), inferScalarType(ifElse.else, bound.scope)];
+      return branches[0] !== null && branches[1] !== null ? unifyScalarTypes(branches as string[]) : null;
+    }
+    case "Path": {
+      const reached = inferPath(e as AST.Path, bound.scope);
+      return reached && !reached.object ? reached.type : null;
+    }
+    case "SetExpr": {
+      const shape = inferSetShape(e, bound.scope);
+      return shape.isScalar ? shape.fields[0].edgeqlType : null;
+    }
     case "Literal":
       switch ((e as AST.Literal).type) {
         case "bigint":
@@ -406,12 +476,15 @@ function inferScalarType(
     }
     case "TypeCast": {
       const parts = (e as AST.TypeCast).type?.name?.parts;
-      return parts && parts.length > 0 ? parts[parts.length - 1] : null;
+      return parts && parts.length > 0 ? builtinScalarType(parts[parts.length - 1], bound.scope) : null;
     }
     case "UnaryOp": {
       const unary = e as AST.UnaryOp;
       if (unary.op === "EXISTS" || unary.op === "NOT") {
         return "bool";
+      }
+      if (unary.op === "DISTINCT") {
+        return inferScalarType(unary.operand, bound.scope);
       }
       const operand = inferScalarType(unary.operand, bound.scope);
       return (unary.op === "+" || unary.op === "-") && operand !== null &&
@@ -434,10 +507,17 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
   if (COMPARISON_OPERATORS.has(op.op)) {
     return "bool";
   }
+  if (op.op === "UNION") {
+    const shape = inferSetShape(op, scope);
+    return shape.isScalar ? shape.fields[0].edgeqlType : null;
+  }
   const left = inferScalarType(op.left, scope);
   const right = inferScalarType(op.right, scope);
   if (left === null || right === null) {
     return null;
+  }
+  if (op.op === "??") {
+    return unifyScalarTypes([left, right]);
   }
   if (op.op === "++") {
     return left === right && (left === "str" || left === "bytes") ?
@@ -475,6 +555,113 @@ function decimalOpType(op: string, left: string, right: string): string | null {
   return left === "decimal" || right === "decimal" || op === "/" || op === "**" ?
     "decimal" :
     "bigint";
+}
+
+/** A std function's result type, fixed or from its arguments' types (null where unknown). */
+type FunctionResultType = string | ((args: (string | null)[]) => string | null);
+
+const SAME_AS_ARGUMENT: FunctionResultType = ([arg]) => arg;
+/*** `round`, `math::ceil`, `math::floor`: bigint and decimal keep their type, other numbers give float64. ***/
+const ROUNDED: FunctionResultType = ([arg]) => arg === null || !NUMERIC_TYPES.includes(arg) ? null : DECIMAL_TYPES.includes(arg) ? arg : "float64";
+
+/**
+ * Gel's std functions by result type (`edb/lib/std`), for the functions a
+ * query commonly selects on their own. A function not listed here is not
+ * described as a scalar.
+ */
+const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
+  ["all", "bool"],
+  ["any", "bool"],
+  ["array_join", "str"],
+  ["assert_distinct", SAME_AS_ARGUMENT],
+  ["assert_exists", SAME_AS_ARGUMENT],
+  ["assert_single", SAME_AS_ARGUMENT],
+  ["contains", "bool"],
+  ["count", "int64"],
+  ["datetime_current", "datetime"],
+  ["datetime_get", "float64"],
+  ["datetime_of_statement", "datetime"],
+  ["datetime_of_transaction", "datetime"],
+  ["datetime_truncate", "datetime"],
+  ["find", "int64"],
+  ["json_typeof", "str"],
+  ["len", "int64"],
+  ["math::abs", ([arg]) => arg !== null && NUMERIC_TYPES.includes(arg) ? arg : null],
+  ["math::ceil", ROUNDED],
+  ["math::floor", ROUNDED],
+  // Ints and floats average to float64; bigints and decimals to decimal.
+  ["math::mean", ([arg]) => arg === null || !NUMERIC_TYPES.includes(arg) ? null : DECIMAL_TYPES.includes(arg) ? "decimal" : "float64"],
+  ["max", SAME_AS_ARGUMENT],
+  ["min", SAME_AS_ARGUMENT],
+  ["random", "float64"],
+  ["re_replace", "str"],
+  ["re_test", "bool"],
+  ["round", ROUNDED],
+  ["str_lower", "str"],
+  ["str_pad_end", "str"],
+  ["str_pad_start", "str"],
+  ["str_repeat", "str"],
+  ["str_replace", "str"],
+  ["str_reverse", "str"],
+  ["str_title", "str"],
+  ["str_trim", "str"],
+  ["str_trim_end", "str"],
+  ["str_trim_start", "str"],
+  ["str_upper", "str"],
+  // Ints sum to int64; floats, bigints and decimals to their own type.
+  ["sum", ([arg]) => arg === null || !NUMERIC_TYPES.includes(arg) ? null : INT_TYPES.includes(arg) ? "int64" : arg],
+  ["to_bigint", "bigint"],
+  ["to_datetime", "datetime"],
+  ["to_decimal", "decimal"],
+  ["to_float32", "float32"],
+  ["to_float64", "float64"],
+  ["to_int16", "int16"],
+  ["to_int32", "int32"],
+  ["to_int64", "int64"],
+  ["to_json", "json"],
+  ["to_str", "str"],
+  ["uuid_generate_v1mc", "uuid"],
+  ["uuid_generate_v4", "uuid"]
+]);
+
+/*** A function's name without the `std::` module: `std::count` → `count`, `math::abs` stays. ***/
+function functionName(call: AST.FunctionCall): string {
+  const parts = call.name.parts;
+  return (parts.length === 2 && parts[0] === "std" ? parts.slice(1) : parts).join("::");
+}
+
+/** The scalar type a std function call returns, or null when it isn't one described here. */
+function functionType(call: AST.FunctionCall, scope: WithScope): string | null {
+  const result = STD_FUNCTION_TYPES.get(functionName(call));
+  if (typeof result === "function") {
+    return result(call.args.map(arg => inferScalarType(arg.value, scope)));
+  }
+  return result ?? null;
+}
+
+/**
+ * Cardinality of a function call: an aggregate is one value (`min` and
+ * `max` of an empty set none), `assert_exists` / `assert_single` bound
+ * their argument's, and any other function is called once per combination
+ * of its arguments (see `productCardinality`).
+ */
+function functionCardinality(call: AST.FunctionCall, scope: WithScope): number {
+  const name = functionName(call);
+  if (["all", "any", "count", "math::mean", "sum"].includes(name)) {
+    return Cardinality.ONE;
+  }
+  if (name === "max" || name === "min") {
+    return Cardinality.AT_MOST_ONE;
+  }
+  const args = call.args.map(arg => expressionCardinality(arg.value, scope));
+  const [lower, upper] = cardinalityBounds(args[0] ?? Cardinality.ONE);
+  if (name === "assert_exists") {
+    return boundsCardinality(1, upper);
+  }
+  if (name === "assert_single") {
+    return boundsCardinality(lower, 1);
+  }
+  return productCardinality(args);
 }
 
 /**
@@ -535,20 +722,11 @@ function collectParameters(node: unknown): ParamInfo[] {
  */
 export function inferOutputShape(
   query: unknown,
-  schema?: {
-    types?: Map<
-      string,
-      {
-        properties: Map<
-          string,
-          { edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
-        >;
-        links?: Map<string, { required?: boolean; multi?: boolean; }>;
-      }
-    >;
-  },
-  scope: WithScope = EMPTY_SCOPE
+  schema?: DescribedSchema,
+  outerScope: WithScope = EMPTY_SCOPE
 ): OutputShape {
+  // The schema travels with the scope, so nested expressions see it.
+  const scope = schema && outerScope.schema !== schema ? { ...outerScope, schema } : outerScope;
   // `id` is always required + single → ONE.
   const idField: OutputField = {
     name: "id",
@@ -573,19 +751,34 @@ export function inferOutputShape(
   if (q.kind === "WithBlock") {
     const block = q as AST.WithBlock;
     let inner: WithScope = {
-      aliases: scope.aliases,
+      ...scope,
       module: block.module ?? scope.module
     };
     for (const binding of block.bindings) {
       inner = {
+        ...inner,
         aliases: new Map(inner.aliases).set(binding.name.name, {
           expr: binding.value,
           scope: inner
-        }),
-        module: inner.module
+        })
       };
     }
     return inferOutputShape(block.body, schema, inner);
+  }
+
+  // `for x in S union body`: the body's rows for each element of S, with
+  // `x` standing for that element.
+  if (q.kind === "ForQuery") {
+    const loop = q as AST.ForQuery;
+    const body = inferOutputShape(loop.body, schema, {
+      ...scope,
+      aliases: new Map(scope.aliases).set(loop.variable.name, { element: true, expr: loop.iterator, scope })
+    });
+    if (body.cardinality === undefined) {
+      return body;
+    }
+    const cardinality = productCardinality([expressionCardinality(loop.iterator, scope), body.cardinality]);
+    return { ...body, cardinality, fields: body.isScalar ? [{ ...body.fields[0], cardinality }] : body.fields };
   }
 
   if (q.kind === "SelectQuery") {
@@ -610,12 +803,13 @@ export function inferOutputShape(
       }
     }
 
-    // Selected set literal (`select {1, 2}`): one element per row.
-    if (!sel.shape && expr.kind === "SetExpr") {
-      return dropLowerBound(
-        inferSetShape(expr as AST.SetExpr, schema, exprScope),
-        narrowed
-      );
+    // Selected set literal (`select {1, 2}`) or union (`select A union B`):
+    // one element per row.
+    if (
+      !sel.shape &&
+      (expr.kind === "SetExpr" || (expr.kind === "BinaryOp" && (expr as AST.BinaryOp).op === "UNION"))
+    ) {
+      return dropLowerBound(inferSetShape(expr, exprScope), narrowed);
     }
 
     // Bare-scalar SELECT (`SELECT <bool>$x`, `SELECT 42`, `SELECT 1 + 2`):
@@ -636,16 +830,9 @@ export function inferOutputShape(
       }
     }
 
-    // Under `with module m`, a bare type name is a type in `m`.
-    const name = extractTypeNameFromExpr(expr);
-    const typeName = name === null ?
-      "Object" :
-      exprScope.module && exprScope.module !== "default" &&
-        !name.includes("::") ?
-      `${exprScope.module}::${name}` :
-      name;
+    const typeName = objectTypeName(expr, exprScope) ?? "Object";
     const fields: OutputField[] = [];
-    const typeDef = schema?.types?.get(typeName);
+    const typeDef = scope.schema?.types?.get(typeName);
 
     if (sel.shape) {
       for (const el of sel.shape.elements) {
@@ -661,7 +848,7 @@ export function inferOutputShape(
           const eqlType = propType.edgeqlType ?? propType.type ?? "uuid";
           fields.push({
             name: fieldName,
-            edgeqlType: eqlType,
+            edgeqlType: builtinScalarType(eqlType, scope),
             cardinality: cardinalityFor(
               propType.required ?? false,
               propType.multi ?? false
@@ -702,17 +889,14 @@ export function inferOutputShape(
 }
 
 /**
- * Describe a selected set literal: the output is one row per element, so
- * the element type is the output type. Scalar elements unify to the type
- * Gel would pick (`{1, 2.5}` → float64); object elements (`{(select A {…}),
- * …}`) are described like their first object query. The result cardinality
- * follows Gel's union rule (see `unionCardinality`).
+ * Describe a selected set literal or union (`{a, b}`, `a union b`): the
+ * output is one row per element, so the element type is the output type.
+ * Scalar elements unify to the type Gel would pick (`{1, 2.5}` → float64);
+ * object elements (`{(select A {…}), …}`) are described like their first
+ * object query. The result cardinality follows Gel's union rule (see
+ * `unionCardinality`).
  */
-function inferSetShape(
-  set: AST.SetExpr,
-  schema: Parameters<typeof inferOutputShape>[1],
-  scope: WithScope
-): OutputShape {
+function inferSetShape(set: AST.Expression, scope: WithScope): OutputShape {
   const cardinalities: number[] = [];
   const objects: OutputShape[] = [];
   const scalarTypes: string[] = [];
@@ -727,11 +911,16 @@ function inferSetShape(
       elements.forEach(visit);
       return;
     }
+    if (expr.kind === "BinaryOp" && (expr as AST.BinaryOp).op === "UNION") {
+      visit((expr as AST.BinaryOp).left);
+      visit((expr as AST.BinaryOp).right);
+      return;
+    }
     cardinalities.push(expressionCardinality(expr, scope));
     // Each element is described as if it were selected on its own.
     const shape = expr.kind === "Subquery" ?
-      inferOutputShape((expr as AST.Subquery).query, schema, scope) :
-      inferOutputShape({ kind: "SelectQuery", expr }, schema, scope);
+      inferOutputShape((expr as AST.Subquery).query, undefined, scope) :
+      inferOutputShape({ kind: "SelectQuery", expr }, undefined, scope);
     if (shape.isScalar) {
       scalarTypes.push(shape.fields[0].edgeqlType);
     } else if (shape.typeName !== "Object") {
@@ -782,13 +971,21 @@ function expressionCardinality(
       if (op.op === "IN" || op.op === "NOT IN") {
         return expressionCardinality(op.left, bound.scope);
       }
-      if (binaryOpType(op, bound.scope) === null) {
-        return Cardinality.MANY;
-      }
       const operands = [
         expressionCardinality(op.left, bound.scope),
         expressionCardinality(op.right, bound.scope)
       ];
+      if (op.op === "UNION") {
+        return unionCardinality(operands);
+      }
+      if (binaryOpType(op, bound.scope) === null) {
+        return Cardinality.MANY;
+      }
+      // `a ?? b` is `a`, or `b` when `a` is empty.
+      if (op.op === "??") {
+        const [left, right] = operands.map(cardinalityBounds);
+        return boundsCardinality(Math.max(left[0], right[0]), Math.max(left[1], right[1]));
+      }
       // `?=` and `?!=` compare an empty operand too, rather than yielding
       // nothing.
       if (op.op === "?=" || op.op === "?!=") {
@@ -802,10 +999,26 @@ function expressionCardinality(
       }
       return productCardinality(operands);
     }
+    case "FunctionCall":
+      return functionCardinality(e as AST.FunctionCall, bound.scope);
+    case "Identifier":
+      // A `for` variable is one element at a time.
+      return elementBinding(e, bound.scope) ? Cardinality.ONE : Cardinality.MANY;
+    case "IfElse": {
+      // One of the branches per condition value.
+      const ifElse = e as AST.IfElse;
+      const [then, otherwise] = [ifElse.then, ifElse.else].map(branch => cardinalityBounds(expressionCardinality(branch, bound.scope)));
+      return productCardinality([
+        expressionCardinality(ifElse.condition, bound.scope),
+        boundsCardinality(Math.min(then[0], otherwise[0]), Math.max(then[1], otherwise[1]))
+      ]);
+    }
     case "Literal":
       return Cardinality.ONE;
     case "Parameter":
       return Cardinality.ONE;
+    case "Path":
+      return inferPath(e as AST.Path, bound.scope)?.cardinality ?? Cardinality.MANY;
     case "SetExpr":
       return unionCardinality(
         (e as AST.SetExpr).elements.map(el => expressionCardinality(el, bound.scope))
@@ -829,6 +1042,132 @@ function expressionCardinality(
     default:
       return Cardinality.MANY;
   }
+}
+
+/*** A cardinality's lower bound (0 or 1) and upper bound (1, or 2 for many). ***/
+function cardinalityBounds(cardinality: number): [number, number] {
+  return [
+    cardinality === Cardinality.ONE || cardinality === Cardinality.AT_LEAST_ONE ? 1 : 0,
+    cardinality === Cardinality.ONE || cardinality === Cardinality.AT_MOST_ONE ? 1 : 2
+  ];
+}
+
+/*** The cardinality with these bounds (see `cardinalityBounds`). ***/
+function boundsCardinality(lower: number, upper: number): number {
+  if (upper <= 1) {
+    return lower >= 1 ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
+  }
+  return lower >= 1 ? Cardinality.AT_LEAST_ONE : Cardinality.MANY;
+}
+
+/** What a path reaches: objects of a type, or a property's values. */
+interface ReachedPath {
+  cardinality: number;
+  object: boolean;
+  type: string;
+}
+
+/**
+ * What a rooted path (`User.posts.title`, `u.best`, `User.<author[is
+ * Post]`) reaches, and how many: a path from a type is the set of all the
+ * objects it reaches (MANY); from a `for` variable or a `with` binding,
+ * each link or property multiplies in its own cardinality. `Enum.Member` is
+ * one str. Null when a step isn't a link or property the schema knows.
+ */
+function inferPath(path: AST.Path, scope: WithScope): ReachedPath | null {
+  const types = scope.schema?.types;
+  if (!path.rooted || !types) {
+    return null;
+  }
+  const [root, ...steps] = path.steps;
+  const rootIdentifier: AST.Identifier = { kind: "Identifier", name: root.name };
+  let reached: ReachedPath;
+  if (scope.aliases.has(root.name)) {
+    const type = objectTypeName(rootIdentifier, scope);
+    if (type === null) {
+      return null;
+    }
+    reached = { cardinality: expressionCardinality(rootIdentifier, scope), object: true, type };
+  } else {
+    const type = qualifyTypeName(root.name, scope);
+    if (types.get(type)?.kind === "enum") {
+      return steps.length === 1 ? { cardinality: Cardinality.ONE, object: false, type: "str" } : null;
+    }
+    if (!types.has(type)) {
+      return null;
+    }
+    reached = { cardinality: Cardinality.MANY, object: true, type };
+  }
+
+  for (const [index, step] of steps.entries()) {
+    const typeDef = types.get(reached.type);
+    if (!typeDef) {
+      return null;
+    }
+    if (step.type === "backlink") {
+      const target = step.filter?.kind === "TypeName" ? (step.filter as AST.TypeName).name.parts.join("::") : null;
+      if (target === null) {
+        return null;
+      }
+      reached = {
+        cardinality: productCardinality([reached.cardinality, Cardinality.MANY]),
+        object: true,
+        type: qualifyTypeName(target, scope)
+      };
+      continue;
+    }
+    if (step.type !== "property" && step.type !== "link") {
+      return null;
+    }
+    const property = typeDef.properties.get(step.name);
+    if (property && index === steps.length - 1) {
+      return {
+        cardinality: productCardinality([
+          reached.cardinality,
+          cardinalityFor(property.required ?? false, property.multi ?? false)
+        ]),
+        object: false,
+        type: builtinScalarType(property.edgeqlType ?? property.type, scope)
+      };
+    }
+    const link = typeDef.links?.get(step.name);
+    if (!link?.target) {
+      return null;
+    }
+    reached = {
+      cardinality: productCardinality([reached.cardinality, cardinalityFor(link.required ?? false, link.multi ?? false)]),
+      object: true,
+      type: link.target.replace(/^default::/, "")
+    };
+  }
+  return reached;
+}
+
+/**
+ * The object type of the set `expr` selects: a type, a path to objects, a
+ * `with` binding of an object query, or a `for` variable over objects. Under
+ * `with module m`, a bare type name is a type in `m`. Null when it isn't
+ * known to be objects.
+ */
+function objectTypeName(expr: AST.Expression, scope: WithScope): string | null {
+  const bound = resolveAlias(expr, scope);
+  const e = bound.expr;
+  const element = elementBinding(e, bound.scope);
+  if (element) {
+    return objectTypeName(element.expr, element.scope);
+  }
+  if (e.kind === "Subquery") {
+    const shape = inferOutputShape((e as AST.Subquery).query, undefined, bound.scope);
+    return shape.isScalar || shape.typeName === "Object" ? null : shape.typeName;
+  }
+  if (e.kind === "Path") {
+    const reached = inferPath(e as AST.Path, bound.scope);
+    if (reached) {
+      return reached.object ? reached.type : null;
+    }
+  }
+  const name = extractTypeNameFromExpr(e);
+  return name === null ? null : qualifyTypeName(name, bound.scope);
 }
 
 /**
@@ -883,13 +1222,15 @@ function unionCardinality(cardinalities: number[]): number {
 const INT_TYPES = ["int16", "int32", "int64"];
 const FLOAT_TYPES = ["float32", "float64"];
 const DECIMAL_TYPES = ["bigint", "decimal"];
+const NUMERIC_TYPES = [...INT_TYPES, ...FLOAT_TYPES, ...DECIMAL_TYPES];
 
 /**
  * The common type of a set literal's scalar elements, by Gel's implicit
  * numeric casts: ints widen to the widest int, floats to the widest float,
  * and a mix of ints and floats to float64 (float32 only for int16, the one
- * int Gel implicitly casts to float32). Anything else keeps the first
- * element's type.
+ * int Gel implicitly casts to float32). Ints widen to bigint, and ints and
+ * bigints to decimal. Anything else (a float with a bigint or decimal, which
+ * Gel rejects) keeps the first element's type.
  */
 function unifyScalarTypes(types: string[]): string {
   if (types.every(t => t === types[0])) {
@@ -897,6 +1238,10 @@ function unifyScalarTypes(types: string[]): string {
   }
   const ints = types.filter(t => INT_TYPES.includes(t));
   const floats = types.filter(t => FLOAT_TYPES.includes(t));
+  const decimals = types.filter(t => DECIMAL_TYPES.includes(t));
+  if (decimals.length > 0 && floats.length === 0 && ints.length + decimals.length === types.length) {
+    return decimals.includes("decimal") ? "decimal" : "bigint";
+  }
   if (ints.length + floats.length !== types.length) {
     return types[0];
   }

@@ -124,3 +124,21 @@ def test_with_select_shape(client):
 
 def test_query_single_scalar(client):
     assert client.query_single("SELECT 42") == 42
+
+
+def test_count_is_an_int64(client):
+    total = client.query_single("SELECT count(Item)")
+    assert isinstance(total, int)
+    assert total == len(client.query("SELECT Item"))
+
+
+def test_path_select_returns_the_property_values(client):
+    name = f"path-{uuid.uuid4()}"
+    client.query_single(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=6,
+    )
+    names = list(client.query("SELECT Item.name"))
+    assert all(isinstance(n, str) for n in names)
+    assert name in names

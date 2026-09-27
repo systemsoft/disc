@@ -385,6 +385,8 @@ EdgeQL types are mapped to TypeScript types:
 
 `bigint` and `decimal` keep every digit: the server sends them as exact JSON numbers and the query builders' `reviveTyped` returns a `bigint` field as a `bigint` and a `decimal` field as a string of its digits. An `int64` field is left as the SDK reads it (a number, or a numeric string past 2^53) — see `sdk/codecs.ts`.
 
+The Go and Rust clients read and send the same exact JSON numbers: in Go `bigint` and `decimal` are `json.Number` and `int64` is `int64`; in Rust they are `ExactNumber` (a `serde_json::Number`, with serde_json's `arbitrary_precision` feature enabled in the generated `Cargo.toml`) and `i64`.
+
 SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 
 ## Architecture

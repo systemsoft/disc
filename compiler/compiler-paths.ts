@@ -177,8 +177,18 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     }
 
     let source = resolved.startType;
-    for (const hop of resolved.hops) {
+    for (const [index, hop] of resolved.hops.entries()) {
       ids = this.compileHop(source, hop, ids, row);
+      // A hop yields its targets' ids from a link column or a junction row,
+      // without reading the targets. Before the next hop, keep only those the
+      // select policy shows: a hidden object passes nothing on. (The last
+      // hop's objects are read from their table, where the policy applies.)
+      if (index < resolved.hops.length - 1 && this.selectPolicyFilter(hop.target)) {
+        const alias = Context.generateAlias(this.ctx, hop.target.tableName);
+        const visible = this.selectColumn(hop.target.tableName, alias, "id");
+        visible.where = SQL.createWhereClause(this.idIn(SQL.createColumnReference("id", alias), ids));
+        ids = { select: visible };
+      }
       row = undefined;
       source = hop.target;
     }

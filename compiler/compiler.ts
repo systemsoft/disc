@@ -11,7 +11,6 @@
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
 import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -38,6 +37,9 @@ interface MultiLinkOp {
 }
 
 export class EdgeQLCompiler extends ShapeCompilerLayer {
+  /** Set while compiling the update or delete body of a `for` over objects, which also reads the iterator's rows. */
+  private mutationReadsIterator = false;
+
   compile(
     query: EdgeQLAST.Query,
     options?: { parameterMap?: Map<string, number>; }
@@ -51,14 +53,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.parameterIndex = options?.parameterMap ??
         buildParameterIndex(query);
 
-      let statement = this.compileQuery(query);
+      const statement = this.compileQuery(query);
 
-      // Apply access control if enabled
-      if (
-        this.enableAccessControl && this.accessEvaluator && this.accessInjector
-      ) {
-        statement = this.applyAccessControl(statement, query);
-      }
+      // Select policies: every read of an object type's table — the top-level
+      // select's, and those in a with binding, a for iterator, a path, a
+      // sub-shape or a subquery — keeps only the rows the policy shows.
+      // Mutations apply their own policy where they are compiled (see
+      // mutationAccessCondition).
+      this.restrictObjectReads(statement, new Set());
 
       return Ok(statement);
     } catch (error) {
@@ -71,174 +73,6 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         )
       );
     }
-  }
-
-  private applyAccessControl(
-    statement: SQL.SQLStatement,
-    query: EdgeQLAST.Query
-  ): SQL.SQLStatement {
-    if (!this.accessEvaluator || !this.accessInjector) {
-      return statement;
-    }
-
-    // Per-request bypass (gh/geldata#6358). The HTTP layer gates the
-    // override behind admin role; once set here we emit unfiltered SQL.
-    if (this.accessContext.bypass) {
-      return statement;
-    }
-
-    // Determine the object type being accessed
-    const objectType = this.extractObjectType(query);
-    if (!objectType) {
-      return statement; // No type identified, return as-is
-    }
-
-    // Policies are registered under TypeDef.name (see adaptAccessPolicies),
-    // so resolve the query's spelling (`Doc`, `default::Doc`) to the type and
-    // look the policy up by that name, as mutationAccessCondition() does.
-    const typeDef = Context.resolveTypeName(this.ctx, objectType);
-    if (!typeDef) {
-      return statement; // Type not found in schema
-    }
-
-    // Apply access control based on statement type
-    switch (statement.kind) {
-      case "SelectStatement": {
-        // Check if access is allowed and inject conditions
-        const decision = this.accessEvaluator.evaluate(
-          typeDef.name,
-          "select",
-          this.accessContext
-        );
-
-        if (!decision.allowed) {
-          // Block access entirely with WHERE FALSE. The user's filter is kept
-          // as `FALSE AND (filter)` rather than replaced: the bind list comes
-          // from the EdgeQL AST, so dropping a filter that references `$n`
-          // leaves PostgreSQL expecting fewer parameters than are sent
-          // (08P01). The planner folds the conjunction to FALSE either way.
-          const falseCondition: SQL.SQLExpression = {
-            kind: "LiteralExpression",
-            type: "boolean",
-            value: false
-          };
-
-          return {
-            ...statement,
-            where: {
-              kind: "WhereClause",
-              condition: statement.where ?
-                {
-                  kind: "BinaryExpression",
-                  operator: "AND",
-                  left: falseCondition,
-                  right: statement.where.condition
-                } :
-                falseCondition
-            }
-          };
-        }
-
-        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
-          // Inject access conditions
-          const accessConditions = this.parseAccessConditions(
-            decision.sqlConditions
-          );
-          if (accessConditions) {
-            if (statement.where) {
-              // Combine with existing WHERE clause
-              const combinedCondition: SQL.BinaryExpression = {
-                kind: "BinaryExpression",
-                operator: "AND",
-                left: accessConditions,
-                right: statement.where.condition
-              };
-
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: combinedCondition
-                }
-              };
-            } else {
-              // Add new WHERE clause
-              return {
-                ...statement,
-                where: {
-                  kind: "WhereClause",
-                  condition: accessConditions
-                }
-              };
-            }
-          }
-        }
-
-        return statement;
-      }
-
-      // Mutations are not handled here: a mutation node can sit anywhere in
-      // the query (with binding, for body, explain, multi-link CTE), so
-      // compileInsertQuery / compileUpdateQuery / compileDeleteQuery apply
-      // their own policy via mutationAccessCondition().
-
-      default:
-        return statement;
-    }
-  }
-
-  private extractObjectType(query: EdgeQLAST.Query): string | undefined {
-    switch (query.kind) {
-      case "SelectQuery":
-        // Extract type from the expression
-        if (query.expr?.kind === "TypeName") {
-          return query.expr.name.parts.join("::");
-        } else if (query.expr?.kind === "Path") {
-          // A path over links selects the objects it reaches (`User.posts`
-          // reads Post rows): their type's policy applies to the rows.
-          const resolved = this.resolvePath(query.expr);
-          if (resolved) {
-            return resolved.typeDef.name;
-          }
-          // Handle path expressions that start with a type
-          const firstStep = query.expr.steps[0];
-          if (firstStep.type === "property") {
-            return firstStep.name;
-          }
-        }
-        break;
-      case "InsertQuery":
-        return query.type.name.parts.join(".");
-      case "UpdateQuery":
-        return query.type.name.parts.join(".");
-      case "DeleteQuery":
-        return query.type.name.parts.join(".");
-    }
-    return undefined;
-  }
-
-  private parseAccessConditions(
-    sqlConditions: string[]
-  ): SQL.SQLExpression | null {
-    if (sqlConditions.length === 0) {
-      return null;
-    }
-
-    // For now, create raw SQL expressions
-    // In a production system, we'd parse these properly
-    const conditions = sqlConditions.map(sql => ({
-      kind: "RawSQLExpression" as const,
-      sql: sql
-    }));
-
-    // Combine multiple conditions with OR (permissive mode)
-    // In restrictive mode we'd use AND, but that's handled by the evaluator
-    return conditions.slice(1).reduce<SQL.SQLExpression>((acc, cond) => ({
-      kind: "BinaryExpression",
-      operator: "OR",
-      left: acc,
-      right: cond
-    }), conditions[0]);
   }
 
   /**
@@ -262,7 +96,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return undefined;
     }
 
-    // Per-request bypass (gh/geldata#6358), same gate as applyAccessControl.
+    // Per-request bypass (gh/geldata#6358), same gate as selectPolicyFilter.
     if (this.accessContext.bypass) {
       return undefined;
     }
@@ -280,6 +114,31 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
 
     return this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+  }
+
+  /**
+   * The update or delete policy's row predicate for a statement on `typeDef`
+   * (see `mutationAccessCondition`). In the body of a `for` over objects the
+   * statement also reads the iterator, whose columns have the table's names,
+   * so the policy's unqualified columns are read from the table's own rows:
+   * `"<table>"."id" IN (SELECT "id" FROM "<table>" WHERE <policy>)`.
+   */
+  private mutationRowCondition(
+    typeDef: Context.TypeDef,
+    operation: "update" | "delete"
+  ): SQL.SQLExpression | undefined {
+    const condition = this.mutationAccessCondition(typeDef.name, operation);
+    if (!condition || !this.mutationReadsIterator) {
+      return condition;
+    }
+
+    const rows = this.tableRowsWhere(typeDef, condition);
+    rows.select = SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("id"))]);
+    return SQL.createBinaryExpression(
+      "IN",
+      SQL.createColumnReference("id", typeDef.tableName),
+      SQL.createSubqueryExpression(rows)
+    );
   }
 
   // AND an access predicate into a (possibly absent) WHERE clause.
@@ -975,7 +834,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // for rows the caller may update.
     whereClause = this.withAccessCondition(
       whereClause,
-      this.mutationAccessCondition(typeDef.name, "update")
+      this.mutationRowCondition(typeDef, "update")
     );
 
     if (multiLinkOps.length === 0) {
@@ -1039,9 +898,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         select: SQL.createSelectClause([
           SQL.createSelectItem(SQL.createColumnReference("*"))
         ]),
-        from: SQL.createFromClause([
-          SQL.createTableReference(typeDef.tableName)
-        ]),
+        from: SQL.createFromClause([this.mutationTargetTable(typeDef)]),
         where: whereClause
       });
     }
@@ -1128,7 +985,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
     whereClause = this.withAccessCondition(
       whereClause,
-      this.mutationAccessCondition(typeDef.name, "delete")
+      this.mutationRowCondition(typeDef, "delete")
     );
 
     return {
@@ -1284,7 +1141,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         kind: "CTE",
         name: cteName,
         recursive: binding.recursive || false,
-        columns: [],
+        // An inlined binding's one column is `value`, so a select of it can
+        // read the row (see compileSelectExpression).
+        columns: value.kind === "Subquery" ? [] : ["value"],
         query: bindingQuery
       });
     }
@@ -1642,7 +1501,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         return this.compileBulkInsert(body, iteratorTable);
       }
       if (body.kind === "UpdateQuery") {
-        const update = this.compileUpdateQuery(body);
+        const update = this.compileIteratorMutation(() => this.compileUpdateQuery(body));
         if (update.kind !== "UpdateStatement") {
           throw new CompilationError(
             "An update in a `for` over objects cannot assign a multi link yet. Update the link without the loop: `update T filter … set { link += … }`.",
@@ -1652,7 +1511,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         return { ...update, from: [iteratorTable], returning: [SQL.createSelectItem(SQL.createColumnReference("*", update.table))] };
       }
       if (body.kind === "DeleteQuery") {
-        const deletion = this.compileDeleteQuery(body);
+        const deletion = this.compileIteratorMutation(() => this.compileDeleteQuery(body));
         return { ...deletion, returning: [SQL.createSelectItem(SQL.createColumnReference("*", deletion.table))], using: [iteratorTable] };
       }
 
@@ -1665,6 +1524,17 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       });
     } finally {
       Context.popScope(this.ctx);
+    }
+  }
+
+  /*** Compile the update or delete body of a `for` over objects (see `mutationRowCondition`). ***/
+  private compileIteratorMutation<T>(compile: () => T): T {
+    const outer = this.mutationReadsIterator;
+    this.mutationReadsIterator = true;
+    try {
+      return compile();
+    } finally {
+      this.mutationReadsIterator = outer;
     }
   }
 
@@ -1911,8 +1781,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
 
     const valueSql = this.compileExpression(query.value);
-    const codegen = new SQLCodeGenerator();
-    const valueStr = codegen.generateExpression(valueSql);
+    const valueStr = this.renderSqlExpr(valueSql);
 
     return {
       kind: "RawSQLStatement",
@@ -1924,8 +1793,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     query: EdgeQLAST.ExplainQuery
   ): SQL.RawSQLStatement {
     const innerStatement = this.compileQuery(query.query);
-    const codegen = new SQLCodeGenerator();
-    const innerSql = codegen.generate(innerStatement);
+    const innerSql = this.renderSqlStatement(innerStatement);
 
     const options: string[] = ["FORMAT JSON"];
     if (query.analyze) {
@@ -1968,10 +1836,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       throw new CompilationError("CONFIGURE SET requires a value");
     }
 
-    const codegen = new SQLCodeGenerator();
-    const valueSql = codegen.generateExpression(
-      this.compileExpression(query.value)
-    );
+    const valueSql = this.renderSqlExpr(this.compileExpression(query.value));
 
     if (query.scope === "SESSION") {
       return {

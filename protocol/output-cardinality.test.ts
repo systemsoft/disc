@@ -38,13 +38,22 @@ const schema = {
           type: "str",
           required: false,
           multi: false
-        }]
+        }],
+        ["visits", { edgeqlType: "Count", multi: false, required: false, type: "bigint" }],
+        ["mood", { edgeqlType: "Mood", multi: false, required: false, type: "text" }]
       ]),
       links: new Map([
         ["tags", { required: true, multi: true }],
-        ["notes", { required: false, multi: true }]
+        ["notes", { required: false, multi: true }],
+        ["best", { multi: false, required: false, target: "Post" }],
+        ["posts", { multi: true, required: false, target: "Post" }]
       ])
     }],
+    ["Post", {
+      links: new Map([["author", { multi: false, required: false, target: "Thing" }]]),
+      properties: new Map([["title", { edgeqlType: "str", multi: false, required: true, type: "text" }]])
+    }],
+    ["Mood", { kind: "enum", links: new Map(), properties: new Map() }],
     ["other::Widget", {
       properties: new Map([
         ["size", {
@@ -56,7 +65,8 @@ const schema = {
       ]),
       links: new Map()
     }]
-  ])
+  ]),
+  scalars: new Map([["Count", "int64"]])
 };
 
 /** Split a packed typedesc block into its length-prefixed descriptors. */
@@ -259,5 +269,122 @@ Deno.test("scalar select reports its own type and result cardinality", () => {
       { cardinality, isScalar: true, type },
       query
     );
+  }
+});
+
+Deno.test("std function calls are described by Gel's return type and cardinality", () => {
+  const cases: [string, string, number][] = [
+    ["select count(Thing)", "int64", Cardinality.ONE],
+    ["select count(Thing.posts)", "int64", Cardinality.ONE],
+    ["select std::count({1, 2})", "int64", Cardinality.ONE],
+    ["select sum({1, 2})", "int64", Cardinality.ONE],
+    ["select sum({<int32>$a, <int32>$b})", "int64", Cardinality.ONE],
+    ["select sum({1.5, 2.5})", "float64", Cardinality.ONE],
+    ["select sum({1n, 2n})", "bigint", Cardinality.ONE],
+    ["select min(Thing.title)", "str", Cardinality.AT_MOST_ONE],
+    ["select max({1, 2})", "int64", Cardinality.AT_MOST_ONE],
+    ["select all({true, false})", "bool", Cardinality.ONE],
+    ["select math::mean({1, 2})", "float64", Cardinality.ONE],
+    ["select math::mean({1.5n, 2n})", "decimal", Cardinality.ONE],
+    ["select len('abc')", "int64", Cardinality.ONE],
+    ["select len(<optional str>$x)", "int64", Cardinality.AT_MOST_ONE],
+    ["select str_upper('abc')", "str", Cardinality.ONE],
+    ["select str_upper(Thing.title)", "str", Cardinality.MANY],
+    ["select to_str(42)", "str", Cardinality.ONE],
+    ["select contains('abc', 'b')", "bool", Cardinality.ONE],
+    ["select find('abc', 'b')", "int64", Cardinality.ONE],
+    ["select round(2)", "float64", Cardinality.ONE],
+    ["select round(2.5)", "float64", Cardinality.ONE],
+    ["select round(2.5n)", "decimal", Cardinality.ONE],
+    ["select math::abs(-2)", "int64", Cardinality.ONE],
+    ["select math::floor(2.5n)", "decimal", Cardinality.ONE],
+    ["select datetime_current()", "datetime", Cardinality.ONE],
+    ["select uuid_generate_v4()", "uuid", Cardinality.ONE],
+    ["select assert_exists(<optional str>$x)", "str", Cardinality.ONE],
+    ["select assert_single(Thing.title)", "str", Cardinality.AT_MOST_ONE]
+  ];
+  for (const [query, type, cardinality] of cases) {
+    assertEquals(inferScalarSet(query), { cardinality, isScalar: true, type }, query);
+  }
+  // An unknown function is not mis-described as a scalar.
+  assertEquals(inferObject("select no_such_function(1)").isScalar, undefined);
+});
+
+Deno.test("union, coalesce, if-else, distinct and exists are described by their operands", () => {
+  const cases: [string, string, number][] = [
+    ["select {1} union {2}", "int64", Cardinality.AT_LEAST_ONE],
+    ["select 1 union 2.5", "float64", Cardinality.AT_LEAST_ONE],
+    ["select 1 union select 2", "int64", Cardinality.AT_LEAST_ONE],
+    ["select <optional str>$x union <optional str>$y", "str", Cardinality.MANY],
+    ["select 1 ?? 2", "int64", Cardinality.ONE],
+    ["select <optional str>$x ?? 'd'", "str", Cardinality.ONE],
+    ["select <optional str>$x ?? <optional str>$y", "str", Cardinality.AT_MOST_ONE],
+    ["select Thing.title ?? 'none'", "str", Cardinality.AT_LEAST_ONE],
+    ["select 1 if true else 2.5", "float64", Cardinality.ONE],
+    ["select 'a' if <optional bool>$c else 'b'", "str", Cardinality.AT_MOST_ONE],
+    ["select {1, 2} if true else 3", "int64", Cardinality.AT_LEAST_ONE],
+    ["select distinct {1, 1}", "int64", Cardinality.AT_LEAST_ONE],
+    ["select count(distinct {1, 1})", "int64", Cardinality.ONE],
+    ["select exists Thing", "bool", Cardinality.ONE],
+    ["select not exists Thing.posts", "bool", Cardinality.ONE]
+  ];
+  for (const [query, type, cardinality] of cases) {
+    assertEquals(inferScalarSet(query), { cardinality, isScalar: true, type }, query);
+  }
+  assertEquals(inferObject("select (select Thing { title }) union (select Thing { title })"), {
+    cardinality: Cardinality.MANY,
+    fields: [["title", "str"]],
+    isScalar: undefined,
+    typeName: "Thing"
+  });
+});
+
+Deno.test("path selects and for queries are described by what they reach", () => {
+  const scalars: [string, string, number][] = [
+    ["select Thing.title", "str", Cardinality.MANY],
+    ["select Thing.posts.title", "str", Cardinality.MANY],
+    ["select Thing.best.title", "str", Cardinality.MANY],
+    ["select Post.author.nickname", "str", Cardinality.MANY],
+    ["select Thing.<author[is Post].title", "str", Cardinality.MANY],
+    ["select Thing.visits", "int64", Cardinality.MANY],
+    ["select Mood.Happy", "str", Cardinality.ONE],
+    ["for x in {1, 2} union x + 1", "int64", Cardinality.AT_LEAST_ONE],
+    ["for x in {1, 2} union (select x)", "int64", Cardinality.AT_LEAST_ONE],
+    ["for x in {<optional str>$a} union x ++ '!'", "str", Cardinality.AT_MOST_ONE],
+    ["for t in Thing union t.title", "str", Cardinality.MANY],
+    ["for t in Thing union (select t.posts.title)", "str", Cardinality.MANY]
+  ];
+  for (const [query, type, cardinality] of scalars) {
+    assertEquals(inferScalarSet(query), { cardinality, isScalar: true, type }, query);
+  }
+
+  const objects: [string, string, string[][]][] = [
+    ["select Thing.posts { title }", "Post", [["title", "str"]]],
+    ["select Thing.best { title }", "Post", [["title", "str"]]],
+    ["select Thing.<author[is Post] { title }", "Post", [["title", "str"]]],
+    ["select Post.author { nickname }", "Thing", [["nickname", "str"]]],
+    ["for t in Thing union (select t { title })", "Thing", [["title", "str"]]],
+    ["for t in Thing union (select t.posts { title })", "Post", [["title", "str"]]]
+  ];
+  for (const [query, typeName, fields] of objects) {
+    assertEquals(inferObject(query), { cardinality: undefined, fields, isScalar: undefined, typeName }, query);
+  }
+});
+
+Deno.test("user-scalar and enum properties are described by the built-in type they extend", () => {
+  assertEquals(inferObject("select Thing { visits, mood }").fields, [["visits", "int64"], ["mood", "str"]]);
+  assertEquals(inferScalarSet("select <Count>7"), { cardinality: Cardinality.ONE, isScalar: true, type: "int64" });
+});
+
+Deno.test("mixed numeric set literals take Gel's common type", () => {
+  const cases: [string, string][] = [
+    ["select {1, 2n}", "bigint"],
+    ["select {2n, 1}", "bigint"],
+    ["select {<int32>$a, 2n}", "bigint"],
+    ["select {1, 2.5n}", "decimal"],
+    ["select {2n, 2.5n}", "decimal"]
+  ];
+  for (const [query, type] of cases) {
+    assertEquals(inferScalarSet(query), { cardinality: Cardinality.AT_LEAST_ONE, isScalar: true, type }, query);
   }
 });

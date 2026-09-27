@@ -20,8 +20,12 @@
 /*** UTILITY ------------------------------------------ ***/
 
 import { quoteIdent } from "./edgeql-ident.ts";
+import { exactNumberValue } from "./exact-json.ts";
 
 const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+/*** JSON number grammar (RFC 8259), so the digits can go out as a JSON number. ***/
+const INTEGER_RE = /^-?(0|[1-9]\d*)$/;
+const NUMBER_RE = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
 
 /*** EXPORT ------------------------------------------- ***/
 
@@ -29,8 +33,10 @@ export type FilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=";
 
 /** Subset of EdgeQL casts the form can produce — keep aligned with form inputs. */
 export type FilterCast =
+  | "bigint"
   | "bool"
   | "datetime"
+  | "decimal"
   | "float32"
   | "float64"
   | "int16"
@@ -108,14 +114,25 @@ export function coerceValue(value: string, cast: FilterCast, fieldLabel: string)
     }
 
     case "int16":
-    case "int32":
-    case "int64": {
+    case "int32": {
       const n = Number.parseInt(value, 10);
 
       if (!Number.isFinite(n) || String(n) !== value.trim())
         throw new Error(`${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`);
 
       return n;
+    }
+
+    /*** Past 2^53 a JS number drops digits: these go out as exact JSON numbers. ***/
+    case "bigint":
+    case "decimal":
+    case "int64": {
+      const v = value.trim();
+
+      if (!(cast === "decimal" ? NUMBER_RE : INTEGER_RE).test(v))
+        throw new Error(`${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`);
+
+      return exactNumberValue(v);
     }
   }
 }

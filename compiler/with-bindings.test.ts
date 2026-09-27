@@ -82,7 +82,7 @@ Deno.test("with-binding: a set-valued binding used twice is one CTE", async () =
 });
 
 Deno.test("with-binding: selecting a plain binding still reads it from a CTE", async () => {
-  assertEquals(await compile("with x := 5 select x"), "WITH x AS ( SELECT 5 ) SELECT x_1.* FROM x AS x_1");
+  assertEquals(await compile("with x := 5 select x"), "WITH x (value) AS ( SELECT 5 ) SELECT x_1.* FROM x AS x_1");
 });
 
 Deno.test("with-binding: the mutation with-form is unchanged", async () => {

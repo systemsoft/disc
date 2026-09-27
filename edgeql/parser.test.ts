@@ -8,7 +8,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { SyntaxError } from "../lib/errors.ts";
 import { EdgeQLAnalyzer } from "./analyzer.ts";
-import type { Expression } from "./ast.ts";
+import type { Expression, SelectQuery } from "./ast.ts";
 import { EdgeQLLexer } from "./lexer.ts";
 import { EdgeQLParser } from "./parser.ts";
 import { TokenType } from "./tokens.ts";
@@ -433,6 +433,21 @@ Deno.test("EdgeQL Parser - Set Operations", () => {
       assertEquals(ast.expr.op, "UNION");
     }
   }
+});
+
+Deno.test("EdgeQL Parser - the right operand of a union may be any expression", () => {
+  // The select of each operand: [left, right] of the union.
+  const operands = (source: string): (SelectQuery | undefined)[] => {
+    const ast = new EdgeQLParser(source).parse();
+    const union = ast.kind === "SelectQuery" && ast.expr.kind === "BinaryOp" && ast.expr.op === "UNION" ? ast.expr : undefined;
+    return [union?.left, union?.right].map(side => side?.kind === "Subquery" && side.query.kind === "SelectQuery" ? side.query : undefined);
+  };
+
+  assertEquals(operands("select {1} union {2}").map(select => select?.expr.kind), ["SetExpr", "SetExpr"]);
+  assertEquals(operands("select 1 union 2.5").map(select => select?.expr.kind), ["Literal", "Literal"]);
+  assertEquals(operands("select (select User) union (select User)")[1]?.expr.kind, "Subquery");
+  const [, shaped] = operands("select User { name } union User { name }");
+  assertEquals([shaped?.expr.kind, shaped?.shape?.elements.length], ["TypeName", 1]);
 });
 
 Deno.test("EdgeQL Parser - Conditional Expression", () => {

@@ -14,8 +14,9 @@
  * See pg-numeric-literals.test.ts for the values PostgreSQL returns.
  */
 
-import { assertStringIncludes } from "@std/assert";
+import { assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { CompilationError } from "../lib/errors.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
@@ -52,6 +53,18 @@ Deno.test("numeric literals: bigint and decimal literals divide as decimals", ()
   assertStringIncludes(compileEdgeQL("select 10n / 4n"), "CAST(10 AS numeric) / CAST(4 AS numeric)");
   assertStringIncludes(compileEdgeQL("select 10n // 4n"), "FLOOR(CAST(10 AS numeric) / CAST(4 AS numeric))");
   assertStringIncludes(compileEdgeQL("select 7.5n / 2"), "CAST(7.5 AS numeric) / 2");
+});
+
+Deno.test("numeric set literals: ints mix with bigints and decimals, floats with neither", () => {
+  // PostgreSQL resolves the union's column to numeric, the common type.
+  assertStringIncludes(compileEdgeQL("select {1, 2n}"), "SELECT 1 UNION ALL SELECT CAST(2 AS numeric)");
+  assertStringIncludes(compileEdgeQL("select {1, 2.5n}"), "SELECT 1 UNION ALL SELECT CAST(2.5 AS numeric)");
+  assertThrows(
+    () => compileEdgeQL("select {1.5, 2.5n}"),
+    CompilationError,
+    "set constructor has arguments of incompatible types 'std::float64' and 'std::decimal'"
+  );
+  assertThrows(() => compileEdgeQL("select {<float32>1, 2n}"), CompilationError, "'std::float32' and 'std::bigint'");
 });
 
 Deno.test("casts over prefix operators compile to a cast of the negated value", () => {

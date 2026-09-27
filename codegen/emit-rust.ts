@@ -61,7 +61,11 @@ function scalarRust(kind: ScalarKind): string {
       return "f64";
     case "json":
       return "serde_json::Value";
-    // decimal/bigint/uuid/datetime/durations/bytes/memory: lossless as JSON strings.
+    // Exact JSON numbers on the wire; see EXACT_NUMBER_RS.
+    case "bigint":
+    case "decimal":
+      return "crate::ExactNumber";
+    // uuid/datetime/durations/bytes/memory: lossless as JSON strings.
     default:
       return "String";
   }
@@ -271,7 +275,9 @@ class RustEmitter {
       "",
       "[dependencies]",
       "serde = { version = \"1\", features = [\"derive\"] }",
-      "serde_json = \"1\"",
+      // arbitrary_precision: numbers keep their source text through
+      // serde_json::Value, so bigint/decimal/int64 are never rounded via f64.
+      "serde_json = { version = \"1\", features = [\"arbitrary_precision\"] }",
       ""
     ]
       .join("\n");
@@ -290,6 +296,7 @@ class RustEmitter {
     out += "\n";
     if (this.config.includeClient)
       out += "pub mod disc_runtime;\n\n";
+    out += EXACT_NUMBER_RS;
 
     for (const mod of this.ir.modules) {
       if (mod.name === "default") {
@@ -641,6 +648,27 @@ class RustEmitter {
 }
 
 /*** RUNTIME ------------------------------------------ ***/
+
+/**
+ * The type of `bigint` and `decimal` fields. The server sends them as exact
+ * JSON numbers; with serde_json's `arbitrary_precision` a `serde_json::Number`
+ * keeps their source text, so no digit is rounded through an f64 on the way
+ * in or out. A newtype rather than the bare `Number` because the generated
+ * structs derive `Default` and `Number` does not implement it.
+ */
+const EXACT_NUMBER_RS = `/// A \`bigint\` or \`decimal\` value: an exact JSON number that keeps every digit.
+/// Build one with \`ExactNumber("12345678901234567890".parse()?)\`; \`.0.to_string()\` gives its digits.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(transparent)]
+pub struct ExactNumber(pub serde_json::Number);
+
+impl Default for ExactNumber {
+    fn default() -> Self {
+        ExactNumber(serde_json::Number::from(0))
+    }
+}
+
+`;
 
 /**
  * Static, schema-independent runtime: a minimal blocking Disc client over

@@ -275,6 +275,14 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           SQL.createTableReference(cteAlias.cteName, tableAlias)
         ]);
 
+        // An inlined binding (`with a := array_unpack(…) select a filter a > 1`)
+        // stands for the current row in this select's filter and order, not for
+        // its expression again: `UNNEST(…) > 1` in a WHERE is rejected.
+        const variable = this.scopeVariable(expr.name);
+        if (variable && !variable.sqlOverride && !variable.row) {
+          this.ctx.currentScope.variables.set(expr.name, { ...variable, sqlOverride: SQL.createColumnReference("value", tableAlias) });
+        }
+
         let selectItems: SQL.SelectItem[];
         if (shape && cteAlias.typeName && cteAlias.typeDef) {
           // Use the underlying type's schema to compile the shape. The CTE's
@@ -409,6 +417,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     fromClause: SQL.FromClause;
   } {
     const elements = flattenSetElements(set);
+    // Gel has no implicit cast between floats and bigint or decimal, so no
+    // common type for the set's elements.
+    const numericTypes = elements.map(element => this.staticNumericType(element));
+    const float = numericTypes.find(type => type === "float32" || type === "float64");
+    const exact = numericTypes.find(type => type === "bigint" || type === "decimal");
+    if (float && exact) {
+      throw new CompilationError(
+        `set constructor has arguments of incompatible types 'std::${float}' and 'std::${exact}'`,
+        locationOf(set)
+      );
+    }
     const branches: SQL.SQLStatement[] = elements.map(element => this.compileSetLiteralElement(element, shape));
     if (branches.length === 0) {
       branches.push(SQL.createSelectStatement({
@@ -1287,14 +1306,23 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     link: Context.LinkDef,
     parentAlias: string
   ): SQL.SQLExpression {
+    // A link to an object the select policy hides is empty, not its id.
+    const target = Context.resolveTypeName(this.ctx, link.target);
     if (link.columnName) {
       // Simple foreign key reference
-      return SQL.createColumnReference(link.columnName, parentAlias);
+      const column = SQL.createColumnReference(link.columnName, parentAlias);
+      return target ? this.readableId(target, column) : column;
     } else if (link.junctionTable) {
       // Many-to-many: subquery returning array of target IDs via junction table
       const jt = link.junctionTable;
       const srcCol = link.junctionSourceColumn || "source_id";
       const tgtCol = link.junctionTargetColumn || "target_id";
+      const correlation = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference(srcCol, jt),
+        SQL.createColumnReference("id", parentAlias)
+      );
+      const readable = target ? this.readableIdCondition(target, SQL.createColumnReference(tgtCol, jt)) : undefined;
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([
@@ -1305,13 +1333,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           )
         ]),
         from: SQL.createFromClause([SQL.createTableReference(jt)]),
-        where: SQL.createWhereClause(
-          SQL.createBinaryExpression(
-            "=",
-            SQL.createColumnReference(srcCol, jt),
-            SQL.createColumnReference("id", parentAlias)
-          )
-        )
+        where: SQL.createWhereClause(readable ? SQL.createBinaryExpression("AND", correlation, readable) : correlation)
       });
       return SQL.createSubqueryExpression(subquery);
     } else if (link.backlink) {
@@ -1597,12 +1619,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           const fromClause = SQL.createFromClause([
             SQL.createTableReference(typeDef.tableName, tableAlias)
           ]);
-          const selectItems = [
-            SQL.createSelectItem(
-              SQL.createColumnReference(property.columnName, tableAlias)
-            )
-          ];
-          return { selectItems, fromClause };
+          const column = SQL.createColumnReference(property.columnName, tableAlias);
+          const selectItems = [SQL.createSelectItem(column)];
+          // An object without the property adds no element (a set has no NULLs).
+          const where = property.required || property.multi ? undefined : SQL.isNotNull(column);
+          return { selectItems, fromClause, where };
         }
       }
     }
@@ -1635,15 +1656,20 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const source = this.compilePathSource(resolved);
     const typeName = resolved.typeDef.name;
     let selectItems: SQL.SelectItem[];
+    let where = source.where;
     if (resolved.property) {
       const value = this.compilePropertyReference(resolved.property, source.alias, typeName);
       // A multi property is a set of values: one row each.
       const multi = resolved.property.multi && !resolved.property.computed;
       selectItems = [SQL.createSelectItem(multi ? SQL.createFunctionCall("unnest", [value]) : value, multi ? resolved.property.name : undefined)];
+      // An object without the property adds no element (a set has no NULLs).
+      if (!multi && !resolved.property.required) {
+        where = where ? SQL.createBinaryExpression("AND", where, SQL.isNotNull(value)) : SQL.isNotNull(value);
+      }
     } else {
       selectItems = shape ? this.compileShape(shape, typeName, source.alias) : this.compileImplicitShape(resolved.typeDef, source.alias);
     }
-    return { fromClause: SQL.createFromClause(source.from), selectItems, where: source.where };
+    return { fromClause: SQL.createFromClause(source.from), selectItems, where };
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
@@ -1681,7 +1707,10 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           }
           const link = td?.links.get(step.name);
           if (link?.columnName) {
-            return SQL.createColumnReference(link.columnName, ta.alias);
+            // The linked object's id, or NULL when the select policy hides it.
+            const column = SQL.createColumnReference(link.columnName, ta.alias);
+            const target = Context.resolveTypeName(this.ctx, link.target);
+            return target ? this.readableId(target, column) : column;
           }
         }
         // Fallback: emit the step name verbatim. Pre-existing behavior
@@ -1909,7 +1938,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // as JSON, defaulting to `[]` so a row with no requirements still
       // produces a parseable JSON array instead of NULL.
       const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${rowAlias}"."id")), '[]'::jsonb) ` +
-        `FROM "${targetType.tableName}" "${rowAlias}" ` +
+        `FROM ${this.readableTableSql(targetType)} "${rowAlias}" ` +
         `WHERE "${rowAlias}"."${link.columnName}" = "${currentAlias.alias}"."id")`;
       return { kind: "RawSQLExpression", sql };
     }
@@ -1922,7 +1951,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const srcCol = link.junctionSourceColumn ?? "source_id";
       const tgtCol = link.junctionTargetColumn ?? "target_id";
       const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${rowAlias}"."id")), '[]'::jsonb) ` +
-        `FROM "${targetType.tableName}" "${rowAlias}" ` +
+        `FROM ${this.readableTableSql(targetType)} "${rowAlias}" ` +
         `JOIN "${link.junctionTable}" ON "${link.junctionTable}"."${srcCol}" = "${rowAlias}"."id" ` +
         `WHERE "${link.junctionTable}"."${tgtCol}" = "${currentAlias.alias}"."id")`;
       return { kind: "RawSQLExpression", sql };
@@ -1976,7 +2005,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           return null;
         }
         const hopAlias = `__l${i - 1}_${stepNames[i - 1]}`;
-        currentSql = `(SELECT "${hopAlias}"."${link.columnName}" FROM "${currentTargetType.tableName}" "${hopAlias}" ` +
+        currentSql = `(SELECT "${hopAlias}"."${link.columnName}" FROM ${this.readableTableSql(currentTargetType)} "${hopAlias}" ` +
           `WHERE "${hopAlias}"."id" = ${currentSql})`;
         const next = Context.resolveTypeName(this.ctx, link.target);
         if (!next) {
@@ -1988,9 +2017,10 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const finalStep = stepNames[stepNames.length - 1];
 
       // FK shortcut at the terminus: the chain already evaluates to
-      // the target's id, so no extra SELECT is needed.
+      // the target's id, so no extra SELECT is needed — unless the select
+      // policy may hide the target, whose id then reads as NULL.
       if (finalStep === "id") {
-        return { kind: "RawSQLExpression", sql: currentSql };
+        return { kind: "RawSQLExpression", sql: this.readableIdSql(currentTargetType, currentSql) };
       }
 
       const targetProp = currentTargetType.properties.get(finalStep);
@@ -2000,7 +2030,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
       const lastLink = stepNames.length - 2;
       const hopAlias = `__l${lastLink}_${stepNames[lastLink]}`;
-      const sql = `(SELECT "${hopAlias}"."${targetProp.columnName}" FROM "${currentTargetType.tableName}" "${hopAlias}" ` +
+      const sql = `(SELECT "${hopAlias}"."${targetProp.columnName}" FROM ${this.readableTableSql(currentTargetType)} "${hopAlias}" ` +
         `WHERE "${hopAlias}"."id" = ${currentSql})`;
       return { kind: "RawSQLExpression", sql };
     }

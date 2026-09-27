@@ -16,6 +16,10 @@
  * (no rewrite), so the client uses the bare server paths directly.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
+import { parseExactJson } from "../exact-json.ts";
+
 /*** EXPORT ------------------------------------------- ***/
 
 export interface ConfigKeyDef {
@@ -190,7 +194,12 @@ export class DiscAPIClient {
       this.authToken = localStorage.getItem(this.TOKEN_STORAGE_KEY);
   }
 
-  /** Execute an EdgeQL query. Wraps the raw QueryResponse into a UI-shaped result. */
+  /**
+   * Execute an EdgeQL query. Wraps the raw QueryResponse into a UI-shaped result.
+   * `bigint`/`decimal`/`int64` values past a double's precision come back as
+   * `ExactNumber`s (see `exact-json.ts`); `ExactNumber` variables go out as
+   * exact JSON numbers.
+   */
   async executeQuery(query: string, variables?: Record<string, any>): Promise<QueryResult> {
     const startedAt = performance.now();
 
@@ -201,7 +210,7 @@ export class DiscAPIClient {
         method: "POST"
       });
 
-      const body = await response.json() as QueryResponse;
+      const body = parseExactJson(await response.text()) as QueryResponse;
       const durationMs = performance.now() - startedAt;
 
       if (!response.ok || (body.errors && body.errors.length > 0)) {

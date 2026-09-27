@@ -39,6 +39,7 @@ const SDL = `module default {
   }
   type Person {
     required name: str;
+    nickname: str;
     manager: Person;
     multi reports: Person;
   }
@@ -105,6 +106,18 @@ Deno.test("path select - Type.property keeps its single-table SQL", async () => 
   assertEquals(await sqlOf("select User.name"), `SELECT user_1.name FROM "user" AS user_1`);
 });
 
+Deno.test("path select - an optional trailing property adds no element for an object without it", async () => {
+  assertEquals(
+    await sqlOf("select Person.nickname"),
+    "SELECT person_1.nickname FROM person AS person_1 WHERE person_1.nickname IS NOT NULL"
+  );
+  assertMatch(await sqlOf("select Person.manager.nickname"), /WHERE \(person_(\d+)\.id IN \(.*\)\) AND \(person_\1\.nickname IS NOT NULL\)$/);
+});
+
+Deno.test("path select - exists over a type reads a select of its objects", async () => {
+  assertMatch(await sqlOf("select exists User"), /^SELECT EXISTS \(SELECT .* FROM "user" AS user_\d+\)$/);
+});
+
 Deno.test("path select - a backlink hop keeps the objects whose link holds a reached id", async () => {
   assertMatch(
     await sqlOf("select User.<author[is Post] { title }"),
@@ -138,7 +151,10 @@ Deno.test("path select - the reached type's select policy applies to the path's 
   compiler.registerAccessPolicy(denyPosts);
   const result = compiler.compile(new EdgeQLParser("select User.posts { title }").parse());
   assert(result.ok);
-  assertMatch(new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " "), /FROM post AS post_\d+ WHERE \(?FALSE\)? AND/);
+  assertMatch(
+    new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " "),
+    /FROM \( SELECT \* FROM post AS __policy_rows WHERE FALSE \) AS post_\d+ WHERE post_\d+\.id IN/
+  );
 });
 
 Deno.test("computed path - a path through a multi link is a JSON array of the values", async () => {

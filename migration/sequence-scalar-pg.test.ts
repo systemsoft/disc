@@ -145,6 +145,41 @@ Deno.test({
 });
 
 Deno.test({
+  name: "PG sequence scalar: sequence_next and sequence_reset drive the scalar's counter",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      await reset(pool);
+      await migrate(pool, SDL);
+      const run = await handlerFor(pool, dsn);
+      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers(Object.values((await run(query))[0] as Record<string, unknown>)[0]));
+
+      assertEquals(await value(`select sequence_next(introspect SqTicketNo)`), 1);
+      await run(`insert SqTicket { title := "a" }`);
+      assertEquals(await value(`select sequence_next(introspect default::SqTicketNo)`), 3);
+      assertEquals(await value(`select sequence_reset(introspect SqTicketNo, 10)`), 10);
+      assertEquals(await value(`select sequence_next(introspect SqTicketNo)`), 11);
+      await run(`insert SqTicket { title := "b" }`);
+      assertEquals(await value(`select sequence_reset(introspect SqTicketNo)`), 1);
+      assertEquals(await value(`select sequence_next(introspect SqTicketNo)`), 1);
+
+      const tickets = await run(`select SqTicket { title, number } order by .title`);
+      assertEquals(tickets.map(row => row as Record<string, unknown>).map(row => [row.title, Number(unwrapExactNumbers(row.number))]), [
+        ["a", 2],
+        ["b", 12]
+      ]);
+    } finally {
+      await reset(pool);
+      await pool.close();
+    }
+  }
+});
+
+Deno.test({
   name: "PG sequence scalar: removing the scalar and its properties drops the sequence",
   ignore: !canRunPgTests(),
   fn: async () => {

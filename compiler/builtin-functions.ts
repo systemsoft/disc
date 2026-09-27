@@ -614,17 +614,18 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "bool"
     }],
 
-    // Sequence functions (compiled to NEXTVAL/SETVAL)
+    // Sequence functions (compiled to NEXTVAL/SETVAL): `sequence_next(introspect
+    // T)` / `sequence_reset(introspect T[, value])` on a sequence scalar T.
     ["sequence_next", {
       name: "sequence_next",
-      args: [{ name: "name", type: "str", required: true }],
+      args: [{ name: "seq", type: "schema::ScalarType", required: true }],
       returnType: "int64"
     }],
     ["sequence_reset", {
       name: "sequence_reset",
       args: [
-        { name: "name", type: "str", required: true },
-        { name: "val", type: "int64", required: true }
+        { name: "seq", type: "schema::ScalarType", required: true },
+        { name: "value", type: "int64", required: false }
       ],
       returnType: "int64"
     }],

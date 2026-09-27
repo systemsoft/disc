@@ -14,11 +14,12 @@
 
 /*** NATIVE ------------------------------------------- ***/
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
 import { createMultiModuleTestSchema } from "../compiler/context.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import type { CodegenConfig } from "./types.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -85,6 +86,23 @@ async function cargoAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Schema with every exact numeric kind, bare, optional and in arrays. */
+function preciseSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(`module default {
+  type PreciseItem {
+    required label: str;
+    required big: bigint;
+    bigs: array<bigint>;
+    dec: decimal;
+    i64: int64;
+  };
+};`);
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
 }
 
 // --- tests -----------------------------------------------------------------
@@ -171,4 +189,22 @@ Deno.test("emitRust: includeMutations=false drops write methods, keeps reads", a
 
   if (await cargoAvailable())
     await assertCompiles(createMultiModuleTestSchema(), config);
+});
+
+Deno.test("emitRust: bigint and decimal are ExactNumber (serde_json arbitrary_precision), int64 is i64", async () => {
+  // The server sends these as exact JSON numbers. Without arbitrary_precision
+  // serde_json reads a number past u64/i64 as an f64 and loses digits; with
+  // it, the serde_json::Number inside ExactNumber keeps the source text both ways.
+  const files = emitRust(schemaToIR(preciseSchema()), rustConfig());
+  const lib = files.find(f => f.path.endsWith("src/lib.rs"))!.content;
+  const cargo = files.find(f => f.path.endsWith("Cargo.toml"))!.content;
+
+  assertStringIncludes(cargo, "serde_json = { version = \"1\", features = [\"arbitrary_precision\"] }");
+  assertStringIncludes(lib, "pub big: crate::ExactNumber,");
+  assertStringIncludes(lib, "pub bigs: Option<Vec<crate::ExactNumber>>,");
+  assertStringIncludes(lib, "pub dec: Option<crate::ExactNumber>,");
+  assertStringIncludes(lib, "pub i64: Option<i64>,");
+
+  if (await cargoAvailable())
+    await assertCompiles(preciseSchema());
 });

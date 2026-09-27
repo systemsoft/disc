@@ -223,7 +223,9 @@ export class EdgeQLParser {
         "EXCEPT" :
         "INTERSECT";
 
-      const right = this.parseQuery();
+      // The right operand is a statement, or any expression (`{1} union {2}`,
+      // `(select A) union (select B)`).
+      const right = FOR_BODY_STATEMENTS.has(this.peek().type) ? this.parseQuery() : this.parseExpressionAsSelect();
 
       // Convert queries to expressions
       const leftExpr: AST.Expression = { kind: "Subquery", query };
@@ -314,11 +316,7 @@ export class EdgeQLParser {
     // `union Expr`): `union x.name`, `union (x.name ++ '!')`, `union x { name }`.
     const statementBody = this.check(TokenType.LPAREN) && FOR_BODY_STATEMENTS.has(this.tokens[this.current + 1]?.type);
     if (!statementBody) {
-      const expr = this.parseExpression();
-      const body: AST.SelectQuery = expr.kind === "ShapeExpr" ?
-        { distinct: false, expr: expr.expr, kind: "SelectQuery", shape: expr.shape, span: expr.span } :
-        { distinct: false, expr, kind: "SelectQuery", span: expr.span };
-      return { body, iterator, kind: "ForQuery", span, variable };
+      return { body: this.parseExpressionAsSelect(), iterator, kind: "ForQuery", span, variable };
     }
     this.consume(TokenType.LPAREN, "Expected '(' after UNION");
 
@@ -327,6 +325,14 @@ export class EdgeQLParser {
     this.consume(TokenType.RPAREN, "Expected ')' after query body");
 
     return { body, iterator, kind: "ForQuery", span, variable };
+  }
+
+  /*** An expression standing for a statement (`x { name }`, `x.name`), as the select of it. ***/
+  private parseExpressionAsSelect(): AST.SelectQuery {
+    const expr = this.parseExpression();
+    return expr.kind === "ShapeExpr" ?
+      { distinct: false, expr: expr.expr, kind: "SelectQuery", shape: expr.shape, span: expr.span } :
+      { distinct: false, expr, kind: "SelectQuery", span: expr.span };
   }
 
   private parseSelectQuery(): AST.SelectQuery {

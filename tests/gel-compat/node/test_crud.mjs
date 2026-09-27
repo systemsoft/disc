@@ -111,3 +111,17 @@ test("WITH … SELECT Type { shape } is described like the query without WITH", 
 test("querySingle of a scalar literal returns the value", async () => {
   assert.equal(await client.querySingle("SELECT 42"), 42);
 });
+
+test("count() is an int64", async () => {
+  const total = await client.querySingle("SELECT count(Item)");
+  assert.equal(typeof total, "number");
+  assert.equal(total, (await client.query("SELECT Item")).length);
+});
+
+test("a path select returns the property's values", async () => {
+  const name = `path-${Date.now()}`;
+  await insertItem(name, 6);
+  const names = await client.query("SELECT Item.name");
+  assert.ok(names.every(n => typeof n === "string"));
+  assert.ok(names.includes(name));
+});
