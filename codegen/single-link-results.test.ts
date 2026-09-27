@@ -108,6 +108,9 @@ Deno.test("single link results - a computed link is typed like a stored one", ()
         boss := .author.manager;
         single first_comment := (select .<post[is Comment] order by .created limit 1);
         multi ordered := (select .<post[is Comment] order by .created);
+        multi link recent := (select .<post[is Comment] order by .created desc limit 2);
+        required single link writer := .author;
+        property made := .<post[is Comment].created;
       }
     }`,
     { validate: false }
@@ -120,6 +123,10 @@ Deno.test("single link results - a computed link is typed like a stored one", ()
   assertStringIncludes(types, " boss?: [User] | null;\n");
   assertStringIncludes(types, " first_comment?: [Comment] | null;\n");
   assertStringIncludes(types, " ordered?: Comment[] | null;\n");
+  assertStringIncludes(types, " recent?: Comment[] | null;\n");
+  assertStringIncludes(types, " writer: [User];\n");
+  // A computed property over a backlink: the values, as a multi property is.
+  assertStringIncludes(types, " made?: Date[] | null;\n");
   // Computed links are read-only.
   assertMatch(types, /export interface PostInsert \{\n\s+\/\*\*[^\n]*\n\s+author: string;\n\s+\}/);
 });

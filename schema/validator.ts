@@ -456,15 +456,10 @@ export class SchemaValidator {
       this.validateTypeRef(property.type);
     }
 
-    // P3-01: cardinality sanity. `required multi` is valid in Gel and
-    // means "at least one element" — but `multi` plus `optional` is
-    // redundant noise, and computed properties can't be declared
-    // required since their values are derived. Flag these as warnings.
-    if (property.computed && property.required) {
-      this.addError(
-        `Property '${property.name.value}': computed properties cannot also be 'required' — the cardinality is determined by the expression`
-      );
-    }
+    // A computed may be declared `required` (Gel: `required single link
+    // x := .author`) when its expression is never empty; that needs the
+    // schema's types, so it is checked after conversion
+    // (detectComputedPointerErrors).
 
     // A colon-form pointer's target decides whether it is a link: whether
     // `multi x: T` is a multi scalar or a multi link, and whether it may

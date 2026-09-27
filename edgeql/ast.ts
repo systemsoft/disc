@@ -189,6 +189,13 @@ export interface ShapeElement extends EdgeQLNode {
    * inside the link's `jsonb_agg(...)`. Only meaningful when `shape` is set.
    */
   orderBy?: OrderByClause[];
+  /**
+   * Sub-shape `offset` / `limit` for a link element: `link: { ... } order by
+   * .created offset 1 limit 2`. Applied after the element's filter and order
+   * by, to the link's objects. Only meaningful when `shape` is set.
+   */
+  offset?: Expression;
+  limit?: Expression;
   /** Type filter for polymorphic shape fields: [IS Type].property */
   typeFilter?: string;
   /**
@@ -591,6 +598,8 @@ export function createShapeElement(
     shape?: Shape;
     filter?: Expression;
     orderBy?: OrderByClause[];
+    offset?: Expression;
+    limit?: Expression;
     linkProperty?: boolean;
   }
 ): ShapeElement {

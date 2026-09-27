@@ -12,10 +12,11 @@
  *   - Property bodies: required, multi, readonly, constraints, defaults,
  *     annotations
  *   - Type-level annotations
+ *   - Computed links and properties: `[required] [multi] name := expr;`
  *
  * Deferred (round-trip would need richer source preservation in
  * `Schema`/`TypeDef`): triggers, rewrites, access policies, indexes,
- * computed expressions, abstract annotation declarations, globals,
+ * abstract annotation declarations, globals,
  * functions, aliases. These are emitted as SDL comments noting the
  * gap so the round-trip stays observable.
  */
@@ -150,6 +151,9 @@ function serializeObject(typeDef: TypeDef): string {
 }
 
 function serializeProperty(prop: PropertyDef): string {
+  if (prop.computed && prop.computedExpr) {
+    return serializeComputed(prop);
+  }
   const parts: string[] = [];
   if (prop.required) {
     parts.push("required");
@@ -197,10 +201,11 @@ function serializeConstraint(c: PropertyConstraint): string {
 }
 
 function serializeLink(link: LinkDef): string {
-  // Computed reverse-link: re-emit its stored expression so it round-trips as
-  // a computed (`name := .<fwd[is Target]`), not as a stored `multi link`.
+  // A computed link (a reverse link `.<fwd[is Target]`, `.author`, a
+  // `(select …)`): its expression, so it round-trips as a computed, not as a
+  // stored link.
   if (link.computed && link.computedExpr) {
-    return `${link.name} := ${link.computedExpr};`;
+    return serializeComputed(link);
   }
 
   // SDL link syntax requires the `link` keyword and `->` arrow:
@@ -231,6 +236,23 @@ function serializeLink(link: LinkDef): string {
   // A link property with a body spans several lines; indent each of them.
   const lines = body.map(l => l.split("\n").map(sub => INDENT + sub).join("\n")).join("\n");
   return `${parts.join(" ")} {\n${lines}\n};`;
+}
+
+/**
+ * `[required] [multi] name := expr;` for a computed link or property. Its
+ * cardinality is the expression's or a declared wider one, so re-emitting it
+ * keeps a declared `multi` / `required` (and restates an inferred one).
+ */
+function serializeComputed(pointer: LinkDef | PropertyDef): string {
+  const parts: string[] = [];
+  if (pointer.required) {
+    parts.push("required");
+  }
+  if (pointer.multi) {
+    parts.push("multi");
+  }
+  parts.push(pointer.name, ":=", `${pointer.computedExpr};`);
+  return parts.join(" ");
 }
 
 function resolveModule(typeDef: TypeDef): string {

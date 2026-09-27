@@ -799,26 +799,27 @@ export class EdgeQLParser {
    */
   /**
    * Trailing modifiers on a link sub-shape: `link: { ... } filter <expr>
-   * order by <expr> [desc]`. Both are optional and must appear in that
-   * order, matching the statement-level clause order. Only a shape element
-   * that actually has a sub-shape can carry them — a bare property is
-   * followed by `,` or `}`, so the `shape` guard keeps a statement-level
-   * `filter` from being swallowed by the last element of an outer shape.
+   * order by <expr> [desc] offset <n> limit <n>`. All are optional and must
+   * appear in that order, matching the statement-level clause order. Only a
+   * shape element that actually has a sub-shape can carry them — a bare
+   * property is followed by `,` or `}`, so the `shape` guard keeps a
+   * statement-level `filter` from being swallowed by the last element of an
+   * outer shape.
    */
   private parseShapeModifiers(
     shape: AST.Shape | undefined
-  ): { filter?: AST.Expression; orderBy?: AST.OrderByClause[]; } {
+  ): Pick<AST.ShapeElement, "filter" | "orderBy" | "offset" | "limit"> {
     if (!shape) {
       return {};
     }
     const filter = this.match(TokenType.FILTER) ?
       this.parseExpression() :
       undefined;
-    if (!this.match(TokenType.ORDER)) {
+    if (!this.check(TokenType.ORDER) && !this.check(TokenType.OFFSET) && !this.check(TokenType.LIMIT)) {
       return { filter };
     }
-    this.consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
-    return { filter, orderBy: this.parseOrderByList() };
+    const { offset, orderBy, limit } = this.parseSelectClauses();
+    return { filter, orderBy, ...(offset ? { offset } : {}), ...(limit ? { limit } : {}) };
   }
 
   private parseShapeElement(): AST.ShapeElement {

@@ -65,6 +65,18 @@ function formatLiteral(lit: Literal): string {
   return String(lit.value);
 }
 
+/*** True when `text` is one parenthesized group (`(…)`), so printing it again doesn't add parentheses. ***/
+function isParenthesized(text: string): boolean {
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    depth += text[index] === "(" ? 1 : text[index] === ")" ? -1 : 0;
+    if (depth === 0) {
+      return index > 0 && index === text.length - 1;
+    }
+  }
+  return false;
+}
+
 function formatPath(path: PathExpression): string {
   // SDL parser path encoding (see schema/parser.ts `parsePathStep` and
   // `parsePostfixExpression`):
@@ -79,9 +91,10 @@ function formatPath(path: PathExpression): string {
   if (path.path.length === 0) {
     return "";
   }
-  // A query (`select …`): its source, parenthesized to parse as one expression.
+  // A query (`select …`) or another expression kept as source text (a set
+  // literal, a shape): its source, parenthesized to parse as one expression.
   if (path.source !== undefined) {
-    return `(${path.source})`;
+    return isParenthesized(path.source) ? path.source : `(${path.source})`;
   }
   // `global name` → ["global", "name"] (see schema/parser.ts `parsePrimaryExpression`).
   if (path.path[0] === "global" && path.path.length === 2) {

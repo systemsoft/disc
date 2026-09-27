@@ -371,3 +371,48 @@ Deno.test("sdl-serializer - round-trips enum scalar Status", () => {
   assertEquals(status !== undefined, true);
   assertEquals(status!.kind, "enum");
 });
+
+Deno.test("sdl-serializer - round-trips computed links and properties with their cardinality", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const parse = (sdl: string): Schema => {
+    const r = mgr.parseSDL(sdl);
+    if (!r.ok) {
+      throw new Error(`parse failed: ${r.error.message}\n${sdl}`);
+    }
+    return mgr.modulesToSchema(r.value);
+  };
+  const original = parse(`module default {
+    type U { required name: str; }
+    type P {
+      required title: str;
+      required author: U;
+      auth := .author;
+      multi wide := .author;
+      single first := (select .<post[is C] order by .created limit 1);
+      multi recent := (select .<post[is C] order by .created desc limit 2);
+      cs := .<post[is C];
+      bodies := .<post[is C].body;
+      multi labels := {.title, .title ++ '!'};
+      upper := str_upper(.title);
+    }
+    type C { required post: P; body: str; created: datetime; }
+  }`);
+  const sdl = serializeSchema(original);
+  assertStringIncludes(sdl, "multi recent := (select .<post[is C] order by .created desc limit 2);");
+  assertStringIncludes(sdl, "multi bodies := .<post[is C].body;");
+
+  const pointers = (schema: Schema) => {
+    const post = schema.types.get("P") ?? schema.types.get("default::P");
+    const pick = (p: LinkDef | PropertyDef) => ({
+      computedExpr: p.computedExpr,
+      multi: p.multi,
+      required: p.required,
+      ...("target" in p ? { target: p.target } : { edgeqlType: p.edgeqlType })
+    });
+    return {
+      links: Object.fromEntries([...post!.links.values()].filter(l => l.computed).map(l => [l.name, pick(l)])),
+      properties: Object.fromEntries([...post!.properties.values()].filter(p => p.computed).map(p => [p.name, pick(p)]))
+    };
+  };
+  assertEquals(pointers(parse(sdl)), pointers(original));
+});

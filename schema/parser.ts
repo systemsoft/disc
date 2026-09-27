@@ -521,20 +521,7 @@ export class SDLParser {
       const name = this.parseMemberName();
 
       if (this.match(TokenType.ASSIGN)) {
-        // Computed property
-        const computed = this.parseExpression();
-        this.consume(
-          TokenType.SEMICOLON,
-          "Expected ';' after computed property"
-        );
-
-        return {
-          kind: "PropertyDeclaration",
-          name,
-          type: AST.createTypeRef(AST.createQualifiedName(["auto"])), // Type will be inferred
-          computed,
-          ...qualifiers
-        };
+        return this.parseComputedPointer(name, qualifiers);
       } else if (this.match(TokenType.COLON)) {
         // Regular property
         const type = this.parseTypeRef();
@@ -574,8 +561,45 @@ export class SDLParser {
     throw this.error(`Unexpected token in type body: ${this.peek().value}`);
   }
 
+  /**
+   * `name := expr;` after the name of a computed pointer, in any of Gel's
+   * forms (`[required] [single | multi] [link | property] name := expr;`). It
+   * is typed `auto`: whether it is a link, and its type, is inferred from the
+   * expression (see modulesToSchema). An expression with braces the SDL
+   * expression parser does not cover (a set literal, a shape) is kept as its
+   * source text.
+   */
+  private parseComputedPointer(name: AST.Identifier, qualifiers: any): AST.PropertyDeclaration {
+    const start = this.current;
+    let computed: AST.Expression;
+    try {
+      computed = this.parseExpression();
+      if (!this.check(TokenType.SEMICOLON)) {
+        throw this.error("Expected ';' after computed property");
+      }
+    } catch (error) {
+      this.current = start;
+      computed = this.parseEdgeQLExpression();
+      if (computed.kind !== "PathExpression" || !computed.source?.includes("{")) {
+        throw error;
+      }
+    }
+    this.consume(TokenType.SEMICOLON, "Expected ';' after computed property");
+
+    return {
+      kind: "PropertyDeclaration",
+      name,
+      type: AST.createTypeRef(AST.createQualifiedName(["auto"])), // Type will be inferred
+      computed,
+      ...qualifiers
+    };
+  }
+
   private parsePropertyDeclaration(qualifiers: any): AST.PropertyDeclaration {
     const name = this.parseIdentifier();
+    if (this.match(TokenType.ASSIGN)) {
+      return this.parseComputedPointer(name, qualifiers);
+    }
     // Accept both the modern colon form (`property token: str`) and the
     // legacy arrow form (`property token -> str`).
     if (!this.match(TokenType.COLON) && !this.match(TokenType.ARROW)) {
@@ -699,8 +723,11 @@ export class SDLParser {
     return null;
   }
 
-  private parseLinkDeclaration(qualifiers: any): AST.LinkDeclaration {
+  private parseLinkDeclaration(qualifiers: any): AST.LinkDeclaration | AST.PropertyDeclaration {
     const name = this.parseIdentifier();
+    if (this.match(TokenType.ASSIGN)) {
+      return this.parseComputedPointer(name, qualifiers);
+    }
 
     // Check for extending clause before the arrow
     let extending: AST.TypeRef[] | undefined;

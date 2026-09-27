@@ -19,7 +19,7 @@ import { Module, normalizeModules, SDLConverter } from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
 import { MigrationEngine } from "./engine.ts";
-import { detectMutualStoredMultiLinks, modulesToSchema } from "./runtime-schema.ts";
+import { detectComputedPointerErrors, detectMutualStoredMultiLinks, modulesToSchema } from "./runtime-schema.ts";
 import * as Types from "./types.ts";
 
 /**
@@ -126,9 +126,14 @@ export class SchemaManager {
       // and query layers can disagree on the junction table. Bidirectional
       // M2M is modeled with one stored side + one computed backlink.
       if (validate) {
-        const mutual = detectMutualStoredMultiLinks(this.modulesToSchema(modules));
+        const schema = this.modulesToSchema(modules);
+        const mutual = detectMutualStoredMultiLinks(schema);
         if (mutual) {
           return Err(new MigrationError(mutual));
+        }
+        const computed = detectComputedPointerErrors(schema);
+        if (computed) {
+          return Err(new MigrationError(`Invalid computed pointers:\n${computed}`));
         }
       }
       return Ok(modules);

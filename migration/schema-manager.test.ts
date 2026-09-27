@@ -499,6 +499,83 @@ Deno.test("SchemaManager - modulesToSchema - object-valued computeds become comp
 });
 
 // ---------------------------------------------------------------------------
+// 6a-5. parseSDL -- computed pointers with `link` / `property` and qualifiers
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - parseSDL - computed pointers in every Gel SDL form", () => {
+  // Gel SDL: `[required] [single | multi] [link | property] name := expr;`,
+  // and any expression (a set literal) on the right.
+  const manager = new SchemaManager({});
+  const parsed = manager.parseSDL(`
+    type U { required name: str; }
+    type P {
+      required title: str;
+      required author: U;
+      link a1 := .author;
+      single link a2 := (select .<post[is C] order by .created limit 1);
+      multi link a3 := (select .<post[is C] order by .created desc);
+      required single link a4 := .author;
+      multi a5 := .author;
+      property t1 := .title;
+      required property t2 := .title;
+      multi property t3 := {.title, .title ++ '!'};
+      bodies := .<post[is C].body;
+      names := .<post[is C].post.author.name;
+    }
+    type C {
+      required post: P;
+      body: str;
+      created: datetime;
+    }
+  `);
+  assertEquals(parsed.ok, true, parsed.ok ? "" : parsed.error.message);
+  if (!parsed.ok) {
+    return;
+  }
+  const post = manager.modulesToSchema(parsed.value).types.get("P");
+  assert(post !== undefined);
+  const link = (name: string) => {
+    const l = post.links.get(name);
+    return l && { multi: l.multi, required: l.required, target: l.target };
+  };
+  assertEquals(link("a1"), { multi: false, required: true, target: "U" });
+  assertEquals(link("a2"), { multi: false, required: false, target: "C" });
+  assertEquals(link("a3"), { multi: true, required: false, target: "C" });
+  assertEquals(link("a4"), { multi: false, required: true, target: "U" });
+  assertEquals(link("a5"), { multi: true, required: true, target: "U" });
+  const property = (name: string) => {
+    const p = post.properties.get(name);
+    return p && { computedExpr: p.computedExpr, edgeqlType: p.edgeqlType, multi: p.multi, required: p.required };
+  };
+  // A path to a property is typed as that property, with the path's cardinality.
+  assertEquals(property("t1"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
+  assertEquals(property("t2"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
+  assertEquals(property("t3"), { computedExpr: "({.title, .title ++ '!'})", edgeqlType: "auto", multi: true, required: false });
+  assertEquals(property("bodies"), { computedExpr: ".<post[is C].body", edgeqlType: "str", multi: true, required: false });
+  assertEquals(property("names"), { computedExpr: ".<post[is C].post.author.name", edgeqlType: "str", multi: true, required: false });
+});
+
+Deno.test("SchemaManager - parseSDL - rejects what Gel rejects on computed pointers", () => {
+  const manager = new SchemaManager({});
+  const types = `
+    type P { required title: str; }
+    type C { required post: P; body: str; }
+  `;
+  const errorOf = (member: string): string => {
+    const parsed = manager.parseSDL(types.replace("required title: str;", `required title: str; ${member}`));
+    assertEquals(parsed.ok, false, `expected '${member}' to be rejected`);
+    return parsed.ok ? "" : parsed.error.message;
+  };
+  // Gel: "including a shape on schema-defined computed links is not yet supported".
+  for (const member of ["cs := .<post[is C] { body };", "c1 := (select .<post[is C] { body } limit 1);"]) {
+    assertEquals(errorOf(member).includes("including a shape on schema-defined computed links is not yet supported"), true, member);
+  }
+  // Gel: "possibly an empty set returned by an expression for the computed link 'c2' … explicitly declared as 'required'".
+  assertEquals(errorOf("required c2 := (select .<post[is C] limit 1);").includes("possibly an empty set"), true);
+  assertEquals(errorOf("required cs := .<post[is C];").includes("possibly an empty set"), true);
+  assertEquals(errorOf("required bs := .<post[is C].body;").includes("possibly an empty set"), true);
+});
+
+// ---------------------------------------------------------------------------
 // 6b. modulesToSchema -- camelCase property name → snake_case columnName
 // ---------------------------------------------------------------------------
 Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_case columnName", () => {

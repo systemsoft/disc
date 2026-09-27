@@ -65,6 +65,24 @@ export interface PathSource {
   where?: SQL.SQLExpression;
 }
 
+/**
+ * A computed link's expression as a select of its objects with `shape` (their
+ * ids by default): `.author` → `select .author { id }`; a `(select …)` takes
+ * the shape itself, keeping its filter, order by and limit.
+ */
+export function expressionLinkSelect(
+  expr: EdgeQLAST.Expression,
+  shape: EdgeQLAST.Shape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))])
+): EdgeQLAST.SelectQuery {
+  if (expr.kind === "ShapeExpr") {
+    return expressionLinkSelect(expr.expr, shape);
+  }
+  if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery") {
+    return { ...expr.query, shape };
+  }
+  return { distinct: false, expr, kind: "SelectQuery", shape };
+}
+
 export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
   /**
    * Resolve `path` to where it starts and the links it follows, or null when
@@ -98,17 +116,18 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
         return null;
       }
       hops.push(hop);
-      multi = multi || hop.kind === "backlink" || hop.link.multi || !hop.link.columnName;
+      multi = multi || hop.kind === "backlink" || hop.link.multi || (!hop.link.columnName && !Context.isExpressionLink(hop.link));
       typeDef = hop.target;
     }
     return { hops, multi, start: origin.start, startType: origin.startType, typeDef };
   }
 
   /**
-   * `path` with each step through a computed link whose expression is a
-   * relative path (`auth := .author`, `bf := .author.best_friend`) replaced
-   * by that path's steps, so `.auth.name` compiles as `.author.name`. Other
-   * computed links (`(select …)`) stay as they are.
+   * `path` with each step through a computed link or property whose
+   * expression is a relative path (`auth := .author`, `bf :=
+   * .author.best_friend`, `bodies := .<post[is Comment].body`) replaced by
+   * that path's steps, so `.auth.name` compiles as `.author.name`. Other
+   * computeds (`(select …)`, `.a ++ .b`) stay as they are.
    */
   protected spliceExpressionLinks(path: EdgeQLAST.Path): EdgeQLAST.Path {
     const origin = this.pathOrigin(path);
@@ -124,7 +143,9 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     let typeDef: Context.TypeDef | undefined = start;
     for (const step of steps) {
       const link: Context.LinkDef | undefined = step.type === "property" ? typeDef?.links.get(step.name) : undefined;
-      const expr = link && Context.isExpressionLink(link) ? new EdgeQLParser(link.computedExpr).parseExpressionOnly() : undefined;
+      const property = step.type === "property" && !link ? typeDef?.properties.get(step.name) : undefined;
+      const computedExpr = link && Context.isExpressionLink(link) ? link.computedExpr : property?.computed ? property.computedExpr : undefined;
+      const expr = computedExpr ? new EdgeQLParser(computedExpr).parseExpressionOnly() : undefined;
       if (typeDef && expr?.kind === "Path" && !expr.rooted) {
         out.push(...this.spliceSteps(typeDef, expr.steps));
       } else {
@@ -309,6 +330,9 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
       const alias = Context.generateAlias(this.ctx, `__j_${link.name}`);
       return this.junctionHop(link.junctionTable, alias, link.junctionSourceColumn ?? "source_id", link.junctionTargetColumn ?? "target_id", ids);
     }
+    if (Context.isExpressionLink(link)) {
+      return this.expressionLinkHop(source, link, ids);
+    }
     // A computed backlink (`multi posts := .<author[is Post]`): the target's
     // forward link holds the source's id.
     const forward = link.backlink ? hop.target.links.get(link.backlink) : undefined;
@@ -317,6 +341,43 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
       return this.tableHop(hop.target.tableName, alias, forward.columnName, "id", ids);
     }
     throw new CompilationError(`Link '${source.name}.${link.name}' cannot be followed in a path: it has no column, junction table or backlink`);
+  }
+
+  /**
+   * The ids a computed link's expression yields (`first := (select
+   * .<post[is Comment] order by .created limit 1)`) from each of the objects
+   * `ids` of type `source`: the expression's select, compiled for a row of
+   * the source's table and read laterally, so its order by and limit apply
+   * per object:
+   *
+   *   SELECT (__agg.v ->> 'id')::uuid FROM post s, LATERAL (<select of the expression>) __agg(v)
+   *   WHERE s.id = <ids>
+   */
+  private expressionLinkHop(source: Context.TypeDef, link: Context.LinkDef & { computedExpr: string; }, ids: PathIds): PathIds {
+    const alias = Context.generateAlias(this.ctx, source.tableName);
+    let rows: SQL.SQLStatement;
+    Context.pushScope(this.ctx);
+    try {
+      this.ctx.currentScope.aliases.set(source.name.replace(/::/g, "_").toLowerCase(), {
+        alias,
+        table: source.tableName,
+        type: source.name
+      });
+      rows = this.compileQuery(expressionLinkSelect(new EdgeQLParser(link.computedExpr).parseExpressionOnly()));
+    } finally {
+      Context.popScope(this.ctx);
+    }
+    const id = SQL.createCastExpression(SQL.createJsonbAccess(SQL.createColumnReference("v", "__agg"), "->>", SQL.createLiteral("string", "id")), "uuid");
+    return {
+      select: SQL.createSelectStatement({
+        from: SQL.createFromClause([
+          SQL.createTableReference(source.tableName, alias),
+          { alias: "__agg", columnAliases: ["v"], kind: "TableReference", lateral: true, name: "", subquery: rows }
+        ]),
+        select: SQL.createSelectClause([SQL.createSelectItem(id)]),
+        where: SQL.createWhereClause(this.idIn(SQL.createColumnReference("id", alias), ids))
+      })
+    };
   }
 
   /*** `SELECT a.<out> FROM <table> a WHERE a.<match> IN/= <ids>`. ***/

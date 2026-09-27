@@ -192,6 +192,83 @@ function inferComputedLink(
 }
 
 /**
+ * The values a computed's expression yields when it is a relative path
+ * ending in a property (`.title`, `.<post[is Comment].body`), as the
+ * computed property Gel infers for it: that property's type, multi when the
+ * property or a hop before it is, required when the property and every hop
+ * are. Null for any other expression, or a property not yet typed.
+ */
+function inferComputedProperty(
+  expr: EdgeQLAST.Expression,
+  source: TypeDef,
+  resolveType: (name: string) => TypeDef | undefined
+): { baseType?: string; edgeqlType: string; multi: boolean; required: boolean; } | null {
+  if (expr.kind !== "Path" || expr.rooted || expr.steps.length === 0) {
+    return null;
+  }
+  const last = expr.steps[expr.steps.length - 1];
+  let owner: { multi: boolean; required: boolean; type: TypeDef; } | null = { multi: false, required: true, type: source };
+  if (expr.steps.length > 1) {
+    const hops = inferComputedLink({ ...expr, steps: expr.steps.slice(0, -1) }, source, resolveType);
+    const type = hops ? resolveType(hops.target) : undefined;
+    owner = hops && type ? { ...hops, type } : null;
+  }
+  const property = last.type === "property" ? owner?.type.properties.get(last.name) : undefined;
+  if (!owner || !property?.edgeqlType || property.edgeqlType === "auto") {
+    return null;
+  }
+  return {
+    ...(property.baseType ? { baseType: property.baseType } : {}),
+    edgeqlType: property.edgeqlType,
+    multi: owner.multi || property.multi,
+    required: owner.required && property.required
+  };
+}
+
+/*** True when a computed's expression carries a shape (`.<post[is C] { body }`, `(select … { … } …)`). ***/
+function hasShape(expr: EdgeQLAST.Expression): boolean {
+  return expr.kind === "ShapeExpr" ||
+    (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && (expr.query.shape !== undefined || hasShape(expr.query.expr)));
+}
+
+/**
+ * What Gel rejects in a schema's computed pointers, as the error message, or
+ * null: a shape in a computed link's expression, and `required` on a computed
+ * whose expression may be empty. (A computed is required when it is declared
+ * so or its expression is never empty — see modulesToSchema — so a required
+ * one whose expression may be empty was declared required.)
+ */
+export function detectComputedPointerErrors(schema: Schema): string | null {
+  const errors: string[] = [];
+  for (const typeDef of schema.types.values()) {
+    const resolve = (target: string): TypeDef | undefined =>
+      schema.types.get(target) ??
+        (typeDef.module && typeDef.module !== "default" ? schema.types.get(`${typeDef.module}::${target}`) : undefined) ??
+        schema.types.get(target.replace(/^default::/, ""));
+    const pointers = [
+      ...[...typeDef.links.values()].map(link => ({ kind: "link", pointer: link })),
+      ...[...typeDef.properties.values()].map(property => ({ kind: "property", pointer: property }))
+    ];
+    for (const { kind, pointer } of pointers) {
+      if (!pointer.computed || !pointer.computedExpr) {
+        continue;
+      }
+      const expr = new EdgeQLParser(pointer.computedExpr).parseExpressionOnly();
+      const where = `the computed ${kind} '${pointer.name}' of object type '${typeDef.name}'`;
+      if (kind === "link" && hasShape(expr)) {
+        errors.push(`${where}: including a shape on schema-defined computed links is not yet supported`);
+        continue;
+      }
+      const inferred = kind === "link" ? inferComputedLink(expr, typeDef, resolve) : inferComputedProperty(expr, typeDef, resolve);
+      if (pointer.required && inferred && !inferred.required) {
+        errors.push(`possibly an empty set returned by an expression for ${where} explicitly declared as 'required'`);
+      }
+    }
+  }
+  return errors.length > 0 ? errors.map(error => `  • ${error}`).join("\n") : null;
+}
+
+/**
  * Detect mutual stored `multi` links: two object types that each declare a
  * non-computed `multi` link pointing at the other. Disc stores every stored
  * multi link in its own junction table and can't tell which side pairs with
@@ -728,7 +805,8 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
             links.set(propName, {
               name: propName,
               target: bl.target,
-              required: false,
+              // Declared `required` (which detectComputedPointerErrors rejects: a backlink may be empty).
+              required: propDecl.required ?? false,
               multi: true,
               computed: true,
               computedExpr: sdlExpressionToEdgeQL(propDecl.computed),
@@ -1145,8 +1223,11 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
   // (select .<post[is Comment] … limit 1)`) is a computed link to their
   // type, not a property: selected with a sub-shape, filtered through, and
   // typed by codegen like a stored link. It has no storage; the compiler
-  // inlines `computedExpr`. Repeated until nothing changes, since one may
-  // go through another (`x := .auth.best_friend`).
+  // inlines `computedExpr`. A path to a property (`t := .title`, `bodies :=
+  // .<post[is Comment].body`) is typed as that property. Repeated until
+  // nothing changes, since one may go through another (`x :=
+  // .auth.best_friend`). Declared `multi` / `required` stand
+  // (detectComputedPointerErrors rejects `required` on one that may be empty).
   for (let changed = true; changed;) {
     changed = false;
     for (const typeDef of types.values()) {
@@ -1154,12 +1235,20 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         if (!property.computed || !property.computedExpr || property.edgeqlType !== "auto") {
           continue;
         }
-        const inferred = inferComputedLink(
-          new EdgeQLParser(property.computedExpr).parseExpressionOnly(),
-          typeDef,
-          target => resolveLinkTarget(target, typeDef.module)
-        );
+        const expr = new EdgeQLParser(property.computedExpr).parseExpressionOnly();
+        const resolve = (target: string) => resolveLinkTarget(target, typeDef.module);
+        const inferred = inferComputedLink(expr, typeDef, resolve);
         if (!inferred) {
+          const values = inferComputedProperty(expr, typeDef, resolve);
+          if (values) {
+            typeDef.properties.set(name, {
+              ...property,
+              ...values,
+              multi: property.multi || values.multi,
+              required: property.required || values.required
+            });
+            changed = true;
+          }
           continue;
         }
         typeDef.properties.delete(name);
@@ -1169,7 +1258,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
           computedExpr: property.computedExpr,
           multi: property.multi || inferred.multi,
           name,
-          required: inferred.required,
+          required: property.required || inferred.required,
           target: inferred.target
         });
         changed = true;

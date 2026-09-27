@@ -21,7 +21,7 @@ import {
   locationOf,
   renderEdgeQLTypeName
 } from "./compiler-base.ts";
-import { PathCompilerLayer } from "./compiler-paths.ts";
+import { expressionLinkSelect, PathCompilerLayer } from "./compiler-paths.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
 
@@ -93,6 +93,9 @@ function namedPaths(node: unknown, names: Set<string>): { name: string; node: Ed
 const MUTATION_CTE_NAME = "m";
 /*** The binding a shape on a select of objects, selected again (`select (select T …) { … } filter …`), reads it through. ***/
 const SELECT_CTE_NAME = "s";
+
+/*** The clauses a link's sub-shape may carry: `posts: { title } filter … order by … offset … limit …`. ***/
+type ShapeClauses = Pick<EdgeQLAST.ShapeElement, "filter" | "orderBy" | "offset" | "limit">;
 
 export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   /** The expression the statement being compiled selects as its result (`select <expr>`), whose value leaves the query. */
@@ -1146,6 +1149,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (property.computed && property.computedExpr) {
       const parser = new EdgeQLParser(property.computedExpr);
       const expr = parser.parseExpressionOnly();
+      // A set (`bodies := .<post[is Comment].body`, `{.a, .b}`) is its values
+      // as an array, as the same computed written in the shape is.
+      const pathSelect = this.shapePathSelect({ computable: true, expr, kind: "ShapeElement" });
+      if (pathSelect) {
+        return this.compileJsonArray(pathSelect);
+      }
       return this.dateDurationText(this.bytesAsBase64(this.compileExpression(expr), this.bytesTypeOf(expr, typeName)), this.staticScalarType(expr));
     }
     return this.dateDurationText(
@@ -1298,13 +1307,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const linkName = element.name.name;
         const link = Context.getLink(this.ctx, typeName, linkName);
         if (link) {
-          value = this.compileLinkWithShape(
-            link,
-            element.shape,
-            tableAlias,
-            element.orderBy,
-            element.filter
-          );
+          value = this.compileLinkWithShape(link, element.shape, tableAlias, element);
         } else {
           // Try as a property reference
           const property = Context.getProperty(this.ctx, typeName, linkName);
@@ -1377,7 +1380,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // row once per element. A one-element set literal is one value.
     const singleton = expr.kind === "SetExpr" && flattenSetElements(expr).length === 1;
     if (!singleton && this.setQuery(expr)) {
-      return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy };
+      return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", limit: element.limit, offset: element.offset, orderBy: element.orderBy };
     }
     // So is a select of one (`b := (select .nicks = 'a')`), unless it keeps at most one element.
     if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && !expr.query.shape) {
@@ -1394,7 +1397,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const subject = expr.kind === "ShapeExpr" ? expr.expr : expr;
     if (this.typeOfObjectSet(subject)) {
       const shape = expr.kind === "ShapeExpr" ? expr.shape : idShape;
-      return { distinct: false, expr: subject, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy, shape };
+      return {
+        distinct: false,
+        expr: subject,
+        filter: element.filter,
+        kind: "SelectQuery",
+        limit: element.limit,
+        offset: element.offset,
+        orderBy: element.orderBy,
+        shape
+      };
     }
     if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery") {
       const typeDef = this.typeOfObjectSet(expr.query.expr);
@@ -1405,7 +1417,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (expr.kind === "ShapeExpr" && expr.expr.kind === "Path") {
       const resolved = this.resolvePath(expr.expr);
       return resolved && !resolved.property ?
-        { distinct: false, expr: expr.expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy, shape: expr.shape } :
+        {
+          distinct: false,
+          expr: expr.expr,
+          filter: element.filter,
+          kind: "SelectQuery",
+          limit: element.limit,
+          offset: element.offset,
+          orderBy: element.orderBy,
+          shape: expr.shape
+        } :
         null;
     }
     if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && expr.query.expr.kind === "Path") {
@@ -1482,20 +1503,49 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   /**
    * A computed link read like a stored one (see `Context.isExpressionLink`):
-   * a select of its expression's objects, with `shape` (else their ids).
-   * With a shape, a single link is a one-element array or null when empty,
-   * a multi link an array; without, a single link is the id or null, a multi
-   * link the ids (null when empty), as compileLinkReference answers.
+   * a select of its expression's objects, with `shape` (else their ids) and
+   * the sub-shape's clauses.
    */
   private compileExpressionLink(
     link: Context.LinkDef & { computedExpr: string; },
     shape?: EdgeQLAST.Shape,
-    orderBy?: EdgeQLAST.OrderByClause[],
-    filter?: EdgeQLAST.Expression
+    clauses: ShapeClauses = {}
   ): SQL.SQLExpression {
-    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
-    const query = this.expressionLinkQuery(link.name, new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape ?? idShape, orderBy, filter);
-    return this.compileObjectsAsLink(this.compileSelectQuery(query), link.multi, shape !== undefined);
+    const query = expressionLinkSelect(new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape);
+    const { filter, limit, offset, orderBy } = clauses;
+    if (!filter && !orderBy && !offset && !limit) {
+      return this.compileLinkRows(link, query, shape !== undefined);
+    }
+    // With a limit or offset of its own, the expression's result is what the
+    // sub-shape's clauses narrow, as in Gel: a select of the link itself,
+    // whose objects the path layer reads through the expression, in the
+    // sub-shape's order or else the expression's.
+    if (query.limit || query.offset) {
+      const self: EdgeQLAST.Path = { kind: "Path", steps: [{ kind: "PathStep", name: link.name, type: "property" }] };
+      return this.compileLinkRows(
+        link,
+        { distinct: false, expr: self, filter, kind: "SelectQuery", limit, offset, orderBy: orderBy ?? query.orderBy, shape: query.shape },
+        shape !== undefined
+      );
+    }
+    return this.compileLinkRows(link, {
+      ...query,
+      filter: query.filter && filter ? EdgeQLAST.createBinaryOp("AND", query.filter, filter) : query.filter ?? filter,
+      limit,
+      offset,
+      orderBy: orderBy ?? query.orderBy
+    }, shape !== undefined);
+  }
+
+  /**
+   * A link's value from `query`, a select of its objects: with a shape, a
+   * single link is a one-element array or null when empty, a multi link an
+   * array; without (`query` selects their ids), a single link is the id or
+   * null, a multi link the ids (null when empty), as compileLinkReference
+   * answers.
+   */
+  private compileLinkRows(link: Context.LinkDef, query: EdgeQLAST.SelectQuery, shaped: boolean): SQL.SQLExpression {
+    return this.compileObjectsAsLink(this.compileSelectQuery(query), link.multi, shaped);
   }
 
   /**
@@ -1811,11 +1861,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     link: Context.LinkDef,
     shape: EdgeQLAST.Shape,
     parentAlias: string,
-    orderBy?: EdgeQLAST.OrderByClause[],
-    filter?: EdgeQLAST.Expression
+    clauses: ShapeClauses = {}
   ): SQL.SQLExpression {
     if (Context.isExpressionLink(link)) {
-      return this.compileExpressionLink(link, shape, orderBy, filter);
+      return this.compileExpressionLink(link, shape, clauses);
+    }
+    const { filter, limit, offset, orderBy } = clauses;
+    // An offset or limit keeps some of the link's objects: a select of the
+    // link (`select .posts { … } filter … order by … limit …`).
+    if (offset || limit) {
+      const self: EdgeQLAST.Path = { kind: "Path", steps: [{ kind: "PathStep", name: link.name, type: "property" }] };
+      return this.compileLinkRows(link, { distinct: false, expr: self, filter, kind: "SelectQuery", limit, offset, orderBy, shape }, true);
     }
     // Generate a subquery for the linked type with the given shape.
     // Use `resolveTypeName` (not `getTypeDef`) so a link target like
@@ -2132,7 +2188,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       }
     }
 
-    const fromBinding = this.bindingPathSelect(path);
+    const fromBinding = this.bindingPathSelect(path) ?? this.expressionLinkPathSelect(path);
     if (fromBinding) {
       return this.compileExpression({ kind: "Subquery", query: fromBinding });
     }
@@ -2153,6 +2209,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         for (const ta of this.ctx.currentScope.aliases.values()) {
           const td = Context.resolveTypeName(this.ctx, ta.type);
           const prop = td?.properties.get(step.name);
+          // A computed property (`title2 := .title ++ '!'`) is its
+          // expression; it has no column.
+          if (prop?.computed && prop.computedExpr) {
+            return this.compileExpression(new EdgeQLParser(prop.computedExpr).parseExpressionOnly());
+          }
           if (prop?.columnName) {
             return SQL.createColumnReference(prop.columnName, ta.alias);
           }
@@ -2297,6 +2358,22 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   private bindingPathSelect(path: EdgeQLAST.Path): EdgeQLAST.SelectQuery | null {
     const resolved = path.rooted && path.steps.length > 1 ? this.resolvePath(path) : null;
     if (resolved?.start.kind !== "binding") {
+      return null;
+    }
+    const idStep: EdgeQLAST.PathStep = { kind: "PathStep", name: "id", type: "property" };
+    const expr: EdgeQLAST.Path = resolved.property ? path : { ...path, steps: [...path.steps, idStep] };
+    return { distinct: false, expr, kind: "SelectQuery", span: path.span };
+  }
+
+  /**
+   * `select .first_comment.body` when `path` goes through a computed link
+   * over a `(select …)` (see `Context.isExpressionLink`), else null: as one
+   * value (`.first_comment.body = 'x'`, `order by .first_comment.created`) the
+   * path is that select; a path to objects stands for their id.
+   */
+  private expressionLinkPathSelect(path: EdgeQLAST.Path): EdgeQLAST.SelectQuery | null {
+    const resolved = this.resolvePath(path);
+    if (!resolved?.hops.some(hop => Context.isExpressionLink(hop.link))) {
       return null;
     }
     const idStep: EdgeQLAST.PathStep = { kind: "PathStep", name: "id", type: "property" };
