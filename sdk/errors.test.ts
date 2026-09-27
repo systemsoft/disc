@@ -8,6 +8,7 @@ import {
 } from "@std/assert";
 
 import {
+  CardinalityViolationError,
   ConstraintViolationError,
   createQueryError,
   DeadlockError,
@@ -190,6 +191,14 @@ Deno.test("errors - createQueryError maps 40001 and 40P01 to their own classes",
   assertInstanceOf(deadlock, DeadlockError);
   assertInstanceOf(deadlock, DiscQueryError);
   assertEquals(deadlock.name, "DeadlockError");
+});
+
+Deno.test("errors - createQueryError maps 21000 to CardinalityViolationError", () => {
+  const err = createQueryError([{ extensions: { sqlState: "21000" }, message: "'default::Program' with id '0' does not exist" }]);
+  assertInstanceOf(err, CardinalityViolationError);
+  assertInstanceOf(err, DiscQueryError);
+  assertEquals(err.name, "CardinalityViolationError");
+  assertEquals(err instanceof ConstraintViolationError, false);
 });
 
 Deno.test("errors - createQueryError without a SQLSTATE is a plain DiscQueryError", () => {

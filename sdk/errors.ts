@@ -118,10 +118,24 @@ export class DeadlockError extends DiscQueryError {
 }
 
 /**
+ * An expression returned more elements than allowed, or an object cast
+ * named an id with no object (SQLSTATE 21000), as Gel's
+ * CardinalityViolationError: `assert_single` of several, or `<T><uuid>$p`
+ * of a missing id ("'default::T' with id '…' does not exist").
+ */
+export class CardinalityViolationError extends DiscQueryError {
+  constructor(errors: QueryError[]) {
+    super(errors);
+    this.name = "CardinalityViolationError";
+  }
+}
+
+/**
  * The query error for a server `errors` envelope, typed by the SQLSTATE of
  * its first error: `UniqueViolationError` (23505), `ForeignKeyViolationError`
  * (23503), `ConstraintViolationError` (any other class 23),
- * `SerializationFailureError` (40001), `DeadlockError` (40P01), and a plain
+ * `CardinalityViolationError` (21000), `SerializationFailureError` (40001),
+ * `DeadlockError` (40P01), and a plain
  * `DiscQueryError` otherwise. Every result is an `instanceof DiscQueryError`.
  */
 export function createQueryError(errors: QueryError[]): DiscQueryError {
@@ -135,6 +149,9 @@ export function createQueryError(errors: QueryError[]): DiscQueryError {
   }
   if (sqlState?.startsWith("23")) {
     return new ConstraintViolationError(errors);
+  }
+  if (sqlState === "21000") {
+    return new CardinalityViolationError(errors);
   }
   if (sqlState === "40001") {
     return new SerializationFailureError(errors);

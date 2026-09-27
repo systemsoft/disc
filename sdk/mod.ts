@@ -87,6 +87,7 @@ export type {
 
 // Error hierarchy
 export {
+  CardinalityViolationError,
   ConstraintViolationError,
   createQueryError,
   DeadlockError,
