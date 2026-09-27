@@ -893,6 +893,12 @@ class TypeScriptEmitter {
       content += `\n    }`;
     }
 
+    // Multi properties and multi links: the filter compiler tests any element
+    // of them with `any(<comparison>)`.
+    const typeInfoMulti = obj.fields.filter(field => !field.isComputed && isMulti(field.cardinality)).map(field => field.name);
+    if (typeInfoMulti.length > 0)
+      content += `,\n    multi: ${JSON.stringify(typeInfoMulti).replaceAll(",", ", ")}`;
+
     content += `\n  };\n\n`;
     content += `  constructor(private client: DiscClient) {}\n\n`;
 

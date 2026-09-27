@@ -778,3 +778,73 @@ Deno.test("Stage F — `filter` at the top level of select is ignored", () => {
   assertEquals(result.clause, "");
   assertEquals(result.variables, {});
 });
+
+// --- Multi properties and multi links ---
+//
+// A condition on a multi property, or through a multi link, holds when some
+// element satisfies it. It compiles to `any(<comparison>)`: one boolean,
+// false when there is no element, so `not` negates it ("no element
+// matches"), `or` holds when either side does, and two conditions on one
+// multi path are independent — in Gel as in Disc, whatever the scoping mode.
+
+const tagInfo: TypeInfo = { casts: { name: "<str>" }, links: {} };
+
+const postWithTagsInfo: TypeInfo = {
+  casts: { title: "<str>" },
+  links: { tags: () => tagInfo },
+  multi: ["tags"]
+};
+
+const memberInfo: TypeInfo = {
+  casts: { name: "<str>", nicks: "<str>", visits: "<int64>" },
+  links: { best: () => postWithTagsInfo, posts: () => postWithTagsInfo },
+  multi: ["nicks", "posts"]
+};
+
+Deno.test("compileFilter — a multi property condition is any(<comparison>)", () => {
+  const result = compileFilter("Member", { nicks: "a1", name: "ann" }, memberInfo);
+  assertEquals(result.clause, "any(.nicks = <str>$p0) and .name = <str>$p1");
+  assertEquals(result.variables, { p0: "a1", p1: "ann" });
+});
+
+Deno.test("compileFilter — each operator on a multi property is its own any(<comparison>)", () => {
+  const result = compileFilter("Member", { nicks: { in: ["a1"], ne: "a2", like: "a%" } }, memberInfo);
+  assertEquals(
+    result.clause,
+    "any(.nicks in array_unpack(<array<str>>$p0)) and any(.nicks != <str>$p1) and any(.nicks like <str>$p2)"
+  );
+});
+
+Deno.test("compileFilter — not() of a multi property condition negates the any()", () => {
+  const result = compileFilter("Member", not({ nicks: "a1" }), memberInfo);
+  assertEquals(result.clause, "not (any(.nicks = <str>$p0))");
+});
+
+Deno.test("compileFilter — conditions through a multi link are each any(<comparison>)", () => {
+  const result = compileFilter("Member", { posts: { title: "Hello", tags: { name: "t2" } } }, memberInfo);
+  assertEquals(result.clause, "(any(.posts.title = <str>$p0) and (any(.posts.tags.name = <str>$p1)))");
+});
+
+Deno.test("compileFilter — combinators inside a multi link keep any() per condition", () => {
+  const result = compileFilter("Member", { posts: or({ title: "a" }, not({ title: "b" })) }, memberInfo);
+  assertEquals(result.clause, "((any(.posts.title = <str>$p0)) or (not (any(.posts.title = <str>$p1))))");
+});
+
+Deno.test("compileFilter — a single link to a type with a multi link wraps only the multi hop", () => {
+  const result = compileFilter("Member", { best: { title: "Hello", tags: { name: "t1" } } }, memberInfo);
+  assertEquals(result.clause, "(.best.title = <str>$p0 and (any(.best.tags.name = <str>$p1)))");
+});
+
+Deno.test("compileFilter — single properties and links stay bare comparisons", () => {
+  const result = compileFilter("Member", or({ visits: 3 }, not({ best: { title: "x" } })), memberInfo);
+  assertEquals(result.clause, "(.visits = <int64>$p0) or (not ((.best.title = <str>$p1)))");
+});
+
+Deno.test("compileFilter — a link's select filter reads the linked object: only its own multi paths are any()", () => {
+  const result = compileFilter(
+    "Member",
+    { select: { posts: { title: true, filter: { title: "x", tags: { name: "t" } } } } },
+    memberInfo
+  );
+  assertEquals(result.selectShape, "{ posts: { title } filter .title = <str>$p0 and (any(.tags.name = <str>$p1)) }");
+});

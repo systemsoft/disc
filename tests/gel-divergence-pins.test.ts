@@ -2052,3 +2052,55 @@ Deno.test("Gel #7382: the docs index stays navigable without a search engine", a
     `index.md must link every published guide (Gel #7382 pin) — missing: ${unlinked.join(", ")}`
   );
 });
+
+// ---------------------------------------------------------------------------
+// Gel `future simple_scoping` — path scoping of a filter. Gel 7's default
+// (legacy path factoring) binds every occurrence of one path in a filter
+// clause to the same element, so `filter .nicks = 'a1' and .nicks = 'a2'`
+// asks for one nick equal to both and matches nothing. With `using future
+// simple_scoping` (the scoping Gel is moving to) each occurrence is its own
+// set, and the filter matches an object with a nick of each.
+//
+// Disc follows simple scoping throughout: two comparisons of one multi path
+// are independent (in a filter, a shape element, a select), and the SDK's
+// object-shaped filters document that meaning (sibling keys over a multi link
+// need not hold for the same linked object) and compile each condition to
+// `any(<comparison>)`, which means the same under both of Gel's modes.
+// Implementing legacy factoring would change the SDK's results and is not
+// planned. A change toward it has to update this pin, the note in
+// `codegen/README.md`, and `compiler/set-semantics.test.ts`.
+// ---------------------------------------------------------------------------
+Deno.test("Gel simple_scoping: comparisons of one multi path in a filter are independent", async () => {
+  const { EdgeQLParser } = await import("../edgeql/parser.ts");
+  const { EdgeQLCompiler } = await import("../compiler/compiler.ts");
+  const { SQLCodeGenerator } = await import("../compiler/codegen.ts");
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    "module default { type Post { required title: str; } type User { multi nicks: str; multi posts: Post; } }",
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+  const compile = (edgeql: string): string => {
+    const result = new EdgeQLCompiler(schema, { enableAccessControl: false }).compile(new EdgeQLParser(edgeql).parse());
+    if (!result.ok)
+      throw result.error;
+    return new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " ");
+  };
+
+  // Each comparison tests its own elements: two tests, not one element equal to both.
+  const nicks = compile("select User filter .nicks = 'a1' and .nicks = 'a2'");
+  assertEquals(nicks.match(/= ANY\(/g)?.length, 2, `each comparison tests the nicks on its own (simple_scoping pin): ${nicks}`);
+  const posts = compile("select User filter .posts.title = 'a' and .posts.title = 'b'");
+  assertEquals(posts.match(/EXISTS \(/g)?.length, 2, `each comparison has its own EXISTS (simple_scoping pin): ${posts}`);
+
+  // Two occurrences in one expression are crossed, not bound to one element.
+  const shape = compile("select User { b := .nicks ++ .nicks }");
+  assertEquals(shape.match(/unnest\(/g)?.length, 2, `each occurrence is its own set (simple_scoping pin): ${shape}`);
+
+  const readme = await Deno.readTextFile(new URL("../codegen/README.md", import.meta.url));
+  assert(readme.includes("simple_scoping"), "codegen/README.md must document the filter scoping (simple_scoping pin).");
+});

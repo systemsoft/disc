@@ -257,7 +257,8 @@ export class UserQueryBuilder {
     },
     links: {
       posts: () => PostQueryBuilder._typeInfo,
-    }
+    },
+    multi: ["posts"]
   };
 
   constructor(private client: DiscClient) {}
@@ -841,7 +842,8 @@ export class MerchantQueryBuilder {
     links: {
       apiKeys: () => ApiKeyQueryBuilder._typeInfo,
       payments: () => PaymentQueryBuilder._typeInfo,
-    }
+    },
+    multi: ["apiKeys", "payments"]
   };
 
   constructor(private client: DiscClient) {}
@@ -1612,7 +1614,8 @@ export class PlaceQueryBuilder {
     },
     computed: {
       counts: { videos: "<int64>", total: "<int64>", score: "<float64>" }
-    }
+    },
+    multi: ["members"]
   };
 
   constructor(private client: DiscClient) {}
@@ -2062,7 +2065,8 @@ export class PetQueryBuilder {
     links: {
       owner: () => PersonQueryBuilder._typeInfo,
       friends: () => PersonQueryBuilder._typeInfo,
-    }
+    },
+    multi: ["friends"]
   };
 
   constructor(private client: DiscClient) {}

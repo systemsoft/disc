@@ -101,10 +101,11 @@ interface GoField {
 
 /**
  * The float field types whose JSON the generated methods convert (see
- * FLOAT_JSON_GO): a float, a pointer to one, a slice of them, a pointer to a
- * slice — groups: pointer, slice, bits.
+ * FLOAT_JSON_GO): a float, a pointer to one, a slice of them, a slice of such
+ * slices (a multi property of float arrays), a pointer to a slice — groups:
+ * pointer, slices, bits.
  */
-const FLOAT_FIELD = /^(\*?)(\[\])?float(32|64)$/;
+const FLOAT_FIELD = /^(\*?)((?:\[\]){0,2})float(32|64)$/;
 
 /**
  * PascalCase a schema identifier into an exported Go identifier, preserving any
@@ -355,17 +356,21 @@ class GoEmitter {
   private emitFloatJSON(name: string, fields: GoField[]): string {
     const floats = fields.flatMap(field => {
       const match = FLOAT_FIELD.exec(field.type);
-      return match ? [{ ...field, bits: match[3], pointer: match[1] === "*", slice: match[2] === "[]" }] : [];
+      return match ? [{ ...field, bits: match[3], pointer: match[1] === "*", slices: match[2] }] : [];
     });
     if (floats.length === 0)
       return "";
     this.floatJSON = true;
 
+    // FLOAT_JSON_GO's converter of a slice field's floats.
+    const converter = (field: typeof floats[number]): string =>
+      `convert${field.pointer ? "Optional" : ""}${field.slices === "[][]" ? "FloatSlices" : "Floats"}`;
+
     const shadows = (decode: boolean): string =>
       floats
         .map(field => {
           const disc = `discFloat${field.bits}`;
-          const type = field.slice ? `${field.pointer ? "*" : ""}[]${disc}` : field.pointer || decode ? `*${disc}` : disc;
+          const type = field.slices ? `${field.pointer ? "*" : ""}${field.slices}${disc}` : field.pointer || decode ? `*${disc}` : disc;
           return `\t\t${field.ident} ${type} \`json:${JSON.stringify(field.tag)}\`\n`;
         })
         .join("");
@@ -376,13 +381,13 @@ class GoEmitter {
     out += `\ttype alias ${name}\n`;
     out += "\taux := struct {\n\t\t*alias\n";
     out += shadows(true);
-    const direct = floats.filter(field => !field.pointer && !field.slice);
+    const direct = floats.filter(field => !field.pointer && !field.slices);
     out += `\t}{${["alias: (*alias)(v)", ...direct.map(field => `${field.ident}: (*discFloat${field.bits})(&v.${field.ident})`)].join(", ")}}\n`;
     out += "\tif err := json.Unmarshal(data, &aux); err != nil {\n\t\treturn err\n\t}\n";
     for (const field of floats) {
       const float = `float${field.bits}`;
-      if (field.slice)
-        out += `\tv.${field.ident} = ${field.pointer ? "convertOptionalFloats" : "convertFloats"}[${float}](aux.${field.ident})\n`;
+      if (field.slices)
+        out += `\tv.${field.ident} = ${converter(field)}[${float}](aux.${field.ident})\n`;
       else if (field.pointer)
         out += `\tv.${field.ident} = (*${float})(aux.${field.ident})\n`;
     }
@@ -396,8 +401,8 @@ class GoEmitter {
     out += shadows(false);
     const values = floats.map(field => {
       const disc = `discFloat${field.bits}`;
-      const value = field.slice ?
-        `${field.pointer ? "convertOptionalFloats" : "convertFloats"}[${disc}](v.${field.ident})` :
+      const value = field.slices ?
+        `${converter(field)}[${disc}](v.${field.ident})` :
         field.pointer ?
         `(*${disc})(v.${field.ident})` :
         `${disc}(v.${field.ident})`;
@@ -746,6 +751,27 @@ func convertOptionalFloats[To, From ~float32 | ~float64](floats *[]From) *[]To {
 		return nil
 	}
 	out := convertFloats[To](*floats)
+	return &out
+}
+
+// convertFloatSlices is convertFloats for each slice of a slice; nil stays nil.
+func convertFloatSlices[To, From ~float32 | ~float64](slices [][]From) [][]To {
+	if slices == nil {
+		return nil
+	}
+	out := make([][]To, len(slices))
+	for i, floats := range slices {
+		out[i] = convertFloats[To](floats)
+	}
+	return out
+}
+
+// convertOptionalFloatSlices is convertFloatSlices through a pointer; nil stays nil.
+func convertOptionalFloatSlices[To, From ~float32 | ~float64](slices *[][]From) *[][]To {
+	if slices == nil {
+		return nil
+	}
+	out := convertFloatSlices[To](*slices)
 	return &out
 }
 `;

@@ -262,3 +262,41 @@ Deno.test("emitGo: float fields keep their types and read and write NaN and ±In
   if (await goAvailable())
     await assertCompiles(floatSchema());
 });
+
+/**
+ * Schema with multi properties of float arrays. Disc's schema validator rejects
+ * a stored one (a PG array column can't hold arrays), so this parses without
+ * validation, as a programmatic `emitGo(schemaToIR(…))` of such a schema would.
+ */
+function floatGridSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    `module default {
+  type Grid {
+    required label: str;
+    multi rows: array<float64>;
+    multi cells: array<float32>;
+  };
+};`,
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
+Deno.test("emitGo: slices of float slices read and write NaN and ±Infinity as strings too", async () => {
+  const models = emitGo(schemaToIR(floatGridSchema()), goConfig())
+    .find(f => f.path.endsWith("models.go"))!
+    .content;
+  assertStringIncludes(models, "\tRows [][]float64 `json:\"rows,omitempty\"`");
+  assertStringIncludes(models, "\t\tRows [][]discFloat64 `json:\"rows,omitempty\"`\n");
+  assertStringIncludes(models, "\tv.Rows = convertFloatSlices[float64](aux.Rows)\n");
+  assertStringIncludes(models, "\tv.Cells = convertFloatSlices[float32](aux.Cells)\n");
+  assertStringIncludes(models, "Rows: convertFloatSlices[discFloat64](v.Rows)");
+  assertStringIncludes(models, "func (v GridInsert) MarshalJSON() ([]byte, error) {");
+  assertStringIncludes(models, "func convertFloatSlices[To, From ~float32 | ~float64](slices [][]From) [][]To {");
+
+  if (await goAvailable())
+    await assertCompiles(floatGridSchema());
+});

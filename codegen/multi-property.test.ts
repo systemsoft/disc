@@ -35,6 +35,11 @@ module default {
   type Plain {
     required name: str;
   }
+  type Team {
+    required name: str;
+    lead: Plain;
+    multi members: Plain;
+  }
 }
 `;
 
@@ -90,6 +95,18 @@ Deno.test("codegen multi property - TS insert/update assign the array with array
   assertStringIncludes(token, "array_unpack(${TokenQueryBuilder._typeCasts[key]}$${key})");
   // The filter/revive type info keeps the element cast.
   assertStringIncludes(token.slice(token.indexOf("_typeInfo")), `scopes: "<str>"`);
+});
+
+Deno.test("codegen multi property - the filter type info lists multi properties and multi links", () => {
+  const queries = tsFile("queries.ts");
+  const builder = (name: string): string => {
+    const start = queries.indexOf(`class ${name}QueryBuilder`);
+    return queries.slice(queries.indexOf("_typeInfo", start), queries.indexOf("\n}\n", start));
+  };
+  // The filter compiler wraps their conditions in `any(…)` (sdk/filter-compiler.ts).
+  assertStringIncludes(builder("Token"), `multi: ["scopes"]`);
+  assertStringIncludes(builder("Team"), `multi: ["members"]`);
+  assertEquals(builder("Plain").includes("multi:"), false);
 });
 
 Deno.test("codegen multi property - a type without multi properties keeps the plain template", () => {

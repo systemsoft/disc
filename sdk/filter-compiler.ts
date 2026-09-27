@@ -36,6 +36,14 @@ export interface TypeInfo {
    * underlying expression). Omitted for types with no filterable computeds.
    */
   computed?: Record<string, Record<string, string>>;
+  /**
+   * The multi properties and multi links. A condition on a multi property or
+   * through a multi link holds when some element satisfies it, and compiles
+   * to `any(<comparison>)`: one boolean, false with no element, so `not`,
+   * `or` and a second condition on the same path mean the same in Gel (with
+   * either path scoping) as in Disc. Omitted for types with none.
+   */
+  multi?: string[];
 }
 
 export interface CompiledFilter {
@@ -81,6 +89,8 @@ const SET_OPS = new Set(["in", "not_in"]);
 const RESERVED_KEYS = new Set(["select", "order_by", "limit", "offset"]);
 
 interface Ctx {
+  /** True when `pathPrefix` goes through a multi link. */
+  multiPath: boolean;
   vars: Record<string, unknown>;
   nextN: number;
   /** EdgeQL field path prefix; "" at root, ".merchant" inside a link, etc. */
@@ -126,7 +136,7 @@ export function compileFilter<T extends object>(
   typeInfo: TypeInfo
 ): CompiledFilter {
   void typeName; // reserved for future error-context messages
-  const ctx: Ctx = { vars: {}, nextN: 0, pathPrefix: "" };
+  const ctx: Ctx = { multiPath: false, nextN: 0, pathPrefix: "", vars: {} };
 
   let selectShape: string | null = null;
   let orderBy: string | null = null;
@@ -236,13 +246,16 @@ function compileSelectShape(
       // which constrains the parent via EXISTS.
       if (linkSelect.filter !== undefined) {
         const savedPrefix = ctx.pathPrefix;
+        const savedMulti = ctx.multiPath;
         ctx.pathPrefix = "";
+        ctx.multiPath = false;
         const predicate = compileArg(
           linkSelect.filter as FilterArg,
           targetInfo,
           ctx
         );
         ctx.pathPrefix = savedPrefix;
+        ctx.multiPath = savedMulti;
         if (predicate.length > 0) {
           modifiers.push(`filter ${predicate}`);
         }
@@ -358,9 +371,12 @@ function compileObject(
     if (linkThunk) {
       const targetInfo = linkThunk();
       const savedPrefix = ctx.pathPrefix;
+      const savedMulti = ctx.multiPath;
       ctx.pathPrefix = `${savedPrefix}.${escapeEdgeQLIdent(key)}`;
+      ctx.multiPath = savedMulti || (info.multi?.includes(key) ?? false);
       const inner = compileArg(value as FilterArg, targetInfo, ctx);
       ctx.pathPrefix = savedPrefix;
+      ctx.multiPath = savedMulti;
       if (inner.length > 0) {
         clauses.push(`(${inner})`);
       }
@@ -387,6 +403,10 @@ function compileObject(
     // Scalar — operator object or bare value.
     const cast = info.casts[key] ?? "<str>";
     const path = `${ctx.pathPrefix}.${escapeEdgeQLIdent(key)}`;
+    // Over a multi property or a multi link: whether some element matches,
+    // one boolean (see `TypeInfo.multi`).
+    const multi = ctx.multiPath || (info.multi?.includes(key) ?? false);
+    const condition = (comparison: string): string => multi ? `any(${comparison})` : comparison;
 
     if (isOperatorObject(value)) {
       for (const [op, opValue] of Object.entries(value)) {
@@ -406,10 +426,10 @@ function compileObject(
           // angle brackets to splice it inside `<array<...>>`.
           const inner = cast.slice(1, -1); // "<str>" -> "str"
           clauses.push(
-            `${path} ${sqlOp} array_unpack(<array<${inner}>>$${param})`
+            condition(`${path} ${sqlOp} array_unpack(<array<${inner}>>$${param})`)
           );
         } else {
-          clauses.push(`${path} ${sqlOp} ${cast}$${param}`);
+          clauses.push(condition(`${path} ${sqlOp} ${cast}$${param}`));
         }
       }
       continue;
@@ -418,7 +438,7 @@ function compileObject(
     // Bare value — equality
     const param = `p${ctx.nextN++}`;
     ctx.vars[param] = value;
-    clauses.push(`${path} = ${cast}$${param}`);
+    clauses.push(condition(`${path} = ${cast}$${param}`));
   }
 
   return clauses.join(" and ");

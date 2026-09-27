@@ -17,11 +17,20 @@
  * JSON form). A client inserts a row holding them in `float64`, `float32` and
  * `array<float64>` fields and reads it back with `Filter`.
  *
+ * A `multi` property of `array<float64>` is a slice of float slices in the
+ * clients (`[][]float64`, `Vec<Vec<f64>>`). Disc's schema validator rejects a
+ * stored one (a PostgreSQL array column can't hold arrays), so the clients are
+ * generated from the schema plus a `grid` field of that type (CLIENT_SDL,
+ * parsed without validation), which a select fills with a set of arrays
+ * (`grid := {.f64s, […]}`); the clients print it, then write it back out as
+ * JSON.
+ *
  * Requires PostgreSQL (DISC_PG_AUTO=1 or DISC_PG_TEST_URL) and, per test, `go`
  * or `cargo`; without them the test is skipped.
  */
 
 import { assert, assertEquals } from "@std/assert";
+import type { Schema } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { EdgeQLProtocolHandler } from "../server/edgeql-protocol.ts";
@@ -45,6 +54,21 @@ const SDL = `module default {
   }
 }`;
 
+/*** The schema the clients are generated from: SDL plus a multi property of float arrays, which no stored schema can hold. ***/
+const CLIENT_SDL = SDL.replace("    i64: int64;\n", "    i64: int64;\n    multi grid: array<float64>;\n");
+
+/*** The schema the clients are generated from (CLIENT_SDL). ***/
+function clientSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(CLIENT_SDL, { validate: false });
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
+/*** The select filling `grid` with a set of two arrays, one holding NaN and ±Infinity. ***/
+const GRID_SHAPE = "{ label, grid := {.f64s, [<float64>'NaN', 0.5]} } filter .label = 'nonfinite'";
+
 const BIG = "12345678901234567890";
 const DEC = "0.1000000000000000055511151231257827";
 /*** 2^53 + 1: the first integer a double cannot hold. ***/
@@ -57,7 +81,7 @@ const I64 = "9007199254740993";
  * decodes one). The float64 is 0.5 in both rows: a JSON number in the insert's
  * row as in the select's shape. Last, the non-finite row as the insert
  * returned it and as the filter read it, each float printed as the server's
- * string would be.
+ * string would be, and the grid as selected and as the client writes it.
  */
 const EXPECTED = [
   `inserted ${BIG} ${DEC} ${I64} ${BIG},1 0.5`,
@@ -65,7 +89,9 @@ const EXPECTED = [
   "filtered 1",
   "nan rejected true",
   "nonfinite inserted NaN NaN Infinity,-0.25,-Infinity",
-  "nonfinite selected NaN NaN Infinity,-0.25,-Infinity"
+  "nonfinite selected NaN NaN Infinity,-0.25,-Infinity",
+  "grid selected Infinity,-0.25,-Infinity;NaN,0.5",
+  "grid written [[\"Infinity\",-0.25,\"-Infinity\"],[\"NaN\",0.5]]"
 ]
   .join("\n");
 
@@ -123,6 +149,18 @@ func nonfinite(label string, item discclient.PreciseItem) string {
 	return fmt.Sprintf("nonfinite %s %s %s %s", label, text(*item.F64), text(float64(*item.F32)), strings.Join(f64s, ","))
 }
 
+func grid(rows [][]float64) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		cells := make([]string, 0, len(row))
+		for _, x := range row {
+			cells = append(cells, text(x))
+		}
+		parts = append(parts, strings.Join(cells, ","))
+	}
+	return strings.Join(parts, ";")
+}
+
 func main() {
 	builder := discclient.NewPreciseItemQueryBuilder(discclient.NewDiscClient(os.Args[1]))
 	bigs := []json.Number{"${BIG}", "1"}
@@ -159,6 +197,20 @@ func main() {
 	}
 	fmt.Println(nonfinite("inserted", special))
 	fmt.Println(nonfinite("selected", read[0]))
+	grids, err := builder.Select("${GRID_SHAPE}")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("grid selected %s\\n", grid(grids[0].Grid))
+	written, err := json.Marshal(discclient.PreciseItemInsert{Label: "grid", Big: "1", Grid: grids[0].Grid})
+	if err != nil {
+		panic(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(written, &fields); err != nil {
+		panic(err)
+	}
+	fmt.Printf("grid written %s\\n", fields["grid"])
 }
 `;
 
@@ -190,6 +242,11 @@ fn text(x: f64) -> String {
 fn nonfinite(label: &str, item: &PreciseItem) -> String {
     let f64s: Vec<String> = item.f64s.as_ref().unwrap().iter().map(|x| text(*x)).collect();
     format!("nonfinite {} {} {} {}", label, text(item.f64.unwrap()), text(item.f32.unwrap() as f64), f64s.join(","))
+}
+
+fn grid(rows: &[Vec<f64>]) -> String {
+    let parts: Vec<String> = rows.iter().map(|row| row.iter().map(|x| text(*x)).collect::<Vec<String>>().join(",")).collect();
+    parts.join(";")
 }
 
 fn main() {
@@ -228,6 +285,16 @@ fn main() {
     let read = builder.filter(Some(".label = 'nonfinite'"), serde_json::json!({})).unwrap();
     println!("{}", nonfinite("inserted", &special));
     println!("{}", nonfinite("selected", &read[0]));
+    let grids = builder.select(Some("${GRID_SHAPE}")).unwrap();
+    println!("grid selected {}", grid(&grids[0].grid));
+    let written = serde_json::to_value(PreciseItemInsert {
+        label: "grid".to_string(),
+        big: exact("1"),
+        grid: Some(grids[0].grid.clone()),
+        ..Default::default()
+    })
+    .unwrap();
+    println!("grid written {}", written["grid"]);
 }
 `;
 
@@ -254,8 +321,8 @@ async function run(tool: string, args: string[], cwd: string): Promise<string> {
   return decoder.decode(out.stdout).trim();
 }
 
-/*** Apply the schema, serve it over HTTP, and hand `body` the port and schema. ***/
-async function withServer(body: (port: number, manager: SchemaManager) => Promise<void>): Promise<void> {
+/*** Apply the schema, serve it over HTTP, and hand `body` the port. ***/
+async function withServer(body: (port: number) => Promise<void>): Promise<void> {
   const dsn = await getTestDsn();
   const pool = new ConnectionPool({ cleanupInterval: 0, connectionString: dsn, maxConnections: 4, minConnections: 1 });
   await pool.initialize();
@@ -280,7 +347,7 @@ async function withServer(body: (port: number, manager: SchemaManager) => Promis
   );
 
   try {
-    await body(listener.addr.port, manager);
+    await body(listener.addr.port);
   } finally {
     await listener.shutdown();
     await resetTestDatabase(pool);
@@ -294,10 +361,10 @@ Deno.test({
   sanitizeOps: false,
   sanitizeResources: false,
   fn: async () => {
-    await withServer(async (port, manager) => {
+    await withServer(async port => {
       const dir = await Deno.makeTempDir({ prefix: "disc_go_exact_" });
       try {
-        await writeFiles(dir, emitGo(schemaToIR(manager.getSchema()!), CONFIG));
+        await writeFiles(dir, emitGo(schemaToIR(clientSchema()), CONFIG));
         await Deno.mkdir(`${dir}/cmd/roundtrip`, { recursive: true });
         await Deno.writeTextFile(`${dir}/cmd/roundtrip/main.go`, GO_MAIN);
         assertEquals(await run("go", ["run", "./cmd/roundtrip", `http://127.0.0.1:${port}`], dir), EXPECTED);
@@ -314,10 +381,10 @@ Deno.test({
   sanitizeOps: false,
   sanitizeResources: false,
   fn: async () => {
-    await withServer(async (port, manager) => {
+    await withServer(async port => {
       const dir = await Deno.makeTempDir({ prefix: "disc_rust_exact_" });
       try {
-        await writeFiles(dir, emitRust(schemaToIR(manager.getSchema()!), CONFIG));
+        await writeFiles(dir, emitRust(schemaToIR(clientSchema()), CONFIG));
         await Deno.mkdir(`${dir}/examples`, { recursive: true });
         await Deno.writeTextFile(`${dir}/examples/roundtrip.rs`, RUST_EXAMPLE);
         assertEquals(await run("cargo", ["run", "--offline", "--quiet", "--example", "roundtrip", "--", String(port)], dir), EXPECTED);

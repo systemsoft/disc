@@ -248,3 +248,20 @@ Deno.test("emitRust: float fields keep their types and read and write NaN and ±
   if (await cargoAvailable())
     await assertCompiles(floatSchema());
 });
+
+Deno.test("emitRust: a Vec of float Vecs goes through disc_float too", async () => {
+  // A multi property of float arrays; Disc's schema validator rejects a stored
+  // one, so this parses without validation. disc_float's FloatField for Vec<T>
+  // covers any nesting.
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL("module default { type Grid { required label: str; multi rows: array<float64>; } }", { validate: false });
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+  const lib = emitRust(schemaToIR(schema), rustConfig()).find(f => f.path.endsWith("src/lib.rs"))!.content;
+  assertStringIncludes(lib, "    #[serde(default, deserialize_with = \"crate::disc_float::deserialize\")]\n    pub rows: Vec<Vec<f64>>,");
+  assertStringIncludes(lib, "serialize_with = \"crate::disc_float::serialize\"");
+
+  if (await cargoAvailable())
+    await assertCompiles(schema);
+});

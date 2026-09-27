@@ -297,7 +297,29 @@ Deno.test({
       assertEquals(await names(".nicks = 'a1'"), ["ann"]);
       assertEquals(await names(".posts.title = 'World' and .nicks = 'a2'"), ["ann"]);
       assertEquals(await names(".posts.tags.name = 't2'"), ["ann"]);
-      assertEquals(await names(".posts.title = 'Nope' or .name = 'bob'"), ["bob"]);
+      // Independent comparisons of one multi path (simple scoping): a nick of each.
+      assertEquals(await names(".nicks = 'a1' and .nicks = 'a2'"), ["ann"]);
+
+      // Under `not` and `or`, one boolean per element (Gel): `not` holds when some element does not match.
+      assertEquals(await names("not (.nicks = 'a1')"), ["ann"]);
+      assertEquals(await names("not (.nicks = 'zz')"), ["ann"]);
+      assertEquals(await names("not (.posts.title = 'Hello')"), ["ann"]);
+      assertEquals(await names("not (.posts.tags.name = 't1')"), ["ann"]);
+      assertEquals(await names("not (.nicks = 'a1' and .nicks = 'a2')"), ["ann"]);
+      assertEquals(await names(".nicks = 'a1' or .nicks = 'zz'"), ["ann"]);
+      // bob has no posts: the `or` has no element to be true.
+      assertEquals(await names(".posts.title = 'Nope' or .name = 'bob'"), []);
+
+      // `any(…)` is one boolean: false for no element, and `not any(…)` is "none matches".
+      assertEquals(await names("not any(.nicks = 'a1')"), ["bob"]);
+      assertEquals(await names("not any(.posts.title = 'Hello')"), ["bob"]);
+      assertEquals(await names("not any(.posts.tags.name = 't2')"), ["bob"]);
+      assertEquals(await names("any(.posts.title = 'Nope') or .name = 'bob'"), ["bob"]);
+      assertEquals(await run("select SetUser { b := any(.nicks = 'a1') } order by .name"), [{ b: true }, { b: false }]);
+
+      // A mutation's filter too.
+      await run("update SetUser filter not (.nicks = 'a1') set { visits := 9 }");
+      assertEquals(await names(".visits = 9"), ["ann"]);
     });
   }
 });

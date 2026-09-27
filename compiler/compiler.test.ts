@@ -2340,3 +2340,15 @@ Deno.test("SQL Compiler - deep chain may end on a single-FK hop", () => {
   );
   assertEquals(sql.includes("channel_id"), true, `expected channel_id FK: ${sql}`);
 });
+
+Deno.test("SQL Compiler - not over and / or keeps its operand grouped", () => {
+  // Regression: `NOT a OR b` is `(NOT a) OR b` in PostgreSQL, which negated
+  // only the first operand of `not (a or b)`.
+  const or = compileEdgeQL("select User { name } filter not (.name = 'x' or .email = 'y')").replace(/\s+/g, " ");
+  assertEquals(/WHERE NOT \(\(user_\d+\.name = 'x'\) OR \(user_\d+\.email = 'y'\)\)/.test(or), true, `expected grouped NOT: ${or}`);
+  const and = compileEdgeQL("select User { name } filter not (.name = 'x' and .email = 'y')").replace(/\s+/g, " ");
+  assertEquals(/WHERE NOT \(\(user_\d+\.name = 'x'\) AND \(user_\d+\.email = 'y'\)\)/.test(and), true, `expected grouped NOT: ${and}`);
+  // A comparison binds tighter than NOT: no parentheses needed.
+  const comparison = compileEdgeQL("select User { name } filter not (.name = 'x')").replace(/\s+/g, " ");
+  assertEquals(/WHERE NOT user_\d+\.name = 'x'/.test(comparison), true, comparison);
+});

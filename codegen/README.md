@@ -313,6 +313,8 @@ import { or } from "./dbschema/disc-client/index.ts";
 await client.user.filter(or({ name: "Ada" }, { email: "ada@example.com" }));
 ```
 
+A condition on a `multi` property, or through a `multi` link, holds when some element matches, and compiles to `any(<comparison>)` (`_typeInfo.multi` lists those fields): one boolean, false when there is no element. So `not({ nicks: "a1" })` means no nick is `a1`, `or` holds when either side does, and sibling keys over one multi link are independent conditions -- `{ posts: { title: "a", published: true } }` is a post titled `a` and a published post, not necessarily the same one. That emitted EdgeQL means the same in Gel under either path scoping mode. Raw EdgeQL follows Gel: `filter not (.nicks = 'a1')` is true when some nick is not `a1`, and two comparisons of one multi path in a filter (`.nicks = 'a1' and .nicks = 'a2'`) are independent, as with Gel's `future simple_scoping` rather than Gel 7's default path factoring, which binds both to the same element.
+
 Omitting `select` defaults the shape to `{ * }`, which covers stored properties only -- computed properties are opt-in and must be named explicitly.
 
 Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.

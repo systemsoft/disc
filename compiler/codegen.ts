@@ -396,7 +396,9 @@ export class SQLCodeGenerator {
     const operand = this.generateExpression(expr.operand);
 
     if (expr.operator === "NOT") {
-      return `NOT ${operand}`;
+      // NOT binds tighter than AND and OR: `NOT a OR b` is `(NOT a) OR b`.
+      const grouped = expr.operand.kind === "BinaryExpression" && /^(AND|OR)$/i.test(expr.operand.operator);
+      return grouped ? `NOT (${operand})` : `NOT ${operand}`;
     }
 
     // Postfix null tests: `<expr> IS NOT NULL`, `<expr> IS NULL`.

@@ -24,10 +24,18 @@
  *   error, as in Gel.
  * - So is a comparison of a multi property, multi link path or backlink
  *   (`.nicks = 'a'`, `.posts.title = x`): one boolean per element (Gel:
- *   `select User { b := .nicks = 'a1' }` is `[true, false]`). In a filter's
- *   condition (through `and`, `or`, `not`) it tests any element in place
- *   (`'a' = ANY(nicks)`, EXISTS over the link), the SQL the SDK's filters
- *   compile to.
+ *   `select User { b := .nicks = 'a1' }` is `[true, false]`). A filter's
+ *   condition that is such a comparison, or an `and` of them, tests any
+ *   element in place (`'a' = ANY(nicks)`, EXISTS over the link): the filter
+ *   is true when any element is, which for a conjunction is each comparison
+ *   having a true element. Under `or` and `not` it is one boolean per
+ *   element, as in Gel: `not (.nicks = 'a1')` is "some nick is not a1", and
+ *   an empty operand leaves no element to be true.
+ * - `any(<such a comparison>)` is one boolean, tested in place: the form the
+ *   SDK's filters compile to (`not any(.nicks = 'a1')`: no nick is a1).
+ * - Two comparisons of the same multi path are independent (`.nicks = 'a1'
+ *   and .nicks = 'a2'` needs a nick of each), as with Gel's `future
+ *   simple_scoping`; pinned in `tests/gel-divergence-pins.test.ts`.
  *
  * Real-PG coverage: `compiler/pg-set-semantics.test.ts`.
  */
@@ -325,11 +333,51 @@ Deno.test("comparison of a multi path in a filter: true when any element matches
     compile("select Post { title } filter .<posts[is User].name = 'ann'"),
     /WHERE EXISTS \(SELECT 1 FROM "user_posts" "__blj_posts" .*"__bl_posts"\."name" = 'ann'\)$/
   );
-  // Through `and`, `or` and `not` (the SDK's filters).
-  const combined = compile("select User { name } filter not (.nicks = 'a1') and .posts.title = 'x' or .posts.tags.name = 't'");
-  assertStringIncludes(combined, "WHERE ((NOT 'a1' = ANY(user_1.nicks)) AND (EXISTS (SELECT 1 FROM \"user_posts\"");
+  // Through `and`; each comparison is independent (simple scoping).
+  const combined = compile("select User { name } filter .nicks = 'a1' and .posts.title = 'x' and .nicks = 'a2'");
+  assertMatch(combined, /WHERE \(\('a1' = ANY\(user_1\.nicks\)\) AND \(EXISTS \(SELECT 1 FROM "user_posts" .*\)\)\) AND \('a2' = ANY\(user_1\.nicks\)\)$/);
   assertEquals(combined.includes("__arg_"), false);
   // An update's and a delete's filter too.
   assertMatch(compile("update User filter .nicks = 'a1' set { visits := 1 }"), /WHERE 'a1' = ANY\(/);
   assertMatch(compile("delete User filter .posts.title = 'p1'"), /WHERE EXISTS \(SELECT 1 FROM "user_posts"/);
+});
+
+Deno.test("comparison of a multi path under not or or in a filter: one boolean per element, as in Gel", () => {
+  // `not (.nicks = 'a1')`: some nick is not a1 (Gel), not "no nick is a1".
+  assertMatch(
+    compile("select User { name } filter not (.nicks = 'a1')"),
+    /WHERE EXISTS \(SELECT 1 FROM \(SELECT (__arg_\d+)\.value = 'a1' FROM \(SELECT unnest\(user_\d+\.nicks\) AS nicks\) AS \1\(value\)\) AS (__arg_\d+)\(value\) WHERE NOT \2\.value\)$/
+  );
+  assertMatch(
+    compile("select User { name } filter not (.posts.title = 'p1')"),
+    /WHERE EXISTS \(SELECT 1 FROM \(SELECT __arg_\d+\.value = 'p1' FROM .* WHERE NOT __arg_\d+\.value\)$/
+  );
+  // `or`: an empty operand has no element, so the condition has none either.
+  assertMatch(
+    compile("select User { name } filter .posts.title = 'p1' or .name = 'x'"),
+    /WHERE EXISTS \(SELECT 1 FROM \(SELECT __arg_\d+\.value = 'p1' FROM .*\) AS (__arg_\d+)\(value\) WHERE .*\(\(\1\.value\) OR \(user_\d+\.name = 'x'\)\)\)$/
+  );
+  // An `and` under `or` or `not` is per element too.
+  const nested = compile("select User { name } filter not (.nicks = 'a1' and .name = 'x')");
+  assertEquals(nested.includes("= ANY("), false, nested);
+  assertStringIncludes(nested, "WHERE NOT __arg_");
+  // An update's filter too.
+  assertMatch(compile("update User filter not (.nicks = 'a1') set { visits := 1 }"), /WHERE EXISTS \(SELECT 1 FROM \(SELECT __arg_/);
+});
+
+Deno.test("any() of a comparison of a multi path: one boolean, tested in place", () => {
+  assertMatch(compile("select User { name } filter any(.nicks = 'a1')"), /WHERE 'a1' = ANY\(user_\d+\.nicks\)$/);
+  assertMatch(compile("select User { name } filter not any(.nicks = 'a1')"), /WHERE NOT 'a1' = ANY\(user_\d+\.nicks\)$/);
+  assertMatch(
+    compile("select User { name } filter not any(.posts.title = 'p1')"),
+    /WHERE NOT EXISTS \(SELECT 1 FROM "user_posts" .*"__t_posts"\."title" = 'p1'\)$/
+  );
+  assertMatch(compile("select User { name } filter any(.nicks in array_unpack(<array<str>>$x))"), /WHERE user_\d+\.nicks && /);
+  assertStringIncludes(compile("select User { b := any(.nicks = 'a1') }"), "'b', 'a1' = ANY(user_1.nicks)");
+  // The SDK's filters: in place through `and`, `or` and `not`.
+  const sdk = compile(
+    "select User { name } filter (not (any(.nicks = <str>$p0))) and (any(.posts.title = <str>$p1)) or (any(.posts.tags.name = <str>$p2))"
+  );
+  assertStringIncludes(sdk, "WHERE ((NOT CAST($1 AS text) = ANY(user_1.nicks)) AND (EXISTS (SELECT 1 FROM \"user_posts\"");
+  assertEquals(sdk.includes("__arg_"), false, sdk);
 });

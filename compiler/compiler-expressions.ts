@@ -100,7 +100,7 @@ function widestIntSqlType(types: (string | null)[]): string {
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
-  /*** Comparisons of a multi path a filter's condition is made of (see `markAnyElementComparisons`), compiled as "any element matches". ***/
+  /*** Comparisons of a multi path a filter's condition is a conjunction of, or `any()`'s argument (see `markAnyElementComparisons`), compiled as "any element matches". ***/
   private readonly anyElementComparisons = new WeakSet<EdgeQLAST.BinaryOp>();
   /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
   private detachedFrom = -1;
@@ -262,7 +262,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileIsTypeCheck(binOp);
     }
 
-    // A comparison of a multi path outside a filter's condition is one
+    // A comparison of a multi path elsewhere (not marked: see anyElementComparisons) is one
     // boolean per element, compiled where a select, a shape element, a `for`
     // body or a function reads them (elementWiseSets): as one value inside
     // another expression it is a compile error, like any other set.
@@ -782,7 +782,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * For an element-wise expression (`elementWiseOperands`) with at least one
    * set operand: the set each operand stands for, null for a value. Else
    * null. A comparison of a multi path of the current object with one value
-   * (`.nicks = 'a'`, `.posts.title = x`) in a filter's condition is not one:
+   * (`.nicks = 'a'`, `.posts.title = x`) a filter's condition is a conjunction of, or `any()`'s argument, is not one:
    * it keeps its compilation as a test of whether any element matches
    * (`markAnyElementComparisons`). Nor is an operator over a `with` binding
    * of objects (`.program = prog`), which compiles to the binding's ids.
@@ -953,22 +953,40 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   /**
    * Mark the comparisons of a multi path (`isAnyElementComparison`) that a
-   * filter's condition is made of through `and`, `or` and `not`, which
-   * compile as "any element matches" (`'a' = ANY(nicks)`, EXISTS over a
-   * multi link) instead of one boolean per element. For one comparison that
-   * is Gel's filter (true when any element is); the SDK's filters are these
-   * conditions. Anywhere else (a shape element, a select, a function's
-   * argument) the comparison is one boolean per element, as in Gel.
+   * filter's condition is made of through `and`, which compile as "any
+   * element matches" (`'a' = ANY(nicks)`, EXISTS over a multi link) instead
+   * of one boolean per element. That is Gel's filter (true when any element
+   * is): a conjunction of the comparisons' crossed elements has a true
+   * element when each comparison has one, the comparisons independent as
+   * with Gel's `future simple_scoping`. Under `or` and `not`, and anywhere
+   * else (a shape element, a select, a function's argument), the comparison
+   * is one boolean per element, as in Gel: `not (.nicks = 'a1')` is true when
+   * some nick is not 'a1'. `any(<comparison>)` is one boolean
+   * (`compileAnyOfComparison`).
    */
   private markAnyElementComparisons(expr: EdgeQLAST.Expression): void {
-    if (expr.kind === "BinaryOp" && (expr.op === "AND" || expr.op === "OR")) {
+    if (expr.kind === "BinaryOp" && expr.op === "AND") {
       this.markAnyElementComparisons(expr.left);
       this.markAnyElementComparisons(expr.right);
-    } else if (expr.kind === "UnaryOp" && expr.op === "NOT") {
-      this.markAnyElementComparisons(expr.operand);
     } else if (expr.kind === "BinaryOp" && this.isAnyElementComparison(expr)) {
       this.anyElementComparisons.add(expr);
     }
+  }
+
+  /**
+   * `any(<comparison of a multi path>)` (`isAnyElementComparison`): whether
+   * any element matches, one boolean tested in place (`'a' = ANY(nicks)`,
+   * EXISTS over a multi link). The SDK's filters compile to it, so their
+   * conditions mean the same under `and`, `or` and `not`. Null for any other
+   * call.
+   */
+  private compileAnyOfComparison(funcCall: EdgeQLAST.FunctionCall, functionName: string): SQL.SQLExpression | null {
+    const arg = funcCall.args.length === 1 ? funcCall.args[0].value : undefined;
+    if (functionName !== "any" || arg?.kind !== "BinaryOp" || !this.isAnyElementComparison(arg)) {
+      return null;
+    }
+    this.anyElementComparisons.add(arg);
+    return this.compileExpression(arg);
   }
 
   /*** An order by key. A set has no one value to order by; Gel rejects it too. ***/
@@ -1400,6 +1418,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     if ((functionName === "sequence_next" || functionName === "sequence_reset") && funcCall.args[0]?.value.kind === "Introspection") {
       return this.compileSequenceFunction(functionName, funcCall);
+    }
+
+    const anyOfComparison = this.compileAnyOfComparison(funcCall, functionName);
+    if (anyOfComparison) {
+      return anyOfComparison;
     }
 
     // Set-aggregates (`count`/`sum`/…) over a link-set path must become a
