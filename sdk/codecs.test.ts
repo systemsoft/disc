@@ -225,6 +225,13 @@ Deno.test("reviveTyped - recurses through links, as a one-element array or a pla
   assertEquals(plain.program.name, "AQ==");
 });
 
+Deno.test("reviveTyped - a link without a shape (a mutation's row, `select { link }`) stays its id, or ids", () => {
+  const id = "01a0e3de-6243-78a8-8af4-e7204578957b";
+  assertEquals(reviveTyped(wire({ content: "AQ==", parent: id }), OBJECT_INFO), { content: new Uint8Array([1]), parent: id });
+  assertEquals(reviveTyped(wire({ parent: null }), OBJECT_INFO), { parent: null });
+  assertEquals(reviveTyped(wire({ parent: [id, id] }), OBJECT_INFO), { parent: [id, id] });
+});
+
 const PRECISE_INFO: TypeInfo = {
   casts: { big: "<bigint>", bigs: "<array<bigint>>", dec: "<decimal>", decs: "<array<decimal>>", size: "<int64>", sizes: "<array<int64>>" },
   links: {}

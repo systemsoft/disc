@@ -279,14 +279,19 @@ class UserQueryBuilder {
   constructor(private client: DiscClient) {}
 
   async count(condition?: string, variables?: UserFilterVars): Promise<number>;
-  async delete(id: string): Promise<User>;
+  async delete(id: string): Promise<{ deleted: number; }>;
   async filter(filter: FilterArg<UserFilter>): Promise<User[]>;
-  async insert(data: UserInsert): Promise<User>;
+  async insert(data: UserInsert): Promise<UserMutationResult>;
   async select(shape?: string): Promise<User[]>;
   async selectById(id: string, shape?: string): Promise<User | null>;
-  async update(id: string, data: UserUpdate): Promise<User>;
+  async update(
+    id: string,
+    data: UserUpdate
+  ): Promise<UserMutationResult | { updated: 0; }>;
 }
 ```
+
+`insert()` and `update()` return the stored row, not a shape: `id`, every stored property (`null` when an optional one is unset, `[]` for an empty multi one) and each single link as its target's id -- `PostMutationResult` declares `author: string` and `editor: string | null`. Multi links and computed fields are absent. An update of an ID that matches nothing resolves to `{ updated: 0 }`. The Rust and Go clients decode the same row into a `PostMutationResult` struct (`String` / `Option<String>`, `string` / `*string`), where `{ updated: 0 }` decodes to an empty row, and `delete` returns a `DeleteResult`.
 
 `filter()` takes a structured object, not an EdgeQL condition string. `FilterArg<T>` is `Expr | T` -- either the type's `Filter` object or an expression built with the `and` / `or` / `not` combinators re-exported from the generated `index.ts`. The object is compiled to EdgeQL by `compileFilter()` from the SDK, with every value bound as a query parameter:
 

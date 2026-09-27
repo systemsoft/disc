@@ -101,7 +101,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(line("inserted", inserted))
+	fmt.Println(line("inserted", discclient.Timing(inserted)))
 	for _, item := range selected {
 		fmt.Println(line("selected", item))
 	}
@@ -110,11 +110,15 @@ func main() {
 `;
 
 const RUST_EXAMPLE = `use disc_client::disc_runtime::DiscClient;
-use disc_client::{Timing, TimingInsert, TimingQueryBuilder};
+use disc_client::{TimingInsert, TimingQueryBuilder};
 
-fn line(label: &str, item: &Timing) -> String {
-    let spans = item.spans.as_ref().map(|spans| spans.join(",")).unwrap_or_else(|| "-".to_string());
-    format!("{} {} {} {} {}", label, item.span.as_ref().unwrap(), item.rel.as_ref().unwrap(), item.days.as_ref().unwrap(), spans)
+/// A macro, so it reads a \`Timing\` and the \`TimingMutationResult\` \`insert\` returns alike.
+macro_rules! row_line {
+    ($label:expr, $item:expr) => {{
+        let item = $item;
+        let spans = item.spans.as_ref().map(|spans| spans.join(",")).unwrap_or_else(|| "-".to_string());
+        format!("{} {} {} {} {}", $label, item.span.as_ref().unwrap(), item.rel.as_ref().unwrap(), item.days.as_ref().unwrap(), spans)
+    }};
 }
 
 fn main() {
@@ -142,9 +146,9 @@ fn main() {
         .unwrap();
     let selected = builder.select(Some("{ label, span, rel, days, spans } order by .label")).unwrap();
     let filtered = builder.filter(Some(".span = <duration>$s"), serde_json::json!({ "s": "PT1H2M" })).unwrap();
-    println!("{}", line("inserted", &inserted));
+    println!("{}", row_line!("inserted", &inserted));
     for item in &selected {
-        println!("{}", line("selected", item));
+        println!("{}", row_line!("selected", item));
     }
     println!("filtered {}", filtered.len());
 }

@@ -282,6 +282,8 @@ const rows = await qb.User.select({ email: true, posts: { title: true } });
 
 Markers: `t.str()`, `t.bool()`, `t.int16/int32/int64()`, `t.float32/float64()`, `t.bigint()`, `t.datetime()`, `t.bytes()`, `t.uuid()`, `t.json()`, plus `t.optional(inner)`, `t.single(Target)`, and `t.multi(Target)`.
 
+A link selected with `true` instead of a sub-shape is its target's id: `select({ author: true })` gives `author: string` (`string | null` for an optional link) and `select({ posts: true })` gives `posts: string[] | null` (`null` when empty). Without `select()`, `await qb.User` returns `id` and the declared properties, no links.
+
 Results hold the markers' TS types: an `int64` or `bigint` is a `bigint`, a `datetime` a `Date` and `bytes` a `Uint8Array`, on linked objects too, as in the generated client. A filter value is cast as its field's marker declares (`p.score.gt(10n)` compiles to `.score > <int64>$p0`).
 
 With a schema attached, `qb.Typo` throws at property access with the list of declared types, instead of sending a doomed query. `defineSchema()` itself rejects non-PascalCase type names and malformed field names at call time.

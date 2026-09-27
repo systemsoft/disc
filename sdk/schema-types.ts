@@ -122,29 +122,36 @@ export interface DiscSchema<S extends SchemaSpec> {
 // --- Type-level helpers (used by the typed builder) ---
 
 /**
- * Stub returned for an unselected link. Matches EdgeQL semantics:
- * `select User { posts }` (no sub-shape) returns each linked Post as
- * just an `{ id: string }` reference. Full expansion happens only via
- * `select User { posts: { title } }` and `ResolveSelected`.
+ * @deprecated No result carries it: a link selected without a sub-shape
+ * (`select({ author: true })`) arrives as its target's id, typed `string` by
+ * `FieldType`. Kept so existing imports still compile.
  */
 export type LinkStub = { id: string; };
 
-/** Resolve a single field marker to its TS type. */
+/**
+ * Resolve a single field marker to the TS type it arrives as when selected
+ * without a sub-shape (`select({ field: true })`). A link without a sub-shape
+ * is its target's id: a single link a `string` (`null` when an optional one is
+ * unset), a multi link a `string[]` of them (`null` when it is empty).
+ */
 export type FieldType<S extends SchemaSpec, F> = F extends Scalar<string, infer T> ? T :
   F extends Optional<infer Inner> ? FieldType<S, Inner> | null :
-  F extends Link<string, "single"> ? LinkStub | null :
-  F extends Link<string, "multi"> ? LinkStub[] :
+  F extends Link<string, "single"> ? string :
+  F extends Link<string, "multi"> ? string[] | null :
   never;
 
+/** A link marker, optional or not. */
+type LinkMarker = Link<string, "single" | "multi"> | Optional<Link<string, "single" | "multi">>;
+
 /**
- * Resolve a whole type spec to its row shape. Scalars resolve to their
- * TS type; links resolve to `LinkStub` (no transitive expansion). This
- * keeps the type non-circular even when the schema graph is — full
- * expansion happens via `ResolveSelected` when the user opts into it.
+ * The row a select without a shape (`await qb.User`) returns: `id` and every
+ * declared property; links are omitted, as the server returns none. Keeps the
+ * type non-circular even when the schema graph is — links are opted into via
+ * `select()` and `ResolveSelected`.
  */
-export type ResolveType<S extends SchemaSpec, Type> = {
-  [F in keyof Type]: FieldType<S, Type[F]>;
-};
+export type ResolveType<S extends SchemaSpec, Type> =
+  & { id: string; }
+  & { [F in keyof Type as Type[F] extends LinkMarker ? never : F]: FieldType<S, Type[F]>; };
 
 /** Distinguish link markers from scalars at the type level. */
 export type IsLink<F> = F extends Link<string, "single" | "multi"> ? true :
@@ -157,11 +164,8 @@ export type LinkCardinality<F> = F extends Link<string, infer C> ? C : never;
  * Shape spec accepted by `select()` for type K.
  *
  * - Scalars accept `true`.
- * - Single links accept either `true` (just the link presence — empty
- *   shape gets the default fields when the server compiles it) or a
- *   nested SelectShape for the target type.
- * - Multi links accept a nested SelectShape only (link expansion
- *   without a sub-shape would emit `posts: { ... }` with no fields).
+ * - Links accept either `true` (the target's id, or a multi link's ids —
+ *   see `FieldType`) or a nested SelectShape for the target type.
  */
 export type SelectShape<S extends SchemaSpec, K extends keyof S> = {
   [F in keyof S[K]]?: S[K][F] extends Link<infer Target, "single" | "multi"> | Optional<Link<infer Target, "single" | "multi">> ?

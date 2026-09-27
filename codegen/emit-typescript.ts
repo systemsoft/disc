@@ -273,6 +273,8 @@ class TypeScriptEmitter {
           content += "\n";
           content += this.generateUpdateType(tsName, obj, "  ", module.name);
           content += "\n";
+          content += this.generateMutationResultType(tsName, obj, "  ", module.name);
+          content += "\n";
           content += this.generateFilterVarsType(tsName, obj, "  ", module.name);
           content += "\n";
           content += this.generateFilterType(obj, "  ", module.name);
@@ -533,6 +535,38 @@ class TypeScriptEmitter {
     return content;
   }
 
+  /**
+   * What `insert()` and `update()` return: the stored row, not a shape -- `id`,
+   * every stored property (always present: `null` when an optional one is
+   * unset, `[]` for an empty multi one) and each single link as its target's
+   * id. Multi links, link properties and computed fields are absent.
+   */
+  private generateMutationResultType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
+    let content = "";
+    content +=
+      `${indent}/** ${obj.name.name} as insert() and update() return it: the stored row, single links as target ids; no multi links or computed fields */\n`;
+    content += `${indent}export interface ${tsTypeName}MutationResult {\n`;
+    content += `${indent}  id: string;\n`;
+
+    for (const field of obj.fields) {
+      if (field.isComputed || field.name === "id")
+        continue;
+      const required = isRequired(field.cardinality);
+      const multi = isMulti(field.cardinality);
+      if (field.isLink) {
+        if (!multi)
+          content += `${indent}  ${field.name}: string${required ? "" : " | null"};\n`;
+        continue;
+      }
+      // A multi property is never null: an empty one is `[]`.
+      const tsType = this.propertyTsType(field.type, valueType(field), required || multi, multi, currentModule);
+      content += `${indent}  ${field.name}: ${tsType};\n`;
+    }
+
+    content += `${indent}}\n`;
+    return content;
+  }
+
   // -- FilterVars / Filter / Select -----------------------------------------
 
   private generateFilterVarsType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
@@ -696,7 +730,7 @@ class TypeScriptEmitter {
     content += this.generateOperatorHelpers();
 
     if (!this.isMultiModule()) {
-      content += `/** Insert/Update/FilterVars/Filter/Select data types */\n`;
+      content += `/** Insert/Update/MutationResult/FilterVars/Filter/Select data types */\n`;
 
       for (const obj of this.allObjects()) {
         const tsTypeName = this.getTypeScriptTypeName(obj.name.name);
@@ -704,6 +738,8 @@ class TypeScriptEmitter {
         content += this.generateInsertType(tsTypeName, obj);
         content += "\n";
         content += this.generateUpdateType(tsTypeName, obj);
+        content += "\n";
+        content += this.generateMutationResultType(tsTypeName, obj);
         content += "\n";
         content += this.generateFilterVarsType(tsTypeName, obj);
         content += "\n";
@@ -787,6 +823,7 @@ class TypeScriptEmitter {
     const filterRef = multiModule ? `Types.${ns}.${typeName}Filter` : `Types.${typeName}Filter`;
     const insertRef = multiModule ? `Types.${ns}.${typeName}Insert` : `Types.${typeName}Insert`;
     const updateRef = multiModule ? `Types.${ns}.${typeName}Update` : `Types.${typeName}Update`;
+    const mutationResultRef = multiModule ? `Types.${ns}.${typeName}MutationResult` : `Types.${typeName}MutationResult`;
 
     const typeCastEntries: string[] = [];
     // Multi scalar properties: the whole set is bound as one array parameter
@@ -952,8 +989,8 @@ class TypeScriptEmitter {
     content += `    return reviveTyped(await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
-    content += `  /** Insert new ${typeName} */\n`;
-    content += `  async insert(data: ${insertRef}): Promise<${typeRef}> {\n`;
+    content += `  /** Insert new ${typeName}. Resolves to its stored row: single links as ids, no multi links. */\n`;
+    content += `  async insert(data: ${insertRef}): Promise<${mutationResultRef}> {\n`;
     content += `    const variables: Record<string, unknown> = {};\n`;
     content += `    const assignments = Object.entries(data).map(([key, value]) => {\n`;
     content += `      const target = ${builderName}._multiLinkTargets[key];\n`;
@@ -968,11 +1005,12 @@ class TypeScriptEmitter {
     content += `      return \`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
     content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
-    content += `    return reviveTyped(await this.client.query<${typeRef}>(query, variables), ${builderName}._typeInfo);\n`;
+    content += `    return reviveTyped(await this.client.query<${mutationResultRef}>(query, variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
-    content += `  /** Update ${typeName} by ID */\n`;
-    content += `  async update(id: string, data: ${updateRef}): Promise<${typeRef}> {\n`;
+    content +=
+      `  /** Update ${typeName} by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no ${typeName} has that ID. */\n`;
+    content += `  async update(id: string, data: ${updateRef}): Promise<${mutationResultRef} | { updated: 0 }> {\n`;
     content += `    const variables: Record<string, unknown> = { id };\n`;
     content += `    const assignments: string[] = [];\n`;
     content += `    for (const [key, value] of Object.entries(data)) {\n`;
@@ -1005,7 +1043,7 @@ class TypeScriptEmitter {
     content += `      assignments.push(\`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
     content += `    }\n`;
     content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;
-    content += `    return reviveTyped(await this.client.query<${typeRef}>(query, variables), ${builderName}._typeInfo);\n`;
+    content += `    return reviveTyped(await this.client.query<${mutationResultRef} | { updated: 0 }>(query, variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Delete ${typeName} by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */\n`;

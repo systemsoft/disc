@@ -14,7 +14,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import { createQueryBuilder } from "./query-builder.ts";
 import type { TypedQueryBuilder, TypedSelectChain } from "./query-builder.ts";
 import { defineSchema, t } from "./schema-types.ts";
-import type { LinkStub, ResolveSelected, ResolveType } from "./schema-types.ts";
+import type { ResolveSelected, ResolveType } from "./schema-types.ts";
 
 // --- Type-level helpers (compile-time-only) ---
 
@@ -181,6 +181,16 @@ type SingleInMultiRow = ResolveSelected<
   "User",
   { posts: { author: { name: true; }; }; }
 >;
+type LinkIdRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "User",
+  { manager: true; posts: true; }
+>;
+type RequiredLinkIdRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "Post",
+  { author: true; }
+>;
 type Builder = TypedQueryBuilder<typeof blogSchema.spec>;
 
 declare const _resolveTypeChecks: [
@@ -188,10 +198,11 @@ declare const _resolveTypeChecks: [
   Expect<Equal<UserRow["active"], boolean>>,
   Expect<Equal<UserRow["createdAt"], Date>>,
   Expect<Equal<UserRow["bio"], string | null>>,
-  // Links resolve to a shallow stub — circular schemas wouldn't type
-  // otherwise. Full expansion happens via `ResolveSelected` instead.
-  Expect<Equal<UserRow["posts"], LinkStub[]>>,
-  Expect<Equal<PostRow["author"], LinkStub | null>>,
+  // A select without a shape returns `id` and the properties, no links.
+  Expect<Equal<UserRow["id"], string>>,
+  Expect<Equal<"posts" extends keyof UserRow ? true : false, false>>,
+  Expect<Equal<"manager" extends keyof UserRow ? true : false, false>>,
+  Expect<Equal<"author" extends keyof PostRow ? true : false, false>>,
   Expect<Equal<PostRow["publishedAt"], Date | null>>,
   // An int64 can exceed 2^53, so it is a bigint, as in the generated client.
   Expect<Equal<PostRow["score"], bigint>>
@@ -205,8 +216,19 @@ declare const _resolveSelectedChecks: [
   Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>,
   Expect<Equal<OptionalNestedRow, { manager: [{ name: string; }] | null; }>>,
   Expect<Equal<DeepRow, { author: [{ manager: [{ name: string; }] | null; }]; }>>,
-  Expect<Equal<SingleInMultiRow, { posts: { author: [{ name: string; }]; }[]; }>>
+  Expect<Equal<SingleInMultiRow, { posts: { author: [{ name: string; }]; }[]; }>>,
+  // A link without a sub-shape is its target's id: a single link's (null when
+  // an optional one is unset), a multi link's ids (null when it is empty).
+  Expect<Equal<RequiredLinkIdRow, { author: string; }>>,
+  Expect<Equal<LinkIdRow, { manager: string | null; posts: string[] | null; }>>
 ];
+
+Deno.test("typed link without a sub-shape is its target's id, not an object", () => {
+  const row: RequiredLinkIdRow = { author: "00000000-0000-0000-0000-000000000000" };
+  // @ts-expect-error a link without a sub-shape is an id string
+  assertEquals(row.author.id, undefined);
+  assertEquals(row.author.length, 36);
+});
 
 Deno.test("typed single link is read through its one-element array, not as an object", () => {
   const row: NestedRow = { author: [{ email: "a@b.c" }], title: "x" };

@@ -293,6 +293,8 @@ class GoEmitter {
         body += "\n";
         body += this.emitShapeStruct(`${name}Update`, obj.shapes.update.fields);
         body += "\n";
+        body += this.emitMutationResult(obj, name);
+        body += "\n";
       }
     }
 
@@ -321,6 +323,32 @@ class GoEmitter {
         tag: this.fieldOmitEmpty(field) ? `${field.name},omitempty` : field.name,
         type: this.goFieldType(field.type, field.cardinality)
       }))
+    );
+  }
+
+  /**
+   * What `Insert` and `Update` return: the stored row, not a shape -- `ID`,
+   * every stored property and each single link as its target's id (nil when
+   * an optional one is unset); no multi links or computed fields. The
+   * `{"updated": 0}` an update of a missing id answers decodes to the zero
+   * value (`ID` "").
+   */
+  private emitMutationResult(obj: ObjectType, name: string): string {
+    return this.emitFields(
+      `${name}MutationResult`,
+      obj
+        .fields
+        .filter(field => !field.isComputed && !(field.isLink && isMulti(field.cardinality)))
+        .map(field => {
+          if (!field.isLink)
+            return {
+              ident: pascalize(field.name),
+              tag: this.fieldOmitEmpty(field) ? `${field.name},omitempty` : field.name,
+              type: this.goFieldType(field.type, field.cardinality)
+            };
+          const required = field.cardinality === "One";
+          return { ident: pascalize(field.name), tag: required ? field.name : `${field.name},omitempty`, type: required ? "string" : "*string" };
+        })
     );
   }
 
@@ -439,6 +467,12 @@ class GoEmitter {
       }
     }
 
+    // The server answers a delete with its row count, never the row.
+    if (this.config.includeMutations) {
+      body += "// DeleteResult is what Delete returns: how many objects it deleted (0 or 1 by id).\n";
+      body += "type DeleteResult struct {\n\tDeleted int64 `json:\"deleted\"`\n}\n";
+    }
+
     return this.fileHeader(body) + body;
   }
 
@@ -470,7 +504,7 @@ class GoEmitter {
         out += this.emitMultiPropertyFn(builder, multiProperties);
       out += this.emitInsertFn(builder, name, etype, multiProperties.length > 0);
       out += this.emitUpdateFn(builder, name, etype, multiProperties.length > 0);
-      out += this.emitDeleteFn(builder, name, etype);
+      out += this.emitDeleteFn(builder, etype);
     }
     out += this.emitCountFn(builder, etype);
 
@@ -564,8 +598,8 @@ class GoEmitter {
 
   private emitInsertFn(builder: string, name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `func (b *${builder}) Insert(data ${name}Insert) (${name}, error) {\n`;
-    out += `\tvar zero ${name}\n`;
+    out += `func (b *${builder}) Insert(data ${name}Insert) (${name}MutationResult, error) {\n`;
+    out += `\tvar zero ${name}MutationResult\n`;
     out += "\traw, err := json.Marshal(data)\n";
     out += "\tif err != nil {\n\t\treturn zero, err\n\t}\n";
     out += "\tvar obj map[string]json.RawMessage\n";
@@ -592,15 +626,15 @@ class GoEmitter {
     out += "\t\t}\n";
     out += "\t}\n";
     out += `\tquery := fmt.Sprintf("insert ${etype} { %s }", strings.Join(assignments, ", "))\n`;
-    out += `\treturn queryOne[${name}](b.client, query, variables)\n`;
+    out += `\treturn queryOne[${name}MutationResult](b.client, query, variables)\n`;
     out += "}\n\n";
     return out;
   }
 
   private emitUpdateFn(builder: string, name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `func (b *${builder}) Update(id string, data ${name}Update) (${name}, error) {\n`;
-    out += `\tvar zero ${name}\n`;
+    out += `func (b *${builder}) Update(id string, data ${name}Update) (${name}MutationResult, error) {\n`;
+    out += `\tvar zero ${name}MutationResult\n`;
     out += "\traw, err := json.Marshal(data)\n";
     out += "\tif err != nil {\n\t\treturn zero, err\n\t}\n";
     out += "\tvar obj map[string]json.RawMessage\n";
@@ -627,15 +661,15 @@ class GoEmitter {
     out += "\t\t}\n";
     out += "\t}\n";
     out += `\tquery := fmt.Sprintf("update ${etype} filter .id = <uuid>$id set { %s }", strings.Join(assignments, ", "))\n`;
-    out += `\treturn queryOne[${name}](b.client, query, variables)\n`;
+    out += `\treturn queryOne[${name}MutationResult](b.client, query, variables)\n`;
     out += "}\n\n";
     return out;
   }
 
-  private emitDeleteFn(builder: string, name: string, etype: string): string {
+  private emitDeleteFn(builder: string, etype: string): string {
     let out = "";
-    out += `func (b *${builder}) Delete(id string) (${name}, error) {\n`;
-    out += `\treturn queryOne[${name}](b.client, ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}, map[string]any{"id": id})\n`;
+    out += `func (b *${builder}) Delete(id string) (DeleteResult, error) {\n`;
+    out += `\treturn queryOne[DeleteResult](b.client, ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}, map[string]any{"id": id})\n`;
     out += "}\n\n";
     return out;
   }

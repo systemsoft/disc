@@ -245,7 +245,8 @@ export function reviveResponse<T = unknown>(
  * reading a link's `@name` keys by its `linkProperties`. The `cal::` types and
  * `duration` stay the strings they arrive as. A single link arrives as a
  * one-element array of rows (as codegen declares it), a multi link as a longer one; a plain
- * object works too. A value already revived is kept. Returns a new structure —
+ * object works too. A link without a shape (a mutation's row, `select { link }`)
+ * is its target's id, or ids, and stays so. A value already revived is kept. Returns a new structure —
  * input is not mutated.
  */
 export function reviveTyped<T>(data: T, typeInfo: TypeInfo): T {

@@ -301,6 +301,8 @@ class RustEmitter {
     if (this.config.includeClient)
       out += "pub mod disc_runtime;\n\n";
     out += EXACT_NUMBER_RS;
+    if (this.config.includeClient && this.config.includeQueryBuilders && this.config.includeMutations)
+      out += DELETE_RESULT_RS;
 
     let modules = "";
     for (const mod of this.ir.modules) {
@@ -368,6 +370,8 @@ class RustEmitter {
       out += "\n";
       out += this.emitUpdate(obj);
       out += "\n";
+      out += this.emitMutationResult(obj);
+      out += "\n";
       if (withBuilders) {
         out += this.emitBuilder(obj);
         out += "\n";
@@ -428,6 +432,36 @@ class RustEmitter {
 
   private emitUpdate(obj: ObjectType): string {
     return this.emitShapeStruct(`${obj.name.name}Update`, obj.shapes.update.fields);
+  }
+
+  /**
+   * What `insert` and `update` return: the stored row, not a shape -- `id`,
+   * every stored property and each single link as its target's id (`None` when
+   * an optional one is unset); no multi links or computed fields. Every field
+   * defaults, as in the base struct, so the `{ "updated": 0 }` an update of a
+   * missing id answers decodes to an empty row (`id` "").
+   */
+  private emitMutationResult(obj: ObjectType): string {
+    let out = "";
+    out += "#[derive(Debug, Clone, Default, serde::Deserialize)]\n";
+    out += "#[allow(non_snake_case)]\n";
+    out += `pub struct ${obj.name.name}MutationResult {\n`;
+    for (const field of obj.fields) {
+      if (field.isComputed || (field.isLink && isMulti(field.cardinality)))
+        continue;
+      if (!field.isLink) {
+        out += this.emitStructField(field);
+        continue;
+      }
+      const id = rustFieldIdent(field.name);
+      const attrs = ["default"];
+      if (id.rename)
+        attrs.push(`rename = ${JSON.stringify(id.rename)}`);
+      out += `    #[serde(${attrs.join(", ")})]\n`;
+      out += `    pub ${id.ident}: ${field.cardinality === "One" ? "String" : "Option<String>"},\n`;
+    }
+    out += "}\n";
+    return out;
   }
 
   private emitShapeStruct(name: string, fields: ShapeField[]): string {
@@ -496,7 +530,7 @@ class RustEmitter {
     if (this.config.includeMutations) {
       out += this.emitInsertFn(name, etype, multiProperties.length > 0);
       out += this.emitUpdateFn(name, etype, multiProperties.length > 0);
-      out += this.emitDeleteFn(name, etype);
+      out += this.emitDeleteFn(etype);
     }
     out += this.emitCountFn(etype);
 
@@ -590,7 +624,7 @@ class RustEmitter {
 
   private emitInsertFn(name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `    pub fn insert(&self, data: ${name}Insert) -> Result<${name}, DiscError> {\n`;
+    out += `    pub fn insert(&self, data: ${name}Insert) -> Result<${name}MutationResult, DiscError> {\n`;
     out += "        let value = serde_json::to_value(&data)?;\n";
     out += "        let empty = serde_json::Map::new();\n";
     out += "        let obj = value.as_object().unwrap_or(&empty);\n";
@@ -616,7 +650,7 @@ class RustEmitter {
 
   private emitUpdateFn(name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `    pub fn update(&self, id: &str, data: ${name}Update) -> Result<${name}, DiscError> {\n`;
+    out += `    pub fn update(&self, id: &str, data: ${name}Update) -> Result<${name}MutationResult, DiscError> {\n`;
     out += "        let value = serde_json::to_value(&data)?;\n";
     out += "        let empty = serde_json::Map::new();\n";
     out += "        let obj = value.as_object().unwrap_or(&empty);\n";
@@ -641,9 +675,9 @@ class RustEmitter {
     return out;
   }
 
-  private emitDeleteFn(name: string, etype: string): string {
+  private emitDeleteFn(etype: string): string {
     let out = "";
-    out += `    pub fn delete(&self, id: &str) -> Result<${name}, DiscError> {\n`;
+    out += `    pub fn delete(&self, id: &str) -> Result<crate::DeleteResult, DiscError> {\n`;
     out += `        let query = ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}.to_string();\n`;
     out += "        let vars = serde_json::json!({ \"id\": id });\n";
     out += "        self.client.query_one(&query, vars)\n";
@@ -693,6 +727,15 @@ impl Default for ExactNumber {
     fn default() -> Self {
         ExactNumber(serde_json::Number::from(0))
     }
+}
+
+`;
+
+/*** What a builder's `delete` returns: the server answers a delete with its row count, never the row. ***/
+const DELETE_RESULT_RS = `/// What \`delete\` returns: how many objects it deleted (0 or 1 by id).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DeleteResult {
+    pub deleted: i64,
 }
 
 `;

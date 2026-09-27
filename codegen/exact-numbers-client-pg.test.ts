@@ -179,7 +179,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(line("inserted", inserted))
+	fmt.Println(line("inserted", discclient.PreciseItem(inserted)))
 	fmt.Println(line("selected", selected[0]))
 	fmt.Printf("filtered %d\\n", len(filtered))
 	_, err = builder.Filter(".dec = <decimal>$d", map[string]any{"d": "NaN"})
@@ -195,7 +195,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(nonfinite("inserted", special))
+	fmt.Println(nonfinite("inserted", discclient.PreciseItem(special)))
 	fmt.Println(nonfinite("selected", read[0]))
 	grids, err := builder.Select("${GRID_SHAPE}")
 	if err != nil {
@@ -215,15 +215,19 @@ func main() {
 `;
 
 const RUST_EXAMPLE = `use disc_client::disc_runtime::DiscClient;
-use disc_client::{ExactNumber, PreciseItem, PreciseItemInsert, PreciseItemQueryBuilder};
+use disc_client::{ExactNumber, PreciseItemInsert, PreciseItemQueryBuilder};
 
 fn exact(digits: &str) -> ExactNumber {
     ExactNumber(digits.parse().unwrap())
 }
 
-fn line(label: &str, item: &PreciseItem) -> String {
-    let bigs: Vec<String> = item.bigs.as_ref().unwrap().iter().map(|n| n.0.to_string()).collect();
-    format!("{} {} {} {} {} {}", label, item.big.0, item.dec.as_ref().unwrap().0, item.i64.unwrap(), bigs.join(","), item.f64.unwrap())
+/// A macro, so it reads a \`PreciseItem\` and the \`PreciseItemMutationResult\` \`insert\` returns alike.
+macro_rules! row_line {
+    ($label:expr, $item:expr) => {{
+        let item = $item;
+        let bigs: Vec<String> = item.bigs.as_ref().unwrap().iter().map(|n| n.0.to_string()).collect();
+        format!("{} {} {} {} {} {}", $label, item.big.0, item.dec.as_ref().unwrap().0, item.i64.unwrap(), bigs.join(","), item.f64.unwrap())
+    }};
 }
 
 /// A float as the server writes it.
@@ -239,9 +243,12 @@ fn text(x: f64) -> String {
     }
 }
 
-fn nonfinite(label: &str, item: &PreciseItem) -> String {
-    let f64s: Vec<String> = item.f64s.as_ref().unwrap().iter().map(|x| text(*x)).collect();
-    format!("nonfinite {} {} {} {}", label, text(item.f64.unwrap()), text(item.f32.unwrap() as f64), f64s.join(","))
+macro_rules! nonfinite {
+    ($label:expr, $item:expr) => {{
+        let item = $item;
+        let f64s: Vec<String> = item.f64s.as_ref().unwrap().iter().map(|x| text(*x)).collect();
+        format!("nonfinite {} {} {} {}", $label, text(item.f64.unwrap()), text(item.f32.unwrap() as f64), f64s.join(","))
+    }};
 }
 
 fn grid(rows: &[Vec<f64>]) -> String {
@@ -267,8 +274,8 @@ fn main() {
     let selected = builder.select(None).unwrap();
     let variables = serde_json::json!({ "b": exact("${BIG}"), "d": exact("${DEC}") });
     let filtered = builder.filter(Some(".big = <bigint>$b and .dec = <decimal>$d"), variables).unwrap();
-    println!("{}", line("inserted", &inserted));
-    println!("{}", line("selected", &selected[0]));
+    println!("{}", row_line!("inserted", &inserted));
+    println!("{}", row_line!("selected", &selected[0]));
     println!("filtered {}", filtered.len());
     let nan = builder.filter(Some(".dec = <decimal>$d"), serde_json::json!({ "d": "NaN" }));
     println!("nan rejected {}", nan.is_err_and(|error| format!("{:?}", error).contains("invalid value for std::decimal")));
@@ -283,8 +290,8 @@ fn main() {
         })
         .unwrap();
     let read = builder.filter(Some(".label = 'nonfinite'"), serde_json::json!({})).unwrap();
-    println!("{}", nonfinite("inserted", &special));
-    println!("{}", nonfinite("selected", &read[0]));
+    println!("{}", nonfinite!("inserted", &special));
+    println!("{}", nonfinite!("selected", &read[0]));
     let grids = builder.select(Some("${GRID_SHAPE}")).unwrap();
     println!("grid selected {}", grid(&grids[0].grid));
     let written = serde_json::to_value(PreciseItemInsert {
