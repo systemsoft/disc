@@ -1192,6 +1192,43 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     return null;
   }
 
+  /**
+   * Compile `.<tupleProp>.<field>` where `tupleProp` is a stored named-tuple
+   * property (`stamp: tuple<n: int64, when: datetime>`, a jsonb column). A
+   * scalar field reads as its own type (`(stamp ->> 'when')::timestamptz`) so
+   * it compares and orders as that type; a collection field stays jsonb.
+   * Returns null when the property isn't a stored named tuple with that field.
+   */
+  private compileStoredTupleField(
+    propName: string,
+    fieldName: string
+  ): SQL.SQLExpression | null {
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const property = td?.properties.get(propName);
+      const type = property && Context.propertyBaseType(property);
+      if (!property || property.computed || property.multi || !type?.startsWith("tuple<")) {
+        continue;
+      }
+      const cast = new EdgeQLParser(`<${type}>{}`).parseExpressionOnly();
+      const field = cast.kind === "TypeCast" ? cast.type.subtypes?.find(t => t.fieldName === fieldName) : undefined;
+      if (!field) {
+        return null;
+      }
+      const column = SQL.createColumnReference(property.columnName, ta.alias);
+      const key = SQL.createLiteral("string", fieldName);
+      if (field.subtypes?.length) {
+        return SQL.createJsonbAccess(column, "->", key);
+      }
+      const fieldType = renderEdgeQLTypeName({ ...field, fieldName: undefined });
+      const pgType = edgeqlTypeToPgType(fieldType, this.ctx.schema.scalars);
+      const text = SQL.createJsonbAccess(column, "->>", key);
+      // `text`, or a type with no PostgreSQL mapping (an enum member is its label).
+      return pgType === "text" || pgType === fieldType ? text : SQL.createCastExpression(text, pgType);
+    }
+    return null;
+  }
+
   private compileShapeElement(
     element: EdgeQLAST.ShapeElement,
     typeName: string,
@@ -2028,7 +2065,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const tupleField = this.compileComputedTupleField(
           firstStep.name,
           secondStep.name
-        );
+        ) ?? this.compileStoredTupleField(firstStep.name, secondStep.name);
         if (tupleField) {
           return tupleField;
         }

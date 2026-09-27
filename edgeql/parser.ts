@@ -633,13 +633,26 @@ export class EdgeQLParser {
       instance: "INSTANCE",
       system: "SYSTEM"
     };
-    const scope = this.check(TokenType.IDENT) ?
-      scopeKeywords[this.peek().value.toLowerCase()] :
-      undefined;
-    if (!scope) {
-      throw this.error(
-        `Expected 'SESSION', 'DATABASE', 'INSTANCE', or 'SYSTEM' after 'CONFIGURE', got '${this.peek().value}'`
-      );
+    // Gel's own spelling of the database scope: `configure current branch`
+    // (and the pre-branch `configure current database`).
+    let scope: AST.ConfigureScope | undefined;
+    if (this.match(TokenType.CURRENT)) {
+      const target = this.check(TokenType.IDENT) ? this.peek().value.toLowerCase() : "";
+      if (target !== "branch" && target !== "database") {
+        throw this.error(
+          `Expected 'BRANCH' or 'DATABASE' after 'CONFIGURE CURRENT', got '${this.peek().value}'`
+        );
+      }
+      scope = "DATABASE";
+    } else {
+      scope = this.check(TokenType.IDENT) ?
+        scopeKeywords[this.peek().value.toLowerCase()] :
+        undefined;
+      if (!scope) {
+        throw this.error(
+          `Expected 'SESSION', 'DATABASE', 'INSTANCE', or 'SYSTEM' after 'CONFIGURE', got '${this.peek().value}'`
+        );
+      }
     }
     this.advance();
 
@@ -2158,10 +2171,9 @@ export class EdgeQLParser {
    * types) have no label and parse as a plain type name.
    */
   private parseTypeArgument(): AST.TypeName {
-    if (
-      (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) &&
-      this.checkNext(TokenType.COLON)
-    ) {
+    // Soft keywords (e.g. `when`) are field names here too, as they are in
+    // named tuple literals and paths.
+    if (this.checkIdentLike() && this.checkNext(TokenType.COLON)) {
       const fieldName = this.advance().value;
       this.advance(); // consume ':'
       const type = this.parseTypeName();

@@ -101,6 +101,31 @@ Deno.test("CONFIGURE parser — dotted key parses", () => {
   assertEquals(ast.key, "query.timeout");
 });
 
+// Gel spells the database scope `configure current branch` (and, before
+// branches, `configure current database`): both are the DATABASE scope.
+Deno.test("CONFIGURE parser — CURRENT BRANCH / CURRENT DATABASE are the DATABASE scope", () => {
+  for (const scopeText of ["current branch", "CURRENT BRANCH", "current database", "Current Database"]) {
+    const set = parseConfig(`configure ${scopeText} set query_execution_timeout := <duration>'1s'`);
+    assertEquals(set.kind, "ConfigureQuery", scopeText);
+    assertEquals(set.scope, "DATABASE", scopeText);
+    assertEquals(set.action, "SET", scopeText);
+    assertEquals(set.key, "query_execution_timeout", scopeText);
+
+    const reset = parseConfig(`configure ${scopeText} reset query_execution_timeout`);
+    assertEquals(reset.scope, "DATABASE", scopeText);
+    assertEquals(reset.action, "RESET", scopeText);
+    assertEquals(reset.key, "query_execution_timeout", scopeText);
+  }
+});
+
+Deno.test("CONFIGURE parser — CURRENT must be followed by BRANCH or DATABASE", () => {
+  assertThrows(
+    () => parseConfig("configure current session set work_mem := '1MB'"),
+    Error,
+    "Expected 'BRANCH' or 'DATABASE' after 'CONFIGURE CURRENT'"
+  );
+});
+
 Deno.test("CONFIGURE parser — invalid scope throws", () => {
   assertThrows(
     () => parseConfig("CONFIGURE INVALID SET foo := 1"),

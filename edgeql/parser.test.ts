@@ -1100,6 +1100,21 @@ Deno.test("EdgeQL Parser - named-tuple cast parses and captures field names", ()
   }
 });
 
+// `when` is a keyword (CASE WHEN) but still a valid tuple field name, bare
+// or backtick-quoted, as it already is in named tuple literals and paths.
+Deno.test("EdgeQL Parser - named-tuple cast accepts `when` as a field name", () => {
+  for (const field of ["when", "`when`"]) {
+    const ast = new EdgeQLParser(`SELECT <tuple<n: int64, ${field}: datetime>>$c`).parse();
+    assertEquals(ast.kind, "SelectQuery");
+    if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
+      assertEquals(ast.expr.type.subtypes?.[1].fieldName, "when", field);
+      assertEquals(ast.expr.type.subtypes?.[1].name.parts, ["datetime"], field);
+    } else {
+      throw new Error(`expected a TypeCast for ${field}`);
+    }
+  }
+});
+
 Deno.test("EdgeQL Parser - positional tuple cast still parses without field names", () => {
   const ast = new EdgeQLParser(
     "SELECT <tuple<str, int64>>$c"

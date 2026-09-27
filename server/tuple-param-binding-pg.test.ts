@@ -183,3 +183,66 @@ Deno.test({
     }
   }
 });
+
+// `when` is a keyword (CASE WHEN, access policy `when`), yet a valid tuple
+// field name in the SDL type, the cast a generated client sends, a named tuple
+// literal and a path. Gel itself reserves `when` and needs it backtick-quoted;
+// the backtick form works here too.
+const EVENT_SDL = `module default {
+  type Evt {
+    required label -> str;
+    stamp -> tuple<n: int64, when: datetime>;
+  };
+};`;
+
+Deno.test({
+  name: "PG tuple binding: a `when` tuple field inserts, selects and filters",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+    const manager = new SchemaManager({ pool });
+    await manager.initialize();
+
+    try {
+      const applied = await manager.applySchema(EVENT_SDL);
+      assertEquals(applied.ok, true, JSON.stringify(applied));
+      const schema = manager.getSchema()!;
+
+      const handler = new EdgeQLProtocolHandler({ databaseUrl: dsn, schema });
+      const run = async (query: string, variables?: Record<string, unknown>): Promise<unknown[]> => {
+        const res = await handler.handleRequest({ query, variables }, makeContext());
+        assertEquals(res.errors, undefined, `${query}: ${JSON.stringify(res.errors)}`);
+        return res.data as unknown[];
+      };
+      try {
+        await run("insert Evt { label := 'cast', stamp := <tuple<n: int64, when: datetime>>$stamp }", {
+          stamp: { n: 1, when: "2024-01-01T00:00:00Z" }
+        });
+        await run("insert Evt { label := 'literal', stamp := (n := 2, when := <datetime>'2025-06-01T00:00:00Z') }");
+        await run("insert Evt { label := 'quoted', stamp := (n := 3, `when` := <datetime>'2026-06-01T00:00:00Z') }");
+
+        const rows = await run("select Evt { label, n := .stamp.n } order by .stamp.n") as Record<string, unknown>[];
+        assertEquals(rows.map(row => [row.label, row.n]), [["cast", 1], ["literal", 2], ["quoted", 3]]);
+
+        const later = await run(
+          "select Evt { label } filter .stamp.when > <datetime>'2024-06-01T00:00:00Z' order by .label"
+        ) as Record<string, unknown>[];
+        assertEquals(later.map(row => row.label), ["literal", "quoted"]);
+
+        const quoted = await run(
+          "select Evt { label } filter .stamp.`when` < <datetime>'2024-06-01T00:00:00Z'"
+        ) as Record<string, unknown>[];
+        assertEquals(quoted.map(row => row.label), ["cast"]);
+      } finally {
+        await handler.close();
+      }
+    } finally {
+      await pool.query("DROP TABLE IF EXISTS \"Evt\" CASCADE");
+      await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
+      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.close();
+    }
+  }
+});

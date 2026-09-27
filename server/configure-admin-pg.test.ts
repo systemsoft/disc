@@ -186,6 +186,22 @@ Deno.test({
       assertEquals(unknown.status, 400, JSON.stringify(unknown.body));
       assertEquals(unknown.body.errors?.[0]?.extensions?.code, "CONFIGURATION_ERROR");
 
+      // Gel's spellings of the same scope: `configure current branch` and `configure current database`.
+      assertEquals((await query("configure current branch set default_statistics_target := 654")).status, 403);
+      assertEquals(await databaseValue(pool, "default_statistics_target"), undefined);
+      const branch = await query("configure current branch set default_statistics_target := 654", SERVICE_TOKEN);
+      assertEquals(branch.status, 200, JSON.stringify(branch.body));
+      assertEquals(await databaseValue(pool, "default_statistics_target"), "654");
+      assertEquals(await freshShow("default_statistics_target"), "654");
+      const currentDatabase = await query("configure current database set default_statistics_target := 765", SERVICE_TOKEN);
+      assertEquals(currentDatabase.status, 200, JSON.stringify(currentDatabase.body));
+      assertEquals(await databaseValue(pool, "default_statistics_target"), "765");
+      assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
+      const branchReset = await query("configure current branch reset default_statistics_target", SERVICE_TOKEN);
+      assertEquals(branchReset.status, 200, JSON.stringify(branchReset.body));
+      assertEquals(await databaseValue(pool, "default_statistics_target"), undefined);
+      assertEquals(await freshShow("default_statistics_target"), before);
+
       // A WITH block around it changes nothing.
       assertEquals((await query("with x := 1 configure system set effective_io_concurrency := 7")).status, 403);
       assertEquals(await autoConfValue(pool, "effective_io_concurrency"), undefined);

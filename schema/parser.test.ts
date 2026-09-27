@@ -1285,6 +1285,33 @@ Deno.test("SDL Parser - named tuple type (tuple<a: str, b: str>)", () => {
   assertEquals(target?.params?.map(p => p.name.parts[0]), ["str", "str", "str"]);
 });
 
+// `when` names a tuple field (bare or quoted) while an access policy in the
+// same type still reads `when (...)` as its condition.
+Deno.test("SDL Parser - `when` as a named-tuple field beside an access policy `when`", () => {
+  const source = `
+    type Evt {
+      stamp: tuple<n: int64, when: datetime>;
+      quoted: tuple<\`when\`: datetime>;
+      access policy recent
+        when (.stamp.when > <datetime>'2024-01-01T00:00:00Z')
+        allow select;
+    }
+  `;
+
+  const typeDecl = new SDLParser(source).parse().declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const fieldNames = (name: string): (string | undefined)[] | undefined => {
+    const member = typeDecl.members.find(m => m.kind === "PropertyDeclaration" && m.name.value === name);
+    return member?.kind === "PropertyDeclaration" ? member.type.params?.map(p => p.fieldName) : undefined;
+  };
+  assertEquals(fieldNames("stamp"), ["n", "when"]);
+  assertEquals(fieldNames("quoted"), ["when"]);
+  const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+  assertEquals(policy?.kind === "AccessPolicy" ? policy.when?.kind : undefined, "BinaryOp");
+});
+
 Deno.test("SDL Parser - array of named tuples (array<tuple<...>>)", () => {
   const source = `
     type Channel {

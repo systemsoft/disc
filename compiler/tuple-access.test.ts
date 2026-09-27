@@ -272,3 +272,35 @@ Deno.test("Tuple Access - Codegen: JsonbAccessExpression with ->>", () => {
     "Codegen should render ->> 'name' for named field access"
   );
 });
+
+// =========================================================================
+// Stored named-tuple property fields: `.stamp.when`
+// =========================================================================
+
+Deno.test("Tuple Access - field of a stored named-tuple property reads as the field's type", async () => {
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    "module default { type Evt { stamp: tuple<n: int64, when: datetime, tags: array<str>, note: str>; } }",
+    { validate: false }
+  );
+  if (!parsed.ok) {
+    throw parsed.error;
+  }
+  const evtCompiler = new EdgeQLCompiler(manager.modulesToSchema(parsed.value), { enableAccessControl: false });
+  const compile = (source: string): string => {
+    const result = evtCompiler.compile(new EdgeQLParser(source).parse());
+    if (!result.ok) {
+      throw result.error;
+    }
+    return codegen.generate(result.value).replace(/\s+/g, " ");
+  };
+
+  const filtered = compile("select Evt filter .stamp.when > <datetime>'2024-06-01T00:00:00Z' order by .stamp.n");
+  assertEquals(/CAST\(evt_\d+\.stamp ->> 'when' AS timestamptz\) >/.test(filtered), true, filtered);
+  assertEquals(/ORDER BY CAST\(evt_\d+\.stamp ->> 'n' AS bigint\)/.test(filtered), true, filtered);
+
+  const shaped = compile("select Evt { tags := .stamp.tags, note := .stamp.`note` }");
+  assertEquals(/'tags', evt_\d+\.stamp -> 'tags'/.test(shaped), true, shaped);
+  assertEquals(/'note', evt_\d+\.stamp ->> 'note'/.test(shaped), true, shaped);
+});
