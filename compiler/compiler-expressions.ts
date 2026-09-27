@@ -20,7 +20,8 @@ import {
   edgeqlTypeToPgType,
   flattenSetElements,
   locationOf,
-  renderEdgeQLTypeName
+  renderEdgeQLTypeName,
+  tupleTypeElements
 } from "./compiler-base.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
@@ -172,6 +173,29 @@ const ELEMENT_WISE_UNARY_OPERATORS = new Set(["+", "-", "NOT", "~"]);
 
 /*** Operators that compare empty operands (`{} ?= 1` is false) rather than giving no element. ***/
 const OPTIONAL_OPERAND_OPERATORS = new Set(["?=", "?!="]);
+
+/*** Operators that compare whole values: on tuples they compare the tuples' elements (see `canonicalTuple`). ***/
+const EQUALITY_OPERATORS = new Set(["=", "!=", "?=", "?!=", "IN", "NOT IN"]);
+
+/**
+ * PostgreSQL types of tuple elements whose JSON text can differ between equal
+ * values (`…T00:00:00Z` and `…T00:00:00+00:00`, `1.5` and `"1.5"`): compared,
+ * such an element is read as its type and made JSON again (`canonicalTuple`).
+ */
+const CANONICAL_JSON_PG_TYPES = new Set([
+  "bigint",
+  "date",
+  "double precision",
+  "integer",
+  "interval",
+  "numeric",
+  "real",
+  "smallint",
+  "time without time zone",
+  "timestamp without time zone",
+  "timestamptz",
+  "uuid"
+]);
 
 /*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
 function widestIntSqlType(types: (string | null)[]): string {
@@ -441,6 +465,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     this.assertNotOverSet(binOp, `'${binOp.op}'`);
+    const tupleComparison = this.compileTupleComparison(binOp);
+    if (tupleComparison) {
+      return tupleComparison;
+    }
     // Coalescing a set: `{1, 2} ?? 3` is {1, 2}, not one COALESCE.
     if (binOp.op === "??" && [binOp.left, binOp.right].some(operand => this.setArgument(operand) && this.isSetWithoutValue(operand))) {
       throw new CompilationError(
@@ -617,6 +645,101 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       default:
         return true;
     }
+  }
+
+  /**
+   * `=`, `!=`, `?=`, `?!=`, `in` and `not in` on whole tuples, when either
+   * operand's tuple type is known (`staticTupleType`): both sides compared as
+   * `canonicalTuple`, so tuples written as different JSON (a literal's and a
+   * parameter's datetime) are equal when their elements are. Null otherwise.
+   *
+   *   filter .t = (n := 1, at := <datetime>'2024-01-01T00:00:00Z')
+   *   → canonical(t) = canonical(jsonb_build_object('n', 1, 'at', …))
+   */
+  private compileTupleComparison(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression | null {
+    if (!EQUALITY_OPERATORS.has(binOp.op)) {
+      return null;
+    }
+    const typeName = this.staticTupleType(binOp.left) ?? this.staticTupleType(binOp.right);
+    if (!typeName || !this.hasCanonicalElements(typeName)) {
+      return null;
+    }
+    const left = this.canonicalTuple(this.compileExpression(binOp.left), typeName);
+    const sqlOp = binOp.op === "?=" ? "IS NOT DISTINCT FROM" : binOp.op === "?!=" ? "IS DISTINCT FROM" : binOp.op;
+    if (binOp.right.kind !== "SetExpr") {
+      return SQL.createBinaryExpression(sqlOp, left, this.canonicalTuple(this.compileExpression(binOp.right), typeName));
+    }
+    // `in {a, b}`: each element made canonical (see `compileSetExpr`).
+    const elements = flattenSetElements(binOp.right);
+    if (elements.length === 0) {
+      return SQL.createBinaryExpression(sqlOp, left, this.compileExpression(binOp.right));
+    }
+    const parts = elements.map(element => this.renderSqlExpr(this.canonicalTuple(this.compileExpression(element), typeName)));
+    return SQL.createBinaryExpression(sqlOp, left, { kind: "RawSQLExpression", sql: `(${parts.join(", ")})` });
+  }
+
+  /*** The tuple type of `expr` when known without running the query: a cast's, a property's, a variable's, a set literal's first known one. Null otherwise. ***/
+  private staticTupleType(expr: EdgeQLAST.Expression): string | null {
+    let type: string | null = null;
+    if (expr.kind === "TypeCast") {
+      type = renderEdgeQLTypeName(expr.type);
+    } else if (expr.kind === "Path") {
+      type = this.staticNumericType(expr);
+    } else if (expr.kind === "Identifier") {
+      const variable = this.scopeVariable(expr.name);
+      if (variable && !variable.sqlOverride) {
+        return this.staticTupleType(variable.expression);
+      }
+      type = variable?.staticType ?? null;
+    } else if (expr.kind === "SetExpr") {
+      return flattenSetElements(expr).map(element => this.staticTupleType(element)).find(found => found !== null) ?? null;
+    }
+    return type !== null && tupleTypeElements(type) ? type : null;
+  }
+
+  /*** Whether the tuple type `typeName` has an element, at any depth, of a type in CANONICAL_JSON_PG_TYPES. ***/
+  private hasCanonicalElements(typeName: string): boolean {
+    return (tupleTypeElements(typeName) ?? []).some(element =>
+      tupleTypeElements(element.type) ?
+        this.hasCanonicalElements(element.type) :
+        CANONICAL_JSON_PG_TYPES.has(edgeqlTypeToPgType(element.type, this.ctx.schema.scalars))
+    );
+  }
+
+  /**
+   * The jsonb tuple `sql` of `typeName` rebuilt so equal tuples are equal
+   * jsonb: each element of a type in CANONICAL_JSON_PG_TYPES read as that type
+   * and made JSON again (`to_jsonb`), a nested tuple rebuilt the same way, any
+   * other element kept as is. An empty tuple (NULL) stays NULL.
+   *
+   *   tuple<n: int64, at: datetime>
+   *   → CASE WHEN t IS NULL THEN NULL ELSE jsonb_build_object(
+   *       'n', to_jsonb(CAST(t ->> 'n' AS bigint)), 'at', to_jsonb(CAST(t ->> 'at' AS timestamptz))) END
+   *
+   * The operand stays a SQL AST node so a parameter in it is still found by
+   * `buildParameterTypeMap`.
+   */
+  private canonicalTuple(sql: SQL.SQLExpression, typeName: string): SQL.SQLExpression {
+    const elements = tupleTypeElements(typeName)!;
+    const values = elements.map((element, index) => {
+      const key = element.name !== undefined ? SQL.createLiteral("string", element.name) : SQL.createLiteral("number", index);
+      if (tupleTypeElements(element.type)) {
+        return this.canonicalTuple(SQL.createJsonbAccess(sql, "->", key), element.type);
+      }
+      const pgType = edgeqlTypeToPgType(element.type, this.ctx.schema.scalars);
+      if (!CANONICAL_JSON_PG_TYPES.has(pgType)) {
+        return SQL.createJsonbAccess(sql, "->", key);
+      }
+      return SQL.createFunctionCall("to_jsonb", [SQL.createCastExpression(SQL.createJsonbAccess(sql, "->>", key), pgType)]);
+    });
+    const named = elements.every(element => element.name !== undefined);
+    const built = named ?
+      SQL.createJsonBuildObject(elements.map((element, index) => SQL.createJsonField(element.name!, values[index]))) :
+      SQL.createFunctionCall("jsonb_build_array", values);
+    return SQL.createCaseExpression(
+      [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
+      built
+    );
   }
 
   /*** The select `in` reads for a right operand that is a type's objects or a path's set (see `membershipSelect`), else null. ***/
@@ -2554,6 +2677,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}>`, this.expressionLocation(cast));
     }
 
+    // `<array<tuple<…>>>[…]`: an array of tuples is a jsonb array, as its
+    // parameter form is (see `jsonbArrayLiteral`).
+    const jsonbArray = pgType === "jsonb" && typeName.startsWith("array<") ? this.jsonbArrayLiteral(expr) : null;
+    if (jsonbArray) {
+      return jsonbArray;
+    }
+
     // A decimal or float cast to bigint is rounded, as Gel's
     // `round($1)::edgedbt.bigint_t` casts do, and so is each element of an
     // array of them cast to `array<bigint>`; text and other values are not,
@@ -2638,6 +2768,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected finitePropertyValue(property: Context.PropertyDef, expr: EdgeQLAST.Expression, sql: SQL.SQLExpression): SQL.SQLExpression {
     const pgType = property.type;
     const typeName = Context.propertyBaseType(property) ?? "decimal";
+    // An array literal written to an `array<tuple<…>>` property (a jsonb column).
+    const jsonbArray = pgType === "jsonb" && typeName.startsWith("array<") ? this.jsonbArrayLiteral(sql) : null;
+    if (jsonbArray) {
+      return jsonbArray;
+    }
     if (
       (pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr, this.numericBaseType(typeName) === "bigint") ||
       (sql.kind === "FunctionCall" && sql.name === "disc_finite_numeric")
@@ -2646,6 +2781,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     const typed = sql.kind === "CastExpression" && sql.targetType === pgType ? sql : SQL.createCastExpression(sql, pgType);
     return this.finiteNumeric(typed, pgType, typeName);
+  }
+
+  /**
+   * An array literal `sql` (`ARRAY[…]`) of an `array<tuple<…>>` built as the
+   * jsonb array such a value is stored as (`edgeqlTypeToPgType`), the form a
+   * `<array<tuple<…>>>$p` parameter binds: its tuples are jsonb already, and
+   * `jsonb_build_array()` of none is `[]`. Null when `sql` is no array literal.
+   */
+  private jsonbArrayLiteral(sql: SQL.SQLExpression): SQL.SQLExpression | null {
+    return sql.kind === "FunctionCall" && sql.name === "ARRAY" ? SQL.createFunctionCall("jsonb_build_array", sql.args) : null;
   }
 
   /**

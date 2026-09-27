@@ -66,6 +66,39 @@ export function renderEdgeQLTypeName(type: EdgeQLAST.TypeName): string {
 }
 
 /**
+ * The elements of the tuple type `typeName`, each with its name when the
+ * tuple is named: `tuple<n: int64, str>` → `[{ name: "n", type: "int64" },
+ * { type: "str" }]`. Null when `typeName` is no tuple type.
+ */
+export function tupleTypeElements(typeName: string): { name?: string; type: string; }[] | null {
+  const name = typeName.trim();
+  if (!name.startsWith("tuple<") || !name.endsWith(">")) {
+    return null;
+  }
+  // Split at the commas outside any `<…>`.
+  const body = name.slice("tuple<".length, -1);
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === "<") {
+      depth++;
+    } else if (body[i] === ">") {
+      depth--;
+    } else if (body[i] === "," && depth === 0) {
+      parts.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(body.slice(start));
+  return parts.map(part => {
+    // A named element is `name: type`; `::` is a module separator.
+    const named = /^\s*(\w+)\s*:(?!:)(.*)$/s.exec(part);
+    return named ? { name: named[1], type: named[2].trim() } : { type: part.trim() };
+  });
+}
+
+/**
  * The `nulls` placement for an EdgeQL order key: `empty first|last` is SQL
  * `NULLS FIRST|LAST`, since the empty set compiles to NULL. Without the
  * clause Gel sorts empty first for `asc` and last for `desc` (the reverse of
