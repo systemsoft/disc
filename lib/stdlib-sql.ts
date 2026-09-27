@@ -197,6 +197,109 @@ const STDLIB_SQL = [
      );
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
 
+  // disc_format_arg(func_name, fmt) — the format argument of `to_str`,
+  // `to_datetime`, `to_int64`, … (compiler `compileFormatted`): `fmt`, unless
+  // it is empty, which Gel rejects before PostgreSQL sees it
+  // (InvalidValueError, SQLSTATE 22023). NULL, an empty set, is NULL: the
+  // compiler then falls back to the function's form without a format.
+  `CREATE OR REPLACE FUNCTION disc_format_arg(func_name text, fmt text) RETURNS text AS $$
+     BEGIN
+       IF fmt = '' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = func_name || '(): "fmt" argument must be a non-empty string';
+       END IF;
+       RETURN fmt;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  // disc_to_str(val, fmt) — `to_str(val, fmt)`: PostgreSQL's to_char, as Gel
+  // calls it, in UTC (Gel's server time zone; `TZ` is `UTC`). A local date is
+  // formatted as midnight UTC, a local time on today's date, as in Gel.
+  `CREATE OR REPLACE FUNCTION disc_to_str(val timestamptz, fmt text) RETURNS text AS $$
+     SELECT to_char(val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT SET timezone = 'UTC';`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val timestamp, fmt text) RETURNS text AS $$
+     SELECT to_char(val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT SET timezone = 'UTC';`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val date, fmt text) RETURNS text AS $$
+     SELECT to_char(val::timestamptz, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT SET timezone = 'UTC';`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val time, fmt text) RETURNS text AS $$
+     SELECT to_char(date_trunc('day', localtimestamp) + val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT SET timezone = 'UTC';`,
+
+  // A format of calendar fields (`Day`, `Mon`) is PostgreSQL's error for an
+  // interval, which Gel words for its type.
+  `CREATE OR REPLACE FUNCTION disc_to_str(val interval, fmt text) RETURNS text AS $$
+     BEGIN
+       RETURN to_char(val, disc_format_arg('to_str', fmt));
+     EXCEPTION WHEN invalid_datetime_format THEN
+       RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = replace(SQLERRM, 'an interval value', 'an std::duration value');
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val bigint, fmt text) RETURNS text AS $$
+     SELECT to_char(val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val double precision, fmt text) RETURNS text AS $$
+     SELECT to_char(val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_to_str(val numeric, fmt text) RETURNS text AS $$
+     SELECT to_char(val, disc_format_arg('to_str', fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  // JSON's one format is `pretty`.
+  `CREATE OR REPLACE FUNCTION disc_to_str(val jsonb, fmt text) RETURNS text AS $$
+     BEGIN
+       IF disc_format_arg('to_str', fmt) <> 'pretty' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = 'to_str(): format ''' || fmt || ''' is invalid';
+       END IF;
+       RETURN jsonb_pretty(val);
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  // disc_to_number(func_name, val, fmt) — `to_int64(val, fmt)`, `to_decimal`,
+  // …: PostgreSQL's to_number, which the compiler casts to the type.
+  `CREATE OR REPLACE FUNCTION disc_to_number(func_name text, val text, fmt text) RETURNS numeric AS $$
+     SELECT to_number(val, disc_format_arg(func_name, fmt));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  // disc_to_timestamp(func_name, val, fmt, zoned) — `to_datetime(val, fmt)`
+  // (zoned) and `cal::to_local_datetime` / `_date` / `_time` (not): Gel's
+  // to_timestamp in UTC. A datetime's format must have a time zone (`TZH`
+  // outside a quoted part), a local one must have none; and so must the
+  // input: parsed again in another time zone, a value that names its zone is
+  // the same instant. (Gel's `_to_timestamptz_check`; InvalidValueError,
+  // SQLSTATE 22007.) The time zone setting is the function's own.
+  `CREATE OR REPLACE FUNCTION disc_to_timestamp(func_name text, val text, fmt text, zoned boolean) RETURNS timestamptz AS $$
+     DECLARE
+       result timestamptz;
+       shifted timestamptz;
+     BEGIN
+       PERFORM disc_format_arg(func_name, fmt);
+       IF zoned AND fmt !~ '^(("([^"\\\\]|\\\\.)*")|([^"]+))*(TZH).*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'missing required time zone in format: ' || quote_literal(fmt),
+           HINT = 'Use one or both of the following: ''TZH'', ''TZM''';
+       END IF;
+       IF NOT zoned AND fmt ~ '^(("([^"\\\\]|\\\\.)*")|([^"]+))*(TZH|TZM).*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'unexpected time zone in format: ' || quote_literal(fmt);
+       END IF;
+       result := to_timestamp(val, fmt);
+       PERFORM set_config('TimeZone', 'America/Toronto', true);
+       shifted := to_timestamp(val, fmt);
+       PERFORM set_config('TimeZone', 'UTC', true);
+       IF (result = shifted) <> zoned THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format',
+           MESSAGE = CASE WHEN zoned THEN 'missing required' ELSE 'unexpected' END || ' time zone in input ' || quote_literal(val);
+       END IF;
+       RETURN result;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT SET timezone = 'UTC';`,
+
   // Per-element checks for `multi` str properties, stored as `text[]`
   // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
   // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty

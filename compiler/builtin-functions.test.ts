@@ -306,31 +306,31 @@ Deno.test("str_pad_end maps to SQL RPAD with return type str", () => {
 });
 
 // Type casting functions
-Deno.test("to_str has 1 arg and returns str with no sqlName", () => {
+Deno.test("to_str has a value and an optional format and returns str with no sqlName", () => {
   const fns = getBuiltinFunctions();
   const fn = fns.get("to_str");
   assertExists(fn);
   assertEquals(fn.sqlName, undefined);
   assertEquals(fn.returnType, "str");
-  assertEquals(fn.args.length, 1);
+  assertEquals(fn.args.map(arg => [arg.name, arg.required]), [["val", true], ["fmt", false]]);
 });
 
-Deno.test("to_int64 has 1 arg and returns int64 with no sqlName", () => {
+Deno.test("to_int64 has a value and an optional format and returns int64 with no sqlName", () => {
   const fns = getBuiltinFunctions();
   const fn = fns.get("to_int64");
   assertExists(fn);
   assertEquals(fn.sqlName, undefined);
   assertEquals(fn.returnType, "int64");
-  assertEquals(fn.args.length, 1);
+  assertEquals(fn.args.map(arg => [arg.name, arg.required]), [["val", true], ["fmt", false]]);
 });
 
-Deno.test("to_float64 has 1 arg and returns float64 with no sqlName", () => {
+Deno.test("to_float64 has a value and an optional format and returns float64 with no sqlName", () => {
   const fns = getBuiltinFunctions();
   const fn = fns.get("to_float64");
   assertExists(fn);
   assertEquals(fn.sqlName, undefined);
   assertEquals(fn.returnType, "float64");
-  assertEquals(fn.args.length, 1);
+  assertEquals(fn.args.map(arg => [arg.name, arg.required]), [["val", true], ["fmt", false]]);
 });
 
 // Window functions

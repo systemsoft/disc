@@ -263,12 +263,50 @@ Deno.test({
         assertEquals(await values(`select [DurIso.ld]`), [["2024-01-02"]]);
         assertEquals((await values(`select [DurIso.dd]`)).sort(), [["P0D"], ["P2D"]]);
         assertEquals((await values(`for x in DurIso union [x.dd]`)).sort(), [["P0D"], ["P2D"]]);
+        // A tuple or array holds no empty element: no value for an object
+        // where one is empty.
+        assertEquals(await values(`for x in DurIso union (x.dd, x.ld)`), [["P0D", "2024-01-02"]]);
+        assertEquals(await values(`for x in DurIso union (a := x.dd, b := x.ld)`), [{ a: "P0D", b: "2024-01-02" }]);
+        assertEquals(await values(`for x in DurIso union (x.label, x.ld)`), [["zero", "2024-01-02"]]);
+        assertEquals(await values(`for x in DurIso union [x.ld]`), [["2024-01-02"]]);
+        assertEquals(await values(`for x in DurIso union [x.ld, x.ld]`), [["2024-01-02", "2024-01-02"]]);
+        assertEquals(await values(`for x in array_unpack([1, 2]) union (x, <str>{})`), []);
+        assertEquals(await values(`for x in {1, 2} union (x, <str>{})`), []);
+        assertEquals(await values(`select (1, <str>{})`), []);
+        assertEquals(await run(`select DurIso { label, t := (.dd, .ld), a := [.ld] } order by .label`), [
+          { a: null, label: "a", t: null },
+          { a: ["2024-01-02"], label: "zero", t: ["P0D", "2024-01-02"] }
+        ]);
         assertEquals((await values(`with d := DurIso.dd select d`)).sort(), ["P0D", "P2D"]);
         assertEquals(await values(`select DurIso.ld is cal::local_date`), [true]);
         assertEquals(await values(`select DurIso.ld is str`), [false]);
         assertEquals(await run(`select DurIso { t := (.dd, .ld), a := [.dd], s := <str>.at } filter .label = 'zero'`), [
           { a: ["P0D"], s: "2024-01-01T00:00:00+00:00", t: ["P0D", "2024-01-02"] }
         ]);
+      });
+
+      await t.step("a zero date duration in a mutation's result, however it is selected", async () => {
+        const dd = (rows: unknown[]): unknown[] => rows.map(row => [(row as Record<string, unknown>).dd, (row as Record<string, unknown>).dds]);
+        assertEquals(
+          dd(await run(`with r := (insert DurIso { label := 'w1', dd := <cal::date_duration>'0 days', dds := [<cal::date_duration>'0 days'] }) select r`)),
+          [["P0D", ["P0D"]]]
+        );
+        assertEquals(dd(await run(`select (insert DurIso { label := 'w2', dd := <cal::date_duration>'0 days' })`)), [["P0D", null]]);
+        assertEquals(dd(await run(`for n in {'w3'} union (insert DurIso { label := n, dd := <cal::date_duration>'0 days' })`)), [["P0D", null]]);
+        assertEquals(dd(await run(`with r := (update DurIso filter .label = 'w1' set { label := 'w1' }) select r`)), [["P0D", ["P0D"]]]);
+        assertEquals(dd(await run(`select (update DurIso filter .label = 'w2' set { label := 'w2' })`)), [["P0D", null]]);
+        assertEquals(dd(await run(`with r := (delete DurIso filter .label = 'w3') select r`)), [["P0D", null]]);
+        assertEquals(dd(await run(`delete DurIso filter .label in {'w1', 'w2'} order by .label`)).sort(), [["P0D", null], ["P0D", ["P0D"]]]);
+        // A property of the bound mutation used in an expression: its value, written once.
+        const insert = (label: string): string =>
+          `insert DurIso { label := '${label}', dd := <cal::date_duration>'0 days', dds := [<cal::date_duration>'0 days'] }`;
+        assertEquals(await run(`with r := (${insert("v1")}) select (r.dd, 1)`), [["P0D", 1]]);
+        assertEquals(await run(`with r := (${insert("v2")}) select <str>r.dd`), ["P0D"]);
+        assertEquals(await run(`with r := (${insert("v3")}) select ([r.dd], r.dds)`), [[["P0D"], ["P0D"]]]);
+        assertEquals(await run(`with r := (${insert("v4")}) select r.dd ?? <cal::date_duration>'1 day'`), ["P0D"]);
+        assertEquals(await run(`with r := (${insert("v5")}) select array_agg(r.dd)`), [["P0D"]]);
+        assertEquals(await run(`with r := (${insert("v6")}) select r.dd`), ["P0D"]);
+        await run(`delete DurIso filter .label like 'v%'`);
       });
 
       await t.step("a variable binds either spelling", async () => {

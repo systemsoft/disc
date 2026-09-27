@@ -291,45 +291,71 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "int64"
     }],
 
-    // Type casting functions (compiled to CAST expressions, no sqlName)
+    // Type casting functions (compiled to CAST expressions, no sqlName). With
+    // a format, `to_str` is PostgreSQL's to_char, the others parse with
+    // to_number or to_timestamp, as in Gel.
     ["to_str", {
       name: "to_str",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "str"
     }],
     ["to_int64", {
       name: "to_int64",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "int64"
     }],
     ["to_float64", {
       name: "to_float64",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "float64"
     }],
     ["to_int16", {
       name: "to_int16",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "int16"
     }],
     ["to_int32", {
       name: "to_int32",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "int32"
     }],
     ["to_float32", {
       name: "to_float32",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "float32"
     }],
     ["to_bigint", {
       name: "to_bigint",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "bigint"
     }],
     ["to_decimal", {
       name: "to_decimal",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "decimal"
     }],
     ["to_bool", {
@@ -491,7 +517,10 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
     }],
     ["to_datetime", {
       name: "to_datetime",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "datetime"
     }],
     ["to_duration", {
@@ -503,17 +532,26 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
     // Calendar conversion functions (compiled to CAST expressions)
     ["cal_to_local_date", {
       name: "cal_to_local_date",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "cal::local_date"
     }],
     ["cal_to_local_time", {
       name: "cal_to_local_time",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "cal::local_time"
     }],
     ["cal_to_local_datetime", {
       name: "cal_to_local_datetime",
-      args: [{ name: "val", type: "any", required: true }],
+      args: [
+        { name: "val", type: "any", required: true },
+        { name: "fmt", type: "str", required: false }
+      ],
       returnType: "cal::local_datetime"
     }],
     // Whole 24 hours as days; whole 30 days as months. A date duration stays

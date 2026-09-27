@@ -249,6 +249,43 @@ function widestIntSqlType(types: (string | null)[]): string {
   return [...INT_SQL_TYPES.values()].find(int => int.width === Math.max(...widths))!.sql;
 }
 
+/*** The SQL type `to_str(value, fmt)` formats a value of each EdgeQL type as: Gel's overload for it (`disc_to_str`, lib/stdlib-sql.ts). ***/
+const TO_STR_FORMAT_TYPES = new Map<string, string>([
+  ["bigint", "numeric"],
+  ["date_duration", "interval"],
+  ["datetime", "timestamptz"],
+  ["decimal", "numeric"],
+  ["duration", "interval"],
+  ["float32", "double precision"],
+  ["float64", "double precision"],
+  ["int16", "bigint"],
+  ["int32", "bigint"],
+  ["int64", "bigint"],
+  ["json", "jsonb"],
+  ["local_date", "date"],
+  ["local_datetime", "timestamp"],
+  ["local_time", "time"],
+  ["relative_duration", "interval"]
+]);
+
+/*** The SQL type of each number parser (`to_int64(str, fmt)`, …). ***/
+const NUMBER_PARSER_TYPES = new Map<string, string>([
+  ["to_bigint", "numeric"],
+  ["to_decimal", "numeric"],
+  ["to_float32", "real"],
+  ["to_float64", "double precision"],
+  ["to_int16", "smallint"],
+  ["to_int32", "integer"],
+  ["to_int64", "bigint"]
+]);
+
+/*** The SQL type of each `cal::to_local_*` parser. ***/
+const LOCAL_PARSER_TYPES = new Map<string, string>([
+  ["cal_to_local_date", "date"],
+  ["cal_to_local_datetime", "timestamp without time zone"],
+  ["cal_to_local_time", "time without time zone"]
+]);
+
 /*** Whether the static type `type` is the built-in `name` (`datetime`, `date_duration`), however spelled (`std::datetime`, `cal::date_duration`). ***/
 function isStdType(type: string | null, name: string): boolean {
   return type !== null && type.replace(/^(std|cal)::/, "") === name;
@@ -1404,6 +1441,94 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
+   * The arguments of PostgreSQL's make_date / make_time / make_timestamp /
+   * make_timestamptz from Gel's `(year, month, day, hour, min, sec[,
+   * timezone])` and `(hour, min, sec)`: fields as `integer`, but the seconds,
+   * at `seconds`, as `double precision`, and the time zone (the seventh) as is.
+   */
+  private dateTimeParts(args: SQL.SQLExpression[], seconds?: number): SQL.SQLExpression[] {
+    return args.map((arg, index) => index === 6 ? arg : SQL.createCastExpression(arg, index === seconds ? "double precision" : "integer"));
+  }
+
+  /*** `to_str(value)`: its text, as `<str>` makes it (`temporalText`); bytes read as UTF-8, as in Gel. ***/
+  private toStrValue(expr: EdgeQLAST.Expression, value: SQL.SQLExpression): SQL.SQLExpression {
+    const type = this.staticScalarType(expr);
+    if (isStdType(type, "bytes")) {
+      return SQL.createFunctionCall("convert_from", [value, SQL.createLiteral("string", "UTF8")]);
+    }
+    const text = this.temporalText(value, type);
+    return text !== value ? text : SQL.createCastExpression(value, "text");
+  }
+
+  /**
+   * `to_str(value, fmt)`: Gel's overloads for a date or time, a duration, a
+   * number (PostgreSQL's to_char, `disc_to_str`) and json (`pretty`), and
+   * `to_str(array<str>, delimiter)`, which is `array_join`. The value is cast
+   * to the SQL type of its overload when its type is known (an int to
+   * `bigint`, a float32 to `double precision`, as Gel's implicit casts do);
+   * any other known type has no such overload, as in Gel.
+   */
+  private compileFormattedToStr(funcCall: EdgeQLAST.FunctionCall, args: SQL.SQLExpression[]): SQL.SQLExpression {
+    const expr = funcCall.args[0].value;
+    const type = this.staticScalarType(expr);
+    if (type?.startsWith("array<") || expr.kind === "ArrayExpr") {
+      return SQL.createFunctionCall("ARRAY_TO_STRING", args);
+    }
+    const base = type?.replace(/^(std|cal)::/, "") ?? null;
+    const pgType = base !== null ? TO_STR_FORMAT_TYPES.get(base) : undefined;
+    if (type !== null && !pgType) {
+      const qualified = type.includes("::") ? type : `std::${type}`;
+      throw new CompilationError(`function "to_str(arg0: ${qualified}, arg1: std::str)" does not exist`, locationOf(funcCall));
+    }
+    const value = pgType ? SQL.createCastExpression(args[0], pgType) : args[0];
+    return this.compileFormatted(funcCall, SQL.createFunctionCall("disc_to_str", [value, args[1]]), () => this.toStrValue(expr, args[0]));
+  }
+
+  /**
+   * `to_datetime(str, fmt)` and `cal::to_local_datetime` / `_date` / `_time`
+   * of one (`disc_to_timestamp`, UTC; `pgType` the result's type), or, of a
+   * value of the other kind and a time zone, the value in that zone
+   * (`to_datetime(local_datetime, zone)`, `cal::to_local_date(datetime,
+   * zone)`, …). `name` is the function's, for its errors.
+   */
+  private compileFormattedTimestamp(
+    funcCall: EdgeQLAST.FunctionCall,
+    args: SQL.SQLExpression[],
+    name: string,
+    pgType: string
+  ): SQL.SQLExpression {
+    const zoned = pgType === "timestamp with time zone";
+    const valueType = this.staticScalarType(funcCall.args[0].value);
+    if (isStdType(valueType, zoned ? "local_datetime" : "datetime")) {
+      const inZone = SQL.createFunctionCall("timezone", [args[1], args[0]]);
+      return zoned ? inZone : SQL.createCastExpression(inZone, pgType);
+    }
+    const parsed = SQL.createFunctionCall("disc_to_timestamp", [
+      SQL.createLiteral("string", name),
+      args[0],
+      args[1],
+      SQL.createLiteral("boolean", zoned)
+    ]);
+    const value = zoned ? parsed : SQL.createCastExpression(SQL.createFunctionCall("timezone", [SQL.createLiteral("string", "UTC"), parsed]), pgType);
+    return this.compileFormatted(funcCall, value, () => SQL.createCastExpression(args[0], pgType));
+  }
+
+  /**
+   * A function of a value and a format, `formatted`. Gel declares the format
+   * `OPTIONAL str = {}`: an empty one is the function without a format,
+   * `unformatted()`, which the formatted form (NULL for a NULL format) falls
+   * back to. A literal format is never empty.
+   */
+  private compileFormatted(
+    funcCall: EdgeQLAST.FunctionCall,
+    formatted: SQL.SQLExpression,
+    unformatted: () => SQL.SQLExpression
+  ): SQL.SQLExpression {
+    const fmt = funcCall.args[1].value;
+    return fmt.kind === "Literal" && fmt.type === "string" ? formatted : SQL.createFunctionCall("COALESCE", [formatted, unformatted()]);
+  }
+
+  /**
    * The wire form of `bytes` inside a shape or JSON. `jsonb_build_object` and
    * `to_jsonb` would render a bytea as PostgreSQL hex text (`"\\x1f8b…"`);
    * JSON carries `bytes` as base64 (RFC 4648), and `encode` breaks lines every
@@ -2492,69 +2617,37 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         );
 
       case "to_str":
+        if (args.length === 2) {
+          return this.compileFormattedToStr(funcCall, args);
+        }
         if (args.length !== 1) {
-          throw new CompilationError("to_str() requires exactly 1 argument");
+          throw new CompilationError("to_str() requires 1 or 2 arguments");
         }
-        {
-          // `to_str(bytes)` is the bytes read as UTF-8, as in Gel.
-          const type = this.staticScalarType(funcCall.args[0].value);
-          if (isStdType(type, "bytes")) {
-            return SQL.createFunctionCall("convert_from", [args[0], SQL.createLiteral("string", "UTF8")]);
-          }
-          const text = this.temporalText(args[0], type);
-          return text !== args[0] ? text : SQL.createCastExpression(args[0], "text");
-        }
+        return this.toStrValue(funcCall.args[0].value, args[0]);
 
+      // `to_int64(str)`, …: a cast; `to_int64(str, fmt)`, …: PostgreSQL's
+      // to_number (`disc_to_number`) cast, as in Gel.
       case "to_int64":
-        if (args.length !== 1) {
-          throw new CompilationError("to_int64() requires exactly 1 argument");
-        }
-        return SQL.createCastExpression(args[0], "bigint");
-
       case "to_float64":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "to_float64() requires exactly 1 argument"
-          );
-        }
-        return SQL.createCastExpression(args[0], "double precision");
-
-      // Additional type cast functions
       case "to_int16":
-        if (args.length !== 1) {
-          throw new CompilationError("to_int16() requires exactly 1 argument");
-        }
-        return SQL.createCastExpression(args[0], "smallint");
-
       case "to_int32":
-        if (args.length !== 1) {
-          throw new CompilationError("to_int32() requires exactly 1 argument");
-        }
-        return SQL.createCastExpression(args[0], "integer");
-
       case "to_float32":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "to_float32() requires exactly 1 argument"
-          );
-        }
-        return SQL.createCastExpression(args[0], "real");
-
       case "to_bigint":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "to_bigint() requires exactly 1 argument"
-          );
+      case "to_decimal": {
+        if (args.length !== 1 && args.length !== 2) {
+          throw new CompilationError(`${functionName}() requires 1 or 2 arguments`);
         }
-        return this.finiteNumeric(SQL.createCastExpression(args[0], "numeric"), "numeric", "bigint");
-
-      case "to_decimal":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "to_decimal() requires exactly 1 argument"
-          );
+        const pgType = NUMBER_PARSER_TYPES.get(functionName)!;
+        const parse = (text: SQL.SQLExpression): SQL.SQLExpression =>
+          pgType === "numeric" ?
+            this.finiteNumeric(SQL.createCastExpression(text, "numeric"), "numeric", functionName.slice("to_".length)) :
+            SQL.createCastExpression(text, pgType);
+        if (args.length === 1) {
+          return parse(args[0]);
         }
-        return this.finiteNumeric(SQL.createCastExpression(args[0], "numeric"), "numeric", "decimal");
+        const parsed = SQL.createFunctionCall("disc_to_number", [SQL.createLiteral("string", functionName), args[0], args[1]]);
+        return this.compileFormatted(funcCall, parse(parsed), () => parse(args[0]));
+      }
 
       case "to_bool":
         if (args.length !== 1) {
@@ -2568,16 +2661,27 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         }
         return SQL.createCastExpression(args[0], "uuid");
 
-      case "to_datetime":
+      case "to_datetime": {
+        // `to_datetime(year, month, day, hour, min, sec, timezone)`
+        if (args.length === 7) {
+          return SQL.createFunctionCall("make_timestamptz", this.dateTimeParts(args, 5));
+        }
+        if (args.length === 2) {
+          return this.compileFormattedTimestamp(funcCall, args, "to_datetime", "timestamp with time zone");
+        }
         if (args.length !== 1) {
-          throw new CompilationError(
-            "to_datetime() requires exactly 1 argument"
-          );
+          throw new CompilationError("to_datetime() requires 1, 2 or 7 arguments");
+        }
+        // `to_datetime(epochseconds)`
+        const numeric = this.staticNumericType(funcCall.args[0].value);
+        if (numeric !== null && (INT_SQL_TYPES.has(numeric) || FLOAT_TYPES.has(numeric) || DECIMAL_TYPES.has(numeric))) {
+          return SQL.createFunctionCall("to_timestamp", [SQL.createCastExpression(args[0], "double precision")]);
         }
         return SQL.createCastExpression(
           args[0],
           "timestamp with time zone"
         );
+      }
 
       case "to_duration":
         if (args.length !== 1) {
@@ -2589,34 +2693,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
       // Calendar conversion functions → CAST
       case "cal_to_local_date":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "cal::to_local_date() requires exactly 1 argument"
-          );
-        }
-        return SQL.createCastExpression(args[0], "date");
-
       case "cal_to_local_time":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "cal::to_local_time() requires exactly 1 argument"
-          );
+      case "cal_to_local_datetime": {
+        const pgType = LOCAL_PARSER_TYPES.get(functionName)!;
+        const name = functionName.slice("cal_".length);
+        // `cal::to_local_date(year, month, day)`, `cal::to_local_time(hour,
+        // min, sec)`, `cal::to_local_datetime(year, …, sec)`
+        const parts = functionName === "cal_to_local_datetime" ? 6 : 3;
+        if (args.length === parts) {
+          return functionName === "cal_to_local_date" ?
+            SQL.createFunctionCall("make_date", this.dateTimeParts(args)) :
+            SQL.createFunctionCall(functionName === "cal_to_local_time" ? "make_time" : "make_timestamp", this.dateTimeParts(args, parts - 1));
         }
-        return SQL.createCastExpression(
-          args[0],
-          "time without time zone"
-        );
-
-      case "cal_to_local_datetime":
-        if (args.length !== 1) {
-          throw new CompilationError(
-            "cal::to_local_datetime() requires exactly 1 argument"
-          );
+        if (args.length === 2) {
+          return this.compileFormattedTimestamp(funcCall, args, name, pgType);
         }
-        return SQL.createCastExpression(
-          args[0],
-          "timestamp without time zone"
-        );
+        if (args.length !== 1) {
+          throw new CompilationError(`cal::${name}() requires 1, 2 or ${parts} arguments`);
+        }
+        return SQL.createCastExpression(args[0], pgType);
+      }
 
       // String functions with special compilation
       case "str_starts_with":

@@ -109,6 +109,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   protected outputSelect: EdgeQLAST.SelectQuery | undefined;
   /** Whether `outputSelect` answers with objects, decided when it is compiled; undefined until then. */
   protected outputObjects: boolean | undefined;
+  /** The expressions of selects compiled as a shape element's JSON array (`compileJsonArray`), whose values leave the query as the statement's result does. */
+  private readonly jsonArrayExpressions = new Set<EdgeQLAST.Expression>();
 
   // Implemented by the top compiler layer (compiler.ts).
   protected abstract compileSelectQueryRaw(
@@ -515,17 +517,28 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     expr: EdgeQLAST.Expression
   ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause; where?: SQL.SQLExpression; } {
     const source = this.compileSelectExpression(EdgeQLAST.createTypeName(typeName.split("::")));
+    const nonEmpty = this.constructorNonEmpty(expr);
+    const where = source.where && nonEmpty ? SQL.createBinaryExpression("AND", source.where, nonEmpty) : source.where ?? nonEmpty;
+    const value = this.dateDurationText(this.compileExpression(expr), this.staticScalarType(expr));
+    return { fromClause: source.fromClause, selectItems: [SQL.createSelectItem(value)], where };
+  }
+
+  /**
+   * When `expr` is a tuple or array constructor (or a cast of one): the
+   * condition that none of its elements that may be empty is — a tuple or
+   * array holds no empty element, so there is no value where one is, as in
+   * Gel. Undefined for any other expression, or when no element may be empty.
+   */
+  protected constructorNonEmpty(expr: EdgeQLAST.Expression): SQL.SQLExpression | undefined {
     const constructor = expr.kind === "TypeCast" ? expr.expr : expr;
     const elements = constructor.kind === "NamedTuple" ?
       constructor.elements.map(element => element.value) :
-      (constructor as EdgeQLAST.TupleExpr | EdgeQLAST.ArrayExpr).elements;
-    const nonEmpty = elements.filter(element => this.mayBeEmpty(element)).map(element => SQL.isNotNull(this.compileExpression(element)));
-    const where = [source.where, ...nonEmpty].reduce<SQL.SQLExpression | undefined>(
-      (all, condition) => !condition ? all : all ? SQL.createBinaryExpression("AND", all, condition) : condition,
-      undefined
-    );
-    const value = this.dateDurationText(this.compileExpression(expr), this.staticScalarType(expr));
-    return { fromClause: source.fromClause, selectItems: [SQL.createSelectItem(value)], where };
+      constructor.kind === "TupleExpr" || constructor.kind === "ArrayExpr" ?
+      constructor.elements :
+      [];
+    return elements.filter(element => this.mayBeEmpty(element)).map(element => SQL.isNotNull(this.compileExpression(element))).reduce<
+      SQL.SQLExpression | undefined
+    >((all, condition) => all ? SQL.createBinaryExpression("AND", all, condition) : condition, undefined);
   }
 
   protected compileSelectExpression(
@@ -878,7 +891,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
     const fromClause = SQL.createFromClause([]); // No FROM clause needed
 
-    return { selectItems, fromClause };
+    // A tuple or array with an empty element (`(x, <str>{})`) is no value.
+    return { selectItems, fromClause, where: this.constructorNonEmpty(expr) };
   }
 
   /**
@@ -1418,8 +1432,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * column reference; computed properties re-parse their captured EdgeQL
    * expression (`PropertyDef.computedExpr`) and compile that in place, so
    * `select X { computedThing }` doesn't reference a non-existent column.
+   *
+   * The value is written as it leaves the query (a zero date duration `P0D`,
+   * bytes base64) unless `written` is false: a value an expression goes on to
+   * use (`(r.dd, 1)`, `<str>r.dd`, `r.dd ?? …`), which writes it itself.
    */
-  private compilePropertyReference(property: Context.PropertyDef, tableAlias: string, typeName: string): SQL.SQLExpression {
+  private compilePropertyReference(property: Context.PropertyDef, tableAlias: string, typeName: string, written = true): SQL.SQLExpression {
     if (property.computed && property.computedExpr) {
       const parser = new EdgeQLParser(property.computedExpr);
       const expr = parser.parseExpressionOnly();
@@ -1429,12 +1447,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       if (pathSelect) {
         return this.compileJsonArray(pathSelect);
       }
-      return this.dateDurationText(this.bytesAsBase64(this.compileExpression(expr), this.bytesTypeOf(expr, typeName)), this.staticScalarType(expr));
+      const value = this.compileExpression(expr);
+      return written ? this.dateDurationText(this.bytesAsBase64(value, this.bytesTypeOf(expr, typeName)), this.staticScalarType(expr)) : value;
     }
-    return this.dateDurationText(
-      this.bytesAsBase64(SQL.createColumnReference(property.columnName, tableAlias), this.bytesTypeOfProperty(property, typeName)),
-      Context.propertyBaseType(property)
-    );
+    const column = SQL.createColumnReference(property.columnName, tableAlias);
+    return written ?
+      this.dateDurationText(this.bytesAsBase64(column, this.bytesTypeOfProperty(property, typeName)), Context.propertyBaseType(property)) :
+      column;
   }
 
   private bytesTypeOfProperty(property: Context.PropertyDef, typeName: string): "bytea" | "bytea[]" | null {
@@ -1570,12 +1589,15 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         // does; a path set is its select's rows as an array.
         const objects = this.objectComputable(element);
         const pathSelect = objects ? null : this.shapePathSelect(element);
+        // A tuple or array with an empty element (`t := (.a, .b)`) is empty.
+        const nonEmpty = objects || pathSelect ? undefined : this.constructorNonEmpty(element.expr);
         value = objects ?? (pathSelect ?
           this.compileJsonArray(pathSelect) :
           this.dateDurationText(
             this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName)),
             this.staticScalarType(element.expr)
           ));
+        value = nonEmpty ? SQL.createCaseExpression([SQL.createWhenClause(nonEmpty, value)]) : value;
       } else if (element.shape) {
         // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
@@ -1761,7 +1783,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   /*** A select's rows as one JSON array, in the select's order (`[]` for none). ***/
   private compileJsonArray(query: EdgeQLAST.SelectQuery): SQL.SQLExpression {
-    const rows = this.compileSelectQuery(query);
+    this.jsonArrayExpressions.add(query.expr);
+    let rows: SQL.SQLStatement;
+    try {
+      rows = this.compileSelectQuery(query);
+    } finally {
+      this.jsonArrayExpressions.delete(query.expr);
+    }
     return SQL.createSubqueryExpression(SQL.createSelectStatement({
       from: SQL.createFromClause([{ alias: "__agg", columnAliases: ["v"], kind: "TableReference", name: "", subquery: rows }]),
       select: SQL.createSelectClause([
@@ -2429,7 +2457,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     let selectItems: SQL.SelectItem[];
     let where = source.where;
     if (resolved.property) {
-      const value = this.compilePropertyReference(resolved.property, source.alias, typeName);
+      // Written as Gel writes it when it leaves the query: as the result or in a shape's array.
+      const written = path === this.outputExpression || this.jsonArrayExpressions.has(path);
+      const value = this.compilePropertyReference(resolved.property, source.alias, typeName, written);
       // A multi property is a set of values: one row each.
       const multi = resolved.property.multi && !resolved.property.computed;
       selectItems = [SQL.createSelectItem(multi ? SQL.createFunctionCall("unnest", [value]) : value, multi ? resolved.property.name : undefined)];
