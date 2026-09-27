@@ -1458,7 +1458,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
             "to_bigint() requires exactly 1 argument"
           );
         }
-        return SQL.createCastExpression(args[0], "numeric");
+        return this.finiteNumeric(SQL.createCastExpression(args[0], "numeric"), "numeric", "bigint");
 
       case "to_decimal":
         if (args.length !== 1) {
@@ -1466,7 +1466,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
             "to_decimal() requires exactly 1 argument"
           );
         }
-        return SQL.createCastExpression(args[0], "numeric");
+        return this.finiteNumeric(SQL.createCastExpression(args[0], "numeric"), "numeric", "decimal");
 
       case "to_bool":
         if (args.length !== 1) {
@@ -2215,7 +2215,55 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
     }
 
-    return fromJson ? this.compileCastFromJson(expr, pgType, typeName) : SQL.createCastExpression(expr, pgType);
+    const compiled = fromJson ? this.compileCastFromJson(expr, pgType, typeName) : SQL.createCastExpression(expr, pgType);
+    return this.isFiniteNumber(cast.expr) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+  }
+
+  /**
+   * `sql`, a value of `typeName` stored as `pgType`, checked by
+   * `disc_finite_numeric` (lib/stdlib-sql.ts) when it is a `decimal` or
+   * `bigint` (or an array of either, or a scalar extending one): PostgreSQL's
+   * numeric holds NaN and ±Infinity, Gel's decimal and bigint do not, so the
+   * cast that would make one fails as InvalidValueError, as in Gel. With the
+   * check on what is written to a decimal or bigint property
+   * (`finitePropertyValue`), no NaN is ever stored, so none is answered.
+   */
+  protected finiteNumeric(sql: SQL.SQLExpression, pgType: string, typeName: string): SQL.SQLExpression {
+    if (pgType !== "numeric" && pgType !== "numeric[]") {
+      return sql;
+    }
+    const element = /^array<(.+)>$/.exec(typeName)?.[1] ?? typeName;
+    const name = DECIMAL_TYPES.has(element) ? `std::${element}` : element;
+    return SQL.createFunctionCall("disc_finite_numeric", [sql, SQL.createLiteral("string", name)]);
+  }
+
+  /**
+   * `sql`, the value `expr` writes to a stored `property`, checked by
+   * `finiteNumeric` when the property is a `decimal` or `bigint` (or an array
+   * of either). A cast already checks its value, but a value reaches the
+   * column without one too: an uncast parameter, a float (PostgreSQL assigns
+   * float8 to numeric), a string literal. The value is cast to the column's
+   * type first, which is also how PostgreSQL types an uncast parameter.
+   */
+  protected finitePropertyValue(property: Context.PropertyDef, expr: EdgeQLAST.Expression, sql: SQL.SQLExpression): SQL.SQLExpression {
+    const pgType = property.type;
+    if ((pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr) || (sql.kind === "FunctionCall" && sql.name === "disc_finite_numeric")) {
+      return sql;
+    }
+    const typed = sql.kind === "CastExpression" && sql.targetType === pgType ? sql : SQL.createCastExpression(sql, pgType);
+    return this.finiteNumeric(typed, pgType, property.edgeqlType ?? "decimal");
+  }
+
+  /*** Whether `expr` is a number that cannot be NaN or ±Infinity: a numeric literal (possibly negated) or an integer. ***/
+  private isFiniteNumber(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind === "UnaryOp" && (expr.op === "-" || expr.op === "+")) {
+      return this.isFiniteNumber(expr.operand);
+    }
+    if (expr.kind === "Literal") {
+      return NUMERIC_LITERAL_TYPES.has(expr.type);
+    }
+    const type = this.staticNumericType(expr);
+    return type !== null && INT_SQL_TYPES.has(type);
   }
 
   /**

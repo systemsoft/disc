@@ -15,6 +15,7 @@
  * - bigint/decimal use PostgreSQL numeric wire format
  */
 
+import { ValidationError } from "../lib/errors.ts";
 import { BufferWriter } from "./buffer.ts";
 import type { ObjectShapeDescriptor, TypeDescriptor } from "./typedesc.ts";
 import { DescriptorTag } from "./typedesc.ts";
@@ -432,6 +433,25 @@ function resolveTypeNameFromId(id: Uint8Array): string {
 // BigInt / Decimal encoding (PostgreSQL numeric wire format)
 // ---------------------------------------------------------------------------
 
+/*** The wire signs of PostgreSQL's non-finite numerics, by their text. ***/
+const NON_FINITE_SIGNS = new Map([[0xC000, "NaN"], [0xD000, "Infinity"], [0xF000, "-Infinity"]]);
+
+/*** PostgreSQL's numeric input for NaN and ±Infinity (any case, `inf` too). ***/
+const NON_FINITE_TEXT = /^\s*[+-]?(nan|inf|infinity)\s*$/i;
+
+/**
+ * Throw InvalidValueError for a NaN or ±Infinity `typeName` (`std::bigint`,
+ * `std::decimal`), given as its text or its wire sign. PostgreSQL's numeric
+ * has them; Gel's bigint and decimal do not, and its numeric wire format has
+ * only the POS (0x0000) and NEG (0x4000) signs.
+ */
+export function assertFiniteNumeric(value: string | number, typeName: string): void {
+  const special = typeof value === "number" ? NON_FINITE_SIGNS.get(value) : NON_FINITE_TEXT.test(value) ? value.trim() : undefined;
+  if (special !== undefined) {
+    throw new ValidationError(`invalid value for ${typeName}: '${special}'`);
+  }
+}
+
 /**
  * Encode a bigint value in PostgreSQL numeric wire format.
  *
@@ -486,6 +506,7 @@ export function decodeBigInt(data: Uint8Array): bigint {
   const ndigits = view.getUint16(0, false);
   const sign = view.getUint16(4, false);
   // dscale at offset 6 (not used for bigint)
+  assertFiniteNumeric(sign, "std::bigint");
 
   if (ndigits === 0) {
     return 0n;
@@ -508,6 +529,7 @@ export function decodeBigInt(data: Uint8Array): bigint {
  */
 export function encodeDecimal(value: string | number): Uint8Array {
   const str = typeof value === "number" ? value.toString() : value;
+  assertFiniteNumeric(str, "std::decimal");
 
   // Handle zero
   if (str === "0" || str === "0.0") {
@@ -601,6 +623,7 @@ export function decodeDecimal(data: Uint8Array): string {
   const weight = view.getInt16(2, false);
   const sign = view.getUint16(4, false);
   const dscale = view.getUint16(6, false);
+  assertFiniteNumeric(sign, "std::decimal");
 
   if (ndigits === 0) {
     return dscale > 0 ? "0." + "0".repeat(dscale) : "0";

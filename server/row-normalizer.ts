@@ -24,7 +24,14 @@
  * numeric: `bigint` and `decimal` are PostgreSQL `numeric`, which deno-postgres
  * decodes as its text. By the column's type OID (`columnTypes`) it is written
  * as that text, raw — an exact JSON number, as in a shape and in Gel.
- * (`NaN`/`Infinity`, which JSON has no number for, stay strings.)
+ * `decimal` and `bigint` never hold NaN or ±Infinity (a cast that would make
+ * one fails; see `finiteNumeric` in compiler/compiler-expressions.ts).
+ *
+ * float (`float32`/`float64`): deno-postgres decodes `float4`/`float8` as their
+ * text too. By the column's type OID it is written as a JSON number, as in a
+ * shape. NaN and ±Infinity, which a float does hold and JSON has no number
+ * for, stay the strings "NaN", "Infinity", "-Infinity": PostgreSQL's JSON form
+ * (`to_jsonb`), which a shape answers with too, as does Gel's JSON output.
  *
  * bytes (D9): deno-postgres decodes `bytea` as `Uint8Array`, which
  * `JSON.stringify` writes as `{"0":31,"1":139,…}`. The wire form is base64
@@ -41,6 +48,18 @@ const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
 
 /*** PostgreSQL type OIDs of `numeric` and `numeric[]`. ***/
 const NUMERIC_OIDS = new Set([1700, 1231]);
+
+/*** PostgreSQL type OIDs of `float4`, `float8`, `float4[]` and `float8[]`. ***/
+const FLOAT_OIDS = new Set([700, 701, 1021, 1022]);
+
+/*** A float column's text (or array of them) as JSON numbers; NaN and ±Infinity stay strings. ***/
+function floatValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : value;
+  }
+  return Array.isArray(value) ? value.map(floatValue) : value;
+}
 
 /*** A numeric column's text (or array of them) as exact JSON numbers. ***/
 function numericValue(value: unknown): unknown {
@@ -69,7 +88,8 @@ export function normalizeRows(rows: Record<string, unknown>[], columnTypes: Reco
   return rows.map(row => {
     const out: Record<string, unknown> = {};
     for (const [column, value] of Object.entries(row)) {
-      out[column] = NUMERIC_OIDS.has(columnTypes[column]) ? numericValue(value) : normalizeValue(value);
+      const oid = columnTypes[column];
+      out[column] = NUMERIC_OIDS.has(oid) ? numericValue(value) : FLOAT_OIDS.has(oid) ? floatValue(value) : normalizeValue(value);
     }
     return out;
   });

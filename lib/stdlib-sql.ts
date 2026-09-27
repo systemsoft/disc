@@ -74,6 +74,29 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql VOLATILE;`,
 
+  // disc_finite_numeric(value, type_name) — every cast to `decimal` or
+  // `bigint` (compiler `finiteNumeric`): the value, unless it is NaN or
+  // ±Infinity. PostgreSQL's numeric has them; Gel's decimal and bigint do not
+  // (Gel rejects 'NaN' in str_to_decimal and NaN/±Infinity in a float →
+  // decimal cast), so they are an InvalidValueError, SQLSTATE 22P02. numeric
+  // compares NaN equal to itself, so `IN` finds it. The array form checks
+  // each element.
+  `CREATE OR REPLACE FUNCTION disc_finite_numeric(value numeric, type_name text) RETURNS numeric AS $$
+     BEGIN
+       IF value IN ('NaN', 'Infinity', '-Infinity') THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_text_representation', MESSAGE = format('invalid value for %s: %L', type_name, value::text);
+       END IF;
+       RETURN value;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_finite_numeric(value numeric[], type_name text) RETURNS numeric[] AS $$
+     BEGIN
+       PERFORM disc_finite_numeric(e.v, type_name) FROM (SELECT unnest(value) AS v) AS e;
+       RETURN value;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
   // Per-element checks for `multi` str properties, stored as `text[]`
   // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
   // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty

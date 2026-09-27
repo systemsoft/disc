@@ -26,7 +26,7 @@
  */
 
 import { unwrapRawJson } from "../lib/exact-json.ts";
-import { decodeBigInt, decodeDecimal, encodeBigInt, encodeDecimal } from "./type-codec.ts";
+import { assertFiniteNumeric, decodeBigInt, decodeDecimal, encodeBigInt, encodeDecimal } from "./type-codec.ts";
 import { uuidToBytes } from "./types.ts";
 
 // 2000-01-01T00:00:00Z in epoch milliseconds; Gel datetime is microseconds
@@ -117,6 +117,9 @@ function encodeFloat64(value: unknown): Uint8Array {
 
 // PostgreSQL hands a numeric (bigint is stored as one) back as its text.
 function encodeBigIntValue(value: unknown): Uint8Array {
+  if (typeof value === "string") {
+    assertFiniteNumeric(value, "std::bigint");
+  }
   return encodeBigInt(BigInt(value as bigint | number | string));
 }
 

@@ -33,6 +33,7 @@ const SDL = `module default {
     required big: bigint;
     bigs: array<bigint>;
     dec: decimal;
+    f64: float64;
     i64: int64;
   }
 }`;
@@ -42,11 +43,18 @@ const DEC = "0.1000000000000000055511151231257827";
 /*** 2^53 + 1: the first integer a double cannot hold. ***/
 const I64 = "9007199254740993";
 
-/*** What each client program prints: the inserted row, the selected row, then the filter's match count. ***/
+/**
+ * What each client program prints: the inserted row, the selected row, the
+ * filter's match count, then whether a NaN decimal variable was rejected by
+ * the server as Gel's InvalidValueError (decimal has no NaN, so no client ever
+ * decodes one). The float64 is 0.5 in both rows: a JSON number in the insert's
+ * row as in the select's shape.
+ */
 const EXPECTED = [
-  `inserted ${BIG} ${DEC} ${I64} ${BIG},1`,
-  `selected ${BIG} ${DEC} ${I64} ${BIG},1`,
-  "filtered 1"
+  `inserted ${BIG} ${DEC} ${I64} ${BIG},1 0.5`,
+  `selected ${BIG} ${DEC} ${I64} ${BIG},1 0.5`,
+  "filtered 1",
+  "nan rejected true"
 ]
   .join("\n");
 
@@ -78,7 +86,7 @@ func line(label string, item discclient.PreciseItem) string {
 	for _, n := range *item.Bigs {
 		bigs = append(bigs, n.String())
 	}
-	return fmt.Sprintf("%s %s %s %d %s", label, item.Big, *item.Dec, *item.I64, strings.Join(bigs, ","))
+	return fmt.Sprintf("%s %s %s %d %s %g", label, item.Big, *item.Dec, *item.I64, strings.Join(bigs, ","), *item.F64)
 }
 
 func main() {
@@ -86,7 +94,8 @@ func main() {
 	bigs := []json.Number{"${BIG}", "1"}
 	dec := json.Number("${DEC}")
 	i64 := int64(${I64})
-	inserted, err := builder.Insert(discclient.PreciseItemInsert{Label: "go", Big: "${BIG}", Bigs: &bigs, Dec: &dec, I64: &i64})
+	f64 := 0.5
+	inserted, err := builder.Insert(discclient.PreciseItemInsert{Label: "go", Big: "${BIG}", Bigs: &bigs, Dec: &dec, F64: &f64, I64: &i64})
 	if err != nil {
 		panic(err)
 	}
@@ -101,6 +110,8 @@ func main() {
 	fmt.Println(line("inserted", inserted))
 	fmt.Println(line("selected", selected[0]))
 	fmt.Printf("filtered %d\\n", len(filtered))
+	_, err = builder.Filter(".dec = <decimal>$d", map[string]any{"d": "NaN"})
+	fmt.Printf("nan rejected %t\\n", err != nil && strings.Contains(err.Error(), "invalid value for std::decimal"))
 }
 `;
 
@@ -113,7 +124,7 @@ fn exact(digits: &str) -> ExactNumber {
 
 fn line(label: &str, item: &PreciseItem) -> String {
     let bigs: Vec<String> = item.bigs.as_ref().unwrap().iter().map(|n| n.0.to_string()).collect();
-    format!("{} {} {} {} {}", label, item.big.0, item.dec.as_ref().unwrap().0, item.i64.unwrap(), bigs.join(","))
+    format!("{} {} {} {} {} {}", label, item.big.0, item.dec.as_ref().unwrap().0, item.i64.unwrap(), bigs.join(","), item.f64.unwrap())
 }
 
 fn main() {
@@ -126,6 +137,7 @@ fn main() {
             big: exact("${BIG}"),
             bigs: Some(vec![exact("${BIG}"), exact("1")]),
             dec: Some(exact("${DEC}")),
+            f64: Some(0.5),
             i64: Some(${I64}),
         })
         .unwrap();
@@ -135,6 +147,8 @@ fn main() {
     println!("{}", line("inserted", &inserted));
     println!("{}", line("selected", &selected[0]));
     println!("filtered {}", filtered.len());
+    let nan = builder.filter(Some(".dec = <decimal>$d"), serde_json::json!({ "d": "NaN" }));
+    println!("nan rejected {}", nan.is_err_and(|error| format!("{:?}", error).contains("invalid value for std::decimal")));
 }
 `;
 

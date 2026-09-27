@@ -387,6 +387,8 @@ EdgeQL types are mapped to TypeScript types:
 
 The Go and Rust clients read and send the same exact JSON numbers: in Go `bigint` and `decimal` are `json.Number` and `int64` is `int64`; in Rust they are `ExactNumber` (a `serde_json::Number`, with serde_json's `arbitrary_precision` feature enabled in the generated `Cargo.toml`) and `i64`.
 
+As in Gel, `bigint` and `decimal` have no NaN or ±Infinity (PostgreSQL's numeric does): a cast or write that would produce one fails with `invalid value for std::decimal` (InvalidValueError, SQLSTATE 22P02), so every value a client reads is a JSON number. `float32`/`float64` do hold NaN and ±Infinity; JSON has no number for them, so they arrive as the strings `"NaN"`, `"Infinity"` and `"-Infinity"` (PostgreSQL's and Gel's JSON form). A Go `float64` or Rust `f64` field cannot decode those strings.
+
 SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 
 ## Architecture

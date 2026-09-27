@@ -122,8 +122,8 @@ Deno.test({
       ) as Record<string, unknown>;
       assertEquals(
         { big: inserted.big, bigs: inserted.bigs, dec: inserted.dec, f64: inserted.f64, i64: inserted.i64 },
-        { big: num(BIG), bigs: [num(BIG), num("1")], dec: num(DEC), f64: "0.5", i64: num(I64) },
-        "insert result (RETURNING row); float64 is untouched"
+        { big: num(BIG), bigs: [num(BIG), num("1")], dec: num(DEC), f64: num("0.5"), i64: num(I64) },
+        "insert result (RETURNING row); float64 is a JSON number, as in a shape"
       );
 
       /*** Variables sent as JSON numbers (raw body text, since a JS number would already be rounded)

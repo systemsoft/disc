@@ -11,6 +11,7 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
+import { ValidationError } from "../lib/errors.ts";
 import { parseExactJson } from "../lib/exact-json.ts";
 import {
   canonicalScalarName,
@@ -76,6 +77,25 @@ Deno.test("decimal - numeric wire format round-trips with its scale", () => {
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "1.50")), "1.50");
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "-2.5000000000000000")), "-2.5000000000000000");
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "12345.6789")), "12345.6789");
+});
+
+/*** A PostgreSQL numeric with no digits and `sign`: 0xC000 is NaN, 0xD000 +Infinity, 0xF000 -Infinity. ***/
+function specialNumeric(sign: number): Uint8Array {
+  const bytes = new Uint8Array(8);
+  new DataView(bytes.buffer).setUint16(4, sign, false);
+  return bytes;
+}
+
+Deno.test("bigint and decimal - NaN and ±Infinity are not values of either, in or out", () => {
+  // Gel's numeric wire format has only the POS (0x0000) and NEG (0x4000) signs.
+  for (const sign of [0xC000, 0xD000, 0xF000]) {
+    assertThrows(() => decodeScalar("decimal", specialNumeric(sign)), ValidationError, "std::decimal");
+    assertThrows(() => decodeScalar("bigint", specialNumeric(sign)), ValidationError, "std::bigint");
+  }
+  for (const special of ["NaN", "Infinity", "-Infinity"]) {
+    assertThrows(() => encodeScalar("decimal", special), ValidationError, "std::decimal");
+    assertThrows(() => encodeScalar("bigint", special), ValidationError, "std::bigint");
+  }
 });
 
 Deno.test("int64, bigint and decimal - a shape's jsonb number keeps every digit", () => {

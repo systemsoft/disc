@@ -618,9 +618,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         if (!element.computable) {
           throw new CompilationError(`Link property '@${name}' in an assignment must be set with ':=' (e.g. '@${name} := <value>')`);
         }
+        const property = Context.getLinkProperty(link, name);
         return {
-          column: Context.getLinkProperty(link, name).columnName,
-          value: this.compileExpression(element.expr)
+          column: property.columnName,
+          value: this.finitePropertyValue(property, element.expr, this.compileExpression(element.expr))
         };
       });
     return [this.linkTarget(expr.expr, linkProperties, nested)];
@@ -896,7 +897,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         property?.multi && !property.computed ?
         this.compileMultiPropertyValue(element.expr, property) :
         this.compileExpression(element.expr);
-      values.push(value);
+      values.push(property ? this.finitePropertyValue(property, element.expr, value) : value);
     }
 
     // Handle conflict resolution
@@ -1038,9 +1039,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         setClauses.push({
           kind: "SetClause",
           column: property.columnName,
-          value: property.multi && !property.computed ?
-            this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
-            this.compileExpression(element.expr)
+          value: this.finitePropertyValue(
+            property,
+            element.expr,
+            property.multi && !property.computed ?
+              this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
+              this.compileExpression(element.expr)
+          )
         });
       }
     }
@@ -1458,9 +1463,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         setClauses.push({
           kind: "SetClause",
           column: property.columnName,
-          value: property.multi && !property.computed ?
-            this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
-            this.compileExpression(element.expr)
+          value: this.finitePropertyValue(
+            property,
+            element.expr,
+            property.multi && !property.computed ?
+              this.compileMultiPropertyAssignment(property, element.operator ?? ":=", element.expr) :
+              this.compileExpression(element.expr)
+          )
         });
       }
     }
