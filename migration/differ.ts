@@ -5,9 +5,10 @@
  * Schema diff engine for generating migration operations
  */
 
-import { EdgeQLCompiler, SUBJECT_PARAMETER } from "../compiler/compiler.ts";
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { edgeqlTypeToPgType } from "../compiler/compiler-base.ts";
 import { MigrationError } from "../lib/errors.ts";
+import { sqlStringLiteral } from "../lib/sql-escape.ts";
 import {
   enumTypeName,
   fitIdentifier,
@@ -21,6 +22,7 @@ import * as AST from "../schema/ast.ts";
 import { enumPgTypeNames, Module, qualifyScalarReferences } from "../schema/converter.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
 import { modulesToSchema } from "./runtime-schema.ts";
+import { scalarConstraintEdgeQL, scalarConstraintMessage } from "./scalar-constraints.ts";
 import * as Types from "./types.ts";
 
 /**
@@ -72,54 +74,9 @@ interface ScalarColumn {
 
 const EXPRESSION_HINT = "A constraint expression becomes a PostgreSQL CHECK, so it may only read the object's own properties and single links.";
 
-/*** The parameter each scalar constraint's `errmessage` names (Gel's: `{min}`, `{pattern}`, …). ***/
-const SCALAR_CONSTRAINT_PARAMS = new Map([
-  ["max_ex_value", "max"],
-  ["max_len_value", "max"],
-  ["max_value", "max"],
-  ["min_ex_value", "min"],
-  ["min_len_value", "min"],
-  ["min_value", "min"],
-  ["one_of", "vals"],
-  ["regexp", "pattern"]
-]);
-
 /*** `edgeql` in the parentheses of `on (…)`, once. ***/
 function parenthesized(edgeql: string): string {
   return edgeql.startsWith("(") && edgeql.endsWith(")") ? edgeql : `(${edgeql})`;
-}
-
-/*** A constraint argument as Gel shows it in a message: `0`, `-1`, `'a'`. ***/
-function argRepr(arg: AST.Expression): string {
-  if (arg.kind === "Literal") {
-    return arg.type === "string" ? `'${arg.value}'` : String(arg.value);
-  }
-  if (arg.kind === "UnaryOp" && arg.op === "-" && arg.operand.kind === "Literal") {
-    return `-${arg.operand.value}`;
-  }
-  return sdlExpressionToEdgeQL(arg);
-}
-
-/*** Gel's default message for a violated scalar constraint (`shown` is its parameter as `argRepr` shows it). ***/
-function scalarMessage(kind: string, scalar: string, shown: string): string {
-  switch (kind) {
-    case "min_value":
-      return `Minimum allowed value for ${scalar} is ${shown}.`;
-    case "max_value":
-      return `Maximum allowed value for ${scalar} is ${shown}.`;
-    case "min_ex_value":
-      return `${scalar} must be greater than ${shown}.`;
-    case "max_ex_value":
-      return `${scalar} must be less than ${shown}.`;
-    case "min_len_value":
-      return `${scalar} must be no shorter than ${shown} characters.`;
-    case "max_len_value":
-      return `${scalar} must be no longer than ${shown} characters.`;
-    case "one_of":
-      return `${scalar} must be one of: ${shown}.`;
-    default:
-      return `invalid ${scalar}`;
-  }
 }
 
 export class SchemaDiffer {
@@ -1575,16 +1532,11 @@ export class SchemaDiffer {
     return chain.flatMap(({ decl, key, module }) =>
       (decl.constraints ?? []).map(constraint => {
         const kind = constraint.name?.value ?? "unnamed";
-        const scalar = decl.name.value;
         const args = constraint.args ?? [];
-        const param = SCALAR_CONSTRAINT_PARAMS.get(kind);
-        const shown = kind === "one_of" ? `[${args.map(argRepr).join(", ")}]` : args[0] ? argRepr(args[0]) : "";
         const declaration = kind === "expression" ?
           `constraint expression on ${parenthesized(sdlExpressionToEdgeQL(constraint.on!))}` :
           `constraint ${kind}(${args.map(sdlExpressionToEdgeQL).join(", ")})`;
-        const message = constraint.errmessage === undefined ?
-          scalarMessage(kind, scalar, shown) :
-          constraint.errmessage.replaceAll("{__subject__}", () => scalar).replaceAll(`{${param}}`, () => shown);
+        const message = scalarConstraintMessage(constraint, decl.name.value);
 
         return {
           check: {
@@ -1598,9 +1550,11 @@ export class SchemaDiffer {
             typeName: owner.typeName
           },
           compile: (compiler: EdgeQLCompiler) =>
-            column.array ?
+            column.array && kind === "expression" ?
+              this.arrayExpressionCheck(compiler, scalarConstraintEdgeQL(constraint, base), module, column.column) :
+              column.array ?
               this.arrayScalarCheck(compiler, kind, args, module, column.column, pgType) :
-              compiler.subjectCheckSql(this.scalarConstraintEdgeQL(constraint, base), module, column.column),
+              compiler.subjectCheckSql(scalarConstraintEdgeQL(constraint, base), module, column.column),
           hint: "A scalar type's constraints become a PostgreSQL CHECK on each column holding a value of that type.",
           where: `Scalar type '${key}' (on ${target})`
         };
@@ -1609,42 +1563,15 @@ export class SchemaDiffer {
   }
 
   /**
-   * A scalar constraint as an EdgeQL boolean over the subject `$__subject__`
-   * (cast to the scalar's `base` type), as Gel defines each: `min_value(m)` is
-   * `__subject__ >= m`, `regexp(p)` is `re_test(p, __subject__)`, … .
+   * A scalar's `constraint expression on (…)` over every element of an array
+   * column: `disc_each_holds` (lib/stdlib-sql.ts) evaluates the expression,
+   * compiled with its subject as the parameter `$1`, for each element, bound
+   * as that parameter. A CHECK can't hold the subquery that would unnest the
+   * array. An empty array passes, as does an element the expression is empty for.
    */
-  private scalarConstraintEdgeQL(constraint: AST.Constraint, base: string): string {
-    const subject = `<${base}>$${SUBJECT_PARAMETER}`;
-    const args = (constraint.args ?? []).map(sdlExpressionToEdgeQL);
-
-    switch (constraint.name?.value) {
-      case "min_value":
-        return `${subject} >= ${args[0]}`;
-      case "max_value":
-        return `${subject} <= ${args[0]}`;
-      case "min_ex_value":
-        return `${subject} > ${args[0]}`;
-      case "max_ex_value":
-        return `${subject} < ${args[0]}`;
-      case "min_len_value":
-        return `len(${subject}) >= ${args[0]}`;
-      case "max_len_value":
-        return `len(${subject}) <= ${args[0]}`;
-      case "regexp":
-        return `re_test(${args[0]}, ${subject})`;
-      case "one_of":
-        return `${subject} in {${args.join(", ")}}`;
-      case "expression":
-        return sdlExpressionToEdgeQL(
-          AST.replaceSubject(constraint.on!, {
-            expr: { kind: "Parameter", name: SUBJECT_PARAMETER },
-            kind: "TypeCast",
-            type: AST.createTypeRef(AST.createQualifiedName(base.split("::")))
-          })
-        );
-      default:
-        throw new Error(`constraint '${constraint.name?.value}' is not supported on a scalar type`);
-    }
+  private arrayExpressionCheck(compiler: EdgeQLCompiler, edgeql: string, module: string, column: string): string {
+    const col = `"${column.replace(/"/g, "\"\"")}"`;
+    return `disc_each_holds(${col}, ${sqlStringLiteral(compiler.subjectCheckSql(edgeql, module, null))})`;
   }
 
   /**

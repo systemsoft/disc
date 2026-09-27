@@ -357,11 +357,11 @@ Deno.test({
   ignore: !RUN_PG,
   fn: () =>
     withSchema(async (pool, schema) => {
-      assertEquals(await run(pool, schema, "select global apx_note"), [null]);
+      assertEquals(await run(pool, schema, "select global apx_note"), []);
       assertEquals(await run(pool, schema, "set global apx_note := ''", "select global apx_note"), [""]);
       assertEquals(await run(pool, schema, "set global apx_label := ''", "select global apx_label"), [""]);
       assertEquals(await run(pool, schema, "select global apx_label"), ["dflt"]);
-      assertEquals(await run(pool, schema, "set global apx_note := 'x'", "set global apx_note := {}", "select global apx_note"), [null]);
+      assertEquals(await run(pool, schema, "set global apx_note := 'x'", "set global apx_note := {}", "select global apx_note"), []);
       // And a policy reads it.
       assertEquals(await run(pool, schema, "select ApxTagged.tag"), []);
       assertEquals(await run(pool, schema, "set global apx_note := ''", "select ApxTagged.tag"), [""]);

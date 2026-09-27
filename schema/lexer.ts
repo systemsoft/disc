@@ -6,6 +6,7 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
+import { unquoteString } from "../lib/string-literals.ts";
 import { createToken, KEYWORDS, Token, TokenType } from "./tokens.ts";
 
 export class SDLLexer {
@@ -398,82 +399,26 @@ export class SDLLexer {
   }
 
   private scanString(quote: string): Token {
-    const startPos = this.pos;
-    const startLine = this.line;
-    const startColumn = this.column;
+    const location = { column: this.column, line: this.line, offset: this.pos };
 
     this.advance(); // Skip opening quote
-
-    const parts: string[] = [];
-    let runStart = this.pos;
-    let escaped = false;
+    const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
-
-      if (ch === null) {
-        throw new SyntaxError(`Unterminated string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos }
-        });
-      }
-
-      if (escaped) {
-        // P2-03: Unicode escape \uXXXX — consume the next 4 hex digits.
-        if (ch === "u") {
-          this.advance(); // consume the 'u'
-          const hex = this.source.slice(this.pos, this.pos + 4);
-          if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
-            throw new SyntaxError(
-              `Invalid \\u escape — expected 4 hex digits, got ${JSON.stringify(hex)}`,
-              {
-                location: {
-                  line: this.line,
-                  column: this.column,
-                  offset: this.pos
-                }
-              }
-            );
-          }
-          parts.push(String.fromCodePoint(parseInt(hex, 16)));
-          for (let i = 0; i < 4; i++) {
-            this.advance();
-          }
-          escaped = false;
-          runStart = this.pos;
-          continue;
-        }
-        parts.push(this.processEscape(ch));
-        escaped = false;
-        this.advance();
-        runStart = this.pos;
-      } else if (ch === "\\") {
-        // Flush the plain-text run before the backslash
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
-        escaped = true;
+      // A backslash keeps the character after it in the body, so `\'` does
+      // not close it; `unquoteString` reads the escapes, as Gel does.
+      if (ch === "\\") {
         this.advance();
       } else if (ch === quote) {
-        // Flush the remaining plain-text run
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
+        const body = this.source.slice(contentStart, this.pos);
         this.advance();
-        return createToken(
-          TokenType.STRING,
-          parts.join(""),
-          startLine,
-          startColumn,
-          startPos
-        );
-      } else {
-        this.advance();
+        return createToken(TokenType.STRING, unquoteString(body, location), location.line, location.column, location.offset);
       }
+      this.advance();
     }
 
-    throw new SyntaxError(`Unterminated string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos }
-    });
+    throw new SyntaxError(`Unterminated string literal`, { location });
   }
 
   private scanBacktickIdent(): Token {
@@ -698,25 +643,6 @@ export class SDLLexer {
     // Skip until end of line
     while (this.pos < this.source.length && this.peek() !== "\n") {
       this.advance();
-    }
-  }
-
-  private processEscape(ch: string): string {
-    switch (ch) {
-      case "n":
-        return "\n";
-      case "r":
-        return "\r";
-      case "t":
-        return "\t";
-      case "\\":
-        return "\\";
-      case "\"":
-        return "\"";
-      case "'":
-        return "'";
-      default:
-        return ch;
     }
   }
 

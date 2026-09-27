@@ -5,7 +5,8 @@
  * EdgeQL Lexer - Tokenizes EdgeQL source code
  */
 
-import { SyntaxError } from "../lib/errors.ts";
+import { SourceLocation, SyntaxError } from "../lib/errors.ts";
+import { unquoteBytes, unquoteString } from "../lib/string-literals.ts";
 import {
   createToken,
   KEYWORDS,
@@ -75,7 +76,7 @@ export class EdgeQLLexer {
 
     // String literals (single and double quotes)
     if (ch === "\"" || ch === "'") {
-      return this.scanString(ch);
+      return this.scanString();
     }
 
     // Raw string literals (r"..." or r'...')
@@ -85,9 +86,11 @@ export class EdgeQLLexer {
       return this.scanRawString();
     }
 
-    // Bytes literals (b"..." or b'...')
+    // Bytes literals (b"...", b'...', and raw br'...' / rb'...')
+    const isQuote = (c: string | null): boolean => c === "\"" || c === "'";
     if (
-      ch === "b" && (this.peekAhead(1) === "\"" || this.peekAhead(1) === "'")
+      (ch === "b" && isQuote(this.peekAhead(1))) ||
+      (((ch === "b" && this.peekAhead(1) === "r") || (ch === "r" && this.peekAhead(1) === "b")) && isQuote(this.peekAhead(2)))
     ) {
       return this.scanBytesLiteral();
     }
@@ -107,9 +110,9 @@ export class EdgeQLLexer {
       return this.scanIdentOrKeyword();
     }
 
-    // Parameters
+    // Dollar-quoted strings ($$...$$, $tag$...$tag$), else parameters
     if (ch === "$") {
-      return this.scanParameter();
+      return this.scanDollarString() ?? this.scanParameter();
     }
 
     // Type cast <type>
@@ -663,156 +666,82 @@ export class EdgeQLLexer {
     });
   }
 
-  private scanString(quote: string): Token {
-    const startPos = this.pos;
-    const startLine = this.line;
-    const startColumn = this.column;
-
-    this.advance(); // Skip opening quote
-
-    const parts: string[] = [];
-    let runStart = this.pos;
-    let escaped = false;
-
-    while (this.pos < this.source.length) {
-      const ch = this.peek();
-
-      if (ch === null) {
-        throw new SyntaxError(`Unterminated string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos }
-        });
-      }
-
-      if (escaped) {
-        parts.push(this.processEscape(ch));
-        escaped = false;
-        this.advance();
-        runStart = this.pos;
-      } else if (ch === "\\") {
-        // Flush the plain-text run before the backslash
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
-        escaped = true;
-        this.advance();
-      } else if (ch === quote) {
-        // Flush the remaining plain-text run
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
-        this.advance();
-        return createToken(
-          TokenType.STRING,
-          parts.join(""),
-          startLine,
-          startColumn,
-          startPos
-        );
-      } else {
-        this.advance();
-      }
-    }
-
-    throw new SyntaxError(`Unterminated string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos }
-    });
-  }
-
-  private scanRawString(): Token {
-    const startPos = this.pos;
-    const startLine = this.line;
-    const startColumn = this.column;
-
-    this.advance(); // Skip 'r'
+  /**
+   * The body of a quoted literal whose opening quote is at the current
+   * position: its source text up to the matching closing quote, which is
+   * consumed. Unless `raw`, a backslash keeps the character after it in the
+   * body (so `\'` does not close it); the escapes are read by
+   * `unquoteString` / `unquoteBytes`. A raw literal has no escapes: its first
+   * matching quote closes it, as in Gel.
+   */
+  private scanQuotedBody(kind: string, raw: boolean, location: SourceLocation): string {
     const quote = this.peek();
-    this.advance(); // Skip quote
-
+    this.advance(); // Skip opening quote
     const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
-
-      if (ch === null) {
-        throw new SyntaxError(`Unterminated raw string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos }
-        });
-      }
-
-      if (ch === quote) {
-        const value = this.source.slice(contentStart, this.pos);
+      if (ch === "\\" && !raw) {
         this.advance();
-        return createToken(
-          TokenType.STRING,
-          value,
-          startLine,
-          startColumn,
-          startPos
-        );
+      } else if (ch === quote) {
+        const body = this.source.slice(contentStart, this.pos);
+        this.advance();
+        return body;
       }
-
       this.advance();
     }
 
-    throw new SyntaxError(`Unterminated raw string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos }
-    });
+    throw new SyntaxError(`Unterminated ${kind} literal`, { location });
   }
 
-  private scanBytesLiteral(): Token {
-    const startPos = this.pos;
-    const startLine = this.line;
-    const startColumn = this.column;
+  private scanString(): Token {
+    const location = { column: this.column, line: this.line, offset: this.pos };
+    const value = unquoteString(this.scanQuotedBody("string", false, location), location);
+    return createToken(TokenType.STRING, value, location.line, location.column, location.offset);
+  }
 
-    this.advance(); // Skip 'b'
-    const quote = this.peek();
-    this.advance(); // Skip quote
+  private scanRawString(): Token {
+    const location = { column: this.column, line: this.line, offset: this.pos };
+    this.advance(); // Skip 'r'
+    const value = this.scanQuotedBody("raw string", true, location);
+    return createToken(TokenType.STRING, value, location.line, location.column, location.offset);
+  }
 
-    const parts: string[] = [];
-    let runStart = this.pos;
-    let escaped = false;
-
-    while (this.pos < this.source.length) {
-      const ch = this.peek();
-
-      if (ch === null) {
-        throw new SyntaxError(`Unterminated bytes literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos }
-        });
-      }
-
-      if (escaped) {
-        parts.push(this.processEscape(ch));
-        escaped = false;
-        this.advance();
-        runStart = this.pos;
-      } else if (ch === "\\") {
-        // Flush the plain-text run before the backslash
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
-        escaped = true;
-        this.advance();
-      } else if (ch === quote) {
-        // Flush the remaining plain-text run
-        if (this.pos > runStart) {
-          parts.push(this.source.slice(runStart, this.pos));
-        }
-        this.advance();
-        return createToken(
-          TokenType.BYTES,
-          parts.join(""),
-          startLine,
-          startColumn,
-          startPos
-        );
-      } else {
-        this.advance();
-      }
+  /**
+   * A dollar-quoted string, `$$…$$` or `$tag$…$tag$`: its content verbatim, as
+   * in Gel (and PostgreSQL). Null, with nothing consumed, when the `$` at the
+   * current position opens no such quote (it is a parameter).
+   */
+  private scanDollarString(): Token | null {
+    const location = { column: this.column, line: this.line, offset: this.pos };
+    const delimiter = /^\$(?:[A-Za-z_0-9]*)?\$/.exec(this.source.slice(this.pos))?.[0];
+    if (!delimiter) {
+      return null;
     }
+    if (this.isDigit(delimiter[1])) {
+      throw new SyntaxError(`dollar quote must not start with a digit`, { location });
+    }
+    const end = this.source.indexOf(delimiter, this.pos + delimiter.length);
+    if (end < 0) {
+      throw new SyntaxError(`unterminated string started with ${delimiter}`, { location });
+    }
+    const value = this.source.slice(this.pos + delimiter.length, end);
+    while (this.pos < end + delimiter.length) {
+      this.advance();
+    }
+    return createToken(TokenType.STRING, value, location.line, location.column, location.offset);
+  }
 
-    throw new SyntaxError(`Unterminated bytes literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos }
-    });
+  /*** A bytes literal, `b'…'`, or raw `br'…'` / `rb'…'`: its bytes, one character per byte (see `unquoteBytes`). ***/
+  private scanBytesLiteral(): Token {
+    const location = { column: this.column, line: this.line, offset: this.pos };
+    const raw = this.peek() === "r" || this.peekAhead(1) === "r";
+    this.advance(); // Skip 'b' (or 'r')
+    if (raw) {
+      this.advance(); // Skip the second prefix letter
+    }
+    const value = unquoteBytes(this.scanQuotedBody("bytes", raw, location), raw, location);
+    return createToken(TokenType.BYTES, value, location.line, location.column, location.offset);
   }
 
   private scanBacktickIdent(): Token {
@@ -1077,30 +1006,6 @@ export class EdgeQLLexer {
     // Skip until end of line
     while (this.pos < this.source.length && this.peek() !== "\n") {
       this.advance();
-    }
-  }
-
-  private processEscape(ch: string): string {
-    switch (ch) {
-      case "n":
-        return "\n";
-      case "r":
-        return "\r";
-      case "t":
-        return "\t";
-      case "\\":
-        return "\\";
-      case "\"":
-        return "\"";
-      case "'":
-        return "'";
-      case "x": // Hex escape
-      case "u": // Unicode escape
-      case "U": // Unicode escape
-        // Simplified for now
-        return ch;
-      default:
-        return ch;
     }
   }
 

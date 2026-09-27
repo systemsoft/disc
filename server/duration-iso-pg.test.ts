@@ -34,6 +34,7 @@ const SDL = `module default {
     ds: array<duration>;
     dds: array<cal::date_duration>;
     at: datetime;
+    ld: cal::local_date;
   };
 };`;
 
@@ -148,7 +149,43 @@ const GEL_SCALARS: [string, unknown][] = [
   [`select <cal::date_duration>'5 days' - <cal::date_duration>'5 days'`, "P0D"],
   [`select <cal::date_duration>'1 day' + <duration>'1 hour'`, "P1DT1H"],
   // A zero date duration in an array literal
-  [`select [<cal::date_duration>'0 days', <cal::date_duration>'1 day']`, ["P0D", "P1D"]]
+  [`select [<cal::date_duration>'0 days', <cal::date_duration>'1 day']`, ["P0D", "P1D"]],
+  // ... and wherever its type is known
+  [`with x := <cal::date_duration>'0 days' select x`, "P0D"],
+  [`select <cal::date_duration>'0 days' ?? <cal::date_duration>'1 day'`, "P0D"],
+  [`select <cal::date_duration>'0 days' if true else <cal::date_duration>'1 day'`, "P0D"],
+  [`select {<cal::date_duration>'0 days', <cal::date_duration>'1 day'}`, "P0D"],
+  [`select to_str(<cal::date_duration>'0 days')`, "P0D"],
+  // cal::duration_normalize_days / _hours
+  [`select cal::duration_normalize_days(<cal::date_duration>'45 days')`, "P1M15D"],
+  [`select cal::duration_normalize_days(<cal::date_duration>'0 days')`, "P0D"],
+  [`select cal::duration_normalize_days(<cal::relative_duration>'1 month 45 days 25 hours')`, "P2M15DT25H"],
+  [`select cal::duration_normalize_hours(<cal::relative_duration>'1 month 25 hours')`, "P1M1DT1H"],
+  [`select cal::duration_normalize_hours(<cal::relative_duration>'49 hours 3 minutes')`, "P2DT1H3M"],
+  // <str> and to_str of dates and times: ISO 8601
+  [`select <str><datetime>'2024-01-02T00:00:00Z'`, "2024-01-02T00:00:00+00:00"],
+  [`select <str><datetime>'2024-01-02T03:04:05.123456Z'`, "2024-01-02T03:04:05.123456+00:00"],
+  [`select <str><datetime>'2024-01-02T03:04:05.5Z'`, "2024-01-02T03:04:05.5+00:00"],
+  [`select <str><datetime>'0001-01-01T00:00:00Z'`, "0001-01-01T00:00:00+00:00"],
+  [`select <str><cal::local_date>'2024-01-02'`, "2024-01-02"],
+  [`select <str><cal::local_time>'03:04:05.25'`, "03:04:05.25"],
+  [`select <str><cal::local_datetime>'2024-01-02T03:04:05'`, "2024-01-02T03:04:05"],
+  [`select <str><cal::local_datetime>'2024-01-02T03:04:05.100'`, "2024-01-02T03:04:05.1"],
+  [`select to_str(<datetime>'2024-01-02T00:00:00Z')`, "2024-01-02T00:00:00+00:00"],
+  [`select to_str(<cal::local_datetime>'2024-01-02T03:04:05')`, "2024-01-02T03:04:05"],
+  [`select <str><datetime>'2024-01-02T00:00:00Z' ++ '!'`, "2024-01-02T00:00:00+00:00!"],
+  [`select <str>datetime_of_statement() = to_str(datetime_of_statement())`, true],
+  // `is` a scalar type
+  [`select <cal::local_date>'2024-01-02' is cal::local_date`, true],
+  [`select <cal::local_time>'01:00' is cal::local_time`, true],
+  [`select <cal::local_datetime>'2024-01-02T00:00' is cal::local_datetime`, true],
+  [`select <cal::date_duration>'1 day' is cal::date_duration`, true],
+  [`select <cal::relative_duration>'1 day' is cal::relative_duration`, true],
+  [`select <datetime>'2024-01-02T00:00:00Z' is datetime`, true],
+  [`select 1 is int64`, true],
+  [`select 1 is str`, false],
+  [`select 1 is anyint`, true],
+  [`select 1.5 is anyreal`, true]
 ];
 
 Deno.test({
@@ -212,6 +249,25 @@ Deno.test({
         const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]).sort();
         assertEquals(await values(`select DurIso.d`), ["PT0S", "PT1H2M"]);
         assertEquals(await values(`select DurIso.dd`), ["P0D", "P2D"]);
+      });
+
+      // Gel factors the paths of a tuple or array built from one type: one
+      // value per object, none for an object where an element is empty.
+      await t.step("tuples and arrays of stored properties, and `is` of them", async () => {
+        await run(`update DurIso filter .label = 'zero' set { ld := <cal::local_date>'2024-01-02' }`);
+        const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]);
+        assertEquals(await values(`select (DurIso.dd, DurIso.ld)`), [["P0D", "2024-01-02"]]);
+        assertEquals(await values(`select <json>(DurIso.dd, DurIso.ld)`), [["P0D", "2024-01-02"]]);
+        assertEquals(await run(`select (a := DurIso.dd, b := DurIso.ld)`), [{ a: "P0D", b: "2024-01-02" }]);
+        assertEquals(await values(`select [DurIso.ld]`), [["2024-01-02"]]);
+        assertEquals((await values(`select [DurIso.dd]`)).sort(), [["P0D"], ["P2D"]]);
+        assertEquals((await values(`for x in DurIso union [x.dd]`)).sort(), [["P0D"], ["P2D"]]);
+        assertEquals((await values(`with d := DurIso.dd select d`)).sort(), ["P0D", "P2D"]);
+        assertEquals(await values(`select DurIso.ld is cal::local_date`), [true]);
+        assertEquals(await values(`select DurIso.ld is str`), [false]);
+        assertEquals(await run(`select DurIso { t := (.dd, .ld), a := [.dd], s := <str>.at } filter .label = 'zero'`), [
+          { a: ["P0D"], s: "2024-01-01T00:00:00+00:00", t: ["P0D", "2024-01-02"] }
+        ]);
       });
 
       await t.step("a variable binds either spelling", async () => {

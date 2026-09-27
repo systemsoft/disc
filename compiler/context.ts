@@ -117,6 +117,23 @@ export interface Schema {
    * bare (the default module's when scalars share a name).
    */
   scalars?: Map<string, string>;
+  /**
+   * The constraints of each user scalar that has any (its own and those of the
+   * scalars it extends), which a cast to it checks. Keyed as `scalars` is.
+   */
+  scalarChecks?: Map<string, ScalarCheck[]>;
+}
+
+/*** A scalar type's constraint as a cast to it checks it (see `migration/scalar-constraints.ts`). ***/
+export interface ScalarCheck {
+  /** The violation's detail: `violated constraint 'std::min_value' on scalar type 'default::Pos'`. */
+  detail: string;
+  /** The constraint as an EdgeQL boolean over `$__subject__` (cast to the scalar's base type). */
+  edgeql: string;
+  /** The violation's message, Gel's. */
+  message: string;
+  /** The module names in `edgeql` resolve in: the declaring scalar's. */
+  module: string;
 }
 
 export interface TriggerDef {

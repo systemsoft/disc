@@ -46,6 +46,7 @@ import { enumPgTypeNames, Module, qualifySharedEnumReferences, SDLConverter } fr
 import type * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
+import { scalarChecksOf } from "./scalar-constraints.ts";
 
 /**
  * SDL type name to SQL column type mapping
@@ -1301,6 +1302,10 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
   }
   if (scalars.size > 0) {
     schema.scalars = scalars;
+  }
+  const scalarChecks = scalarChecksOf(modules);
+  if (scalarChecks.size > 0) {
+    schema.scalarChecks = scalarChecks;
   }
   return schema;
 }

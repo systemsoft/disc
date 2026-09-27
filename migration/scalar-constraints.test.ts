@@ -14,8 +14,7 @@
  * drop them as scalars and properties change.
  */
 
-import { assert, assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { MigrationError } from "../lib/errors.ts";
+import { assert, assertEquals } from "@std/assert";
 import { normalizeModules, type Module } from "../schema/converter.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
@@ -165,15 +164,16 @@ Deno.test("scalar constraint: subtypes' tables get it, abstract tables and enums
   assertEquals(found.map(check => check.table), ["child"]);
 });
 
-Deno.test("scalar constraint: a scalar expression on a multi property is an error naming the scalar and the property", () => {
-  const sdl = `module default { scalar type NotBad extending str { constraint expression on (__subject__ != 'bad'); }; type T { multi words: NotBad; }; };`;
-  const error = assertThrows(() => new SchemaDiffer().diff([], modules(sdl)), MigrationError);
-
-  assertStringIncludes(
-    error.message,
-    "Scalar type 'default::NotBad' (on property 'default::T.words'): 'constraint expression on (__subject__ != 'bad')' can't be enforced"
+Deno.test("scalar constraint: a scalar expression on a multi or array property checks each element", () => {
+  const found = declared(
+    `module default { scalar type NotBad extending str { constraint expression on (__subject__ != 'bad'); }; type T { multi words: NotBad; list: array<NotBad>; }; };`
   );
-  assertStringIncludes(error.message, "can't be checked on each element of an array or multi property yet");
+
+  assertEquals(found.map(check => check.expression).sort(), [
+    "disc_each_holds(\"list\", E'CAST($1 AS text) != ''bad''')",
+    "disc_each_holds(\"words\", E'CAST($1 AS text) != ''bad''')"
+  ]);
+  assertEquals(found[0].message, "invalid NotBad");
 });
 
 // ============================================================

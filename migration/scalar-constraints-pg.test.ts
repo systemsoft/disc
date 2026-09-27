@@ -17,6 +17,7 @@ import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { postgresErrorFields } from "../lib/errors.ts";
 import { canRunPgTests, getTestDsn, makePool, resetTestDatabase } from "../tests/pg-test-harness.ts";
+import { EdgeQLProtocolHandler } from "../server/edgeql-protocol.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 const EVM = String.raw`scalar type XsEVMAddress extending str { constraint regexp(r'^0x[0-9a-fA-F]{40}$'); };`;
@@ -234,5 +235,72 @@ Deno.test({
       assertEquals(await checksOn(pool, "xs_wallet"), declared);
       assertEquals((await checksOn(pool, "xs_wallet_tags")).length, 1);
       assertEquals(await migrate(pool, POSITIVE), 0, "once repaired, the next migrate is a no-op");
+    })
+});
+
+const EVEN = `module default {
+  scalar type XsPos extending int64 { constraint min_value(0); };
+  scalar type XsShort extending str { constraint max_len_value(3); };
+  scalar type XsEven extending int64 { constraint expression on (__subject__ % 2 = 0); };
+  scalar type XsEven2 extending XsEven;
+  type XsBag { label: str; multi evens: XsEven; list: array<XsEven>; };
+};`;
+
+// Gel 7.1 checks a cast to a constrained scalar (`<XsPos>-1`, element by
+// element for `<array<XsPos>>`), and a scalar's `constraint expression` on each
+// element of a multi or array property, with the scalar's error.
+Deno.test({
+  name: "PG scalar constraint: casts to a constrained scalar, and expression constraints on multi and array elements, are checked",
+  ignore: !canRunPgTests(),
+  fn: () =>
+    run(async pool => {
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+      const applied = await manager.applySchema(EVEN);
+      assertEquals(applied.ok, true, JSON.stringify(applied));
+      const handler = new EdgeQLProtocolHandler({ databaseUrl: await getTestDsn(), schema: manager.getSchema()! });
+      await manager.close();
+
+      const errorOf = async (query: string, variables?: Record<string, unknown>): Promise<string | null> => {
+        const response = await handler.handleRequest({ query, variables }, {
+          auth: { permissions: [], roles: [] },
+          requestId: "scalar_cast",
+          session: { createdAt: new Date(), database: "disc_test", lastActivity: new Date(), sessionId: "scalar_cast", variables: {} },
+          startedAt: new Date()
+        });
+        return response.errors?.[0]?.message.replace(/^Database query failed: /, "") ?? null;
+      };
+
+      const cases: [string, string | null, Record<string, unknown>?][] = [
+        [`select <XsPos>-1`, "Minimum allowed value for XsPos is 0."],
+        [`select <XsPos>'-3'`, "Minimum allowed value for XsPos is 0."],
+        [`select <XsPos>$p`, "Minimum allowed value for XsPos is 0.", { p: -2 }],
+        [`select (<XsPos>-1) ?? 3`, "Minimum allowed value for XsPos is 0."],
+        [`select <array<XsPos>>[1, -1]`, "Minimum allowed value for XsPos is 0."],
+        [`select <XsShort>'abcd'`, "XsShort must be no longer than 3 characters."],
+        [`select <XsEven>3`, "invalid XsEven"],
+        [`select <XsEven2>3`, "invalid XsEven"],
+        [`select <XsPos>5`, null],
+        [`select <XsPos>{}`, null],
+        [`select <array<XsPos>>[1, 2]`, null],
+        [`select <XsEven2>4`, null],
+        [`insert XsBag { evens := {2, 3} }`, "invalid XsEven"],
+        [`insert XsBag { list := [2, 3] }`, "invalid XsEven"],
+        [`insert XsBag { label := 'ok', evens := {2, 4}, list := [2, 4] }`, null],
+        [`insert XsBag { evens := <array<XsEven>>[] }`, null],
+        [`update XsBag filter .label = 'ok' set { evens += 5 }`, "invalid XsEven"]
+      ];
+      const answers: [string, string | null][] = [];
+      for (const [query, , variables] of cases) {
+        answers.push([query, await errorOf(query, variables)]);
+      }
+      assertEquals(answers, cases.map(([query, expected]) => [query, expected]));
+
+      const stored = await violation(pool, `INSERT INTO xs_bag (evens) VALUES (ARRAY[1]::bigint[])`);
+      assertEquals([stored.sqlState, stored.message, stored.detail], [
+        "23514",
+        "invalid XsEven",
+        "violated constraint 'std::expression' on scalar type 'default::XsEven'"
+      ]);
     })
 });

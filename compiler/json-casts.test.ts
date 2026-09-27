@@ -132,7 +132,11 @@ Deno.test("json operand: an integer subscript on a json operand", async () => {
 });
 
 Deno.test("json operand: a call to a function that returns json", async () => {
-  assertEquals(await compile("select <str>json_get(<json>$j, 'k')"), `SELECT (${J} -> 'k') #>> '{}'`);
+  // `json_get` of a key that isn't there is empty: no row.
+  assertEquals(
+    await compile("select <str>json_get(<json>$j, 'k')"),
+    `SELECT value_1.* FROM ( SELECT (jsonb_extract_path(${J}, CAST('k' AS text))) #>> '{}' ) AS value_1 WHERE value_1 IS NOT NULL`
+  );
   assertStringIncludes(await compile("select <str>to_json('1')"), "#>> '{}'");
 });
 

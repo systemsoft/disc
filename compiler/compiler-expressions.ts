@@ -11,6 +11,7 @@ import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError, InvalidReferenceError, InvalidValueError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
+import { sqlStringLiteral } from "../lib/sql-escape.ts";
 import { normalizeStdTypeName } from "../lib/std-types.ts";
 import {
   backlinkIntersectionName,
@@ -38,6 +39,45 @@ const INT_SQL_TYPES = new Map([
   ["int16", { sql: "smallint", width: 16 }],
   ["int32", { sql: "integer", width: 32 }],
   ["int64", { sql: "bigint", width: 64 }]
+]);
+
+/*** The EdgeQL type of each non-numeric literal: `'a'`, `b'a'`, `true`. ***/
+const LITERAL_TYPES = new Map<string, string>([
+  ["boolean", "bool"],
+  ["bytes", "bytes"],
+  ["string", "str"]
+]);
+
+/*** The built-in scalar types an `is` test names, bare (`cal::local_date` is `local_date`). ***/
+const STATIC_SCALAR_TYPES = new Set([
+  "bigint",
+  "bool",
+  "bytes",
+  "date_duration",
+  "datetime",
+  "decimal",
+  "duration",
+  "float32",
+  "float64",
+  "int16",
+  "int32",
+  "int64",
+  "json",
+  "local_date",
+  "local_datetime",
+  "local_time",
+  "relative_duration",
+  "str",
+  "uuid"
+]);
+
+/*** The abstract scalar types an `is` test may name, and the types each stands for. ***/
+const ABSTRACT_SCALAR_TYPES = new Map<string, Set<string>>([
+  ["anyfloat", new Set(["float32", "float64"])],
+  ["anyint", new Set(["int16", "int32", "int64", "bigint"])],
+  ["anynumeric", new Set(["bigint", "decimal"])],
+  ["anyreal", new Set(["int16", "int32", "int64", "bigint", "float32", "float64", "decimal"])],
+  ["anyscalar", STATIC_SCALAR_TYPES]
 ]);
 
 /*** The EdgeQL type of each numeric literal: `7`, `7.0`, `7n`, `7.0n`. ***/
@@ -153,6 +193,9 @@ const SET_ARGUMENT_FUNCTIONS = new Set([
   "stddev_samp",
   "sum"
 ]);
+
+/*** Built-in functions of values whose answer may be the empty set (SQL NULL) though no argument is. ***/
+const MAY_BE_EMPTY_FUNCTIONS = new Set(["array_get", "json_get", "re_match", "find"]);
 
 /*** Aggregates and set tests with a value for every set, the empty one too. ***/
 const NEVER_EMPTY_AGGREGATES = new Set(["all", "any", "array_agg", "count", "exists", "sum"]);
@@ -352,6 +395,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "bigint":
       case "decimal":
         return SQL.createCastExpression(SQL.createLiteral("number", literal.value), "numeric");
+      // `b'…'`: its bytes (one character per byte, see `unquoteBytes`) as
+      // PostgreSQL's hex bytea input, which is digits only.
+      case "bytes": {
+        const hex = [...String(literal.value)].map(ch => ch.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+        return SQL.createCastExpression(SQL.createLiteral("string", `\\x${hex}`), "bytea");
+      }
       case "string":
         sqlType = "string";
         break;
@@ -675,7 +724,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
-   * False when `expr` is never empty (never SQL NULL): a literal, a required
+   * False when `expr` is never empty (never SQL NULL): a literal but `{}`, a required
    * single property, a parameter not cast `<optional …>`, a `with` name bound
    * to such a value, an element of a set, an aggregate or set test that is
    * never empty (`count`, `exists`, `any`, …), `?=` and `?!=`, and an
@@ -684,6 +733,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected mayBeEmpty(expr: EdgeQLAST.Expression): boolean {
     switch (expr.kind) {
       case "Literal":
+        return expr.type === "empty";
       case "Parameter":
         return false;
       case "TypeCast":
@@ -718,6 +768,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return this.mayBeEmpty(expr.left) || this.mayBeEmpty(expr.right);
       case "FunctionCall":
         return !NEVER_EMPTY_AGGREGATES.has(Context.lookupFunction(this.ctx.schema, expr.name.parts)?.name ?? "");
+      // A tuple or array is empty when an element is.
+      case "TupleExpr":
+      case "ArrayExpr":
+        return expr.elements.some(element => this.mayBeEmpty(element));
+      case "NamedTuple":
+        return expr.elements.some(element => this.mayBeEmpty(element.value));
+      case "TupleAccessExpr": {
+        const element = this.literalTupleElement(expr);
+        return element ? this.mayBeEmpty(element) : true;
+      }
       default:
         return true;
     }
@@ -789,6 +849,60 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.scopeVariable(subject.name)?.row || Context.getCTEAlias(this.ctx, subject.name)?.typeDef ? expr.query : null;
     }
     return subject.kind === "Path" && this.isObjectPath(subject) ? expr.query : null;
+  }
+
+  /**
+   * Whether a statement's value `expr` is known to be possibly the empty set
+   * (SQL NULL), so that the statement answers no row for it: `{}`, an
+   * `<optional …>` parameter, a path or `with` name that may be empty, a
+   * global, an aggregate of an empty set, a built-in function whose answer can
+   * be empty (`json_get` of a path that isn't there, `array_get` past the end,
+   * …), and a built-in function, operator or cast of such a value. Anything
+   * else is taken as a value.
+   */
+  protected outputMayBeEmpty(expr: EdgeQLAST.Expression): boolean {
+    switch (expr.kind) {
+      case "Literal":
+        return expr.type === "empty";
+      case "SetExpr":
+        return flattenSetElements(expr).length === 0;
+      case "Path":
+      case "GlobalRef":
+        return this.mayBeEmpty(expr);
+      case "Identifier": {
+        // A `with` name inlined is its value; a `for` or select variable is an element.
+        const variable = this.scopeVariable(expr.name);
+        return variable !== undefined && !variable.sqlOverride && !variable.element && !variable.row && this.outputMayBeEmpty(variable.expression);
+      }
+      case "FunctionCall": {
+        const funcDef = Context.lookupFunction(this.ctx.schema, expr.name.parts);
+        const name = funcDef?.name ?? "";
+        // A set-returning function is rows, none of them empty.
+        if (
+          !funcDef || !Context.isBuiltinFunction(funcDef) || SET_RETURNING_FUNCTIONS.has(name) || NEVER_EMPTY_AGGREGATES.has(name) || name === "assert_exists"
+        ) {
+          return false;
+        }
+        return MAY_BE_EMPTY_FUNCTIONS.has(name) || expr.args.some(arg => this.outputMayBeEmpty(arg.value));
+      }
+      case "TypeCast":
+        return expr.cardinality?.required === false || this.outputMayBeEmpty(expr.expr);
+      case "UnaryOp":
+        return expr.op !== "EXISTS" && this.outputMayBeEmpty(expr.operand);
+      case "BinaryOp":
+        if (OPTIONAL_OPERAND_OPERATORS.has(expr.op)) {
+          return false;
+        }
+        if (expr.op === "??") {
+          return this.outputMayBeEmpty(expr.left) && this.outputMayBeEmpty(expr.right);
+        }
+        if (expr.op === "IN" || expr.op === "NOT IN" || expr.op === "IS" || expr.op === "IS NOT") {
+          return this.outputMayBeEmpty(expr.left);
+        }
+        return this.outputMayBeEmpty(expr.left) || this.outputMayBeEmpty(expr.right);
+      default:
+        return false;
+    }
   }
 
   /**
@@ -1217,12 +1331,36 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return type;
     }
     switch (expr.kind) {
-      case "FunctionCall":
-        return Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType ?? null;
+      case "Literal":
+        return LITERAL_TYPES.get(expr.type) ?? null;
+      case "FunctionCall": {
+        const funcDef = Context.lookupFunction(this.ctx.schema, expr.name.parts);
+        // `cal::duration_normalize_days` of a date duration is a date duration.
+        if (funcDef?.name === "cal_duration_normalize_days" && expr.args.length === 1) {
+          const arg = this.staticScalarType(expr.args[0].value);
+          return isStdType(arg, "date_duration") ? arg : funcDef.returnType ?? null;
+        }
+        // `array_agg` of a set of a known type is an array of it.
+        if (funcDef?.name === "array_agg" && expr.args.length === 1) {
+          const element = this.staticScalarType(expr.args[0].value)?.replace(/^(std|cal)::/, "");
+          return element && !element.startsWith("array<") ? `array<${element}>` : null;
+        }
+        return funcDef?.returnType ?? null;
+      }
       case "BinaryOp":
+        // `a ?? b` is of its operands' type.
+        if (expr.op === "??") {
+          return this.staticScalarType(expr.left) ?? this.staticScalarType(expr.right);
+        }
         return expr.op === "+" || expr.op === "-" ?
           dateArithmeticType(expr.op, this.staticScalarType(expr.left), this.staticScalarType(expr.right)) :
           null;
+      case "IfElse":
+        return this.staticScalarType(expr.then) ?? this.staticScalarType(expr.else);
+      case "Identifier": {
+        const variable = this.scopeVariable(expr.name);
+        return variable && !variable.sqlOverride ? this.staticScalarType(variable.expression) : null;
+      }
       case "ArrayExpr": {
         const types = expr.elements.map(element => this.staticScalarType(element)?.replace(/^(std|cal)::/, "") ?? null);
         return types[0] && types.every(element => element === types[0]) ? `array<${types[0]}>` : null;
@@ -1246,6 +1384,23 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected dateDurationText(value: SQL.SQLExpression, type: string | null | undefined): SQL.SQLExpression {
     const element = /^array<(.+)>$/.exec(type ?? "")?.[1] ?? type;
     return isStdType(element ?? null, "date_duration") ? SQL.createFunctionCall("disc_date_duration_text", [value]) : value;
+  }
+
+  /**
+   * `value` as the text `<str>` and `to_str` make of it when `type`, its
+   * EdgeQL type if known, is a date or time: Gel's ISO 8601 text. A
+   * `datetime` is `2024-01-02T03:04:05+00:00` and a `cal::local_datetime`
+   * `2024-01-02T03:04:05`, where PostgreSQL's text puts a space and writes
+   * `+00`; that is the JSON string `to_jsonb` makes of them, less its quotes
+   * (it has no escapes). A date duration is `dateDurationText`'s. Any other
+   * value is returned as is.
+   */
+  protected temporalText(value: SQL.SQLExpression, type: string | null): SQL.SQLExpression {
+    if (isStdType(type, "datetime") || isStdType(type, "local_datetime")) {
+      const json = SQL.createCastExpression(SQL.createFunctionCall("to_jsonb", [value]), "text");
+      return SQL.createFunctionCall("btrim", [json, SQL.createLiteral("string", "\"")]);
+    }
+    return this.dateDurationText(value, type);
   }
 
   /**
@@ -1308,7 +1463,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   private staticArrayElementType(expr: EdgeQLAST.Expression): string | null {
     if (expr.kind === "ArrayExpr") {
-      return this.commonNumericType(expr.elements.map(element => this.staticNumericType(element)));
+      const bytes = expr.elements.length > 0 && expr.elements.every(element => this.staticScalarType(element) === "bytes");
+      return bytes ? "bytes" : this.commonNumericType(expr.elements.map(element => this.staticNumericType(element)));
     }
     let type: string | null = null;
     if (expr.kind === "Identifier") {
@@ -1475,11 +1631,21 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   private elementWiseOperands(expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] | null {
     switch (expr.kind) {
-      case "BinaryOp":
+      case "BinaryOp": {
+        // `x is <scalar type>` is one boolean per element of `x`.
+        const isType = expr.right.kind === "TypeName" ?
+          expr.right.name.parts.join("::") :
+          expr.right.kind === "Identifier" ?
+          expr.right.name :
+          undefined;
+        if ((expr.op === "IS" || expr.op === "IS NOT") && isType !== undefined && this.isScalarTypeName(isType)) {
+          return [expr.left];
+        }
         if (this.isSetOperator(expr.op) || expr.op === "??" || expr.op === "IS" || expr.op === "IS NOT") {
           return null;
         }
         return expr.op === "IN" || expr.op === "NOT IN" ? [expr.left] : [expr.left, expr.right];
+      }
       case "UnaryOp":
         return ELEMENT_WISE_UNARY_OPERATORS.has(expr.op) ? [expr.operand] : null;
       case "TypeCast":
@@ -1811,6 +1977,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return SQL.createBinaryExpression(binOp.op, left, right);
     }
 
+    const scalarCheck = this.compileScalarIsCheck(binOp, typeName);
+    if (scalarCheck) {
+      return scalarCheck;
+    }
+
     // Resolve the type in the schema
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -1851,6 +2022,42 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       kind: "RawSQLExpression" as const,
       sql: `__type__ ${inOp} (${typeList})`
     };
+  }
+
+  /**
+   * `x is T` for a scalar type `T` (`<cal::local_date>'…' is cal::local_date`,
+   * `.age is str`, `1 is anyint`): Gel answers it from the static type of `x`,
+   * so it is a constant — true when that type is `T`, a scalar extending `T`,
+   * or one of the types an abstract `T` stands for — for each element of `x`
+   * (none when `x` is empty). `is not` is its negation. Null when `T` is no
+   * scalar type.
+   */
+  /*** Whether `typeName` names a scalar type an `is` test can name: built-in, abstract (`anyint`) or a user scalar. ***/
+  private isScalarTypeName(typeName: string): boolean {
+    const bare = typeName.replace(/^(std|cal|default)::/, "");
+    return ABSTRACT_SCALAR_TYPES.has(bare) || STATIC_SCALAR_TYPES.has(bare) || this.scalarBaseType(typeName) !== undefined;
+  }
+
+  private compileScalarIsCheck(binOp: EdgeQLAST.BinaryOp, typeName: string): SQL.SQLExpression | null {
+    const bare = (name: string): string => name.replace(/^(std|cal|default)::/, "");
+    const target = bare(typeName);
+    if (!this.isScalarTypeName(typeName)) {
+      return null;
+    }
+    const operand = binOp.left;
+    const actual = operand.kind === "TypeCast" ? renderEdgeQLTypeName(operand.type) : this.staticScalarType(operand);
+    if (actual === null) {
+      throw new CompilationError(
+        `cannot determine the type of the operand of '${binOp.op.toLowerCase()} ${typeName}'`,
+        this.expressionLocation(binOp)
+      );
+    }
+    const types = [bare(actual), bare(this.scalarBaseType(actual) ?? actual)];
+    const matches = types.some(type => type === target || (ABSTRACT_SCALAR_TYPES.get(target)?.has(type) ?? false));
+    const result = SQL.createLiteral("boolean", matches !== (binOp.op === "IS NOT"));
+    return this.mayBeEmpty(operand) ?
+      SQL.createCaseExpression([SQL.createWhenClause(SQL.isNotNull(this.compileExpression(operand)), result)]) :
+      result;
   }
 
   /**
@@ -2289,7 +2496,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           throw new CompilationError("to_str() requires exactly 1 argument");
         }
         {
-          const text = this.dateDurationText(args[0], this.staticScalarType(funcCall.args[0].value));
+          // `to_str(bytes)` is the bytes read as UTF-8, as in Gel.
+          const type = this.staticScalarType(funcCall.args[0].value);
+          if (isStdType(type, "bytes")) {
+            return SQL.createFunctionCall("convert_from", [args[0], SQL.createLiteral("string", "UTF8")]);
+          }
+          const text = this.temporalText(args[0], type);
           return text !== args[0] ? text : SQL.createCastExpression(args[0], "text");
         }
 
@@ -2534,13 +2746,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return SQL.createCastExpression(args[0], "jsonb");
 
       case "json_get":
-        // json_get(val, key) → val -> key
-        if (args.length !== 2) {
-          throw new CompilationError(
-            "json_get() requires exactly 2 arguments"
-          );
-        }
-        return SQL.createJsonbAccess(args[0], "->", args[1]);
+        return this.compileJsonGet(funcCall, args);
 
       // Array special compilation
       case "array_get":
@@ -3094,6 +3300,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     this.assertNotOverSet(cast, `<${renderEdgeQLTypeName(cast.type)}>`);
+    const tuple = this.tupleLiteralCast(cast);
+    if (tuple) {
+      return tuple;
+    }
     const expr = this.compileExpression(cast.expr);
     const typeName = renderEdgeQLTypeName(cast.type);
     const fromJson = this.isJsonExpression(cast.expr);
@@ -3144,7 +3354,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // not json already is `jsonValue`.
     const sourceType = this.staticScalarType(cast.expr);
     if (pgType === "text" && !fromJson) {
-      const text = this.dateDurationText(expr, sourceType);
+      const text = this.temporalText(expr, sourceType);
       if (text !== expr) {
         return text;
       }
@@ -3174,7 +3384,97 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const value = float ? SQL.createCastExpression(expr, pgType.endsWith("[]") ? "double precision[]" : "double precision") : expr;
     const operand = !rounded ? value : array ? this.roundElements(value) : SQL.createFunctionCall("round", [value]);
     const compiled = fromJson ? this.compileCastFromJson(operand, pgType, typeName) : SQL.createCastExpression(operand, pgType);
-    return this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+    const checked = this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+    return this.scalarCastCheck(checked, typeName);
+  }
+
+  /**
+   * `value`, cast to `typeName`, checked against the constraints of the user
+   * scalar it names (or of its array element: each element is), as Gel checks
+   * a cast to a constrained scalar: each constraint's boolean, compiled over
+   * the value as a CHECK's is (`subjectCheckSql`), goes through
+   * `disc_check_constraint`, which raises Gel's ConstraintViolationError when
+   * it is false. The value is a derived table's column, so it is computed
+   * once; an empty value passes. `value` itself when the scalar has none.
+   */
+  private scalarCastCheck(value: SQL.SQLExpression, typeName: string): SQL.SQLExpression {
+    const element = /^array<(.+)>$/.exec(typeName)?.[1];
+    const name = normalizeStdTypeName(element ?? typeName);
+    const scalarChecks = this.ctx.schema.scalarChecks;
+    const checks = (this.ctx.moduleScope && !name.includes("::") ? scalarChecks?.get(`${this.ctx.moduleScope}::${name}`) : undefined) ??
+      scalarChecks?.get(name) ?? scalarChecks?.get(name.replace(/^default::/, ""));
+    if (!checks) {
+      return value;
+    }
+    const subject = Context.generateAlias(this.ctx, "subject");
+    const holds: SQL.RawSQLExpression = {
+      kind: "RawSQLExpression",
+      sql: checks
+        .map(check =>
+          `disc_check_constraint(${this.subjectCheckSql(check.edgeql, check.module, "v")}, ${sqlStringLiteral(check.message)}, ${
+            sqlStringLiteral(check.detail)
+          }, '', '')`
+        )
+        .join(" AND ")
+    };
+    const column = SQL.createColumnReference(element ? "a" : "v", subject);
+    const test = element ?
+      SQL.createSubqueryExpression(SQL.createSelectStatement({
+        from: SQL.createFromClause([{
+          alias: "e",
+          columnAliases: ["v"],
+          expression: SQL.createFunctionCall("unnest", [column]),
+          kind: "TableReference",
+          name: ""
+        }]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createFunctionCall("bool_and", [holds]))])
+      })) :
+      holds;
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      from: SQL.createFromClause([{
+        alias: subject,
+        columnAliases: [element ? "a" : "v"],
+        kind: "TableReference",
+        name: "",
+        subquery: SQL.createSelectStatement({ select: SQL.createSelectClause([SQL.createSelectItem(value)]) })
+      }]),
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(
+          SQL.createCaseExpression([SQL.createWhenClause(SQL.createBinaryExpression("IS NOT", test, SQL.createLiteral("boolean", false)), column)])
+        )
+      ])
+    }));
+  }
+
+  /**
+   * A tuple literal cast to a tuple type, `<tuple<a: int64, b: str>>(1, 'x')`:
+   * the tuple of the cast's type, built element by element — each element
+   * cast to its type and named as the type names it. As in Gel, a named
+   * target names (or renames) the elements and a positional one drops the
+   * literal's names. Null for any other cast.
+   */
+  private tupleLiteralCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression | null {
+    const targets = cast.type.subtypes;
+    const values = cast.expr.kind === "TupleExpr" ?
+      cast.expr.elements :
+      cast.expr.kind === "NamedTuple" ?
+      cast.expr.elements.map(element => element.value) :
+      null;
+    if (cast.type.name.parts.at(-1) !== "tuple" || !targets?.length || !values) {
+      return null;
+    }
+    if (targets.length !== values.length) {
+      throw new CompilationError(
+        `cannot cast a tuple of ${values.length} element(s) to '${renderEdgeQLTypeName(cast.type)}'`,
+        this.expressionLocation(cast)
+      );
+    }
+    const elements = values.map((value, i) =>
+      this.tupleElement({ expr: value, kind: "TypeCast", span: value.span, type: { ...targets[i], fieldName: undefined } })
+    );
+    return targets.every(target => target.fieldName) ?
+      SQL.createJsonBuildObject(targets.map((target, i) => SQL.createJsonField(target.fieldName!, elements[i]))) :
+      SQL.createFunctionCall("jsonb_build_array", elements);
   }
 
   /**
@@ -4218,14 +4518,60 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return SQL.createFunctionCall(this.staticTupleArrayType(arrayExpr) ? "jsonb_build_array" : "ARRAY", elements);
   }
 
+  /**
+   * `json_get(json, variadic path: str, named only default: optional json)`:
+   * the element of `json` at `path`, each step an object key or an array
+   * index (negative from the end) — PostgreSQL's `jsonb_extract_path`, which
+   * reads the steps the same way — or `default` when there is none there
+   * (without one, the empty set). An empty `json` or path step is the empty
+   * set, whatever the default. No path is `json` itself.
+   */
+  private compileJsonGet(funcCall: EdgeQLAST.FunctionCall, args: SQL.SQLExpression[]): SQL.SQLExpression {
+    const unknown = funcCall.args.find(arg => arg.name !== undefined && arg.name !== "default");
+    const positional = args.filter((_, i) => funcCall.args[i].name === undefined);
+    if (unknown || positional.length === 0) {
+      throw new CompilationError(
+        `json_get() takes a json value, then its path, and a 'default' named argument${unknown ? `, not '${unknown.name}'` : ""}`,
+        this.expressionLocation(funcCall)
+      );
+    }
+    const [json, ...steps] = positional;
+    if (steps.length === 0) {
+      return json;
+    }
+    const path = steps.map(step => SQL.createCastExpression(step, "text"));
+    const found = SQL.createFunctionCall("jsonb_extract_path", [json, ...path]);
+    const fallback = args[funcCall.args.findIndex(arg => arg.name === "default")];
+    if (!fallback) {
+      return found;
+    }
+    const anyEmpty = [json, ...path]
+      .map(value => SQL.createBinaryExpression("IS", value, SQL.createLiteral("null", null)))
+      .reduce((all, test) => SQL.createBinaryExpression("OR", all, test));
+    return SQL.createCaseExpression(
+      [SQL.createWhenClause(anyEmpty, SQL.createLiteral("null", null))],
+      SQL.createFunctionCall("COALESCE", [found, fallback])
+    );
+  }
+
   private compileTupleExpr(tupleExpr: EdgeQLAST.TupleExpr): SQL.SQLExpression {
-    const elements = tupleExpr.elements.map(el => this.dateDurationText(this.compileExpression(el), this.staticScalarType(el)));
+    const elements = tupleExpr.elements.map(el => this.tupleElement(el));
     return SQL.createFunctionCall("jsonb_build_array", elements);
+  }
+
+  /*** A tuple element as its tuple's jsonb holds it: a zero date duration `P0D` (`dateDurationText`), bytes base64 (`bytesAsBase64`). ***/
+  private tupleElement(expr: EdgeQLAST.Expression): SQL.SQLExpression {
+    const type = this.staticScalarType(expr);
+    return this.bytesAsBase64(this.dateDurationText(this.compileExpression(expr), type), isStdType(type, "bytes") ? "bytea" : null);
   }
 
   private compileTupleAccess(
     access: EdgeQLAST.TupleAccessExpr
   ): SQL.SQLExpression {
+    const element = this.literalTupleElement(access);
+    if (element) {
+      return this.compileExpression(element);
+    }
     const tupleExpr = this.compileExpression(access.tuple);
 
     if (access.accessType === "index" && access.index !== undefined) {
@@ -4247,12 +4593,35 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     throw new CompilationError("Invalid tuple access expression");
   }
 
+  /**
+   * The element an access names of a tuple literal cast to a tuple type
+   * (`(<tuple<a: int64, b: str>>(1, 'x')).a` is `<int64>1`): the element's
+   * own expression, cast to its type, where reading it back out of the
+   * tuple's jsonb would give text. Undefined for any other access.
+   */
+  private literalTupleElement(access: EdgeQLAST.TupleAccessExpr): EdgeQLAST.Expression | undefined {
+    const cast = access.tuple.kind === "TypeCast" ? access.tuple : undefined;
+    const tuple = cast?.expr;
+    const values = tuple?.kind === "TupleExpr" ?
+      tuple.elements :
+      tuple?.kind === "NamedTuple" ?
+      tuple.elements.map(element => element.value) :
+      undefined;
+    const targets = cast?.type.subtypes;
+    if (!values || !targets || targets.length !== values.length) {
+      return undefined;
+    }
+    const i = access.accessType === "index" ? access.index ?? -1 : targets.map(target => target.fieldName).indexOf(access.fieldName);
+    if (i < 0 || i >= values.length) {
+      return undefined;
+    }
+    return { expr: values[i], kind: "TypeCast", span: values[i].span, type: { ...targets[i], fieldName: undefined } };
+  }
+
   private compileNamedTuple(
     namedTuple: EdgeQLAST.NamedTuple
   ): SQL.SQLExpression {
-    const fields = namedTuple.elements.map(el =>
-      SQL.createJsonField(el.name, this.dateDurationText(this.compileExpression(el.value), this.staticScalarType(el.value)))
-    );
+    const fields = namedTuple.elements.map(el => SQL.createJsonField(el.name, this.tupleElement(el.value)));
     return SQL.createJsonBuildObject(fields);
   }
 

@@ -554,6 +554,9 @@ export abstract class CompilerBase {
    */
   protected abstract policyConditionSql(edgeql: string, objectType: string): string;
 
+  /*** A scalar constraint (EdgeQL over `$__subject__`, names resolved in `module`) as SQL over `column` (see `EdgeQLCompiler.subjectCheckSql`). ***/
+  abstract subjectCheckSql(edgeql: string, module: string, column: string | null): string;
+
   /*** `run`, with the policy conditions it compiles reading the object's row as `alias`. ***/
   protected withPolicySubject<T>(alias: string, run: () => T): T {
     const outer = this.policySubject;

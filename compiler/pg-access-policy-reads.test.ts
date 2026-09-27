@@ -428,7 +428,7 @@ Deno.test({
       assertEquals(await sorted(pool, schema, "select {(select AcpUser.name), 'z'}"), ["ann", "z"]);
       const [group] = await values(pool, schema, "group AcpPost by .published") as { elements: { title: string; }[]; }[];
       assertEquals(group.elements.map(post => post.title).sort(), ["A1", "B1"]);
-      assertEquals((await values(pool, schema, "select <json>(select AcpUser)") as { name: string; }[]).map(user => user.name), ["ann"]);
+      assertEquals((await values(pool, schema, "select <json>(select AcpUser { name })") as { name: string; }[]).map(user => user.name), ["ann"]);
     })
 });
 

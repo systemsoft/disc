@@ -249,7 +249,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.parameterIndex = options?.parameterMap ??
         buildParameterIndex(query);
       this.cteNames.clear();
-      const body = query.kind === "WithBlock" ? query.body : query;
+      const outer = query.kind === "WithBlock" ? query.body : query;
+      // A `for`'s values are its body's.
+      const body = outer.kind === "ForQuery" ? outer.body : outer;
       this.outputExpression = body.kind === "SelectQuery" && !body.shape ? body.expr : undefined;
 
       const statement = this.hoistMutations(this.compileQuery(query));
@@ -2878,9 +2880,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * parameter `$__subject__` (cast to the scalar's base type), as the boolean
    * of a CHECK on `column` — any column of that scalar type, in any table.
    * Names resolve in `module`, the scalar's. Throws a CompilationError, as
-   * `checkConstraintSql` does, for anything else a CHECK can't read.
+   * `checkConstraintSql` does, for anything else a CHECK can't read. A null
+   * `column` keeps the subject the parameter `$1` (see `disc_each_holds`).
    */
-  subjectCheckSql(edgeql: string, module: string, column: string): string {
+  subjectCheckSql(edgeql: string, module: string, column: string | null): string {
     const outer = this.ctx;
     const parameterIndex = this.parameterIndex;
     this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: module };
@@ -2894,16 +2897,17 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           return node;
         }
         if ((node as SQL.SQLExpression).kind === "ParameterReference" && (node as SQL.ParameterReference).index === 1) {
-          return SQL.createColumnReference(column);
+          return SQL.createColumnReference(column ?? SUBJECT_PARAMETER);
         }
         return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, replace(value)]));
       };
-      const sql = replace(this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly())) as SQL.SQLExpression;
+      const compiled = this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly());
+      const sql = replace(compiled) as SQL.SQLExpression;
       const notRowLocal = rowLocalViolation(sql, "");
       if (notRowLocal) {
         throw new CompilationError(notRowLocal);
       }
-      return new SQLCodeGenerator().generateExpression(sql);
+      return new SQLCodeGenerator().generateExpression(column === null ? compiled : sql);
     } finally {
       this.ctx = outer;
       this.parameterIndex = parameterIndex;

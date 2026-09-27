@@ -118,9 +118,43 @@ const GEL_SCALARS: [string, unknown][] = [
   // json itself
   [`select <json><json>'[1,2]'`, "[1,2]"],
   [`select to_str(<json>'x')`, "\"x\""],
-  // An empty set: Disc answers one NULL row, as it does for `select <str>{}` (Gel: no row).
-  [`select <json>{}`, null],
-  [`select <json><str>{}`, null],
+  // An empty set is no row.
+  [`select <json>{}`, []],
+  [`select <json><str>{}`, []],
+  [`select <str>{}`, []],
+  [`select to_str(<int64>{})`, []],
+  [`select len(<str>{})`, []],
+  [`select 1 + <int64>{}`, []],
+  [`with x := <str>{} select x`, []],
+  [`select <str>{} ?? 'x'`, "x"],
+  // A tuple literal cast to a tuple type takes the type's names
+  [`select <json><tuple<a: int64, b: str>>(1, 'x')`, { a: 1, b: "x" }],
+  [`select (<tuple<a: int64, b: str>>(1, 'x')).a`, 1],
+  [`select (<tuple<a: int64, b: str>>(1, 'x')).b`, "x"],
+  [`select <tuple<int64, str>>(c := 1, d := 'x')`, [1, "x"]],
+  [`select [<tuple<a: int64, b: str>>(1, 'x')]`, [{ a: 1, b: "x" }]],
+  [`select <tuple<a: int64, b: str>>(1, 'x') = (a := 1, b := 'x')`, true],
+  // json_get: a variadic path and a default
+  [`select json_get(to_json('{"a": [{"b": 5}]}'), 'a', '0', 'b')`, 5],
+  [`select json_get(to_json('[1, [2, 3]]'), '1', '-1')`, 3],
+  [`select json_get(to_json('{"a": 1}'), 'x', default := <json>'d')`, "d"],
+  [`select json_get(to_json('{"a": 1}'), 'a', default := <json>'d')`, 1],
+  [`select json_get(to_json('{"a": 1}'), 'x', 'y', default := <json>0)`, 0],
+  [`select json_get(to_json('{"a": [5]}'), 'a', 'x', default := <json>'d')`, "d"],
+  [`select json_get(to_json('{"a": [1]}'), 'a', '5')`, []],
+  [`select json_get(to_json('{"a": 1}'), 'a', 'b')`, []],
+  [`select json_get(to_json('null'), 'x')`, []],
+  [`select json_get(<json>{}, 'a', default := <json>1)`, []],
+  [`select json_get(to_json('{"a": 1}'), <str>{}, default := <json>1)`, []],
+  [`select json_get(to_json('{"a": null}'), 'a')`, null],
+  [`select json_get(to_json('{"a": 1}'))`, { a: 1 }],
+  // bytes literals
+  [`select <json>b'\\x00ab'`, "AGFi"],
+  [`select <json>[b'ab']`, ["YWI="]],
+  [`select <json>(b'ab', 1)`, ["YWI=", 1]],
+  [`select to_str(b'ab')`, "ab"],
+  [`select len(b'\\x00\\xff')`, 2],
+  [`select br'\\x00'`, "XHgwMA=="],
   // arrays and tuples
   [`select <json>[1, 2, 3]`, [1, 2, 3]],
   [`select <json>['a', 'b']`, ["a", "b"]],
@@ -210,6 +244,40 @@ Deno.test({
         assertEquals(await run(`select JsonCast { label, j := <json>.at, k := <json>.dd, m := <json>.s, e := <json>.b }`), [
           { e: "YWI=", j: "2024-01-02T03:04:05+00:00", k: "P0D", label: "a", m: "hi" }
         ]);
+      });
+
+      // A named tuple selected is its row (the response's object).
+      await t.step("a tuple literal cast to a named tuple type", async () => {
+        const checks: [string, unknown][] = [
+          [`select <tuple<a: int64, b: str>>(1, 'x')`, { a: 1, b: "x" }],
+          [`select <tuple<a: int64, b: str>>(c := 1, d := 'x')`, { a: 1, b: "x" }],
+          [`select <tuple<a: str, b: int64>>('1', 2)`, { a: "1", b: 2 }],
+          [`select <tuple<a: int64>>(b := '5')`, { a: 5 }],
+          [`select <tuple<a: int64, b: tuple<c: str>>>(1, ('x',))`, { a: 1, b: { c: "x" } }]
+        ];
+        const answers: [string, unknown][] = [];
+        for (const [query] of checks) {
+          answers.push([query, (await run(query))[0]]);
+        }
+        assertEquals(answers, checks);
+      });
+
+      // Gel: `<json>T` is each object's `{ id }`, `<json>T { … }` (the shape is
+      // the operand's) and `<json>(select T { … } …)` each object's shape.
+      await t.step("<json> of objects", async () => {
+        await run(`insert JsonCast { label := 'b', b := b'\\x00ab' }`);
+        const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]);
+        assertEquals(await values(`select <json>(select JsonCast { label, b } order by .label)`), [{ b: "YWI=", label: "a" }, {
+          b: "AGFi",
+          label: "b"
+        }]);
+        assertEquals((await values(`select <json>JsonCast { label }`)).sort((x, y) => JSON.stringify(x) < JSON.stringify(y) ? -1 : 1), [
+          { label: "a" },
+          { label: "b" }
+        ]);
+        const ids = await values(`select <json>JsonCast`);
+        assertEquals(ids.map(value => Object.keys(value as Record<string, unknown>)), [["id"], ["id"]]);
+        assertEquals(await values(`select <json>(select JsonCast { label } filter .label = 'zz')`), []);
       });
 
       await t.step("a json variable is its JSON value", async () => {

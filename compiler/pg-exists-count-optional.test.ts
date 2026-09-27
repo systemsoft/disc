@@ -115,7 +115,7 @@ Deno.test({
       const neq = "select ExRef { name } filter .peeled ?!= <optional str>$p";
       assertEquals((await rows(neq, [null])).length, 2, "?!= null matches the set rows");
       assertEquals((await rows(neq, ["abc"])).length, 3, "?!= 'abc' includes the unset rows");
-      assertEquals(scalar(await rows("select <optional str>$p", [null])), null, "optional param as SQL NULL");
+      assertEquals((await rows("select <optional str>$p", [null])).length, 0, "an optional param passed as null is the empty set: no row");
 
       // `??` falls back to its right side when the left is empty.
       const nicks = await rows(`select ExRef { n := .peeled ?? "anon" } order by .size`);

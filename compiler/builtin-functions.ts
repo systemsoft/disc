@@ -516,6 +516,20 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       args: [{ name: "val", type: "any", required: true }],
       returnType: "cal::local_datetime"
     }],
+    // Whole 24 hours as days; whole 30 days as months. A date duration stays
+    // one (`staticScalarType`).
+    ["cal_duration_normalize_hours", {
+      name: "cal_duration_normalize_hours",
+      args: [{ name: "dur", type: "cal::relative_duration", required: true }],
+      returnType: "cal::relative_duration",
+      sqlName: "justify_hours"
+    }],
+    ["cal_duration_normalize_days", {
+      name: "cal_duration_normalize_days",
+      args: [{ name: "dur", type: "cal::relative_duration", required: true }],
+      returnType: "cal::relative_duration",
+      sqlName: "justify_days"
+    }],
     ["cal_date_get", {
       name: "cal_date_get",
       args: [
@@ -561,7 +575,9 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       name: "json_get",
       args: [
         { name: "val", type: "json", required: true },
-        { name: "key", type: "str", required: true }
+        // Variadic: `json_get(j, 'a', '0', 'b')`.
+        { name: "path", type: "str", required: true },
+        { name: "default", type: "json", required: false }
       ],
       returnType: "json"
     }],

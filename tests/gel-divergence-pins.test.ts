@@ -610,8 +610,14 @@ Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injec
  * expression on (…)` CHECK. IMMUTABLE, a constant expression that fails (say
  * `constraint expression on (false)`) would be folded, and raise, when the
  * CHECK is created — even on an empty table.
+ *
+ * `disc_each_holds` is the CHECK of a scalar's `constraint expression on (…)`
+ * on an array column: it runs the constraint (compiled from the schema, and
+ * row-local — `subjectCheckSql` rejects anything that reads a table) for each
+ * element through EXECUTE, which PostgreSQL does not let an IMMUTABLE
+ * function's result stand for; STABLE like `disc_check_constraint`.
  */
-const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_access_check", "disc_check_constraint", "disc_uuidv7"]);
+const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_access_check", "disc_check_constraint", "disc_each_holds", "disc_uuidv7"]);
 
 Deno.test("Gel #8811: stdlib SQL declares no table reads", async () => {
   const src = await Deno.readTextFile(

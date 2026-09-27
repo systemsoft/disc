@@ -91,6 +91,32 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql STABLE;`,
 
+  // disc_each_holds(vals, condition) — the CHECK of a scalar's `constraint
+  // expression on (…)` on an array column (a multi property, or an array of
+  // the scalar; migration/differ.ts `arrayExpressionCheck`): FALSE when the
+  // boolean `condition` — the constraint compiled with its subject as the
+  // parameter `$1`, from the schema, never from a query — is FALSE for an
+  // element, bound as `$1`; else TRUE. A CHECK can't hold the subquery that
+  // would unnest the array. The condition is row-local (`subjectCheckSql`
+  // rejects anything else), so this reads no table. STABLE, not IMMUTABLE,
+  // like `disc_check_constraint`.
+  `CREATE OR REPLACE FUNCTION disc_each_holds(vals anyarray, condition text) RETURNS boolean AS $$
+     DECLARE
+       holds boolean;
+     BEGIN
+       IF cardinality(vals) = 0 THEN
+         RETURN TRUE;
+       END IF;
+       FOR i IN array_lower(vals, 1)..array_upper(vals, 1) LOOP
+         EXECUTE 'SELECT ' || condition INTO holds USING vals[i];
+         IF holds IS FALSE THEN
+           RETURN FALSE;
+         END IF;
+       END LOOP;
+       RETURN TRUE;
+     END;
+   $$ LANGUAGE plpgsql STABLE STRICT;`,
+
   // disc_assert_single(value, n) — `assert_single(<set>)` (compiler
   // `assertSingle`): `value`, one of the set's `n` rows, unless there are
   // more than one: Gel's CardinalityViolationError, SQLSTATE 21000

@@ -271,9 +271,9 @@ Deno.test("Stage 27 — json_object_unpack compiles to JSONB_EACH", () => {
   assertStringIncludes(sql, "JSONB_EACH");
 });
 
-Deno.test("Stage 27 — json_get compiles to -> operator", () => {
+Deno.test("Stage 27 — json_get compiles to jsonb_extract_path", () => {
   const sql = compileEdgeQL(`SELECT json_get(to_json('{"a":1}'), 'a')`);
-  assertStringIncludes(sql, "->");
+  assertStringIncludes(sql, "jsonb_extract_path(");
 });
 
 // ---------------------------------------------------------------------------

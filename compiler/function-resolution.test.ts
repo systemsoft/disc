@@ -57,7 +57,7 @@ Deno.test("function call: bare base64_decode reaches the std_base64_decode wrapp
 });
 
 Deno.test("function call: a std::-qualified call gets the function's special compilation", () => {
-  assertStringIncludes(compileEdgeQL("select std::json_get(<json>$j, 'k')"), "-> 'k'");
+  assertStringIncludes(compileEdgeQL("select std::json_get(<json>$j, 'k')"), "jsonb_extract_path(CAST($1 AS jsonb), CAST('k' AS text))");
   assertEquals(compileEdgeQL("select std::to_str(1)"), compileEdgeQL("select to_str(1)"));
 });
 

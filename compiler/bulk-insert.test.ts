@@ -242,7 +242,8 @@ Deno.test("bulk insert: the documented batch example compiles", async () => {
   assertEquals(error, undefined);
   assertEquals(
     sql,
-    `INSERT INTO "user" (email, name) SELECT (${ITEM} -> 'email') #>> '{}', (${ITEM} -> 'name') #>> '{}' ` +
+    `INSERT INTO "user" (email, name) SELECT (jsonb_extract_path(${ITEM}, CAST('email' AS text))) #>> '{}', ` +
+      `(jsonb_extract_path(${ITEM}, CAST('name' AS text))) #>> '{}' ` +
       "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val) RETURNING id"
   );
 });

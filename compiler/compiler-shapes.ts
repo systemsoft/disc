@@ -331,6 +331,105 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     return [...writes];
   }
 
+  /**
+   * `<json>` of a set of objects selected — `select <json>User`, `select
+   * <json>User { name }` (the shape is the operand's: a cast binds looser than
+   * a shape), `select <json>(select User { … } order by …)` — is the objects
+   * themselves: a select of objects is already one JSON object per row, as
+   * its shape writes it. An object with no shape is `{ id }`, as Gel writes
+   * it. The select to compile instead, or null for any other expression.
+   */
+  private jsonObjectsOperand(
+    expr: EdgeQLAST.Expression,
+    shape: EdgeQLAST.Shape | undefined
+  ): { expr: EdgeQLAST.Expression; shape?: EdgeQLAST.Shape; } | null {
+    if (expr.kind !== "TypeCast" || !/^(std::)?json$/.test(renderEdgeQLTypeName(expr.type))) {
+      return null;
+    }
+    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    const isObjectType = (operand: EdgeQLAST.Expression): boolean =>
+      operand.kind === "TypeName" && !this.scopeVariable(operand.name.parts.join("::")) &&
+      Context.resolveTypeName(this.ctx, operand.name.parts.join("::"))?.kind === "object";
+    const operand = expr.expr;
+    if (isObjectType(operand)) {
+      return { expr: operand, shape: shape ?? idShape };
+    }
+    if (!shape && operand.kind === "Subquery" && operand.query.kind === "SelectQuery" && isObjectType(operand.query.expr)) {
+      return { expr: { ...operand, query: { ...operand.query, shape: operand.query.shape ?? idShape } } };
+    }
+    return null;
+  }
+
+  /**
+   * A tuple or array built of paths from one object type — `(JT.dd, JT.ld)`,
+   * `[JT.dd]`, `<json>(JT.a, JT.b)` — is one value per object of the type,
+   * as Gel factors the paths' common prefix: the type and the constructor
+   * with each `JT.p` made `.p`, the path of the current object. Null for any
+   * other expression.
+   */
+  private perObjectConstructor(expr: EdgeQLAST.Expression): { typeName: string; expr: EdgeQLAST.Expression; } | null {
+    const constructor = expr.kind === "TypeCast" ? expr.expr : expr;
+    if (constructor.kind !== "TupleExpr" && constructor.kind !== "NamedTuple" && constructor.kind !== "ArrayExpr") {
+      return null;
+    }
+    const roots = new Set<string>();
+    const collect = (node: unknown): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      const path = node as EdgeQLAST.Path;
+      if (path.kind === "Path" && path.rooted) {
+        roots.add(path.steps[0].name);
+      }
+      Object.values(node).forEach(collect);
+    };
+    collect(constructor);
+    const [typeName] = roots;
+    if (
+      roots.size !== 1 || this.scopeVariable(typeName) || Context.getCTEAlias(this.ctx, typeName) ||
+      Context.resolveTypeName(this.ctx, typeName)?.kind !== "object"
+    ) {
+      return null;
+    }
+    const relative = (node: unknown): unknown => {
+      if (Array.isArray(node)) {
+        return node.map(relative);
+      }
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      const path = node as EdgeQLAST.Path;
+      if (path.kind === "Path" && path.rooted && path.steps[0].name === typeName) {
+        return { ...path, rooted: false, steps: path.steps.slice(1) };
+      }
+      return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, relative(value)]));
+    };
+    return { expr: relative(expr) as EdgeQLAST.Expression, typeName };
+  }
+
+  /**
+   * The select of `perObjectConstructor`: one row per object of `typeName`,
+   * the value `expr` of it. As in Gel, an object where an element is empty has
+   * no value (a tuple or array holds no empty element).
+   */
+  private compilePerObjectConstructor(
+    typeName: string,
+    expr: EdgeQLAST.Expression
+  ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause; where?: SQL.SQLExpression; } {
+    const source = this.compileSelectExpression(EdgeQLAST.createTypeName(typeName.split("::")));
+    const constructor = expr.kind === "TypeCast" ? expr.expr : expr;
+    const elements = constructor.kind === "NamedTuple" ?
+      constructor.elements.map(element => element.value) :
+      (constructor as EdgeQLAST.TupleExpr | EdgeQLAST.ArrayExpr).elements;
+    const nonEmpty = elements.filter(element => this.mayBeEmpty(element)).map(element => SQL.isNotNull(this.compileExpression(element)));
+    const where = [source.where, ...nonEmpty].reduce<SQL.SQLExpression | undefined>(
+      (all, condition) => !condition ? all : all ? SQL.createBinaryExpression("AND", all, condition) : condition,
+      undefined
+    );
+    const value = this.dateDurationText(this.compileExpression(expr), this.staticScalarType(expr));
+    return { fromClause: source.fromClause, selectItems: [SQL.createSelectItem(value)], where };
+  }
+
   protected compileSelectExpression(
     expr: EdgeQLAST.Expression,
     shape?: EdgeQLAST.Shape
@@ -349,6 +448,31 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const compiled = this.withDetached(() => this.compileSelectExpression(detached, shape));
       [...variables.entries()].filter(([name, variable]) => variable.subject && !outer.has(name)).forEach(([name]) => variables.delete(name));
       return compiled;
+    }
+
+    const objects = this.jsonObjectsOperand(expr, shape);
+    if (objects) {
+      // Still a json value, not an object: its type is `json`.
+      const asJson = (items: SQL.SelectItem[]): SQL.SelectItem[] =>
+        items.map(item => SQL.createSelectItem(SQL.createFunctionCall("to_jsonb", [item.expression])));
+      if (objects.expr.kind === "Subquery") {
+        const statement = this.compileQuery(objects.expr.query);
+        const alias = Context.generateAlias(this.ctx, "__sub");
+        const subquery = statement.kind === "SelectStatement" ?
+          { ...statement, select: { ...statement.select, columns: asJson(statement.select.columns) } } :
+          statement;
+        return {
+          fromClause: SQL.createFromClause([{ alias, kind: "TableReference", name: "", subquery }]),
+          selectItems: [SQL.createSelectItem(SQL.createColumnReference("*", alias))]
+        };
+      }
+      const compiled = this.compileSelectExpression(objects.expr, objects.shape);
+      return { ...compiled, selectItems: asJson(compiled.selectItems) };
+    }
+
+    const perObject = shape ? null : this.perObjectConstructor(expr);
+    if (perObject) {
+      return this.compilePerObjectConstructor(perObject.typeName, perObject.expr);
     }
 
     if (expr.kind === "TypeName") {
@@ -472,6 +596,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const cteAlias = Context.getCTEAlias(this.ctx, expr.name);
       if (cteAlias) {
         cteAlias.referenced = true;
+        // The type of the statement's value, read before the name is bound to the CTE's column below.
+        // Whether it may be empty: a binding of values that is no select.
+        const bound = this.scopeVariable(expr.name);
+        const mayBeEmpty = bound !== undefined && !bound.sqlOverride && this.outputMayBeEmpty(bound.expression);
+        const outputType = expr === this.outputExpression && cteAlias.values ?
+          this.staticScalarType(expr) ?? (cteAlias.select && !cteAlias.select.shape ? this.staticScalarType(cteAlias.select.expr) : null) :
+          null;
 
         // The CTE name acts as a virtual table — SELECT FROM the CTE name
         const tableAlias = Context.addTableAlias(
@@ -532,6 +663,18 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           ];
         }
 
+        // A statement's value bound to an empty set (`with x := <str>{}
+        // select x`) is no row, not a row holding NULL.
+        // Its zero date durations are `P0D`.
+        if (cteAlias.values && !cteAlias.typeDef && expr === this.outputExpression) {
+          const value = SQL.createColumnReference("value", tableAlias);
+          const text = this.dateDurationText(value, outputType);
+          return {
+            fromClause,
+            selectItems: text === value ? selectItems : [SQL.createSelectItem(text)],
+            where: mayBeEmpty ? SQL.isNotNull(value) : undefined
+          };
+        }
         return { selectItems, fromClause };
       }
 
@@ -610,9 +753,26 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
     // For other expressions, compile directly; the statement's result is written as Gel writes it.
     const compiledExpr = this.compileExpression(expr);
-    const selectItems = [
-      SQL.createSelectItem(expr === this.outputExpression ? this.dateDurationText(compiledExpr, this.staticScalarType(expr)) : compiledExpr)
-    ];
+    const output = expr === this.outputExpression;
+    const selectItems = [SQL.createSelectItem(output ? this.dateDurationText(compiledExpr, this.staticScalarType(expr)) : compiledExpr)];
+
+    // The statement's value when it may be empty (`select <str>{}`, `select
+    // json_get(j, 'missing')`): SQL NULL is the empty set, so there is no row,
+    // as in Gel, rather than one row holding NULL. The value is a derived
+    // table so it is computed once; a one-column row is NULL when its column is.
+    if (output && this.outputMayBeEmpty(expr)) {
+      const alias = Context.generateAlias(this.ctx, "value");
+      return {
+        fromClause: SQL.createFromClause([{
+          alias,
+          kind: "TableReference",
+          name: "",
+          subquery: SQL.createSelectStatement({ select: SQL.createSelectClause(selectItems) })
+        }]),
+        selectItems: [SQL.createSelectItem(SQL.createColumnReference("*", alias))],
+        where: { kind: "RawSQLExpression", sql: `${alias} IS NOT NULL` }
+      };
+    }
     const fromClause = SQL.createFromClause([]); // No FROM clause needed
 
     return { selectItems, fromClause };
@@ -650,7 +810,18 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         locationOf(set)
       );
     }
-    const branches: SQL.SQLStatement[] = elements.map(element => this.compileSetLiteralElement(element, shape));
+    // The statement's set: each element is a value the statement answers, so
+    // written as the statement writes its value (a zero date duration `P0D`,
+    // an empty element no row).
+    const output = set === this.outputExpression;
+    const branches: SQL.SQLStatement[] = elements.map(element => {
+      this.outputExpression = output ? element : this.outputExpression;
+      try {
+        return this.compileSetLiteralElement(element, shape);
+      } finally {
+        this.outputExpression = output ? set : this.outputExpression;
+      }
+    });
     if (branches.length === 0) {
       branches.push(SQL.createSelectStatement({
         select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("null", null))]),

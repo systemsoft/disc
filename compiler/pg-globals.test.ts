@@ -181,14 +181,10 @@ Deno.test({
         schema
       );
 
-      // Execute without setting the global -- should return NULL
+      // Execute without setting the global: current_setting (missing_ok)
+      // is NULL, the empty set, so no row, as in Gel.
       const result = await pool.query(sql);
-      assertEquals(result.rowCount, 1, "Should return 1 row");
-
-      // The value should be NULL (unset setting with missing_ok=true returns NULL)
-      const row = result.rows[0] as Record<string, unknown>;
-      const values = Object.values(row);
-      assertEquals(values[0], null, "Unset global should return NULL");
+      assertEquals(result.rowCount, 0, "An unset global is the empty set: no row");
 
       await cleanup(pool, manager);
     } finally {
@@ -281,17 +277,10 @@ Deno.test({
         schema
       );
 
-      // Execute without setting -- PG returns NULL (missing_ok=true)
+      // Execute without setting -- PG reads NULL (missing_ok=true), the
+      // empty set: no row.
       const result = await pool.query(sql);
-      assertEquals(result.rowCount, 1, "Should return 1 row");
-
-      const row = result.rows[0] as Record<string, unknown>;
-      const values = Object.values(row);
-      assertEquals(
-        values[0],
-        null,
-        "Required global unset should still return NULL from PG"
-      );
+      assertEquals(result.rowCount, 0, "Required global unset is still empty from PG");
 
       await cleanup(pool, manager);
     } finally {
