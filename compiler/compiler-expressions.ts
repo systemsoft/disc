@@ -261,6 +261,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   private readonly tupleArrayAggregates = new WeakSet<EdgeQLAST.FunctionCall>();
   /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
   private detachedFrom = -1;
+  /*** Selects of objects that compile to their objects' ids, not their JSON (see `objectComparisonById`). ***/
+  protected readonly objectIdSelects = new WeakSet<EdgeQLAST.SelectQuery>();
 
   // Implemented by higher layers of the compiler inheritance chain.
   protected abstract compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement;
@@ -268,6 +270,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     path: EdgeQLAST.Path
   ): SQL.SQLExpression;
   protected abstract isSetPath(expr: EdgeQLAST.Expression): boolean;
+  protected abstract isObjectPath(path: EdgeQLAST.Path): boolean;
   protected abstract membershipSelect(expr: EdgeQLAST.Expression): SQL.SelectStatement | null;
   protected abstract pathProperty(path: EdgeQLAST.Path): Context.PropertyDef | undefined;
   protected abstract compileGlobalRef(
@@ -417,6 +420,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // Handle IS / IS NOT for polymorphic type checking
     if (binOp.op === "IS" || binOp.op === "IS NOT") {
       return this.compileIsTypeCheck(binOp);
+    }
+
+    const byId = this.objectComparisonById(binOp);
+    if (byId) {
+      return this.compileExpression(byId);
     }
 
     // A comparison of a multi path elsewhere (not marked: see anyElementComparisons) is one
@@ -713,6 +721,74 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       default:
         return true;
     }
+  }
+
+  /*** A filter's condition with its comparisons of objects comparing ids (`objectComparisonById`), through `and`, `or` and `not`. ***/
+  private comparingObjectsById(expr: EdgeQLAST.Expression): EdgeQLAST.Expression {
+    if (expr.kind === "UnaryOp" && expr.op === "NOT") {
+      const operand = this.comparingObjectsById(expr.operand);
+      return operand === expr.operand ? expr : { ...expr, operand };
+    }
+    if (expr.kind !== "BinaryOp") {
+      return expr;
+    }
+    if (expr.op === "AND" || expr.op === "OR") {
+      const left = this.comparingObjectsById(expr.left);
+      const right = this.comparingObjectsById(expr.right);
+      return left === expr.left && right === expr.right ? expr : { ...expr, left, right };
+    }
+    return this.objectComparisonById(expr) ?? expr;
+  }
+
+  /**
+   * `=`, `!=`, `?=`, `?!=`, `in` and `not in` on objects, which compare their
+   * identity, rewritten to compare their ids; null when no operand needs it.
+   * A select of objects (`objectSelectOf`) compiles to their ids
+   * (`objectIdSelects`), and a path to several objects gets `.id`
+   * (`.tags` → `.tags.id`), compared element by element like any multi path
+   * — on the left of a symmetric operator. A single link (`.author`), a
+   * `with` name of objects and an id cast are ids already.
+   *
+   *   filter .author = (select User filter .email = $e)
+   *   → author_id = (SELECT user_2.id FROM "user" AS user_2 WHERE user_2.email = $1)
+   */
+  private objectComparisonById(binOp: EdgeQLAST.BinaryOp): EdgeQLAST.BinaryOp | null {
+    if (!EQUALITY_OPERATORS.has(binOp.op)) {
+      return null;
+    }
+    const rights = binOp.right.kind === "SetExpr" ? flattenSetElements(binOp.right) : [binOp.right];
+    const selects = [binOp.left, ...rights]
+      .map(operand => this.objectSelectOf(operand))
+      .filter((select): select is EdgeQLAST.SelectQuery => select !== null && !this.objectIdSelects.has(select));
+    const isObjects = (expr: EdgeQLAST.Expression): expr is EdgeQLAST.Path => expr.kind === "Path" && this.isSetPath(expr) && this.isObjectPath(expr);
+    if (selects.length === 0 && !isObjects(binOp.left) && !isObjects(binOp.right)) {
+      return null;
+    }
+    selects.forEach(select => this.objectIdSelects.add(select));
+    const idStep: EdgeQLAST.PathStep = { kind: "PathStep", name: "id", type: "property" };
+    const ids = (expr: EdgeQLAST.Expression): EdgeQLAST.Expression => isObjects(expr) ? { ...expr, steps: [...expr.steps, idStep] } : expr;
+    const swap = isObjects(binOp.right) && !isObjects(binOp.left) && binOp.op !== "IN" && binOp.op !== "NOT IN";
+    const rewritten = { ...binOp, left: ids(swap ? binOp.right : binOp.left), right: ids(swap ? binOp.left : binOp.right) };
+    if (this.anyElementComparisons.has(binOp)) {
+      this.anyElementComparisons.add(rewritten);
+    }
+    return rewritten;
+  }
+
+  /*** The select of objects `expr` is (`(select User filter …)`, `(select detached User)`, `(select .author.best_friend)`, `(select u)`), else null. ***/
+  protected objectSelectOf(expr: EdgeQLAST.Expression): EdgeQLAST.SelectQuery | null {
+    if (expr.kind !== "Subquery" || expr.query.kind !== "SelectQuery") {
+      return null;
+    }
+    const subject = detachedOperand(expr.query.expr) ?? expr.query.expr;
+    if (subject.kind === "TypeName") {
+      const name = subject.name.parts.join("::");
+      return this.scopeVariable(name)?.row || Context.resolveTypeName(this.ctx, name)?.kind === "object" ? expr.query : null;
+    }
+    if (subject.kind === "Identifier") {
+      return this.scopeVariable(subject.name)?.row || Context.getCTEAlias(this.ctx, subject.name)?.typeDef ? expr.query : null;
+    }
+    return subject.kind === "Path" && this.isObjectPath(subject) ? expr.query : null;
   }
 
   /**
@@ -1593,6 +1669,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * in its condition tests any element in place (`markAnyElementComparisons`).
    */
   protected compileFilter(filter: EdgeQLAST.Expression): SQL.SQLExpression {
+    filter = this.comparingObjectsById(filter);
     this.markAnyElementComparisons(filter);
     this.markTruthContexts(filter);
     const sets = this.elementWiseSets(filter);

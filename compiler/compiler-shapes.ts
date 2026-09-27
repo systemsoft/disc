@@ -91,6 +91,8 @@ function namedPaths(node: unknown, names: Set<string>): { name: string; node: Ed
 
 /*** CTE name for the anonymous binding of `select (insert|update|delete …) { shape }`. ***/
 const MUTATION_CTE_NAME = "m";
+/*** The binding a shape on a select of objects, selected again (`select (select T …) { … } filter …`), reads it through. ***/
+const SELECT_CTE_NAME = "s";
 
 export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   /** The expression the statement being compiled selects as its result (`select <expr>`), whose value leaves the query. */
@@ -118,9 +120,23 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // `select (with n := (…) insert …) { shape }` is
     // `with n := (…) select (insert …) { shape }`: the inner block's bindings
     // are in scope of the mutation either way, and nothing else reads them.
-    if (query.expr.kind === "Subquery" && query.expr.query.kind === "WithBlock" && this.endsInMutation(query.expr.query)) {
+    // So is a shape on `(with … select …)`.
+    if (query.expr.kind === "Subquery" && query.expr.query.kind === "WithBlock" && (query.shape || this.endsInMutation(query.expr.query))) {
       const { body, ...block } = query.expr.query;
       return this.compileQuery({ ...block, body: { ...query, expr: { kind: "Subquery", query: body } } });
+    }
+    // `select (select T …) { shape }` is the inner select with this shape;
+    // filtered, ordered or sliced again, it is `with s := (select T …) select s { shape } …`.
+    if (query.shape && this.objectSelectOf(query.expr) && query.expr.kind === "Subquery" && query.expr.query.kind === "SelectQuery") {
+      if (!query.filter && !query.orderBy && !query.offset && !query.limit && !query.distinct) {
+        return this.compileSelectQuery({ ...query.expr.query, shape: query.shape });
+      }
+      const name = this.claimCteName(SELECT_CTE_NAME);
+      return this.compileQuery({
+        kind: "WithBlock",
+        bindings: [{ kind: "WithBinding", name: { kind: "Identifier", name }, value: query.expr }],
+        body: { ...query, expr: { kind: "Identifier", name } }
+      });
     }
     if (query.expr.kind === "Subquery" && isMutationQuery(query.expr.query)) {
       const name = this.claimCteName(MUTATION_CTE_NAME);
@@ -165,10 +181,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
     try {
       // Handle the main expression and generate appropriate FROM clause
+      const idsOnly = this.objectIdSelects.has(query);
       const { selectItems, fromClause, where } = this.compileSelectExpression(
         query.expr,
-        query.shape
+        idsOnly ? undefined : query.shape
       );
+      // A select of objects compared by identity (`objectComparisonById`): their ids.
+      const subject = idsOnly ? this.ctx.currentScope.aliases.values().next().value : undefined;
+      if (subject) {
+        selectItems.splice(0, selectItems.length, SQL.createSelectItem(SQL.createColumnReference("id", subject.alias)));
+      }
 
       // Compile WHERE clause: the source's own condition (a path's objects)
       // and the filter.
@@ -530,12 +552,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
 
     if (expr.kind === "Subquery") {
-      // A mutation operand never gets here (see compileSelectQuery). For any
-      // other subquery the shape would be dropped without a trace.
+      // A mutation or a select of objects never gets here (see
+      // compileSelectQuery). For any other subquery the shape would be dropped
+      // without a trace.
       if (shape) {
         throw new CompilationError(
-          "A shape on a parenthesized query is only supported for insert, update and delete. " +
-            "Put the shape inside the parentheses: select (select T { … } filter …)"
+          "A shape on a parenthesized query is only supported for insert, update, delete and a select of objects"
         );
       }
 
@@ -1261,15 +1283,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // Named element (alias or computed property)
       key = element.name.name;
       if (element.computable) {
-        // Computed property: name := expression. A path set is its select's
-        // rows as an array.
-        const pathSelect = this.shapePathSelect(element);
-        value = pathSelect ?
+        // Computed property: name := expression. Objects read as a link
+        // does; a path set is its select's rows as an array.
+        const objects = this.objectComputable(element);
+        const pathSelect = objects ? null : this.shapePathSelect(element);
+        value = objects ?? (pathSelect ?
           this.compileJsonArray(pathSelect) :
           this.dateDurationText(
             this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName)),
             this.staticScalarType(element.expr)
-          );
+          ));
       } else if (element.shape) {
         // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
@@ -1471,32 +1494,109 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     filter?: EdgeQLAST.Expression
   ): SQL.SQLExpression {
     const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
-    const query = this.expressionLinkQuery(link, new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape ?? idShape, orderBy, filter);
+    const query = this.expressionLinkQuery(link.name, new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape ?? idShape, orderBy, filter);
+    return this.compileObjectsAsLink(this.compileSelectQuery(query), link.multi, shape !== undefined);
+  }
+
+  /**
+   * The rows of a select of objects (`rows`: with a shape, or `{ id }`) read
+   * as a link is: with a shape, one object is a one-element array or null
+   * when empty, several an array; without, one is the id or null, several
+   * the ids (null when empty), as compileLinkReference answers.
+   */
+  private compileObjectsAsLink(rows: SQL.SQLStatement, multi: boolean, shaped: boolean): SQL.SQLExpression {
     const row = SQL.createColumnReference("v", "__agg");
     let value: SQL.SQLExpression = SQL.createFunctionCall("jsonb_agg", [
-      shape ? row : SQL.createBinaryExpression("->", row, SQL.createLiteral("string", "id"))
+      shaped ? row : SQL.createBinaryExpression("->", row, SQL.createLiteral("string", "id"))
     ]);
-    if (shape && link.multi) {
+    if (shaped && multi) {
       value = SQL.createFunctionCall("COALESCE", [value, { kind: "RawSQLExpression", sql: "'[]'::jsonb" }]);
-    } else if (!shape && !link.multi) {
+    } else if (!shaped && !multi) {
       value = SQL.createBinaryExpression("->", value, SQL.createLiteral("number", 0));
     }
     return SQL.createSubqueryExpression(SQL.createSelectStatement({
-      from: SQL.createFromClause([{ alias: "__agg", columnAliases: ["v"], kind: "TableReference", name: "", subquery: this.compileSelectQuery(query) }]),
+      from: SQL.createFromClause([{ alias: "__agg", columnAliases: ["v"], kind: "TableReference", name: "", subquery: rows }]),
       select: SQL.createSelectClause([SQL.createSelectItem(value)])
     }));
   }
 
+  /**
+   * A computed shape element whose value is objects, read as a link is
+   * (`compileObjectsAsLink`): a path to objects, a type's objects, a select
+   * of them, a `with` name bound to them, or `assert_single` of one of those,
+   * with or without a shape. It is one object when Gel infers at most one (a
+   * path through single links, a select keeping at most one, a binding of
+   * one, `assert_single`), else several. Null for any other value, and for
+   * one object of a path or a name without a shape, which is its id already.
+   *
+   *   best := .author.best_friend { name }   → [{ "name": … }] or null
+   *   one := (select User filter .email = $e) → its id or null
+   *   all := (select detached User)           → the ids
+   */
+  private objectComputable(element: EdgeQLAST.ShapeElement): SQL.SQLExpression | null {
+    const { expr } = element;
+    const shape = expr.kind === "ShapeExpr" ? expr.shape : undefined;
+    let subject = expr.kind === "ShapeExpr" ? expr.expr : expr;
+    const asserted = subject.kind === "FunctionCall" && subject.args.length === 1 &&
+      subject.name.parts.join("::").replace(/^std::/, "") === "assert_single";
+    if (subject.kind === "FunctionCall" && asserted) {
+      subject = subject.args[0].value;
+    }
+    const multi = this.objectsMayBeSeveral(subject);
+    if (multi === null || (!shape && !asserted && !multi && (subject.kind === "Path" || subject.kind === "Identifier"))) {
+      return null;
+    }
+    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    const ownShape = subject.kind === "Subquery" && subject.query.kind === "SelectQuery" ? subject.query.shape : undefined;
+    const query = this.expressionLinkQuery(element.name!.name, subject, shape ?? ownShape ?? idShape, element.orderBy, element.filter);
+    const rows = this.compileSelectQuery(query);
+    return this.compileObjectsAsLink(
+      asserted ? (this.assertSingle(rows) as SQL.SubqueryExpression).query : rows,
+      multi && !asserted,
+      shape !== undefined || ownShape !== undefined
+    );
+  }
+
+  /*** Whether the objects `expr` stands for may be several, as Gel infers it (see `objectComputable`); null when `expr` is not objects. ***/
+  private objectsMayBeSeveral(expr: EdgeQLAST.Expression): boolean | null {
+    if (this.typeOfObjectSet(expr)) {
+      return true;
+    }
+    if (expr.kind === "Path") {
+      const resolved = this.resolvePath(expr);
+      return resolved && !resolved.property ? resolved.multi : null;
+    }
+    if (expr.kind === "Identifier") {
+      const variable = this.scopeVariable(expr.name);
+      const cte = variable ? undefined : Context.getCTEAlias(this.ctx, expr.name);
+      return variable?.row ? false : cte?.typeDef ? !cte.singleton : null;
+    }
+    if (expr.kind !== "Subquery" || expr.query.kind !== "SelectQuery") {
+      return null;
+    }
+    const query = expr.query;
+    const typeDef = this.typeOfObjectSet(query.expr);
+    if (typeDef) {
+      return !this.selectsAtMostOne(query, typeDef);
+    }
+    // A select of the current object (`(select User …)` in a shape of User's) is it or nothing.
+    const several = query.expr.kind === "TypeName" ?
+      (this.scopeVariable(query.expr.name.parts.join("::"))?.row ? false : null) :
+      this.objectsMayBeSeveral(query.expr);
+    const keepsOne = query.limit?.kind === "Literal" && Number(query.limit.value) <= 1;
+    return several === null ? null : several && !keepsOne;
+  }
+
   /*** `select <expr> { shape } filter … order by …` for a computed link's expression; a `(select …)` takes the shape, filter and order by itself. ***/
   private expressionLinkQuery(
-    link: Context.LinkDef,
+    name: string,
     expr: EdgeQLAST.Expression,
     shape: EdgeQLAST.Shape,
     orderBy?: EdgeQLAST.OrderByClause[],
     filter?: EdgeQLAST.Expression
   ): EdgeQLAST.SelectQuery {
     if (expr.kind === "ShapeExpr") {
-      return this.expressionLinkQuery(link, expr.expr, shape, orderBy, filter);
+      return this.expressionLinkQuery(name, expr.expr, shape, orderBy, filter);
     }
     if (expr.kind !== "Subquery" || expr.query.kind !== "SelectQuery") {
       return { distinct: false, expr, filter, kind: "SelectQuery", orderBy, shape };
@@ -1504,7 +1604,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const query = expr.query;
     if ((filter || orderBy) && (query.limit || query.offset)) {
       throw new CompilationError(
-        `Cannot filter or order the computed link '${link.name}' in a shape: its expression already applies a limit or offset`
+        `Cannot filter or order the computed link '${name}' in a shape: its expression already applies a limit or offset`
       );
     }
     return {
@@ -2189,8 +2289,10 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * `select n.last` when `path` starts at a `with` binding of objects (a
    * select, or a mutation's rows: `n := (insert …)`), else null. As one value
    * (`number := n.last`) the path is that select, as `(select n.last)` is; a
-   * path to objects (`program := n.program`) stands for their id. More than
-   * one row fails at run time, as any scalar subquery does.
+   * path to objects (`program := n.program`) stands for their id. As a single
+   * property's or link's value, a binding of possibly several objects is a
+   * compile error (`bindingPathMayBeSeveral`); elsewhere more than one row
+   * fails at run time, as any scalar subquery does.
    */
   private bindingPathSelect(path: EdgeQLAST.Path): EdgeQLAST.SelectQuery | null {
     const resolved = path.rooted && path.steps.length > 1 ? this.resolvePath(path) : null;

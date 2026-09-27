@@ -128,7 +128,8 @@ pgTest("path through a link with nested sub-shapes, empty is null", async (pool,
     await rows(pool, schema, "select ClPost { title, bf: { name, best_friend: { name } }, auth: { bf2 := .best_friend { name } } } order by .title"),
     [
       { auth: [{ bf2: [{ name: "u2" }] }], bf: [{ best_friend: null, name: "u2" }], title: "p1" },
-      { auth: [{ bf2: [] }], bf: null, title: "p2" }
+      // `bf2 := .best_friend { name }` is one object: null when empty, as `bf` is.
+      { auth: [{ bf2: null }], bf: null, title: "p2" }
     ]
   );
 });

@@ -14,7 +14,15 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, ConfigurationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
-import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
+import {
+  buildParameterIndex,
+  compileEmptyOrder,
+  detachedOperand,
+  flattenSetElements,
+  isMutationQuery,
+  locationOf,
+  POLICY_ROWS
+} from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -627,7 +635,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         `Link property '@${linkProperty.name?.name}' on link '${link.name}': link properties are only supported on multi links`
       );
     }
-    if (this.bareTypeSelect(expr) || this.selectsManyObjects(expr)) {
+    if (this.bareTypeSelect(expr) || this.selectsManyObjects(expr) || this.bindingPathMayBeSeveral(expr)) {
       throw new CompilationError(
         `possibly more than one element returned by an expression for a link '${link.name}' declared as 'single'`,
         locationOf(expr) ?? (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" ? locationOf(expr.query.expr) : undefined)
@@ -662,6 +670,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       }
     }
 
+    // Any other select of objects (`(select detached User filter …)`): its id.
+    const objects = this.objectSelectOf(expr);
+    if (objects) {
+      this.objectIdSelects.add(objects);
+    }
     return this.compileExpression(expr);
   }
 
@@ -685,12 +698,58 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       expr.kind === "Identifier" ?
       Context.getCTEAlias(this.ctx, expr.name)?.select :
       undefined;
-    if (query?.kind !== "SelectQuery" || query.expr.kind !== "TypeName") {
+    const subject = query?.kind === "SelectQuery" ? detachedOperand(query.expr) ?? query.expr : undefined;
+    if (query?.kind !== "SelectQuery" || subject?.kind !== "TypeName") {
       return false;
     }
-    const name = query.expr.name.parts.join("::");
+    const name = subject.name.parts.join("::");
     const typeDef = this.scopeVariable(name) ? undefined : Context.resolveTypeName(this.ctx, name);
     return typeDef?.kind === "object" && !this.selectsAtMostOne(query, typeDef);
+  }
+
+  /**
+   * Refuse the value of a single property that may be several values, as Gel
+   * does when compiling: `number := n.last` where `n` is a `with` binding of
+   * possibly several objects (`bindingPathMayBeSeveral`).
+   */
+  private assertSingleValue(property: Context.PropertyDef, element: EdgeQLAST.ShapeElement): void {
+    if (this.bindingPathMayBeSeveral(element.expr)) {
+      throw new CompilationError(
+        `possibly more than one element returned by an expression for a property '${property.name}' declared as 'single'`,
+        locationOf(element) ?? locationOf(element.expr)
+      );
+    }
+  }
+
+  /**
+   * True when `expr` has a path from a `with` binding of possibly several
+   * objects (`n.last` of `n := (select Counter)`; not of a binding of one,
+   * see `bindsOneObject`) as one value: alone, selected (`(select n.last)`)
+   * or an operand (`n.last + 1`). An aggregate (`max(n.last)`) and
+   * `assert_single(n.last)` are one value.
+   */
+  private bindingPathMayBeSeveral(expr: EdgeQLAST.Expression): boolean {
+    switch (expr.kind) {
+      case "Path": {
+        const resolved = expr.rooted && expr.steps.length > 1 ? this.resolvePath(expr) : null;
+        return resolved?.start.kind === "binding" && resolved.multi;
+      }
+      case "Subquery": {
+        const { query } = expr;
+        const keepsOne = query.kind === "SelectQuery" && query.limit?.kind === "Literal" && Number(query.limit.value) <= 1;
+        return query.kind === "SelectQuery" && !keepsOne && this.bindingPathMayBeSeveral(query.expr);
+      }
+      case "BinaryOp":
+        // `in`'s right operand is a whole set.
+        return this.bindingPathMayBeSeveral(expr.left) ||
+          (expr.op !== "IN" && expr.op !== "NOT IN" && this.bindingPathMayBeSeveral(expr.right));
+      case "UnaryOp":
+        return expr.op !== "EXISTS" && this.bindingPathMayBeSeveral(expr.operand);
+      case "TypeCast":
+        return this.bindingPathMayBeSeveral(expr.expr);
+      default:
+        return false;
+    }
   }
 
   // Compile a multi-link assignment value down to a SELECT yielding the
@@ -717,6 +776,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           return statement;
         }
       }
+    }
+
+    // Any other select of objects (`(select detached User filter …)`): their ids.
+    const objects = this.objectSelectOf(expr);
+    if (objects) {
+      this.objectIdSelects.add(objects);
+      return this.compileSelectQuery(objects) as SQL.SelectStatement;
     }
 
     // Fallback: wrap whatever the expression compiles to as a single-column
@@ -1048,6 +1114,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         columns.push(property.columnName);
       }
 
+      if (property && !property.multi) {
+        this.assertSingleValue(property, element);
+      }
       const value = singleLink ?
         this.compileLinkAssignmentExpression(singleLink, element.expr) :
         property?.multi && !property.computed ?
@@ -1192,6 +1261,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           );
         }
       } else {
+        if (!property.multi) {
+          this.assertSingleValue(property, element);
+        }
         setClauses.push({
           kind: "SetClause",
           column: property.columnName,
@@ -1616,6 +1688,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           );
         }
       } else {
+        if (!property.multi) {
+          this.assertSingleValue(property, element);
+        }
         setClauses.push({
           kind: "SetClause",
           column: property.columnName,
@@ -2021,7 +2096,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         cteName,
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         select: value.kind === "Subquery" && value.query.kind === "SelectQuery" ? value.query : undefined,
-        singleton: value.kind === "Subquery" && value.query.kind === "InsertQuery",
+        singleton: this.bindsOneObject(value),
         typeName: underlyingTypeName,
         typeDef,
         values,
@@ -2061,8 +2136,39 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return mainQuery;
     }
 
-    // Combine CTEs with the main query
+    // Combine CTEs with the main query. A body that is a WITH itself (a
+    // nested block: `with t := … select (with … select …) { … }`) joins this
+    // one: SQL has no WITH directly after another.
+    if (mainQuery.kind === "CTEStatement") {
+      return SQL.withCTEs([...emitted, ...mainQuery.ctes], mainQuery.query);
+    }
     return SQL.withCTEs(emitted, mainQuery);
+  }
+
+  /**
+   * True when a `with` binding's value is one object at most, as Gel infers
+   * it: an insert, a select, update or delete of a type's objects keeping at
+   * most one (`selectsAtMostOne`: `limit 1`, a filter on `.id` or an
+   * exclusive property), or a select of another such binding (`m := n`).
+   */
+  private bindsOneObject(value: EdgeQLAST.Expression): boolean {
+    if (value.kind !== "Subquery") {
+      return false;
+    }
+    const { query } = value;
+    if (query.kind === "InsertQuery") {
+      return true;
+    }
+    if (query.kind === "SelectQuery" && query.expr.kind === "Identifier") {
+      return Context.getCTEAlias(this.ctx, query.expr.name)?.singleton === true;
+    }
+    const subject = query.kind === "SelectQuery" ? query.expr : query.kind === "UpdateQuery" || query.kind === "DeleteQuery" ? query.type : undefined;
+    const typeDef = subject?.kind === "TypeName" ? Context.resolveTypeName(this.ctx, subject.name.parts.join("::")) : undefined;
+    if (!subject || typeDef?.kind !== "object") {
+      return false;
+    }
+    const limit = query.kind === "SelectQuery" || query.kind === "DeleteQuery" ? query.limit : undefined;
+    return this.selectsAtMostOne({ expr: subject, filter: "filter" in query ? query.filter : undefined, kind: "SelectQuery", limit }, typeDef);
   }
 
   /**

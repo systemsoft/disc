@@ -270,7 +270,7 @@ Deno.test({
           "select (update MrOrder filter .label = 'seed' set { items += (select MrItem filter .name = 'i2') }) " +
             "{ items: { name }, before := (select MrOrder { items: { name } } filter .label = 'seed') }"
         ),
-        [{ before: { items: [{ name: "i1" }] }, items: [{ name: "i1" }, { name: "i2" }] }]
+        [{ before: [{ items: [{ name: "i1" }] }], items: [{ name: "i1" }, { name: "i2" }] }]
       );
 
       // A path from the result inside a read of the type still reflects the writes.

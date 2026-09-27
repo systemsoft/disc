@@ -141,9 +141,9 @@ Deno.test({
       assertEquals(await run("select ScopeOrder { x := (select ScopeItem { name } order by .name) } filter .code = 'o1'"), [{ x: names }]);
       assertEquals(await run("select ScopeOrder { x := ScopeItem { name } order by .name } filter .code = 'o1'"), [{ x: names }]);
       assertEquals(((await run("select ScopeOrder { x := ScopeItem } filter .code = 'o1'")) as { x: unknown[]; }[])[0].x.length, 3);
-      // At most one object: the object.
+      // At most one object: read as a single link is, `[{ … }]` (or null).
       assertEquals(await run("select ScopeOrder { x := (select ScopeItem { name } order by .name limit 1) } filter .code = 'o1'"), [{
-        x: { name: "a" }
+        x: [{ name: "a" }]
       }]);
     });
   }

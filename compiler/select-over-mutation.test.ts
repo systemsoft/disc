@@ -251,10 +251,8 @@ Deno.test("select over mutation - a shape over an object cast is a compile error
   assertEquals(await sqlOf("select <Program><uuid>$u"), "SELECT CAST($1 AS uuid)");
 });
 
-Deno.test("select over mutation - a shape over a parenthesized select is a compile error, not a silently dropped shape", async () => {
-  const shaped = await compile("select (select GitRef filter .name = 'main') { name }");
-
-  assert(/shape/i.test(shaped.error ?? ""), `expected a compile error about the shape, got: ${JSON.stringify(shaped)}`);
+Deno.test("select over mutation - a shape over a parenthesized select of objects is the inner select with the shape", async () => {
+  assertEquals(await sqlOf("select (select GitRef filter .name = 'main') { name }"), await sqlOf("select GitRef { name } filter .name = 'main'"));
 });
 
 // ---------------------------------------------------------------------------

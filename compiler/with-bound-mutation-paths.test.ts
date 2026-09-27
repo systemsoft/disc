@@ -9,8 +9,11 @@
  *     `(select n.last)`; a path to objects is their id.
  *   - A binding of an insert (upsert included) is one object, as Gel infers
  *     it: a path from it in a shape or a filter is one value, not an array or
- *     an any-element test. A binding of a select stays a set.
- *   - `select (with B <mutation>) { … }` compiles as `with B select (<mutation>) { … }`.
+ *     an any-element test. A binding of a select stays a set unless it keeps
+ *     at most one object; as an insert's value, a path from a set is a compile
+ *     error, as in Gel.
+ *   - `select (with B <mutation>) { … }` compiles as `with B select (<mutation>) { … }`,
+ *     as `select (with B select …) { … }` does.
  *
  * The schema is a git forge's issue numbering, as its author wrote it. See
  * server/numbering-upsert-pg.test.ts for the same queries against PostgreSQL.
@@ -85,10 +88,16 @@ Deno.test("with-bound paths - n.last in an insert's values is (select n.last)", 
   assertStringIncludes(bare, "( SELECT n_1.last FROM n AS n_1 )");
 });
 
-Deno.test("with-bound paths - n.last of a with-bound select is (select n.last) too", async () => {
-  const sql = await sqlOf(`with n := (select collab::Numbering filter .last = 1) insert collab::Bug { ${BUG_VALUES}, number := n.last }`);
-
+Deno.test("with-bound paths - n.last of a with-bound select of at most one is (select n.last) too; of several, refused", async () => {
+  const sql = await sqlOf(`with n := (select collab::Numbering filter .last = 1 limit 1) insert collab::Bug { ${BUG_VALUES}, number := n.last }`);
   assert(/, \( SELECT (n_\d+)\.last FROM n AS \1 \)\) RETURNING \*$/.test(sql), sql);
+
+  const compiler = new EdgeQLCompiler(await testSchema(), { enableAccessControl: false });
+  const several = compiler.compile(
+    new EdgeQLParser(`with n := (select collab::Numbering filter .last = 1) insert collab::Bug { ${BUG_VALUES}, number := n.last }`).parse()
+  );
+  assert(!several.ok);
+  assertEquals(several.error.message, "possibly more than one element returned by an expression for a property 'number' declared as 'single'");
 });
 
 Deno.test("with-bound paths - n.program as a link value is the linked object's id; n.program.name its property", async () => {
@@ -140,10 +149,9 @@ Deno.test("with-bound paths - select (with … update|delete …) { shape }, and
   assert(/\), (m_\d+) AS \( INSERT INTO bug .* FROM \1 AS \1_\d+$/.test(nested), nested);
 });
 
-Deno.test("with-bound paths - a shape on (with … select …) is still refused", async () => {
-  const compiler = new EdgeQLCompiler(await testSchema(), { enableAccessControl: false });
-  const result = compiler.compile(new EdgeQLParser("select (with x := 1 select collab::Bug) { number }").parse());
+Deno.test("with-bound paths - a shape on (with … select …) is with … select (select …) { shape }", async () => {
+  const inner = await sqlOf("select (with x := 1 select collab::Bug filter .number = x) { number }");
 
-  assert(!result.ok);
-  assertStringIncludes(result.error.message, "A shape on a parenthesized query is only supported for insert, update and delete");
+  assertEquals(inner, await sqlOf("with x := 1 select (select collab::Bug filter .number = x) { number }"));
+  assertEquals(inner, await sqlOf("with x := 1 select collab::Bug { number } filter .number = x"));
 });

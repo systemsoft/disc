@@ -104,12 +104,16 @@ Deno.test("a computed select of another type's objects is an array, unless it ke
     compile("select Cart { x := (select Item { name }) }"),
     /'x', \(SELECT COALESCE\(jsonb_agg\(__agg\.v\), '\[\]'::jsonb\) FROM \(SELECT jsonb_build_object\('name', item_\d+\.name\) FROM item AS item_\d+\) AS __agg\(v\)\)/
   );
-  // A bare type is its objects' ids; with a shape, the shape.
-  assertStringIncludes(compile("select Cart { x := Item }"), "jsonb_agg(__agg.v)");
-  assertStringIncludes(compile("select Cart { x := Item { name } }"), "jsonb_agg(__agg.v)");
-  // `limit 1` and a filter on `.id` keep at most one: one object.
-  assertEquals(compile("select Cart { x := (select Item { name } limit 1) }").includes("jsonb_agg"), false);
-  assertEquals(compile("select Cart { x := (select Item { name } filter .id = <uuid>$id) }").includes("jsonb_agg"), false);
+  // A bare type is its objects' ids, as a stored multi link is; with a shape, the shape.
+  assertStringIncludes(compile("select Cart { x := Item }"), "jsonb_agg(__agg.v -> 'id')");
+  assertStringIncludes(compile("select Cart { x := Item { name } }"), "COALESCE(jsonb_agg(__agg.v), '[]'::jsonb)");
+  // `limit 1` and a filter on `.id` keep at most one: one object, as a
+  // single link is — `[{ … }]` or null, no `[]`.
+  for (const one of ["(select Item { name } limit 1)", "(select Item { name } filter .id = <uuid>$id)"]) {
+    const sql = compile(`select Cart { x := ${one} }`);
+    assertStringIncludes(sql, "'x', (SELECT jsonb_agg(__agg.v) FROM");
+    assertEquals(sql.includes("'[]'::jsonb"), false, sql);
+  }
 });
 
 Deno.test("select of a select is the inner select's rows, not one scalar subquery", () => {

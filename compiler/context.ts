@@ -66,9 +66,11 @@ export interface CTEAlias {
    */
   mutation?: boolean;
   /**
-   * The binding is one object at most: an insert (`n := (insert T { … })`,
-   * with or without `unless conflict`), which Gel infers as a singleton. A
-   * path from it (`n.last`) is one value, not a set.
+   * The binding is one object at most, as Gel infers it: an insert
+   * (`n := (insert T { … })`, with or without `unless conflict`), or a
+   * select, update or delete keeping at most one object (`limit 1`, a filter
+   * on `.id` or an exclusive property). A path from it (`n.last`) is one
+   * value, not a set.
    */
   singleton?: boolean;
   /**
