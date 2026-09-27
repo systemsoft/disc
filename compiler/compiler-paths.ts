@@ -160,6 +160,67 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     return source;
   }
 
+  /**
+   * Bind the object prefix of a selected path (`Order.items` of
+   * `select Order.items.name`, `Item` of `select Item.name`) to the objects
+   * the select reads from `alias` (see `bindSubject`). A relative path, or
+   * one through a backlink or a type intersection, binds nothing.
+   */
+  protected bindPathSubject(path: EdgeQLAST.Path, resolved: ResolvedPath, alias: string): void {
+    const steps = resolved.property ? path.steps.slice(0, -1) : path.steps;
+    if (!path.rooted || steps.slice(1).some(step => step.type !== "property") || (resolved.start.kind === "row" && resolved.hops.length === 0)) {
+      return;
+    }
+    this.bindSubject([steps.map(step => step.name).join(".")], { alias, table: resolved.typeDef.tableName, type: resolved.typeDef.name });
+  }
+
+  /**
+   * The condition that `resolved`, a path from a type or a `with` binding,
+   * reaches the object `alias` from the object `row` of its start:
+   * `alias.id IN (<ids of the path from row>)`.
+   */
+  protected pathReaches(resolved: ResolvedPath, row: Context.TableAlias, alias: string): SQL.SQLExpression {
+    return this.idIn(SQL.createColumnReference("id", alias), this.compilePathIds({ ...resolved, start: { kind: "row", row } }));
+  }
+
+  /**
+   * The select of the ids or values the right operand of `in` stands for,
+   * when it is a set with no one SQL value: a type's objects (`x in Item`),
+   * or a path to several objects or values (`x in o.items`,
+   * `n in o.items.name`). Else null.
+   */
+  protected membershipSelect(expr: EdgeQLAST.Expression): SQL.SelectStatement | null {
+    if (expr.kind === "TypeName") {
+      const name = expr.name.parts.join("::");
+      const typeDef = this.scopeVariable(name) ? undefined : Context.resolveTypeName(this.ctx, name);
+      return typeDef?.kind === "object" ? this.selectColumn(typeDef.tableName, Context.generateAlias(this.ctx, typeDef.tableName), "id") : null;
+    }
+    const resolved = expr.kind === "Path" ? this.resolvePath(expr) : null;
+    if (!resolved?.multi || resolved.property?.computed) {
+      return null;
+    }
+    Context.pushScope(this.ctx);
+    try {
+      const source = this.compilePathSource(resolved);
+      const { property } = resolved;
+      let value: SQL.SQLExpression = SQL.createColumnReference(property ? property.columnName : "id", source.alias);
+      let where = source.where;
+      if (property?.multi) {
+        value = SQL.createFunctionCall("unnest", [value]);
+      } else if (property && !property.required) {
+        // An object without the property adds no element (`NOT IN` a NULL is never true).
+        where = where ? SQL.createBinaryExpression("AND", where, SQL.isNotNull(value)) : SQL.isNotNull(value);
+      }
+      return SQL.createSelectStatement({
+        from: SQL.createFromClause(source.from),
+        select: SQL.createSelectClause([SQL.createSelectItem(value)]),
+        where: where ? SQL.createWhereClause(where) : undefined
+      });
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
   /*** The ids of the objects `resolved` reaches, built hop by hop from its start. ***/
   private compilePathIds(resolved: ResolvedPath): PathIds {
     let ids: PathIds;
@@ -262,10 +323,14 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
   private pathOrigin(path: EdgeQLAST.Path): { start: PathStart; startType: Context.TypeDef; steps: EdgeQLAST.PathStep[]; } | null {
     if (path.rooted) {
       const [root, ...steps] = path.steps;
-      const variable = this.scopeVariable(root.name);
-      if (variable) {
-        const startType = variable.row ? Context.resolveTypeName(this.ctx, variable.row.type) : undefined;
-        return variable.row && startType ? { start: { kind: "row", row: variable.row }, startType, steps } : null;
+      // A `for` variable, or a bound subject (`Item`, `Order.items`).
+      const bound = this.boundPrefix(path);
+      if (bound) {
+        const startType = Context.resolveTypeName(this.ctx, bound.row.type);
+        return startType ? { start: { kind: "row", row: bound.row }, startType, steps: bound.steps } : null;
+      }
+      if (this.scopeVariable(root.name)) {
+        return null;
       }
       const cte = Context.getCTEAlias(this.ctx, root.name);
       if (cte) {

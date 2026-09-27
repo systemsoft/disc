@@ -1759,6 +1759,7 @@ export class EdgeQLParser {
     // Type name or identifier (also accepts soft keywords like `type`)
     if (this.checkIdentLike()) {
       const parts: string[] = [];
+      const span = this.spanOf(this.peek());
 
       parts.push(this.parseIdentifier().name);
 
@@ -1768,7 +1769,7 @@ export class EdgeQLParser {
 
       // Check if it's a type name (starts with uppercase or is qualified)
       if (parts.length > 1 || /^[A-Z]/.test(parts[0])) {
-        return AST.createTypeName(parts);
+        return { ...AST.createTypeName(parts), span };
       }
 
       return AST.createIdentifier(parts[0]);

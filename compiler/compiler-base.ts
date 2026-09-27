@@ -28,6 +28,14 @@ export function locationOf(node: EdgeQLAST.EdgeQLNode | undefined): ErrorContext
   return start ? { location: { column: start.column, line: start.line, offset: start.offset } } : undefined;
 }
 
+/*** The operand of `detached <expr>` (the parser's `DETACHED` unary operator, or a `Detached` node), else null. ***/
+export function detachedOperand(expr: EdgeQLAST.Expression): EdgeQLAST.Expression | null {
+  if (expr.kind === "Detached") {
+    return expr.expr;
+  }
+  return expr.kind === "UnaryOp" && expr.op === "DETACHED" ? expr.operand : null;
+}
+
 /**
  * Extract the intersection type name from a backlink step's optional
  * filter. The parser emits `[is X]` as a `TypeName` AST node here (see

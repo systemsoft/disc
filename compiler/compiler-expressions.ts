@@ -15,6 +15,7 @@ import {
   backlinkIntersectionName,
   compileEmptyOrder,
   CompilerBase,
+  detachedOperand,
   edgeqlTypeToPgType,
   flattenSetElements,
   locationOf,
@@ -92,6 +93,8 @@ function widestIntSqlType(types: (string | null)[]): string {
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
+  /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
+  private detachedFrom = -1;
 
   // Implemented by higher layers of the compiler inheritance chain.
   protected abstract compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement;
@@ -99,6 +102,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     path: EdgeQLAST.Path
   ): SQL.SQLExpression;
   protected abstract isSetPath(expr: EdgeQLAST.Expression): boolean;
+  protected abstract membershipSelect(expr: EdgeQLAST.Expression): SQL.SelectStatement | null;
   protected abstract pathProperty(path: EdgeQLAST.Path): Context.PropertyDef | undefined;
   protected abstract compileGlobalRef(
     expr: EdgeQLAST.GlobalRef
@@ -120,7 +124,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "BinaryOp":
         return this.compileBinaryOp(expr);
       case "UnaryOp":
-        return this.compileUnaryOp(expr);
+        return expr.op === "DETACHED" ? this.compileDetached({ expr: expr.operand, kind: "Detached", span: expr.span }) : this.compileUnaryOp(expr);
       case "FunctionCall":
         return this.compileFunctionCall(expr);
       case "WindowFunctionCall":
@@ -291,6 +295,22 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
     }
 
+    // Membership in a type's objects or a path's set (`x in Item`,
+    // `o not in Order`, `n in o.items.name`): `IN` the select of their ids or
+    // values.
+    if (binOp.op === "IN" || binOp.op === "NOT IN") {
+      const right = binOp.right;
+      const set = this.membershipSubquery(right);
+      if (set) {
+        return SQL.createBinaryExpression(binOp.op, this.compileExpression(binOp.left), set);
+      }
+      // One object (a bound subject, a `for` variable): `in` it is `=` it.
+      const name = right.kind === "TypeName" ? right.name.parts.join("::") : right.kind === "Identifier" ? right.name : undefined;
+      if (name !== undefined && this.scopeVariable(name)?.row) {
+        return SQL.createBinaryExpression(binOp.op === "IN" ? "=" : "<>", this.compileExpression(binOp.left), this.compileExpression(right));
+      }
+    }
+
     // Multi-link chain on the LHS, e.g. `.channels.videos.isDraft` or the
     // deeper `.channels.videos.tags.name`: the SDK filter API emits this for a
     // nested `{ channels: { videos: { … } } }` filter. Rewrite to nested
@@ -387,6 +407,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
+  }
+
+  /*** The select `in` reads for a right operand that is a type's objects or a path's set (see `membershipSelect`), else null. ***/
+  private membershipSubquery(expr: EdgeQLAST.Expression): SQL.SubqueryExpression | null {
+    const set = this.isTypeRoot(expr) ? this.readingSnapshot(() => this.membershipSelect(expr)) : this.membershipSelect(expr);
+    return set ? SQL.createSubqueryExpression(set) : null;
   }
 
   /**
@@ -535,15 +561,82 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       Context.resolveTypeName(this.ctx, name)?.kind === "object";
   }
 
-  /*** The variable `name` names in the current or an enclosing scope (a `for` variable, an inlined `with` binding). ***/
+  /**
+   * The variable `name` names in the current or an enclosing scope (a `for`
+   * variable, an inlined `with` binding, a bound subject). Inside `detached`,
+   * the subjects bound outside it are not seen.
+   */
   protected scopeVariable(name: string): Context.VariableDef | undefined {
-    for (const scope of [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]) {
-      const variable = scope.variables.get(name);
-      if (variable) {
+    const scopes = [...this.ctx.scopes, this.ctx.currentScope];
+    for (let index = scopes.length - 1; index >= 0; index--) {
+      const variable = scopes[index].variables.get(name);
+      if (variable && !(variable.subject && index < this.detachedFrom)) {
         return variable;
       }
     }
     return undefined;
+  }
+
+  /**
+   * Bind the subject of a select, update or delete to its current object
+   * `row`, as Gel's path scoping does: in the statement's filter, order by
+   * and shape, `Item` (or `Item.name`, `count(Item)`) of `select Item`, and
+   * `Order.items` of `select Order.items.name`, are the current object, not
+   * the whole set again. `names` are the subject's spellings: its type as
+   * written and as resolved, or its path prefix (`Order.items`).
+   */
+  protected bindSubject(names: string[], row: Context.TableAlias): void {
+    for (const name of new Set(names)) {
+      this.ctx.currentScope.variables.set(name, {
+        expression: EdgeQLAST.createIdentifier(name),
+        name,
+        row,
+        sqlOverride: SQL.createColumnReference("id", row.alias),
+        subject: true,
+        type: row.type
+      });
+    }
+  }
+
+  /**
+   * The longest leading steps of a rooted path bound to an object (a `for`
+   * variable over objects, a bound subject: `Order.items` of
+   * `Order.items.name`) and the steps after them, or null.
+   */
+  protected boundPrefix(path: EdgeQLAST.Path): { row: Context.TableAlias; steps: EdgeQLAST.PathStep[]; } | null {
+    if (!path.rooted) {
+      return null;
+    }
+    for (let length = path.steps.length; length >= 1; length--) {
+      const prefix = path.steps.slice(0, length);
+      if (length > 1 && prefix.slice(1).some(step => step.type !== "property")) {
+        continue;
+      }
+      const row = this.scopeVariable(prefix.map(step => step.name).join("."))?.row;
+      if (row) {
+        return { row, steps: path.steps.slice(length) };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * `select <T> { id }` when `expr` is an object type `T`: the set of its
+   * objects, which an aggregate (`count(T)`) or `exists T` reads as rows. A
+   * bound subject (`count(Item)` in `select Item { … }`) is its one current
+   * object.
+   */
+  protected typeSetQuery(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+    const detached = detachedOperand(expr);
+    const type = detached ?? expr;
+    if (type.kind !== "TypeName") {
+      return null;
+    }
+    const name = type.name.parts.join("::");
+    const variable = detached ? this.withDetached(() => this.scopeVariable(name)) : this.scopeVariable(name);
+    const isObjects = variable ? variable.row !== undefined : Context.resolveTypeName(this.ctx, name)?.kind === "object";
+    const shape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    return isObjects ? { kind: "Subquery", query: { distinct: false, expr, kind: "SelectQuery", shape, span: expr.span } } : null;
   }
 
   /**
@@ -1005,10 +1098,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   private compileExists(operand: EdgeQLAST.Expression): SQL.SQLExpression {
     // A type (`exists User`) is the set of its objects.
-    const typeSet: EdgeQLAST.Subquery | null = operand.kind === "TypeName" ?
-      { kind: "Subquery", query: { distinct: false, expr: operand, kind: "SelectQuery", span: operand.span } } :
-      null;
-    const set = operand.kind === "Subquery" ? operand : typeSet ?? this.bindingSetQuery(operand) ?? this.setQuery(operand);
+    const set = operand.kind === "Subquery" ? operand : this.typeSetQuery(operand) ?? this.bindingSetQuery(operand) ?? this.setQuery(operand);
     if (set) {
       return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(set) };
     }
@@ -1246,7 +1336,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // scalar arguments.
     if (funcCall.args.length === 1) {
       const value = funcCall.args[0].value;
-      const arg = this.bindingSetQuery(value) ?? this.setQuery(value) ?? value;
+      const arg = this.typeSetQuery(value) ?? this.bindingSetQuery(value) ?? this.setQuery(value) ?? value;
       const multi = functionName === "count" ? this.multiPropertyColumn(arg) : null;
       if (multi) {
         return SQL.createFunctionCall("CARDINALITY", [multi.column]);
@@ -2789,6 +2879,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           `${columnSql} <> ALL(${arr})` :
           `${columnSql} = ANY(${arr})`;
       }
+      const set = this.membershipSubquery(r);
+      if (set) {
+        return `${columnSql} ${op} ${this.renderSqlExpr(set)}`;
+      }
     }
     const rhsSql = this.renderSqlExpr(this.compileExpression(rhsExpr));
     return `${columnSql} ${op} ${rhsSql}`;
@@ -2959,12 +3053,25 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   private compileDetached(detached: EdgeQLAST.Detached): SQL.SQLExpression {
     // DETACHED strips scope context — compile inner expression without
-    // scope resolution (the expression runs in a fresh scope context)
+    // scope resolution (the expression runs in a fresh scope context). A
+    // subject bound outside is the whole set again: `count(detached Item)`
+    // in `select Item { … }` counts every Item.
     Context.pushScope(this.ctx);
     try {
-      return this.compileExpression(detached.expr);
+      return this.withDetached(() => this.compileExpression(detached.expr));
     } finally {
       Context.popScope(this.ctx);
+    }
+  }
+
+  /*** Run `compile` with the subjects bound so far hidden (see `scopeVariable`). ***/
+  protected withDetached<T>(compile: () => T): T {
+    const outer = this.detachedFrom;
+    this.detachedFrom = this.ctx.scopes.length + 1;
+    try {
+      return compile();
+    } finally {
+      this.detachedFrom = outer;
     }
   }
 

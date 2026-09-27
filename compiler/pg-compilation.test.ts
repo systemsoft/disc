@@ -882,11 +882,13 @@ Deno.test({
       // by that set. The subquery selects departments where active = true.
       // eng (Ada, Billie), ops (Daena), sales (Eve) are active departments.
       // Cher (sales, inactive) should still appear because sales has at
-      // least one active employee (Eve).
+      // least one active employee (Eve). `detached`: inside the filter of a
+      // select of TestEmployee, `TestEmployee` is the current employee (Gel's
+      // path scoping), not every employee.
       const sql = compileEdgeQL(
         `SELECT TestEmployee { name, department }
          FILTER .department IN (
-           SELECT TestEmployee.department FILTER .active = true
+           SELECT detached TestEmployee.department FILTER .active = true
          )`,
         schema
       );
@@ -904,6 +906,17 @@ Deno.test({
         5,
         "All 5 employees should match since all departments have active members"
       );
+
+      // Without `detached`, the inner TestEmployee is the outer one: the
+      // department of the current employee when active, so Cher is left out.
+      const scoped = await pool.query(compileEdgeQL(
+        `SELECT TestEmployee { name, department }
+         FILTER .department IN (
+           SELECT TestEmployee.department FILTER .active = true
+         )`,
+        schema
+      ));
+      assertEquals(scoped.rowCount, 4);
 
       await manager.close();
     } finally {

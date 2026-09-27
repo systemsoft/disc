@@ -125,6 +125,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private mutationCtePrefix = "";
   /** The rows giving ids to the inserts nested in the statement being compiled (see `NestedInsertRows`). */
   private nestedRows: NestedInsertRows | undefined;
+  /** The abstract type an update or delete of each of its subtypes was written against, as written and resolved (see compileAbstractMutation). */
+  private abstractSubject: string[] = [];
 
   compile(
     query: EdgeQLAST.Query,
@@ -1267,21 +1269,29 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   // type, as they do in a select: `.name` → its column, `.link.id` → the FK
   // column, deeper paths → a correlated subselect. UPDATE and DELETE name their
   // table without an alias, so the table name itself is the qualifier.
+  // The mutated type, named (`update Item filter Item.name = …`), is the
+  // updated or deleted object (see `bindSubject`), unless the statement is
+  // on a `for` variable (`update x …`), which is that object instead.
   private withMutationScope<T>(
     typeName: string,
     typeDef: Context.TypeDef,
-    compile: () => T
+    compile: () => T,
+    bindsType = true
   ): T {
     Context.pushScope(this.ctx);
-    this.ctx.currentScope.aliases.set(typeName.toLowerCase(), {
-      alias: typeDef.tableName,
-      table: typeDef.tableName,
-      type: typeName
-    });
+    const row = { alias: typeDef.tableName, table: typeDef.tableName, type: typeName };
+    this.ctx.currentScope.aliases.set(typeName.toLowerCase(), row);
+    const abstractSubject = this.abstractSubject;
+    if (bindsType) {
+      this.bindSubject([...abstractSubject, typeName, typeDef.name], row);
+    }
+    // A statement nested in this one is not on the abstract type.
+    this.abstractSubject = [];
 
     try {
       return compile();
     } finally {
+      this.abstractSubject = abstractSubject;
       Context.popScope(this.ctx);
     }
   }
@@ -1296,14 +1306,35 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
     if (this.concreteSubtypes(typeDef).length > 0) {
-      return this.compileAbstractMutation(typeDef, "upd", subtype => this.compileUpdateQuery({ ...query, type: subtypeName(subtype) }));
+      return this.compileAbstractMutation(
+        typeDef,
+        "upd",
+        subtype =>
+          this.withAbstractSubject(query === update ? [typeName, typeDef.name] : [], () => this.compileUpdateQuery({ ...query, type: subtypeName(subtype) }))
+      );
     }
 
     // Inserts nested in its link assignments get their ids from the updated rows.
     const rows: NestedInsertRows | undefined = this.assignsInsert(query.shape.elements) ?
       { alias: typeDef.tableName, columns: [], cte: this.claimCteName(`${this.mutationCtePrefix}nested_rows`), perRow: true } :
       undefined;
-    return this.withMutationScope(typeName, typeDef, () => this.withNestedRows(rows, () => this.compileUpdateInScope(query, typeName, typeDef)));
+    return this.withMutationScope(
+      typeName,
+      typeDef,
+      () => this.withNestedRows(rows, () => this.compileUpdateInScope(query, typeName, typeDef)),
+      query === update
+    );
+  }
+
+  /*** Run `compile`, an update or delete of a subtype, with `names` (the abstract type written) bound to the subtype's object too. ***/
+  private withAbstractSubject<T>(names: string[], compile: () => T): T {
+    const outer = this.abstractSubject;
+    this.abstractSubject = names;
+    try {
+      return compile();
+    } finally {
+      this.abstractSubject = outer;
+    }
   }
 
   /*** True when a shape assigns an insert to a link: `item := (insert …)`, or in a set of targets. ***/
@@ -1633,14 +1664,19 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
     if (this.concreteSubtypes(typeDef).length > 0) {
-      return this.compileAbstractMutation(typeDef, "del", subtype => this.compileDeleteQuery({ ...query, type: subtypeName(subtype) }));
+      return this.compileAbstractMutation(
+        typeDef,
+        "del",
+        subtype =>
+          this.withAbstractSubject(query === deletion ? [typeName, typeDef.name] : [], () => this.compileDeleteQuery({ ...query, type: subtypeName(subtype) }))
+      );
     }
 
     // Compile WHERE clause
     let whereClause: SQL.WhereClause | undefined;
     if (query.filter) {
       const filter = query.filter;
-      const condition = this.withMutationScope(typeName, typeDef, () => this.compileFilter(filter));
+      const condition = this.withMutationScope(typeName, typeDef, () => this.compileFilter(filter), query === deletion);
       whereClause = SQL.createWhereClause(condition);
     }
 
@@ -1913,6 +1949,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         fromClause = SQL.createFromClause([
           SQL.createTableReference(typeDef.tableName, tableAlias)
         ]);
+        this.bindSubject([typeName, typeDef.name], { alias: tableAlias, table: typeDef.tableName, type: typeDef.name });
       } else if (query.expr.kind === "Identifier" && Context.getCTEAlias(this.ctx, query.expr.name)?.typeName) {
         // Another object binding (`v := (select u filter …)`): its CTE rows
         // are the objects' rows, so paths resolve against its type.
@@ -1927,10 +1964,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         fromClause = SQL.createFromClause([
           SQL.createTableReference(cteAlias.cteName, tableAlias)
         ]);
+        if (!this.scopeVariable(query.expr.name)) {
+          this.bindSubject([query.expr.name], { alias: tableAlias, table: cteAlias.cteName, type: cteAlias.typeName! });
+        }
       } else if (query.expr.kind === "Path" && this.isObjectPath(query.expr)) {
         // A path's objects (`User.posts`): the reached type's rows the path
         // keeps.
-        const source = this.compilePathSource(this.resolvePath(query.expr)!);
+        const resolved = this.resolvePath(query.expr)!;
+        const source = this.compilePathSource(resolved);
+        this.bindPathSubject(query.expr, resolved, source.alias);
         fromClause = SQL.createFromClause(source.from);
         sourceCondition = source.where;
       } else {
@@ -1940,8 +1982,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       // Compile WHERE clause
       let whereClause: SQL.WhereClause | undefined;
-      if (query.filter) {
-        const condition = this.compileFilter(query.filter);
+      const condition = this.compileSubjectFilter(query);
+      if (condition) {
         whereClause = SQL.createWhereClause(sourceCondition ? SQL.createBinaryExpression("AND", sourceCondition, condition) : condition);
       } else if (sourceCondition) {
         whereClause = SQL.createWhereClause(sourceCondition);
@@ -2458,7 +2500,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Compile FILTER to HAVING clause
     let havingClause: SQL.HavingClause | undefined;
     if (query.filter) {
-      const havingCondition = this.compileExpression(query.filter);
+      // In the filter, the grouped type is the group's rows: `count(User)` is `COUNT(*)`.
+      const variables = this.ctx.currentScope.variables;
+      const outer = variables.get(typeName);
+      variables.set(typeName, { expression: query.expr, name: typeName, sqlOverride: SQL.star(), type: typeName });
+      let havingCondition: SQL.SQLExpression;
+      try {
+        havingCondition = this.compileExpression(query.filter);
+      } finally {
+        if (outer) {
+          variables.set(typeName, outer);
+        } else {
+          variables.delete(typeName);
+        }
+      }
       havingClause = {
         kind: "HavingClause",
         condition: havingCondition
@@ -2740,17 +2795,29 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     };
   }
 
+  /**
+   * A type in expression position. The subject of the enclosing select,
+   * update or delete (`Item` in `select Item filter Item in …`, see
+   * `bindSubject`) is its current object's id, and in a group's filter the
+   * grouped type is the group's rows (`count(User)` is `COUNT(*)`). Any
+   * other type is the set of its objects, which has no one value: it is
+   * read by `in` (`x in Item`), aggregates (`count(Item)`), `exists` and
+   * selects, each of which compiles it as rows.
+   */
   protected compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {
-    // For function arguments, a TypeName like "User" often means "all User objects"
-    // In the context of count(User), this would be like "SELECT * FROM users"
     const name = typeName.name.parts.join("::");
+    const variable = this.scopeVariable(name);
+    if (variable?.sqlOverride) {
+      return variable.sqlOverride;
+    }
     const typeDef = Context.resolveTypeName(this.ctx, name);
     if (!typeDef) {
-      throw new InvalidReferenceError(`Type '${name}' not found`);
+      throw new InvalidReferenceError(`Type '${name}' not found`, locationOf(typeName));
     }
-
-    // Generate a simple column reference for the primary table
-    // In a full implementation, this might create a subquery
-    return SQL.createColumnReference("*");
+    throw new CompilationError(
+      `'${name}' is the set of all its objects, not one value: use it with \`in\` (\`x in ${name}\`), ` +
+        `an aggregate (\`count(${name})\`), \`exists\` or a select (\`(select ${name} filter …)\`)`,
+      locationOf(typeName)
+    );
   }
 }

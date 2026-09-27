@@ -283,6 +283,12 @@ export interface VariableDef {
   row?: TableAlias;
   /*** The EdgeQL type of the value `sqlOverride` stands for, when known (`len()` picks its SQL function by it). ***/
   staticType?: string;
+  /**
+   * The subject of a select, update or delete, bound by Gel's path scoping:
+   * the variable is named after the subject's path (`Item`, `Order.items`)
+   * and is its current object (`row`). `detached` hides it.
+   */
+  subject?: boolean;
 }
 
 export function createContext(schema: Schema): CompilationContext {

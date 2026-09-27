@@ -393,8 +393,8 @@ Deno.test("EdgeQL to SQL - SELECT with function call", () => {
   const sql = compileToSQL(edgeql);
   const normalized = normalizeSQL(sql);
 
-  // Should generate count(*) with FROM for the User type's table
-  assertStringIncludes(normalized, "count(*)");
+  // Should count the rows of a select of the User type's table
+  assertStringIncludes(normalized, "COUNT(*)");
   assertStringIncludes(normalized, "FROM users AS");
 });
 

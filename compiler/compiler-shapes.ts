@@ -14,6 +14,7 @@ import { propNameToColumnName } from "../lib/identifiers.ts";
 import {
   backlinkIntersectionName,
   compileEmptyOrder,
+  detachedOperand,
   edgeqlTypeToPgType,
   flattenSetElements,
   isMutationQuery,
@@ -42,6 +43,50 @@ function renderPath(path: EdgeQLAST.Path): string {
       return index === 0 && path.rooted ? step.name : `.${step.name}`;
     })
     .join("");
+}
+
+/**
+ * The nodes under `node` naming one of `names`, each with the longest name it
+ * names: a type (`Order`), a `with` binding (`o`), or the leading steps of a
+ * rooted path (`Order.items` of `Order.items.name`). Inside `detached`, a
+ * cast's or a mutation's type and a backlink's `[is T]`, a name is not a
+ * reference.
+ */
+function namedPaths(node: unknown, names: Set<string>): { name: string; node: EdgeQLAST.EdgeQLNode; }[] {
+  if (!node || typeof node !== "object") {
+    return [];
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap(item => namedPaths(item, names));
+  }
+  const candidate = node as { kind?: string; name?: unknown; rooted?: boolean; steps?: EdgeQLAST.PathStep[]; };
+  if (candidate.kind === "UnaryOp" && (node as EdgeQLAST.UnaryOp).op === "DETACHED") {
+    return [];
+  }
+  switch (candidate.kind) {
+    case "Detached":
+    case "PathStep":
+      return [];
+    case "Identifier": {
+      const name = candidate.name as string;
+      return names.has(name) ? [{ name, node: node as EdgeQLAST.EdgeQLNode }] : [];
+    }
+    case "TypeName": {
+      const name = (candidate.name as EdgeQLAST.QualifiedName).parts.join("::");
+      return names.has(name) ? [{ name, node: node as EdgeQLAST.EdgeQLNode }] : [];
+    }
+    case "Path": {
+      const steps = candidate.steps ?? [];
+      for (let length = candidate.rooted ? steps.length : 0; length >= 1; length--) {
+        const name = steps.slice(0, length).map(step => step.name).join(".");
+        if (names.has(name)) {
+          return [{ name, node: node as EdgeQLAST.EdgeQLNode }];
+        }
+      }
+      return [];
+    }
+  }
+  return Object.entries(node).flatMap(([key, value]) => key === "type" ? [] : namedPaths(value, names));
 }
 
 /*** CTE name for the anonymous binding of `select (insert|update|delete …) { shape }`. ***/
@@ -104,8 +149,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // Compile WHERE clause: the source's own condition (a path's objects)
       // and the filter.
       let whereClause: SQL.WhereClause | undefined;
-      if (query.filter) {
-        const condition = this.compileFilter(query.filter);
+      const condition = this.compileSubjectFilter(query);
+      if (condition) {
         whereClause = SQL.createWhereClause(where ? SQL.createBinaryExpression("AND", where, condition) : condition);
       } else if (where) {
         whereClause = SQL.createWhereClause(where);
@@ -156,6 +201,80 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   }
 
   /**
+   * The filter of `query`, compiled after its subject. When the subject is a
+   * path through links from a type or a `with` binding and the filter names
+   * where it starts (`select Order.items filter Order.code = 'o1'`), the
+   * start is, as in Gel's path scoping, the object each element is reached
+   * from: the element is kept when some such object passes the filter.
+   *
+   *   select Order.items filter Order.code = 'o1'
+   *   → … WHERE <item_1 is an item of some order> AND EXISTS (SELECT 1 FROM "order" AS order_3
+   *        WHERE item_1.id IN (<ids of order_3.items>) AND order_3.code = 'o1')
+   *
+   * Naming the start in the shape or the order by, or naming a step between
+   * the start and the selected objects (`Order.items` of
+   * `select Order.items.tags`) anywhere, is not supported yet: a compile
+   * error rather than a filter over every order.
+   */
+  protected compileSubjectFilter(query: EdgeQLAST.SelectQuery): SQL.SQLExpression | undefined {
+    const { expr, filter } = query;
+    // Where the path starts, as written: not the subject it has just bound.
+    const resolved = expr.kind === "Path" && expr.rooted ? this.withDetached(() => this.resolvePath(expr)) : null;
+    const steps = expr.kind === "Path" && resolved ? (resolved.property ? expr.steps.slice(0, -1) : expr.steps) : [];
+    if (!resolved || resolved.hops.length === 0 || resolved.start.kind === "row" || steps.slice(1).some(step => step.type !== "property")) {
+      return filter ? this.compileFilter(filter) : undefined;
+    }
+
+    const prefix = (length: number): string => steps.slice(0, length).map(step => step.name).join(".");
+    const root = prefix(1);
+    const names = new Set(steps.map((_, index) => prefix(index + 1)));
+    const clauses: [unknown, string][] = [[query.shape, "shape"], [query.orderBy, "order by"], [filter, "filter"]];
+    for (const [node, clause] of clauses) {
+      const unsupported = namedPaths(node, names).find(named => named.name !== prefix(steps.length) && (clause !== "filter" || named.name !== root));
+      if (unsupported) {
+        throw new CompilationError(
+          `Naming '${unsupported.name}' in the ${clause} of a select of '${renderPath(expr as EdgeQLAST.Path)}' ` +
+            `(a step before the selected objects) is not supported yet; select from it instead ` +
+            `(\`select ${root} { … } filter …\`, or a \`for\` over it)`,
+          locationOf(unsupported.node) ?? locationOf((unsupported.node as Partial<EdgeQLAST.Path>).steps?.[0])
+        );
+      }
+    }
+    if (!filter || !namedPaths(filter, names).some(named => named.name === root)) {
+      return filter ? this.compileFilter(filter) : undefined;
+    }
+
+    const start = resolved.start;
+    const alias = this.scopeVariable(prefix(steps.length))!.row!.alias;
+    if (start.kind === "binding") {
+      start.cte.referenced = true;
+    }
+    const table = start.kind === "binding" ? start.cte.cteName : resolved.startType.tableName;
+    const row: Context.TableAlias = { alias: Context.generateAlias(this.ctx, table), table, type: resolved.startType.name };
+    const variables = this.ctx.currentScope.variables;
+    const outer = variables.get(root);
+    this.bindSubject([root], row);
+    try {
+      const reaches = this.pathReaches(resolved, row, alias);
+      return {
+        kind: "UnaryExpression",
+        operand: SQL.createSubqueryExpression(SQL.createSelectStatement({
+          from: SQL.createFromClause([SQL.createTableReference(table, row.alias)]),
+          select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("number", 1))]),
+          where: SQL.createWhereClause(SQL.createBinaryExpression("AND", reaches, this.compileFilter(filter)))
+        })),
+        operator: "EXISTS"
+      };
+    } finally {
+      if (outer) {
+        variables.set(root, outer);
+      } else {
+        variables.delete(root);
+      }
+    }
+  }
+
+  /**
    * The data-modifying CTEs of the mutation bindings `expr` reads by name
    * (`m`, `m.items`, `count(m.items)`); none when it reads none. A name a
    * scope variable takes (a `for` variable) is not the binding.
@@ -196,9 +315,26 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     /** A condition of the source itself, ANDed with the filter: which of the type's rows a path reaches. */
     where?: SQL.SQLExpression;
   } {
+    // `select detached T`: T is every object of T, even where T is bound,
+    // and naming T in the filter still means the T bound outside.
+    const detached = detachedOperand(expr);
+    if (detached) {
+      const variables = this.ctx.currentScope.variables;
+      const outer = new Set(variables.keys());
+      const compiled = this.withDetached(() => this.compileSelectExpression(detached, shape));
+      [...variables.entries()].filter(([name, variable]) => variable.subject && !outer.has(name)).forEach(([name]) => variables.delete(name));
+      return compiled;
+    }
+
     if (expr.kind === "TypeName") {
       // SELECT User -> SELECT * FROM users
       const typeName = expr.name.parts.join("::");
+      // The subject of an enclosing statement (`(select Item { … })` inside
+      // `select Item { … }`) is its current object, as a `for` variable is.
+      const bound = this.scopeVariable(typeName)?.row;
+      if (bound) {
+        return this.compileSelectExpression(EdgeQLAST.createIdentifier(typeName), shape);
+      }
       const typeDef = Context.resolveTypeName(this.ctx, typeName);
 
       if (!typeDef) {
@@ -258,7 +394,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const polymorphic = this.compilePolymorphicSelect(
           typeDef,
           resolvedName,
-          shape
+          shape,
+          [typeName, resolvedName]
         );
         if (polymorphic) {
           return polymorphic;
@@ -280,6 +417,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const fromClause = SQL.createFromClause([
         SQL.createTableReference(typeDef.tableName, tableAlias)
       ]);
+      this.bindSubject([typeName, resolvedName], { alias: tableAlias, table: typeDef.tableName, type: resolvedName });
 
       let selectItems: SQL.SelectItem[];
       if (shape) {
@@ -401,6 +539,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         );
       }
 
+      // `select (select …)` is the inner select's rows, each its own row:
+      // as one value (a scalar subquery), more than one row would fail.
+      if (expr.query.kind === "SelectQuery") {
+        const alias = Context.generateAlias(this.ctx, "__sub");
+        return {
+          fromClause: SQL.createFromClause([{ alias, kind: "TableReference", name: "", subquery: this.compileQuery(expr.query) }]),
+          selectItems: [SQL.createSelectItem(SQL.createColumnReference("*", alias))]
+        };
+      }
+
       // Handle subquery
       const subquery = this.compileQuery(expr.query) as SQL.SelectStatement;
       const selectItems = [SQL.createSelectItem({
@@ -420,32 +568,6 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (sets) {
       const { from, value, where } = this.compileElementWise(expr, sets);
       return { fromClause: SQL.createFromClause(from), selectItems: [SQL.createSelectItem(value)], where };
-    }
-
-    if (expr.kind === "FunctionCall") {
-      // Check if function has a TypeName argument (e.g., count(User))
-      // This means we need a FROM clause for that type
-      let fromClause = SQL.createFromClause([]);
-      for (const arg of expr.args) {
-        if (arg.value.kind === "TypeName") {
-          const argTypeName = arg.value.name.parts.join("::");
-          const argTypeDef = Context.resolveTypeName(this.ctx, argTypeName);
-          if (argTypeDef) {
-            const tableAlias = Context.addTableAlias(
-              this.ctx,
-              argTypeName.toLowerCase(),
-              argTypeDef.tableName,
-              argTypeName
-            );
-            fromClause = SQL.createFromClause([
-              SQL.createTableReference(argTypeDef.tableName, tableAlias)
-            ]);
-          }
-        }
-      }
-      const compiledExpr = this.compileExpression(expr);
-      const selectItems = [SQL.createSelectItem(compiledExpr)];
-      return { selectItems, fromClause };
     }
 
     // `<Type><uuid>expr` compiles to the uuid (it stands for a link target), so
@@ -825,7 +947,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   private compilePolymorphicSelect(
     typeDef: Context.TypeDef,
     resolvedName: string,
-    shape?: EdgeQLAST.Shape
+    shape: EdgeQLAST.Shape | undefined,
+    subjectNames: string[]
   ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause; } | null {
     const concreteSubs = this.concreteSubtypes(typeDef);
 
@@ -908,6 +1031,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         subquery
       } as SQL.TableReference
     ]);
+    this.bindSubject(subjectNames, { alias: tableAlias, table: typeDef.tableName, type: resolvedName });
 
     let selectItems: SQL.SelectItem[];
     if (shape) {
@@ -1222,6 +1346,20 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (!singleton && this.setQuery(expr)) {
       return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy };
     }
+    // A type's objects (`x := Item`, `x := Item { name }`, `x := (select Item { name } filter …)`)
+    // are an array too, unless the select keeps at most one object.
+    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    const subject = expr.kind === "ShapeExpr" ? expr.expr : expr;
+    if (this.typeOfObjectSet(subject)) {
+      const shape = expr.kind === "ShapeExpr" ? expr.shape : idShape;
+      return { distinct: false, expr: subject, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy, shape };
+    }
+    if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery") {
+      const typeDef = this.typeOfObjectSet(expr.query.expr);
+      if (typeDef && !this.selectsAtMostOne(expr.query, typeDef)) {
+        return expr.query;
+      }
+    }
     if (expr.kind === "ShapeExpr" && expr.expr.kind === "Path") {
       const resolved = this.resolvePath(expr.expr);
       return resolved && !resolved.property ?
@@ -1241,8 +1379,47 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (!resolved?.multi || loneBacklink) {
       return null;
     }
-    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
     return { distinct: false, expr, kind: "SelectQuery", shape: resolved.property ? undefined : idShape };
+  }
+
+  /*** The object type `expr` is every object of (`Item`, `detached Item`), or undefined: a bound subject is one object. ***/
+  private typeOfObjectSet(expr: EdgeQLAST.Expression): Context.TypeDef | undefined {
+    const detached = detachedOperand(expr);
+    if (detached) {
+      return this.withDetached(() => this.typeOfObjectSet(detached));
+    }
+    if (expr.kind !== "TypeName") {
+      return undefined;
+    }
+    const name = expr.name.parts.join("::");
+    const typeDef = this.scopeVariable(name) ? undefined : Context.resolveTypeName(this.ctx, name);
+    return typeDef?.kind === "object" ? typeDef : undefined;
+  }
+
+  /**
+   * True when a select of `typeDef`'s objects keeps at most one, as Gel
+   * infers it: `limit 1`, or a filter requiring `.id` or an exclusive
+   * property to equal one value.
+   */
+  private selectsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
+    if (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) {
+      return true;
+    }
+    const conjuncts = (expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] =>
+      expr.kind === "BinaryOp" && expr.op === "AND" ? [...conjuncts(expr.left), ...conjuncts(expr.right)] : [expr];
+    const isUnique = (expr: EdgeQLAST.Expression): boolean => {
+      if (expr.kind !== "Path" || expr.rooted || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+        return false;
+      }
+      const name = expr.steps[0].name;
+      return name === "id" || (typeDef.properties.get(name)?.constraints?.some(constraint => constraint.name === "exclusive") ?? false);
+    };
+    const isOneValue = (expr: EdgeQLAST.Expression): boolean =>
+      ["GlobalRef", "Identifier", "Literal", "Parameter"].includes(expr.kind) || (expr.kind === "TypeCast" && isOneValue(expr.expr));
+    return query.filter !== undefined && conjuncts(query.filter).some(condition =>
+      condition.kind === "BinaryOp" && condition.op === "=" &&
+      ((isUnique(condition.left) && isOneValue(condition.right)) || (isUnique(condition.right) && isOneValue(condition.left)))
+    );
   }
 
   /*** A select's rows as one JSON array, in the select's order (`[]` for none). ***/
@@ -1670,7 +1847,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         }
 
         const typeName = typeStep.name;
-        const typeDef = Context.resolveTypeName(this.ctx, typeName);
+        // A bound subject or a variable named like the type is not the type.
+        const typeDef = this.scopeVariable(typeName) ? undefined : Context.resolveTypeName(this.ctx, typeName);
         const property = typeDef && !shape ?
           Context.getProperty(
             this.ctx,
@@ -1689,6 +1867,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           const fromClause = SQL.createFromClause([
             SQL.createTableReference(typeDef.tableName, tableAlias)
           ]);
+          this.bindSubject([typeName, typeDef.name], { alias: tableAlias, table: typeDef.tableName, type: typeDef.name });
           const column = SQL.createColumnReference(property.columnName, tableAlias);
           const selectItems = [SQL.createSelectItem(column)];
           // An object without the property adds no element (a set has no NULLs).
@@ -1724,6 +1903,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
 
     const source = this.compilePathSource(resolved);
+    this.bindPathSubject(path, resolved, source.alias);
     const typeName = resolved.typeDef.name;
     let selectItems: SQL.SelectItem[];
     let where = source.where;
@@ -1743,14 +1923,20 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
-    // `x.name`, where `x` is a `for` variable over objects: the rest of the
-    // path read from the iterator's current row, as `.name` is from a shape's.
-    const row = path.rooted ? this.scopeVariable(path.steps[0].name)?.row : undefined;
-    if (row) {
+    // `x.name`, where `x` is a `for` variable over objects or a bound subject
+    // (`Item.name`, `Order.items.name` in a select of `Order.items`): the
+    // rest of the path read from the current row, as `.name` is from a
+    // shape's. The bound path itself is the object's id.
+    const bound = this.boundPrefix(path);
+    if (bound) {
+      const { row, steps } = bound;
+      if (steps.length === 0) {
+        return SQL.createColumnReference("id", row.alias);
+      }
       Context.pushScope(this.ctx);
       try {
         this.ctx.currentScope.aliases.set(row.type.replace(/::/g, "_").toLowerCase(), row);
-        return this.compilePathInExpression({ kind: "Path", span: path.span, steps: path.steps.slice(1) });
+        return this.compilePathInExpression({ kind: "Path", span: path.span, steps });
       } finally {
         Context.popScope(this.ctx);
       }
