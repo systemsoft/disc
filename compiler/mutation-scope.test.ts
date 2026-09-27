@@ -256,7 +256,7 @@ Deno.test("mutation scope + policy - update carries the owner predicate next to 
 
   assert(sql.startsWith("UPDATE doc SET title = "), sql);
   assertEquals(countOf(sql, OWNER_PREDICATE), 1, sql);
-  assertStringIncludes(sql, `WHERE ((${OWNER_PREDICATE})) AND (`);
+  assertStringIncludes(sql, `WHERE (doc.${OWNER_PREDICATE}) AND (`);
   assertStringIncludes(sql, `"doc"."program_id" = CAST($`);
   assertStringIncludes(sql, "doc.title = CAST($");
   // Its one subselect is the check on each updated object (update write).

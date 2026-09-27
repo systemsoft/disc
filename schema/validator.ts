@@ -921,17 +921,17 @@ export class SchemaValidator {
       const innerType = typeRef.params[0];
       const innerTypeName = innerType.name.parts.join("::");
 
-      // Only orderable scalar types are valid inner types for range/multirange
+      // Gel's range element types, each backed by a PostgreSQL range type
+      // (int16 has neither).
       const orderableTypes = [
-        "int16",
         "int32",
         "int64",
         "float32",
         "float64",
         "decimal",
         "datetime",
-        "cal::local_date",
-        "cal::local_datetime"
+        "cal::local_datetime",
+        "cal::local_date"
       ];
 
       if (!orderableTypes.includes(innerTypeName)) {

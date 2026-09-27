@@ -8,12 +8,13 @@
  * DML, with-blocks, for/group queries, globals, config, and introspection.
  */
 
+import { BUILTIN_ACCESS_GLOBALS } from "../access/evaluator.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
-import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf } from "./compiler-base.ts";
+import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -37,6 +38,11 @@ interface MultiLinkOp {
   link: Context.LinkDef;
   operator: ":=" | "+=" | "-=";
   targets: LinkTarget[];
+}
+
+/*** A global whose value is text, where '' is a value (see `EdgeQLCompiler.globalValue`). ***/
+function isTextGlobal(globalDef: Context.GlobalDef): boolean {
+  return globalDef.pgType === "text";
 }
 
 /*** The name of `subtype` as a statement's type (`update <subtype> …`). ***/
@@ -125,7 +131,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       );
     }
 
-    return this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+    return this.decisionFilter(decision);
   }
 
   /**
@@ -135,20 +141,22 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * cannot be modified either". Throws when the operation itself is denied
    * (see `mutationAccessCondition`); a denied select leaves no rows (FALSE).
    *
-   * The policies' columns are unqualified, which holds directly over the
-   * target table. Where the statement also reads other rows with the same
-   * column names — the iterator of a `for` over objects, or `excluded` in an
-   * upsert's ON CONFLICT … DO UPDATE (`qualified`) — they are read from the
-   * table's own rows instead:
-   * `"<table>"."id" IN (SELECT "id" FROM "<table>" WHERE <policies>)`.
+   * The policies read the object's row by the target table's name, which
+   * holds directly in the statement's WHERE. Where the statement also reads
+   * other rows with the same column names — the iterator of a `for` over
+   * objects, or `excluded` in an upsert's ON CONFLICT … DO UPDATE
+   * (`qualified`) — they are read from the table's own rows instead:
+   * `"<table>"."id" IN (SELECT "id" FROM "<table>" AS "__policy_rows" WHERE <policies>)`.
    */
   private mutationRowCondition(
     typeDef: Context.TypeDef,
     operation: "update" | "delete",
     qualified = this.mutationReadsIterator
   ): SQL.SQLExpression | undefined {
-    const allowed = this.mutationAccessCondition(typeDef.name, operation);
-    const selectable = this.selectPolicyFilter(typeDef);
+    const [allowed, selectable] = this.withPolicySubject(
+      qualified ? POLICY_ROWS : typeDef.tableName,
+      () => [this.mutationAccessCondition(typeDef.name, operation), this.selectPolicyFilter(typeDef)]
+    );
     // An `allow all` policy gives select and the operation the same predicate; it is kept once.
     const same = selectable && allowed &&
       new SQLCodeGenerator().generateExpression(selectable) === new SQLCodeGenerator().generateExpression(allowed);
@@ -210,12 +218,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
   /**
    * `check` over the row of `typeDef` being written, for `SQL.checkedRow`. The
-   * policies' columns are unqualified, so they are read from that row alone
-   * (`__written`): an update may also read other rows with the same column
+   * policies read the object's row as `__policy_rows`, so they are read from
+   * that row alone: an update may also read other rows with the same column
    * names (the iterator of a `for` over objects).
    */
   private writtenRowCheck(typeDef: Context.TypeDef, check: string): SQL.RawSQLExpression {
-    return { kind: "RawSQLExpression", sql: `(SELECT ${check} FROM (SELECT "${typeDef.tableName}".*) AS "__written")` };
+    return { kind: "RawSQLExpression", sql: `(SELECT ${check} FROM (SELECT "${typeDef.tableName}".*) AS "${POLICY_ROWS}")` };
   }
 
   // AND an access predicate into a (possibly absent) WHERE clause.
@@ -1928,15 +1936,22 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * to the global's type, else its default. `current_setting` with missing_ok
    * gives NULL for a setting never set on the connection, and '' for one a
    * finished transaction set locally — both mean the global has no value.
+   * A text global's value is stored after a one-character prefix (see
+   * `compileSetGlobal`), so that the empty string is a value too.
    *
-   * Produces: COALESCE(CAST(NULLIF(current_setting('<setting>', true), '') AS <type>), <default>)
+   * Produces: COALESCE(CAST(NULLIF(current_setting('<setting>', true), '') AS <type>), <default>),
+   * with `substr(…, 2)` around the NULLIF for a text global
    */
   private globalValue(globalDef: Context.GlobalDef): SQL.SQLExpression {
     const setting = SQL.createFunctionCall("current_setting", [
       SQL.createLiteral("string", globalDef.pgSettingName),
       SQL.createLiteral("boolean", true)
     ]);
-    const value = SQL.createCastExpression(SQL.createFunctionCall("NULLIF", [setting, SQL.createLiteral("string", "")]), globalDef.pgType);
+    const stored = SQL.createFunctionCall("NULLIF", [setting, SQL.createLiteral("string", "")]);
+    const value = SQL.createCastExpression(
+      isTextGlobal(globalDef) ? SQL.createFunctionCall("substr", [stored, SQL.createLiteral("number", 2)]) : stored,
+      globalDef.pgType
+    );
     if (globalDef.default === undefined) {
       return value;
     }
@@ -1950,7 +1965,41 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     return globalDef ? new SQLCodeGenerator().generateExpression(this.globalValue(globalDef)) : undefined;
   }
 
-  /*** Compile a GlobalRef expression to SQL: the global's value (see `globalValue`). ***/
+  /**
+   * `edgeql`, a policy's condition on objects of `objectType`, compiled like
+   * a filter on that type with its row as `policySubject`: it may follow
+   * links and backlinks, call functions and read globals. It compiles in a
+   * context of its own (names resolve in the type's module; nothing of the
+   * query around it is in scope), and — as Gel's policy expressions ignore
+   * other policies — none of the objects it reads is narrowed by a policy.
+   */
+  protected policyConditionSql(edgeql: string, objectType: string): string {
+    const typeDef = [...this.ctx.schema.types.values()].find(candidate => candidate.name === objectType);
+    if (!typeDef) {
+      throw new CompilationError(`Access policy on unknown type '${objectType}'`);
+    }
+    const outer = this.ctx;
+    const compilingPolicy = this.compilingPolicy;
+    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: typeDef.module };
+    this.ctx.currentScope.aliases.set(POLICY_ROWS, { alias: this.policySubject, table: typeDef.tableName, type: typeDef.name });
+    this.compilingPolicy = true;
+    try {
+      return this.renderPolicySql(this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly()));
+    } finally {
+      outer.aliasCounter = this.ctx.aliasCounter;
+      this.ctx = outer;
+      this.compilingPolicy = compilingPolicy;
+    }
+  }
+
+  /**
+   * Compile a GlobalRef expression to SQL: the global's value (see
+   * `globalValue`). In a policy's condition, a global the access context
+   * supplies (the caller's `current_user`, `current_role`,
+   * `current_session`, or a value in `globals`) or that the schema does not
+   * declare is the one the policy evaluator reads (see
+   * `AccessEvaluator.expressionToSQL`).
+   */
   protected compileGlobalRef(expr: EdgeQLAST.GlobalRef): SQL.SQLExpression {
     const qualifiedName = expr.module ?
       `${expr.module}::${expr.name}` :
@@ -1960,6 +2009,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       qualifiedName,
       this.ctx.moduleScope
     );
+    const fromContext = BUILTIN_ACCESS_GLOBALS.has(qualifiedName) || this.accessContext.globals?.has(qualifiedName);
+    if (this.compilingPolicy && this.accessEvaluator && (fromContext || !globalDef)) {
+      return { kind: "RawSQLExpression", sql: this.accessEvaluator.expressionToSQL({ kind: "AccessGlobal", name: qualifiedName }, this.accessContext) };
+    }
     if (!globalDef) {
       throw new CompilationError(`Unknown global: ${qualifiedName}`);
     }
@@ -2000,10 +2053,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
     const valueSql = this.compileExpression(query.value);
     const valueStr = this.renderSqlExpr(valueSql);
+    // A text global's value follows a prefix: '' is then a value, told apart
+    // from no value (NULL, or '' once unset — see globalValue).
+    const stored = isTextGlobal(globalDef) ? `'=' || ${valueStr}::text` : `${valueStr}::text`;
 
     return {
       kind: "RawSQLStatement",
-      sql: `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`
+      sql: `SELECT set_config('${globalDef.pgSettingName}', ${stored}, true)`
     };
   }
 

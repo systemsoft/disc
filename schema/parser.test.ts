@@ -1552,3 +1552,135 @@ Deno.test("SDL Validator - a colon-form multi link may be exclusive (it is not a
 
   assertEquals(result.errors, undefined);
 });
+
+Deno.test("SDL Parser - on source delete delete target if orphan parses", () => {
+  const link = onlyMember(`type Bug { link program -> Program { on source delete delete target if orphan; }; }`);
+
+  assertEquals((link as SDLAST.LinkDeclaration).onSourceDelete, "delete target if orphan");
+});
+
+Deno.test("SDL Parser - colon-form link takes delete target if orphan", () => {
+  const member = onlyMember(`type Bug { multi tags: Tag { on source delete delete target if orphan; }; }`) as SDLAST.PropertyDeclaration;
+
+  assertEquals(member.onSourceDelete, "delete target if orphan");
+});
+
+Deno.test("SDL Parser - 'if' not followed by 'orphan' reports its location", () => {
+  const error = assertThrows(
+    () => new SDLParser(`type Bug {\n  program: Program {\n    on source delete delete target if bogus;\n  };\n}`).parse(),
+    SyntaxError
+  );
+
+  assertEquals(error.message.includes("Expected 'orphan' after 'if', got 'bogus'"), true, error.message);
+  assertEquals(error.context?.location?.line, 3);
+});
+
+Deno.test("SDL Validator - delete target if orphan on a scalar property is rejected", () => {
+  const result = new SchemaValidator().validate(
+    new SDLParser(`type Bug { title: str { on source delete delete target if orphan; }; }`).parse()
+  );
+
+  assertEquals(result.errors?.some(e => e.message.includes("only links can have a delete policy")), true, JSON.stringify(result.errors));
+});
+
+/*** Gel's ranges: int32, int64, float32, float64, decimal, datetime, cal::local_datetime, cal::local_date (docs.geldata.com/reference/stdlib/range). ***/
+function rangeErrors(type: string): string[] {
+  const result = new SchemaValidator().validate(new SDLParser(`type Slot { span: ${type}; }`).parse());
+  return (result.errors ?? []).map(e => e.message);
+}
+
+Deno.test("SDL Validator - every Gel range element type is accepted, as range and multirange", () => {
+  for (const element of ["int32", "int64", "float32", "float64", "decimal", "datetime", "cal::local_datetime", "cal::local_date"]) {
+    assertEquals(rangeErrors(`range<${element}>`), [], element);
+    assertEquals(rangeErrors(`multirange<${element}>`), [], element);
+  }
+});
+
+Deno.test("SDL Validator - range<int16> is rejected: neither Gel nor PostgreSQL has an int16 range", () => {
+  assertEquals(rangeErrors("range<int16>"), [
+    "Type 'int16' is not a valid inner type for 'range'; expected one of: int32, int64, float32, float64, decimal, datetime, cal::local_datetime, cal::local_date"
+  ]);
+  assertEquals(rangeErrors("multirange<std::int16>").length, 1);
+});
+
+Deno.test("SDL Validator - other scalars without a range type are rejected", () => {
+  for (const element of ["str", "bool", "duration", "cal::local_time", "bigint", "uuid"]) {
+    assertEquals(rangeErrors(`range<${element}>`).length, 1, element);
+  }
+});
+
+/*** The access policies of the first type declared in `source`. ***/
+function policiesOf(source: string): SDLAST.AccessPolicy[] {
+  const [decl] = new SDLParser(source).parse().declarations;
+  if (decl.kind !== "TypeDeclaration") {
+    throw new Error(`expected a type declaration, got ${decl.kind}`);
+  }
+  return decl.members.filter((m): m is SDLAST.AccessPolicy => m.kind === "AccessPolicy");
+}
+
+Deno.test("SDL Parser - Access policy in Gel's form, with when, using and a body", () => {
+  const [locked, open, bare] = policiesOf(`
+    type Doc {
+      locked: bool;
+      access policy no_locked
+        when (.locked ?= true)
+        deny update, delete
+        using (global current_user ?= .owner) {
+          errmessage := 'locked';
+        };
+      access policy open
+        allow select;
+      access policy bare allow all using (true);
+    }
+  `);
+
+  assertEquals(locked.name.value, "no_locked");
+  assertEquals(locked.when?.kind, "BinaryOp");
+  assertEquals(locked.actions, [{ allow: false, kind: "AccessAction", operations: ["update", "delete"] }]);
+  assertEquals(locked.condition?.kind, "BinaryOp");
+  assertEquals(locked.errmessage, "locked");
+  assertEquals(open.actions[0].operations, ["select"]);
+  assertEquals(open.when, undefined);
+  assertEquals(bare.condition?.kind, "Literal");
+});
+
+Deno.test("SDL Parser - Access policy body accepts a when clause", () => {
+  const [policy] = policiesOf(`
+    type Doc {
+      access policy admins {
+        when (global role ?= 'admin');
+        allow all;
+      };
+    }
+  `);
+  assertEquals(policy.when?.kind, "BinaryOp");
+});
+
+Deno.test("SDL Parser - Access policy expressions: exists, in, not in, like, ??", () => {
+  const [policy] = policiesOf(`
+    type Doc {
+      access policy p {
+        allow select;
+        using (exists .owner and global current_user in .members.id and (.tag ?? 'b') not in .members.name and .title like 'x%');
+      };
+    }
+  `);
+  assertEquals(policy.condition?.kind, "BinaryOp");
+});
+
+Deno.test("SDL Parser - Global declarations accept Gel's `required global` order", () => {
+  const ast = new SDLParser(`
+    required global level: int64 {
+      default := 1;
+    };
+    multi global tags: str;
+    global required legacy: str;
+  `)
+    .parse();
+  const globals = ast.declarations.filter((d): d is SDLAST.GlobalDeclaration => d.kind === "GlobalDeclaration");
+  assertEquals(globals.map(g => [g.name.value, g.required ?? false, g.multi ?? false]), [
+    ["level", true, false],
+    ["tags", false, true],
+    ["legacy", true, false]
+  ]);
+});

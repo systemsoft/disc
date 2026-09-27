@@ -274,7 +274,7 @@ Deno.test("select over mutation + policy - update and delete carry the owner pre
     const parts = cteParts(sql);
 
     assertEquals(countOf(sql, OWNER_PREDICATE), 1, sql);
-    assertStringIncludes(parts.inner, `WHERE ((${OWNER_PREDICATE})) AND (`);
+    assertStringIncludes(parts.inner, `WHERE (doc.${OWNER_PREDICATE}) AND (`);
     assertStringIncludes(parts.inner, "doc.title = CAST($");
     assertProjects(parts, ["id"], ["doc"]);
   }

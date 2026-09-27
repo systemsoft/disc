@@ -158,3 +158,109 @@ Deno.test("drop link - a camelCase single link drops its snake_case FK column", 
 
   assertStringIncludes(ddl, "DROP COLUMN IF EXISTS pinned_program_id;");
 });
+
+const DELETE_TARGET = "link program: Program { on source delete delete target; };";
+const IF_ORPHAN = "link program: Program { on source delete delete target if orphan; };";
+const MULTI_IF_ORPHAN = "multi link programs: Program { on source delete delete target if orphan; };";
+
+Deno.test("create link - delete target if orphan deletes the target only when no other source links it through the same link", () => {
+  const ddl = initialDDL(bug(IF_ORPHAN));
+
+  assert(
+    ddl.includes(
+      "CREATE OR REPLACE FUNCTION disc_source_delete_bug_program() RETURNS TRIGGER AS $$ BEGIN " +
+        "IF NOT EXISTS (SELECT 1 FROM bug WHERE program_id = OLD.program_id) THEN DELETE FROM program WHERE id = OLD.program_id; END IF; " +
+        "RETURN NULL; END; $$ LANGUAGE plpgsql;"
+    ),
+    ddl.join("\n")
+  );
+  assert(ddl.includes("CREATE TRIGGER trg_source_delete_bug_program AFTER DELETE ON bug FOR EACH ROW EXECUTE FUNCTION disc_source_delete_bug_program();"));
+});
+
+Deno.test("create link - a multi link's delete target if orphan checks its junction for other sources", () => {
+  const ddl = initialDDL(bug(MULTI_IF_ORPHAN)).join("\n");
+
+  assertStringIncludes(
+    ddl,
+    "BEGIN IF NOT EXISTS (SELECT 1 FROM bug WHERE id = OLD.source_id) AND NOT EXISTS (SELECT 1 FROM bug_programs WHERE target_id = OLD.target_id) " +
+      "THEN DELETE FROM program WHERE id = OLD.target_id; END IF; RETURN NULL; END;"
+  );
+  assertStringIncludes(ddl, "CREATE TRIGGER trg_source_delete_bug_programs AFTER DELETE ON bug_programs");
+});
+
+Deno.test("alter link - delete target → delete target if orphan replaces the trigger", () => {
+  const ddl = migrationDDL(bug(DELETE_TARGET), bug(IF_ORPHAN));
+
+  assertEquals(ddl.slice(0, 2), [
+    "DROP TRIGGER IF EXISTS trg_source_delete_bug_program ON bug;",
+    "DROP FUNCTION IF EXISTS disc_source_delete_bug_program();"
+  ]);
+  assertStringIncludes(ddl[2], "IF NOT EXISTS (SELECT 1 FROM bug WHERE program_id = OLD.program_id)");
+  assertStringIncludes(ddl[3], "CREATE TRIGGER trg_source_delete_bug_program AFTER DELETE ON bug");
+  assertEquals(ddl.length, 4);
+});
+
+Deno.test("alter link - delete target if orphan → delete target replaces the trigger without the orphan check", () => {
+  const ddl = migrationDDL(bug(IF_ORPHAN), bug(DELETE_TARGET));
+
+  assertEquals(ddl.length, 4);
+  assertStringIncludes(ddl[2], "BEGIN DELETE FROM program WHERE id = OLD.program_id; RETURN NULL; END;");
+});
+
+Deno.test("alter link - delete target if orphan → allow drops the trigger", () => {
+  assertEquals(migrationDDL(bug(IF_ORPHAN), bug("link program: Program;")), [
+    "DROP TRIGGER IF EXISTS trg_source_delete_bug_program ON bug;",
+    "DROP FUNCTION IF EXISTS disc_source_delete_bug_program();"
+  ]);
+});
+
+Deno.test("rollback - adding a delete target if orphan link drops its trigger", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL(new SchemaDiffer().diff(modules(bug("")), modules(bug(IF_ORPHAN))));
+
+  assertEquals(rollback.slice(0, 2), [
+    "DROP TRIGGER IF EXISTS trg_source_delete_bug_program ON bug;",
+    "DROP FUNCTION IF EXISTS disc_source_delete_bug_program();"
+  ]);
+});
+
+Deno.test("rollback - creating a type with a delete target if orphan multi link drops its trigger", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL(new SchemaDiffer().diff([], modules(bug(MULTI_IF_ORPHAN)))).join("\n");
+
+  assertStringIncludes(rollback, "DROP TRIGGER IF EXISTS trg_source_delete_bug_programs ON bug_programs;");
+  assertStringIncludes(rollback, "DROP FUNCTION IF EXISTS disc_source_delete_bug_programs();");
+});
+
+function items(link: string): string {
+  return `module default {
+    type Tag { required name: str; };
+    abstract type Item { ${link} };
+    type Note extending Item;
+    type Task extending Item;
+  };`;
+}
+
+Deno.test("create type - an inherited delete target if orphan link checks every concrete subtype's link column", () => {
+  const ddl = initialDDL(items("link tag: Tag { on source delete delete target if orphan; };")).join("\n");
+  const check = "IF NOT EXISTS (SELECT 1 FROM note WHERE tag_id = OLD.tag_id) AND NOT EXISTS (SELECT 1 FROM task WHERE tag_id = OLD.tag_id) " +
+    "THEN DELETE FROM tag WHERE id = OLD.tag_id; END IF;";
+
+  for (const table of ["item", "note", "task"]) {
+    assertStringIncludes(ddl, `disc_source_delete_${table}_tag() RETURNS TRIGGER AS $$ BEGIN ${check}`);
+  }
+});
+
+Deno.test("create type - an inherited multi delete target if orphan link checks every concrete subtype's junction", () => {
+  const ddl = initialDDL(items("multi link tags: Tag { on source delete delete target if orphan; };")).join("\n");
+
+  assertStringIncludes(
+    ddl,
+    "BEGIN IF NOT EXISTS (SELECT 1 FROM note WHERE id = OLD.source_id) AND NOT EXISTS (SELECT 1 FROM note_tags WHERE target_id = OLD.target_id) " +
+      "AND NOT EXISTS (SELECT 1 FROM task_tags WHERE target_id = OLD.target_id) THEN DELETE FROM tag WHERE id = OLD.target_id; END IF;"
+  );
+});
+
+Deno.test("create type - an inherited plain delete target link keeps its body", () => {
+  const ddl = initialDDL(items("link tag: Tag { on source delete delete target; };")).join("\n");
+
+  assertStringIncludes(ddl, "disc_source_delete_note_tag() RETURNS TRIGGER AS $$ BEGIN DELETE FROM tag WHERE id = OLD.tag_id; RETURN NULL; END;");
+});

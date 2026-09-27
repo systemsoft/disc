@@ -580,7 +580,8 @@ export class SchemaDiffer {
     allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.CreateTypeOperation {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
-    const links = this.extractLinksWithInheritance(typeDef, allTypes);
+    const inheritedLinks = this.extractLinksWithInheritance(typeDef, allTypes);
+    const links = allTypes ? this.withOrphanTables(typeDef, inheritedLinks, allTypes) : inheritedLinks;
     const triggers = this.extractTriggers(typeDef);
 
     const op: Types.CreateTypeOperation = {
@@ -733,6 +734,82 @@ export class SchemaDiffer {
     return links;
   }
 
+  /**
+   * `typeDef`'s links with `orphanTables` set on each `delete target if
+   * orphan` link that other concrete types hold too (see
+   * `LinkDefinition.orphanTables`).
+   */
+  private withOrphanTables(
+    typeDef: AST.TypeDeclaration,
+    links: Types.LinkDefinition[],
+    allTypes: Map<string, AST.TypeDeclaration>
+  ): Types.LinkDefinition[] {
+    const ownTable = typeNameToTableName(typeDef.name.value);
+
+    return links.map(link => {
+      if (link.onSourceDelete !== "DELETE TARGET IF ORPHAN") {
+        return link;
+      }
+
+      const tables = this.linkHolderTables(typeDef, link.name, allTypes);
+      const ownOnly = tables.length === 0 || (tables.length === 1 && tables[0] === ownTable);
+
+      return ownOnly ? link : { ...link, orphanTables: tables };
+    });
+  }
+
+  /**
+   * Tables of the concrete types holding `typeDef`'s link `linkName` (Gel:
+   * the same link): every concrete type among the types declaring it in
+   * `typeDef`'s ancestry (itself included) and their descendants. Sorted.
+   */
+  private linkHolderTables(
+    typeDef: AST.TypeDeclaration,
+    linkName: string,
+    allTypes: Map<string, AST.TypeDeclaration>
+  ): string[] {
+    const declarers: AST.TypeDeclaration[] = [];
+    const ancestors = new Set<AST.TypeDeclaration>();
+    const visitAncestors = (type: AST.TypeDeclaration): void => {
+      if (ancestors.has(type)) {
+        return;
+      }
+      ancestors.add(type);
+      if (type.members.some(member => member.kind === "LinkDeclaration" && member.name.value === linkName)) {
+        declarers.push(type);
+      }
+      for (const ext of type.extending ?? []) {
+        const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), allTypes);
+        if (parent) {
+          visitAncestors(parent);
+        }
+      }
+    };
+
+    const subtypes = this.getCache(allTypes).subtypes;
+    const descendants = new Set<string>();
+    const tables = new Set<string>();
+    const visitDescendants = (name: string): void => {
+      if (descendants.has(name)) {
+        return;
+      }
+      descendants.add(name);
+      if (!allTypes.get(name)?.abstract) {
+        tables.add(typeNameToTableName(name));
+      }
+      for (const child of [...subtypes.get(name) ?? [], ...subtypes.get(`default::${name}`) ?? []]) {
+        visitDescendants(child);
+      }
+    };
+
+    visitAncestors(typeDef);
+    for (const declarer of declarers) {
+      visitDescendants(declarer.name.value);
+    }
+
+    return [...tables].sort();
+  }
+
   private extractProperties(
     typeDef: AST.TypeDeclaration
   ): Types.PropertyDefinition[] {
@@ -842,7 +919,7 @@ export class SchemaDiffer {
   }
 
   private mapOnSourceDelete(
-    value?: "allow" | "delete target"
+    value?: "allow" | "delete target" | "delete target if orphan"
   ): Types.LinkDefinition["onSourceDelete"] {
     if (!value) {
       return undefined;
@@ -852,6 +929,8 @@ export class SchemaDiffer {
         return "ALLOW";
       case "delete target":
         return "DELETE TARGET";
+      case "delete target if orphan":
+        return "DELETE TARGET IF ORPHAN";
       default:
         return undefined;
     }
@@ -910,7 +989,7 @@ export class SchemaDiffer {
       this.extractLinksWithInheritance(oldType, oldAllTypes) :
       this.extractLinks(oldType);
     const newLinks = newAllTypes ?
-      this.extractLinksWithInheritance(newType, newAllTypes) :
+      this.withOrphanTables(newType, this.extractLinksWithInheritance(newType, newAllTypes), newAllTypes) :
       this.extractLinks(newType);
 
     operations.push(...this.diffLinks(oldLinks, newLinks));
@@ -1300,7 +1379,7 @@ export class SchemaDiffer {
     const types = this.extractTypes(schema);
 
     return [...types.values()].flatMap(typeDef =>
-      this.extractLinksWithInheritance(typeDef, types).map(link => ({
+      this.withOrphanTables(typeDef, this.extractLinksWithInheritance(typeDef, types), types).map(link => ({
         link,
         tableName: typeNameToTableName(typeDef.name.value),
         typeName: typeDef.name.value

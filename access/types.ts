@@ -42,8 +42,18 @@ export interface AccessPolicy {
   name: string;
   objectType: string;
   using?: AccessExpressionNode; /*** For row-level security ***/
+  /**
+   * The EdgeQL source of the condition an object must meet for the policy to
+   * apply to it — Gel's `when` and `using`, ANDed — when the policy came from
+   * SDL. The compiler compiles it (see `AccessEvaluator.setPolicyCompiler`),
+   * so it may follow links and backlinks, call functions and read globals;
+   * `using` is its in-memory form, absent when it has none.
+   */
+  usingSource?: string;
   /*** Disc's extra condition on the objects an insert or update writes (see `AccessEvaluator.writeCheck`) ***/
   withCheck?: AccessExpressionNode;
+  /*** The EdgeQL source of `withCheck` (see `usingSource`). ***/
+  withCheckSource?: string;
 }
 
 /**
@@ -95,6 +105,12 @@ export interface AccessDecision {
    * should prefer this over `reason`. (Gel #4095)
    */
   denialMessage?: string;
+  /**
+   * The conditions of the deny policies that depend on the object: an object
+   * meeting any of them is denied, whatever allows it (Gel: denies subtract
+   * from the union of allows).
+   */
+  denySqlConditions?: string[];
   reason?: string;
   sqlConditions?: string[]; // SQL WHERE clauses to apply
 }
@@ -105,6 +121,14 @@ export interface AccessDecision {
  * global. Supplied by the compiler, which knows the schema's globals.
  */
 export type AccessGlobalResolver = (name: string, objectType: string | undefined) => string | undefined;
+
+/**
+ * Compiles the EdgeQL source of a policy's condition (`usingSource`,
+ * `withCheckSource`) on objects of `objectType` to a SQL predicate over the
+ * object's row, aliased `__policy_rows`, for the compiler's access context.
+ * Supplied by the compiler.
+ */
+export type AccessPolicyCompiler = (edgeql: string, objectType: string) => string;
 
 /**
  * Policy evaluation mode

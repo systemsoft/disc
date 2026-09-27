@@ -65,6 +65,11 @@ jobs:
       - name: Build UI
         run: cd ui && bun run build
 
+      # svelte-check type-checks the .svelte/.ts sources (on TS 7 via --tsgo;
+      # `typescript` stays on 6 until svelte-check accepts 7 directly).
+      - name: Type-check UI
+        run: cd ui && bun run check
+
       # dprint is the project formatter (`deno task format`); deno fmt is
       # intentionally unused. bunx fetches the dprint CLI; plugins come
       # from dprint.json.

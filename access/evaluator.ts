@@ -28,7 +28,8 @@ import {
   AccessDecision,
   AccessGlobalResolver,
   AccessOperation,
-  AccessPolicy
+  AccessPolicy,
+  AccessPolicyCompiler
 } from "./types.ts";
 
 /*** EXPORT ------------------------------------------- ***/
@@ -54,6 +55,7 @@ export class AccessEvaluator {
   private config: AccessConfig;
   private globalResolver?: AccessGlobalResolver;
   private policies: Map<string, AccessPolicy[]>;
+  private policyCompiler?: AccessPolicyCompiler;
 
   constructor(config: AccessConfig) {
     this.config = config;
@@ -72,6 +74,7 @@ export class AccessEvaluator {
    */
   evaluate(objectType: string, operation: AccessOperation, context: AccessContext): AccessDecision {
     const appliedPolicies: string[] = [];
+    const denySqlConditions: string[] = [];
     const sqlConditions: string[] = [];
     const allPolicies = this.policiesFor(objectType, context);
 
@@ -97,6 +100,9 @@ export class AccessEvaluator {
       appliedPolicies.push(policy.name);
       // Check if this policy applies to the operation
       const decision = this.evaluatePolicy(policy, operation, context);
+
+      if (decision.denySqlCondition)
+        denySqlConditions.push(decision.denySqlCondition);
 
       if (decision.allowed) {
         hasAllow = true;
@@ -147,6 +153,7 @@ export class AccessEvaluator {
       allowed,
       appliedPolicies,
       denialMessage: !allowed ? denialMessage : undefined,
+      denySqlConditions: allowed && denySqlConditions.length > 0 ? denySqlConditions : undefined,
       reason,
       sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined
     };
@@ -175,9 +182,9 @@ export class AccessEvaluator {
     const deny: WritePolicy[] = [];
 
     for (const policy of policies) {
-      const conditions = [policy.using, policy.withCheck]
-        .filter((expr): expr is AccessExpressionNode => expr !== undefined)
-        .map(expr => `(${this.expressionToSQL(expr, context, policy.objectType)})`);
+      const conditions = [this.usingSQL(policy, context), this.withCheckSQL(policy, context)]
+        .filter((sql): sql is string => sql !== undefined)
+        .map(sql => `(${sql})`);
       const writePolicy: WritePolicy = {
         condition: conditions.length > 0 ? conditions.join(" AND ") : "TRUE",
         errmessage: policy.errmessage
@@ -326,6 +333,13 @@ export class AccessEvaluator {
   }
 
   /**
+   * Set how a policy's EdgeQL condition becomes SQL (see `AccessPolicyCompiler`).
+   */
+  setPolicyCompiler(compiler: AccessPolicyCompiler): void {
+    this.policyCompiler = compiler;
+  }
+
+  /**
    * Set how a custom global in a policy becomes SQL (see `AccessGlobalResolver`).
    */
   setGlobalResolver(resolver: AccessGlobalResolver): void {
@@ -344,6 +358,39 @@ export class AccessEvaluator {
   }
 
   /*** PRIVATE ------------------------------------------ ***/
+
+  /**
+   * The SQL of the condition an object must meet for `policy` to apply to it
+   * (Gel's `when` and `using`), or undefined when it applies to every object:
+   * its EdgeQL compiled by the compiler when both are there, else its
+   * in-memory form.
+   */
+  private usingSQL(policy: AccessPolicy, context: AccessContext): string | undefined {
+    return this.policySQL(policy, policy.usingSource, policy.using, context);
+  }
+
+  /*** The SQL of `policy`'s `with check`, as `usingSQL`. ***/
+  private withCheckSQL(policy: AccessPolicy, context: AccessContext): string | undefined {
+    return this.policySQL(policy, policy.withCheckSource, policy.withCheck, context);
+  }
+
+  private policySQL(
+    policy: AccessPolicy,
+    source: string | undefined,
+    expr: AccessExpressionNode | undefined,
+    context: AccessContext
+  ): string | undefined {
+    if (source !== undefined && this.policyCompiler)
+      return this.policyCompiler(source, policy.objectType);
+
+    if (expr)
+      return this.expressionToSQL(expr, context, policy.objectType);
+
+    if (source !== undefined)
+      throw new ValidationError(`Access policy ${policy.name} on ${policy.objectType} needs the query compiler to evaluate`);
+
+    return undefined;
+  }
 
   /**
    * Evaluate a comparison expression
@@ -528,15 +575,27 @@ export class AccessEvaluator {
     policy: AccessPolicy,
     operation: AccessOperation,
     context: AccessContext
-  ): { allowed: boolean; denied: boolean; sqlCondition?: string; } {
+  ): { allowed: boolean; denied: boolean; denySqlCondition?: string; sqlCondition?: string; } {
     let allowed = false;
     let denied = false;
+    let denySqlCondition: string | undefined;
     let sqlCondition: string | undefined;
 
     for (const action of policy.actions) {
       // Check if this action applies to the operation
       if (!this.operationMatches(operation, action.operations))
         continue;
+
+      /*** A deny with a condition denies the objects that meet it, which only the SQL can
+           tell (Gel: denies subtract from what the allows give): the write check decides
+           for each object an insert or update writes (see `writePolicies`), a filter for
+           the objects a select, update or delete reads. ***/
+      if (!action.allow && this.config.enableRLS && (policy.using || policy.usingSource !== undefined)) {
+        if (operation !== "insert" && operation !== "update write")
+          denySqlCondition = this.usingSQL(policy, context);
+
+        continue;
+      }
 
       /*** Evaluate condition if present. A custom global the context does not supply is
            session state only the policy's SQL can read, so a condition over one is left to
@@ -553,21 +612,14 @@ export class AccessEvaluator {
         allowed = true;
 
         // Generate SQL condition for row-level security
-        if (policy.using && this.config.enableRLS)
-          sqlCondition = this.expressionToSQL(policy.using, context, policy.objectType);
-      } else if (
-        (operation === "insert" || operation === "update write") && this.config.enableRLS && policy.using &&
-        containsColumnReference(policy.using)
-      ) {
-        /*** A deny over the object's values denies the objects it matches, which the write
-             check decides for each object written (see `writePolicies`). ***/
-        continue;
+        if (this.config.enableRLS)
+          sqlCondition = this.usingSQL(policy, context);
       } else {
         denied = true;
       }
     }
 
-    return { allowed, denied, sqlCondition };
+    return { allowed, denied, denySqlCondition, sqlCondition };
   }
 
   /**

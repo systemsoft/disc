@@ -636,6 +636,7 @@ function mapErrorCodeToStatus(code: string): number {
     case "READ_ONLY_MODE":
       return 503;
     case "ACCESS_DENIED":
+    case "ACCESS_POLICY_ERROR":
     case "POLICY_DENIED":
       return 403;
     case "PARSE_ERROR":

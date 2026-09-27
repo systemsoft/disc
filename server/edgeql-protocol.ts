@@ -519,14 +519,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       // The SQLSTATE (and constraint/table/detail when PostgreSQL sent them)
       // is what lets a client tell a unique violation from a serialization
-      // failure — the message alone is not something to match on.
+      // failure — the message alone is not something to match on. An access
+      // policy violation (42501, from disc_access_check) is Gel's
+      // AccessPolicyError.
+      const fields = postgresErrorFields(error);
       return {
         errors: [{
           message: errorMessage,
           extensions: {
-            code: "EXECUTION_ERROR",
+            code: fields?.sqlState === "42501" ? "ACCESS_POLICY_ERROR" : "EXECUTION_ERROR",
             durationMs: Date.now() - startTime,
-            ...postgresErrorFields(error)
+            ...fields
           }
         }]
       };

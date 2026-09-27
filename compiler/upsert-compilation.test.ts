@@ -478,7 +478,7 @@ Deno.test("UPSERT - composite target on a type with a row-level update policy up
   // read from the table's own rows (unqualified, a policy column would be ambiguous with `excluded`).
   assertStringIncludes(
     await compileGitForge(upsert, { userId: USER_ID }),
-    `ON CONFLICT (owner_id, title) DO UPDATE SET title = 'u' WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE (owner_id = E'${USER_ID}') ) RETURNING (CASE WHEN (SELECT CASE WHEN "doc".xmax = 0 THEN disc_access_check(`
+    `ON CONFLICT (owner_id, title) DO UPDATE SET title = 'u' WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE __policy_rows.owner_id = E'${USER_ID}' ) RETURNING (CASE WHEN (SELECT CASE WHEN "doc".xmax = 0 THEN disc_access_check(`
   );
   assertStringIncludes(await compileGitForge(upsert, { bypass: true, userId: USER_ID }), "ON CONFLICT (owner_id, title) DO UPDATE SET title = 'u'");
 });

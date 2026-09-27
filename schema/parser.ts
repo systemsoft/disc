@@ -171,6 +171,13 @@ export class SDLParser {
       return this.parseFunctionDeclaration();
     }
 
+    // Gel's order puts the qualifiers first: `required global x: T`.
+    if (!isAbstract && (this.check(TokenType.REQUIRED) || this.check(TokenType.MULTI))) {
+      const qualifiers = this.parsePointerQualifiers();
+      this.consume(TokenType.GLOBAL, "Expected 'global' after pointer qualifiers");
+      return this.parseGlobalDeclaration(qualifiers);
+    }
+
     if (this.match(TokenType.GLOBAL)) {
       if (isAbstract) {
         throw this.error("Global cannot be abstract");
@@ -315,8 +322,10 @@ export class SDLParser {
     return { kind: "FunctionDeclaration", name, parameters, returnType, using };
   }
 
-  private parseGlobalDeclaration(): AST.GlobalDeclaration {
-    const qualifiers = this.parsePointerQualifiers();
+  /*** A global declaration after `global`; `leading` holds qualifiers written before `global` (Gel's order). ***/
+  private parseGlobalDeclaration(leading: { required?: boolean; multi?: boolean; } = {}): AST.GlobalDeclaration {
+    const trailing = this.parsePointerQualifiers();
+    const qualifiers = { multi: leading.multi || trailing.multi, required: leading.required || trailing.required };
     const name = this.parseIdentifier();
     this.consume(TokenType.COLON, "Expected ':' after global name");
     const type = this.parseTypeRef();
@@ -983,22 +992,57 @@ export class SDLParser {
     const actions: AST.AccessAction[] = [];
     let condition: AST.Expression | undefined;
     let errmessage: string | undefined;
+    let when: AST.Expression | undefined;
     let withCheck: AST.Expression | undefined;
     const annotations: AST.Annotation[] = [];
+    const isAction = (): boolean => this.check(TokenType.IDENT) && (this.peek().value === "allow" || this.peek().value === "deny");
+    const isWhen = (): boolean => this.check(TokenType.IDENT) && this.peek().value === "when";
+    const parenthesized = (clause: string): AST.Expression => {
+      this.consume(TokenType.LPAREN, `Expected '(' after '${clause}'`);
+      const expr = this.parseExpression();
+      this.consume(TokenType.RPAREN, "Expected ')' after expression");
+      return expr;
+    };
 
-    this.consume(TokenType.LBRACE, "Expected '{' after policy name");
+    // Gel's form: `access policy <name> [when (<cond>)] allow|deny <ops>
+    // [using (<expr>)] [{ errmessage := …; annotation …; }];`
+    const gelForm = !this.check(TokenType.LBRACE);
+    if (gelForm) {
+      if (isWhen()) {
+        this.advance();
+        when = parenthesized("when");
+      }
+      if (!isAction()) {
+        throw this.error(`Expected 'allow', 'deny' or '{' in access policy, got '${this.peek().value}'`);
+      }
+      const allow = this.advance().value === "allow";
+      actions.push({ kind: "AccessAction", allow, operations: this.parseAccessOperations() });
+      if (this.match(TokenType.USING)) {
+        condition = parenthesized("using");
+      }
+    }
 
-    while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
-      if (this.check(TokenType.IDENT) && (this.peek().value === "allow" || this.peek().value === "deny")) {
+    // The body: Disc's form holds the whole policy; Gel's (optional) its errmessage and annotations.
+    const hasBody = !gelForm || this.check(TokenType.LBRACE);
+    if (hasBody) {
+      this.consume(TokenType.LBRACE, "Expected '{' after policy name");
+    } else {
+      this.consume(TokenType.SEMICOLON, "Expected ';' or '{' after access policy");
+    }
+
+    while (hasBody && !this.check(TokenType.RBRACE) && !this.isAtEnd()) {
+      if (isAction()) {
         const allow = this.advance().value === "allow";
         const operations = this.parseAccessOperations();
         actions.push({ kind: "AccessAction", allow, operations });
         this.consume(TokenType.SEMICOLON, "Expected ';' after access action");
       } else if (this.match(TokenType.USING)) {
-        this.consume(TokenType.LPAREN, "Expected '(' after 'using'");
-        condition = this.parseExpression();
-        this.consume(TokenType.RPAREN, "Expected ')' after expression");
+        condition = parenthesized("using");
         this.consume(TokenType.SEMICOLON, "Expected ';' after using clause");
+      } else if (isWhen()) {
+        this.advance();
+        when = parenthesized("when");
+        this.consume(TokenType.SEMICOLON, "Expected ';' after when clause");
       } else if (this.match(TokenType.WITH)) {
         // `with check (<expr>);` — INSERT/UPDATE post-condition. (P1-37)
         this.consume(TokenType.CHECK, "Expected 'check' after 'with'");
@@ -1022,12 +1066,14 @@ export class SDLParser {
         this.consume(TokenType.SEMICOLON, "Expected ';' after errmessage");
       } else {
         throw this.error(
-          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', 'errmessage', or 'annotation'?`
+          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'when', 'using', 'with check', 'errmessage', or 'annotation'?`
         );
       }
     }
 
-    this.consume(TokenType.RBRACE, "Expected '}' after policy body");
+    if (hasBody) {
+      this.consume(TokenType.RBRACE, "Expected '}' after policy body");
+    }
 
     const policy: AST.AccessPolicy = {
       kind: "AccessPolicy",
@@ -1035,6 +1081,9 @@ export class SDLParser {
       actions,
       condition
     };
+    if (when !== undefined) {
+      policy.when = when;
+    }
     if (withCheck !== undefined) {
       policy.withCheck = withCheck;
     }
@@ -1406,7 +1455,7 @@ export class SDLParser {
       return "allow";
     }
 
-    // "delete target"
+    // "delete target" or "delete target if orphan"
     if (token.type === TokenType.DELETE) {
       this.advance();
       const targetToken = this.peek();
@@ -1415,17 +1464,28 @@ export class SDLParser {
         targetToken.value === "target"
       ) {
         this.advance();
-        return "delete target";
+        if (!this.match(TokenType.IF)) {
+          return "delete target";
+        }
+        const orphanToken = this.peek();
+        if (orphanToken.type === TokenType.IDENT && orphanToken.value === "orphan") {
+          this.advance();
+          return "delete target if orphan";
+        }
+        throw this.error(
+          `Expected 'orphan' after 'if', got '${orphanToken.value}'`,
+          "The only valid form is 'delete target if orphan'."
+        );
       }
       throw this.error(
         `Expected 'target' after 'delete', got '${targetToken.value}'`,
-        "Valid 'on source delete' policies: allow, delete target."
+        "Valid 'on source delete' policies: allow, delete target, delete target if orphan."
       );
     }
 
     throw this.error(
       `Invalid source delete policy: ${token.value}`,
-      "Valid 'on source delete' policies: allow, delete target."
+      "Valid 'on source delete' policies: allow, delete target, delete target if orphan."
     );
   }
 
@@ -1570,7 +1630,7 @@ export class SDLParser {
   }
 
   private parseComparisonExpression(): AST.Expression {
-    let left = this.parseAdditiveExpression();
+    let left = this.parseCoalesceExpression();
 
     while (true) {
       let op: string | null = null;
@@ -1583,14 +1643,45 @@ export class SDLParser {
         op = ">";
       } else if (this.match(TokenType.GREATEREQ)) {
         op = ">=";
+      } else {
+        op = this.matchWordOperator();
       }
 
       if (op) {
-        const right = this.parseAdditiveExpression();
+        const right = this.parseCoalesceExpression();
         left = { kind: "BinaryOp", op, left, right };
       } else {
         break;
       }
+    }
+
+    return left;
+  }
+
+  /*** The word operator at the current token (`in`, `like`, `ilike`, each optionally after `not`), consumed; else null. ***/
+  private matchWordOperator(): string | null {
+    const words = new Set(["ilike", "in", "like"]);
+    const word = (offset: number): string | undefined => {
+      const token = this.tokens[this.current + offset];
+      return token?.type === TokenType.IDENT ? token.value : undefined;
+    };
+    if (words.has(word(0) ?? "")) {
+      return this.advance().value;
+    }
+    if (word(0) === "not" && words.has(word(1) ?? "")) {
+      this.advance();
+      return `not ${this.advance().value}`;
+    }
+    return null;
+  }
+
+  /*** `a ?? b`: `a`, or `b` when `a` is empty. Binds tighter than comparisons, looser than arithmetic. ***/
+  private parseCoalesceExpression(): AST.Expression {
+    let left = this.parseAdditiveExpression();
+
+    while (this.match(TokenType.COALESCE)) {
+      const right = this.parseAdditiveExpression();
+      left = { kind: "BinaryOp", op: "??", left, right };
     }
 
     return left;
@@ -1656,6 +1747,13 @@ export class SDLParser {
       this.advance();
       const operand = this.parseUnaryExpression();
       return { kind: "UnaryOp", op: "not", operand };
+    }
+
+    // `exists <set>`: whether the set is non-empty.
+    if (this.check(TokenType.IDENT) && this.peek().value === "exists" && !this.checkNext(TokenType.LPAREN)) {
+      this.advance();
+      const operand = this.parseUnaryExpression();
+      return { kind: "UnaryOp", op: "exists", operand };
     }
 
     // Type cast: `<type>expr` (e.g., `<cal::relative_duration>"1 hour"`).

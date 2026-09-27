@@ -25,6 +25,7 @@
 
 import { MigrationError } from "../lib/errors.ts";
 import { PG_MAX_IDENTIFIER_BYTES, propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import { deletesTargets } from "./types.ts";
 import type {
   AddLinkOperation,
   AddPropertyOperation,
@@ -471,6 +472,8 @@ export interface ExistingDeleteRules {
   foreignKeys: Map<string, string>;
   /** The asked-about tables that exist. */
   tables: Set<string>;
+  /** Source (`pg_proc.prosrc`) of the function each trigger executes, keyed `<table>.<trigger>`. */
+  triggerBodies: Map<string, string>;
   /** Timing (`BEFORE`, `AFTER`, `INSTEAD OF`) of each trigger, keyed `<table>.<trigger>`. */
   triggers: Map<string, string>;
 }
@@ -483,7 +486,7 @@ export type ExistingDeleteRuleReader = (tableNames: string[]) => Promise<Existin
 
 /** How the DDL generator names a link's delete rules and which FK action it gives the link (see `DDLGenerator`). */
 export interface LinkDeleteRuleNaming {
-  sourceDeleteTrigger(tableName: string, link: LinkDefinition): { name: string; table: string; timing: string; };
+  sourceDeleteTrigger(tableName: string, link: LinkDefinition): { body: string; name: string; table: string; timing: string; };
   targetForeignKey(tableName: string, link: LinkDefinition): { constraint: string; onDelete: string; table: string; };
 }
 
@@ -515,10 +518,11 @@ function pgStoredName(name: string): string {
  * Compares every declared link (`declared`) with the database: the ON DELETE
  * action of its target FK (`fk_<table>_<link>_id`, or `fk_<junction>_target_id`
  * on a multi link), and whether its `trg_source_delete_…` trigger exists —
- * with the timing and on the table Disc creates it with now (AFTER DELETE;
- * a multi link's on its junction). Earlier Disc created it BEFORE DELETE on
- * the source table, where the target's RESTRICT FK blocked deleting the
- * source; such a trigger is replaced.
+ * with the timing, on the table and running the function body Disc creates
+ * it with now (AFTER DELETE; a multi link's on its junction; `if orphan`
+ * adds a check). Earlier Disc created it BEFORE DELETE on the source table,
+ * where the target's RESTRICT FK blocked deleting the source; such a
+ * trigger is replaced, as is one whose body runs another policy.
  * Returns one `AlterType` → `AlterLink` per link that differs, carrying the
  * same `ChangeOnDelete` / `ChangeOnSourceDelete` the ALTER LINK path turns
  * into DDL (drop and re-add the FK; create, replace or drop the trigger).
@@ -609,7 +613,10 @@ export async function reconcileLinkDeleteRules(
       /*** Where a multi link's trigger was before it moved to the junction: the source table. ***/
       const misplaced = trigger.table !== entry.tableName && existing.triggers.has(`${entry.tableName}.${name}`);
       const present = timing !== undefined || misplaced;
-      const matches = entry.link.onSourceDelete === "DELETE TARGET" ? timing === trigger.timing && !misplaced : !present;
+      const body = existing.triggerBodies.get(`${trigger.table}.${name}`)?.trim();
+      const matches = deletesTargets(entry.link.onSourceDelete) ?
+        timing === trigger.timing && !misplaced && body === trigger.body :
+        !present;
       if (!matches) {
         changes.push({ kind: "ChangeOnSourceDelete", newValue: entry.link.onSourceDelete, oldValue: present ? "DELETE TARGET" : undefined });
       }

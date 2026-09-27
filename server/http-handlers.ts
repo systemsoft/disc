@@ -518,8 +518,10 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         this.stats.failed_requests++;
         const errorHeaders = this.get_default_headers("application/json");
         await this.apply_schema_drift_headers(request, errorHeaders);
+        // An access policy violation is a refusal, not a malformed request.
+        const forbidden = response.errors?.some(e => e.extensions?.code === "ACCESS_POLICY_ERROR");
         return new Response(JSON.stringify(response), {
-          status: 400,
+          status: forbidden ? 403 : 400,
           headers: errorHeaders
         });
       }

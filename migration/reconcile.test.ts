@@ -80,6 +80,7 @@ function restrictingDatabase(asked: string[][]): (tableNames: string[]) => Promi
     return Promise.resolve({
       foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
       tables: new Set(["bug"]),
+      triggerBodies: new Map<string, string>(),
       triggers: new Map<string, string>()
     });
   };
@@ -113,7 +114,7 @@ Deno.test("reconcileLinkDeleteRules reports a foreign key that doesn't exist ins
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set(["bug"]), triggers: new Map<string, string>() })
+    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set(["bug"]), triggerBodies: new Map<string, string>(), triggers: new Map<string, string>() })
   );
 
   assertEquals(result.operations, []);
@@ -125,8 +126,45 @@ Deno.test("reconcileLinkDeleteRules skips a table that doesn't exist yet", async
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set<string>(), triggers: new Map<string, string>() })
+    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set<string>(), triggerBodies: new Map<string, string>(), triggers: new Map<string, string>() })
   );
+
+  assertEquals(result, { missingForeignKeys: [], operations: [] });
+});
+
+/*** `Bug.program` declares `on source delete delete target if orphan`; the database's trigger may run another body. ***/
+const IF_ORPHAN: DeclaredLink = {
+  link: { annotations: {}, multi: false, name: "program", onSourceDelete: "DELETE TARGET IF ORPHAN", required: false, target: "Program" },
+  tableName: "bug",
+  typeName: "Bug"
+};
+
+function triggerDatabase(body: string): () => Promise<ExistingDeleteRules> {
+  return () =>
+    Promise.resolve({
+      foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
+      tables: new Set(["bug"]),
+      triggerBodies: new Map([["bug.trg_source_delete_bug_program", body]]),
+      triggers: new Map([["bug.trg_source_delete_bug_program", "AFTER"]])
+    });
+}
+
+Deno.test("reconcileLinkDeleteRules replaces a source-delete trigger whose function body differs from the declared policy's", async () => {
+  const plainDeleteTarget = " BEGIN DELETE FROM program WHERE id = OLD.program_id; RETURN NULL; END; ";
+  const result = await reconcileLinkDeleteRules([IF_ORPHAN], [], new DDLGenerator(), triggerDatabase(plainDeleteTarget));
+  const ddl = new DDLGenerator().generateDDL(result.operations);
+
+  assertEquals(ddl.slice(0, 2), [
+    "DROP TRIGGER IF EXISTS trg_source_delete_bug_program ON bug;",
+    "DROP FUNCTION IF EXISTS disc_source_delete_bug_program();"
+  ]);
+  assert(ddl[2].includes("IF NOT EXISTS (SELECT 1 FROM bug WHERE program_id = OLD.program_id)"), ddl[2]);
+  assertEquals(ddl.length, 4);
+});
+
+Deno.test("reconcileLinkDeleteRules leaves a source-delete trigger whose function body is the declared one", async () => {
+  const body = ` ${new DDLGenerator().sourceDeleteTrigger("bug", IF_ORPHAN.link).body} `;
+  const result = await reconcileLinkDeleteRules([IF_ORPHAN], [], new DDLGenerator(), triggerDatabase(body));
 
   assertEquals(result, { missingForeignKeys: [], operations: [] });
 });

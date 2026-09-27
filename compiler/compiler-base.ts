@@ -10,6 +10,7 @@
 import {
   AccessConfig,
   AccessContext,
+  AccessDecision,
   AccessEvaluator,
   AccessPolicy,
   AccessSQLInjector
@@ -416,14 +417,29 @@ export function buildParameterTypeMap(node: unknown): Map<number, string> {
   return out;
 }
 
-/*** The alias of a policy-filtered table inside its own subquery (see `tableRowsWhere`). ***/
-const POLICY_ROWS = "__policy_rows";
+/**
+ * The alias of a policy-filtered table inside its own subquery (see
+ * `tableRowsWhere`), and of the object row a compiled policy condition reads
+ * (see `policyConditionSql`).
+ */
+export const POLICY_ROWS = "__policy_rows";
 
 export abstract class CompilerBase {
   protected ctx: Context.CompilationContext;
   protected accessEvaluator?: AccessEvaluator;
   protected accessInjector?: AccessSQLInjector;
   protected accessContext: AccessContext;
+  /**
+   * Set while a policy's condition compiles (see `policyConditionSql`): as in
+   * Gel, policy expressions ignore every policy, so no read in one is narrowed.
+   */
+  protected compilingPolicy = false;
+  /**
+   * The alias a policy's condition reads the object's row by: `__policy_rows`
+   * (see `tableRowsWhere`, and a written row's check), or a mutation's target
+   * table where its WHERE reads it directly (see `withPolicySubject`).
+   */
+  protected policySubject = POLICY_ROWS;
   protected enableAccessControl: boolean;
   /**
    * Maps each named EdgeQL parameter (without leading `$`) to its 1-indexed
@@ -458,6 +474,7 @@ export abstract class CompilerBase {
 
       this.accessEvaluator = new AccessEvaluator(config);
       this.accessEvaluator.setGlobalResolver((name, objectType) => this.policyGlobalSql(name, objectType));
+      this.accessEvaluator.setPolicyCompiler((edgeql, objectType) => this.policyConditionSql(edgeql, objectType));
       this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
     }
   }
@@ -468,6 +485,33 @@ export abstract class CompilerBase {
    * schema declares no such global.
    */
   protected abstract policyGlobalSql(name: string, objectType: string | undefined): string | undefined;
+
+  /**
+   * A policy's condition on objects of `objectType` (EdgeQL), as SQL over the
+   * object's row aliased `__policy_rows` (see `AccessPolicyCompiler`).
+   */
+  protected abstract policyConditionSql(edgeql: string, objectType: string): string;
+
+  /*** `run`, with the policy conditions it compiles reading the object's row as `alias`. ***/
+  protected withPolicySubject<T>(alias: string, run: () => T): T {
+    const outer = this.policySubject;
+    this.policySubject = alias;
+    try {
+      return run();
+    } finally {
+      this.policySubject = outer;
+    }
+  }
+
+  /**
+   * A compiled policy condition as SQL text. Its reads are not narrowed by
+   * any policy (a policy expression ignores policies), but a read of an
+   * abstract type's table still becomes a read of its objects.
+   */
+  protected renderPolicySql(expr: SQL.SQLExpression): string {
+    this.restrictReads(expr, new Set(), false);
+    return new SQLCodeGenerator().generateExpression(expr);
+  }
 
   /**
    * Register an access policy (only works if access control is enabled)
@@ -537,16 +581,38 @@ export abstract class CompilerBase {
   }
 
   /**
+   * The rows an access decision keeps, as a predicate: those an allowing
+   * policy's condition holds for (any one is enough), less those a denying
+   * policy's condition holds for. Undefined when it keeps every row.
+   */
+  protected decisionFilter(decision: AccessDecision): SQL.SQLExpression | undefined {
+    const allowed = this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+    const denies = decision.denySqlConditions ?? [];
+    if (denies.length === 0) {
+      return allowed;
+    }
+    const notDenied: SQL.SQLExpression = {
+      kind: "RawSQLExpression",
+      sql: `NOT COALESCE(${denies.map(condition => `(${condition})`).join(" OR ")}, FALSE)`
+    };
+    return allowed ? SQL.createBinaryExpression("AND", allowed, notDenied) : notDenied;
+  }
+
+  /**
    * The select policy's row filter on `typeDef`: undefined when the query may
    * read every row (access control off, a bypass caller, no policy narrowing
    * select), FALSE when select is denied. The filter is policy SQL over the
-   * type's own columns, unqualified, so it only holds directly over the
-   * type's table (see `tableRowsWhere`). Policy expressions reference no other
-   * object type, so applying them never recurses into another policy — as in
-   * Gel, where policy expressions ignore other policies.
+   * type's row, so it only holds over the type's table aliased
+   * `__policy_rows` (see `tableRowsWhere`). A policy's condition may read
+   * other objects (a link, a backlink), but those reads are never narrowed —
+   * as in Gel, policy expressions ignore other policies — so applying one
+   * never recurses into another policy.
    */
   protected selectPolicyFilter(typeDef: Context.TypeDef): SQL.SQLExpression | undefined {
-    if (!this.enableAccessControl || !this.accessEvaluator || this.accessContext.bypass || typeDef.kind !== "object") {
+    if (
+      !this.enableAccessControl || !this.accessEvaluator || this.accessContext.bypass || this.compilingPolicy ||
+      typeDef.kind !== "object"
+    ) {
       return undefined;
     }
     // An abstract type's objects answer to their own types' policies: the
@@ -566,7 +632,7 @@ export abstract class CompilerBase {
     if (!decision.allowed) {
       return SQL.createLiteral("boolean", false);
     }
-    return this.parseAccessConditions(decision.sqlConditions ?? []) ?? undefined;
+    return this.decisionFilter(decision);
   }
 
   /**

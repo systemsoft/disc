@@ -35,7 +35,7 @@ module default {
 `;
 
 const USER_ID = "01234567-89ab-7cde-8f01-000000000001";
-const CHECK = `disc_access_check(COALESCE(((owner = E'${USER_ID}')), FALSE), E'access policy violation on`;
+const CHECK = `disc_access_check(COALESCE((__policy_rows.owner IS NOT DISTINCT FROM E'${USER_ID}'), FALSE), E'access policy violation on`;
 
 async function testSchema(): Promise<Schema> {
   const manager = new SchemaManager({ dryRun: true });
@@ -66,7 +66,10 @@ async function compile(edgeql: string, context: AccessContext | undefined): Prom
 
 Deno.test("write check - inserts and updates of a policied type check what they write", async () => {
   const insert = await compile(`insert Owned { title := 't', owner := <uuid>'${USER_ID}' }`, { userId: USER_ID });
-  assertStringIncludes(insert, `RETURNING (CASE WHEN (SELECT ${CHECK} insert of default::Owned') FROM (SELECT "owned".*) AS "__written") THEN owned END).*`);
+  assertStringIncludes(
+    insert,
+    `RETURNING (CASE WHEN (SELECT ${CHECK} insert of default::Owned') FROM (SELECT "owned".*) AS "__policy_rows") THEN owned END).*`
+  );
 
   const update = await compile("update Owned set { title := 'u' }", { userId: USER_ID });
   assertStringIncludes(update, `${CHECK} update of default::Owned')`);

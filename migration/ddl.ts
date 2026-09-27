@@ -847,7 +847,7 @@ END $$;`,
         );
 
         // A multi link's delete-target trigger is on its junction.
-        if (link.onSourceDelete === "DELETE TARGET") {
+        if (Types.deletesTargets(link.onSourceDelete)) {
           this.deferredStatements.push(...this.generateSourceDeleteTrigger(tableName, link));
         }
       }
@@ -898,7 +898,7 @@ END $$;`,
 
     // Generate source delete triggers (a multi link's comes with its junction, above)
     for (const link of operation.links) {
-      if (!link.multi && link.onSourceDelete === "DELETE TARGET") {
+      if (!link.multi && Types.deletesTargets(link.onSourceDelete)) {
         statements.push(
           ...this.generateSourceDeleteTrigger(tableName, link)
         );
@@ -1413,7 +1413,7 @@ END $$;`,
     }
 
     // Generate source delete trigger if needed
-    if (link.onSourceDelete === "DELETE TARGET") {
+    if (Types.deletesTargets(link.onSourceDelete)) {
       statements.push(
         ...this.generateSourceDeleteTrigger(tableName, link)
       );
@@ -1486,10 +1486,10 @@ END $$;`,
           statements.push(this.generateReplaceTargetForeignKey(tableName, this.alteredLink(subject, operation)));
           break;
         case "ChangeOnSourceDelete":
-          if (change.oldValue === "DELETE TARGET") {
+          if (Types.deletesTargets(change.oldValue)) {
             statements.push(...this.dropSourceDeleteTrigger(tableName, this.alteredLink(subject, operation)));
           }
-          if (change.newValue === "DELETE TARGET") {
+          if (Types.deletesTargets(change.newValue)) {
             statements.push(...this.generateSourceDeleteTrigger(tableName, this.alteredLink(subject, operation)));
           }
           break;
@@ -2313,30 +2313,19 @@ END $$;`,
 
   /**
    * Generate the AFTER DELETE trigger that deletes a link's targets when
-   * `on source delete delete target` is set. It fires once the link to the
-   * target is gone, so the target's FK (RESTRICT by default) can't block it.
-   *
-   * A single link's trigger is on the source table and deletes
-   * `OLD.<link>_id`. A multi link's is on its junction: the source's row
-   * deletion cascades to the junction rows, and each one whose source no
-   * longer exists deletes its target (unlinking a target, or deleting it,
-   * leaves the source in place).
+   * `on source delete delete target` (or `delete target if orphan`) is set.
+   * It fires once the link to the target is gone, so the target's FK
+   * (RESTRICT by default) can't block it.
    */
   private generateSourceDeleteTrigger(
     tableName: string,
     link: Types.LinkDefinition
   ): string[] {
-    const targetTable = this.escapeIdentifier(typeNameToTableName(link.target));
     const fnName = this.escapeIdentifier(`disc_source_delete_${tableName}_${link.name}`);
     const trigger = this.sourceDeleteTrigger(tableName, link);
-    const body = link.multi ?
-      `IF NOT EXISTS (SELECT 1 FROM ${
-        this.escapeIdentifier(tableName)
-      } WHERE id = OLD.source_id) THEN DELETE FROM ${targetTable} WHERE id = OLD.target_id; END IF;` :
-      `DELETE FROM ${targetTable} WHERE id = OLD.${this.escapeIdentifier(linkColumnName(link.name))};`;
 
     return [
-      `CREATE OR REPLACE FUNCTION ${fnName}() RETURNS TRIGGER AS $$ BEGIN ${body} RETURN NULL; END; $$ LANGUAGE plpgsql;`,
+      `CREATE OR REPLACE FUNCTION ${fnName}() RETURNS TRIGGER AS $$ ${trigger.body} $$ LANGUAGE plpgsql;`,
       `CREATE TRIGGER ${this.escapeIdentifier(trigger.name)} ${trigger.timing} DELETE ON ${
         this.escapeIdentifier(trigger.table)
       } FOR EACH ROW EXECUTE FUNCTION ${fnName}();`
@@ -2345,14 +2334,51 @@ END $$;`,
 
   /**
    * The trigger behind a link's `on source delete delete target`: its name,
-   * the table it's on (the source table, or a multi link's junction) and its
-   * timing. The delete-rule repair (`reconcileLinkDeleteRules`) compares the
-   * database's triggers against it.
+   * the table it's on (the source table, or a multi link's junction), its
+   * timing and its function's body. The delete-rule repair
+   * (`reconcileLinkDeleteRules`) compares the database's triggers against it.
+   *
+   * A single link's trigger is on the source table and deletes
+   * `OLD.<link>_id`. A multi link's is on its junction: the source's row
+   * deletion cascades to the junction rows, and each one whose source no
+   * longer exists deletes its target (unlinking a target, or deleting it,
+   * leaves the source in place).
+   *
+   * `if orphan` (Gel) keeps a target another object still links to through
+   * the same link: another source row pointing at it, or another junction
+   * row. Links by other names don't count. When several sources of a target
+   * go in one statement, the target goes with the last of them. A link
+   * declared on a parent type is the same link on every concrete type
+   * holding it (`link.orphanTables`), so the check reads all their link
+   * columns, or junctions.
    */
-  sourceDeleteTrigger(tableName: string, link: Types.LinkDefinition): { name: string; table: string; timing: "AFTER"; } {
+  sourceDeleteTrigger(tableName: string, link: Types.LinkDefinition): { body: string; name: string; table: string; timing: "AFTER"; } {
+    const table = link.multi ? `${tableName}_${link.name}` : tableName;
+    const targetTable = this.escapeIdentifier(typeNameToTableName(link.target));
+    const ifOrphan = link.onSourceDelete === "DELETE TARGET IF ORPHAN";
+    const holders = link.orphanTables ?? [tableName];
+    let action: string;
+
+    if (link.multi) {
+      const orphan = ifOrphan ?
+        holders.map(holder => ` AND NOT EXISTS (SELECT 1 FROM ${this.escapeIdentifier(`${holder}_${link.name}`)} WHERE target_id = OLD.target_id)`).join("") :
+        "";
+      action = `IF NOT EXISTS (SELECT 1 FROM ${
+        this.escapeIdentifier(tableName)
+      } WHERE id = OLD.source_id)${orphan} THEN DELETE FROM ${targetTable} WHERE id = OLD.target_id; END IF;`;
+    } else {
+      const column = this.escapeIdentifier(linkColumnName(link.name));
+      const deleteTarget = `DELETE FROM ${targetTable} WHERE id = OLD.${column};`;
+      const orphan = holders
+        .map(holder => `NOT EXISTS (SELECT 1 FROM ${this.escapeIdentifier(holder)} WHERE ${column} = OLD.${column})`)
+        .join(" AND ");
+      action = ifOrphan ? `IF ${orphan} THEN ${deleteTarget} END IF;` : deleteTarget;
+    }
+
     return {
+      body: `BEGIN ${action} RETURN NULL; END;`,
       name: `trg_source_delete_${tableName}_${link.name}`,
-      table: link.multi ? `${tableName}_${link.name}` : tableName,
+      table,
       timing: "AFTER"
     };
   }
@@ -2463,7 +2489,7 @@ END $$;`,
     }
 
     for (const link of operation.links) {
-      if (link.onSourceDelete === "DELETE TARGET") {
+      if (Types.deletesTargets(link.onSourceDelete)) {
         statements.push(...this.dropSourceDeleteTrigger(tableName, link));
       }
     }
@@ -2720,7 +2746,7 @@ END $$;`
     const linkName = link.name;
 
     /*** The source table survives the rollback, so its delete-target trigger must go explicitly. ***/
-    const statements: string[] = link.onSourceDelete === "DELETE TARGET" ?
+    const statements: string[] = Types.deletesTargets(link.onSourceDelete) ?
       this.dropSourceDeleteTrigger(tableName, link) :
       [];
 

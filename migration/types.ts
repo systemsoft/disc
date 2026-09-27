@@ -412,7 +412,19 @@ export interface LinkDefinition {
   cardinality?: string;
   extending?: string[];
   onTargetDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
-  onSourceDelete?: "ALLOW" | "DELETE TARGET";
+  /**
+   * `DELETE TARGET` deletes the targets with their source; `DELETE TARGET IF
+   * ORPHAN` only the targets no other object links through the same link.
+   */
+  onSourceDelete?: "ALLOW" | "DELETE TARGET" | "DELETE TARGET IF ORPHAN";
+  /**
+   * `DELETE TARGET IF ORPHAN` on a link declared on (or inherited from) a
+   * parent type: the tables of every concrete type holding the same link —
+   * the declaring type if concrete, and its concrete descendants — whose
+   * link columns (or junctions) the orphan check reads. Unset when that is
+   * only the link's own table.
+   */
+  orphanTables?: string[];
   annotations: Record<string, any>;
   /** Link properties (`multi members: User { role: str; }`): columns of the junction table. */
   properties?: PropertyDefinition[];
@@ -683,6 +695,11 @@ export interface MigrationHistoryEntry {
    * (gh/geldata#8773)
    */
   appliedOrder: number;
+}
+
+/*** Whether an `on source delete` policy deletes targets — `delete target` or `delete target if orphan` — which a trigger does. ***/
+export function deletesTargets(policy: LinkDefinition["onSourceDelete"]): boolean {
+  return policy === "DELETE TARGET" || policy === "DELETE TARGET IF ORPHAN";
 }
 
 // Helper functions for creating operations

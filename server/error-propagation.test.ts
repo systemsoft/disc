@@ -166,6 +166,23 @@ Deno.test("EdgeQLProtocolHandler - a unique violation reports sqlState, constrai
   assertStringIncludes(response.errors[0].message, "duplicate key");
 });
 
+Deno.test("EdgeQLProtocolHandler - an access policy violation (SQLSTATE 42501) is an ACCESS_POLICY_ERROR", async () => {
+  const handler = new EdgeQLProtocolHandler({
+    connectionPool: makePostgresErrorPool({
+      code: "42501",
+      message: "access policy violation on insert of default::User",
+      severity: "ERROR"
+    })
+  });
+
+  const response = await handler.handleRequest({ query: "insert User { name := 'x' }", variables: {} }, makeContext());
+
+  assert(response.errors, "expected errors");
+  assertEquals(response.errors[0].extensions?.code, "ACCESS_POLICY_ERROR");
+  assertEquals(response.errors[0].extensions?.sqlState, "42501");
+  assertStringIncludes(response.errors[0].message, "access policy violation on insert of default::User");
+});
+
 Deno.test("EdgeQLProtocolHandler - a serialization failure carries only the fields PostgreSQL sent", async () => {
   const handler = new EdgeQLProtocolHandler({
     connectionPool: makePostgresErrorPool({ code: "40001", message: "could not serialize access due to concurrent update", severity: "ERROR" })

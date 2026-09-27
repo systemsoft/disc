@@ -12,9 +12,11 @@
 
 import { BUILTIN_ACCESS_GLOBALS, containsColumnReference } from "./evaluator.ts";
 import { convertExpression } from "./expression-converter.ts";
+import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
+import { ValidationError } from "../lib/errors.ts";
 
 import type { AccessExpressionNode } from "./ast.ts";
-import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy } from "../schema/ast.ts";
+import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy, Expression as SDLExpression } from "../schema/ast.ts";
 import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccessPolicy } from "./types.ts";
 
 /*** EXPORT ------------------------------------------- ***/
@@ -95,8 +97,10 @@ function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[])
  * - `sdl.name.value`  → `runtime.name`
  * - `objectType` arg  → `runtime.objectType`
  * - `sdl.actions[]`   → `runtime.actions[]` (only `allow` and `operations` kept)
- * - `sdl.condition`   → `runtime.using` (always, for SQL WHERE generation)
- * - `sdl.condition`   → `runtime.condition` ONLY if no column references;
+ * - `sdl.when` AND `sdl.condition` (Gel's `when` and `using`) →
+ *   `runtime.usingSource`, the EdgeQL the compiler compiles for SQL, and
+ *   `runtime.using`, its in-memory form when it has one
+ * - that condition → `runtime.condition` ONLY if no column references;
  *   otherwise a minimal presence guard over its built-in globals is extracted
  *
  * Note on withCheck (P1-37): the SDL parser surfaces `with check (...)` as
@@ -104,11 +108,9 @@ function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[])
  * `runtime.withCheck`, which the compiler checks, with `using`, on every
  * object an insert or update writes (see `AccessEvaluator.writePolicies`).
  *
- * Note on deny policies (P1-38): deny policies currently compile to a
- * coarse gate (if the policy matches and the action is denied, reject the
- * whole request) rather than per-row filtering. This mirrors Gel’s
- * documented behavior as of 5.x — row-level deny would require JOIN-style
- * policy composition that isn’t implemented.
+ * Note on deny policies: a deny with a condition denies the objects that
+ * meet it (a filter on select, update read and delete; the write check on
+ * insert and update write); one without denies the operation outright.
  */
 export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPolicy[]): RuntimeAccessPolicy[] {
   return sdlPolicies.map((sdl): RuntimeAccessPolicy => {
@@ -118,22 +120,29 @@ export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPo
       objectType
     };
 
-    if (sdl.condition !== undefined) {
-      const converted = convertExpression(sdl.condition);
-      policy.using = converted;
+    /*** Gel's `when` restricts the objects the policy applies to, as its `using` does: the
+         policy's condition is both. ***/
+    const conditions = [sdl.when, sdl.condition].filter((expr): expr is SDLExpression => expr !== undefined);
 
-      if (containsColumnReference(converted)) {
+    if (conditions.length > 0) {
+      policy.usingSource = conditions.map(expr => `(${sdlExpressionToEdgeQL(expr)})`).join(" and ");
+      const converted = convertAll(conditions);
+
+      if (converted !== undefined) {
+        policy.using = converted;
+
         /*** Column references can’t be evaluated in-memory; extract a minimal guard that
-             checks required globals are present. ***/
-        policy.condition = extractGlobalGuard(converted);
-      } else {
-        // Pure context expression — safe for in-memory evaluation.
-        policy.condition = converted;
+             checks required globals are present. A pure context expression is safe for
+             in-memory evaluation. With no in-memory form (`exists .owner`), the SQL alone
+             decides. ***/
+        policy.condition = containsColumnReference(converted) ? extractGlobalGuard(converted) : converted;
       }
     }
 
-    if (sdl.withCheck !== undefined)
-      policy.withCheck = convertExpression(sdl.withCheck);
+    if (sdl.withCheck !== undefined) {
+      policy.withCheckSource = sdlExpressionToEdgeQL(sdl.withCheck);
+      policy.withCheck = convertAll([sdl.withCheck]);
+    }
 
     /*** Custom denial message (Gel #4095). Forwarded as-is; the evaluator surfaces it via
          AccessDecision.denialMessage and callers prefer it over the generic reason when
@@ -146,6 +155,22 @@ export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPo
 }
 
 /*** HELPER ------------------------------------------- ***/
+
+/**
+ * The in-memory form of `exprs` ANDed, or undefined when one has none (an
+ * expression the evaluator cannot run, such as `exists .owner`).
+ */
+function convertAll(exprs: SDLExpression[]): AccessExpressionNode | undefined {
+  try {
+    const converted = exprs.map(convertExpression);
+    return converted.length === 1 ? converted[0] : { kind: "AccessLogical", operands: converted, operator: "and" };
+  } catch (error) {
+    if (error instanceof ValidationError)
+      return undefined;
+
+    throw error;
+  }
+}
 
 /**
  * Converts a single SDL AccessAction into a runtime AccessAction, stripping

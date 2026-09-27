@@ -280,3 +280,51 @@ Deno.test({
       assertEquals(await onDeleteAction(pool, "fk_bug_program_id"), undefined);
     })
 });
+
+Deno.test({
+  name: "PG delete-rule drift: source-delete triggers created now are left alone by the next migrate",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    for (
+      const link of [
+        "link program: Program { on source delete delete target; };",
+        "multi link programs: Program { on source delete delete target; };",
+        "link program: Program { on source delete delete target if orphan; };",
+        "multi link programs: Program { on source delete delete target if orphan; };"
+      ]
+    ) {
+      await run(async pool => {
+        assertEquals(await migrate(pool, schema(link)), 1, link);
+        assertEquals(await migrate(pool, schema(link)), 0, link);
+      });
+    }
+  }
+});
+
+Deno.test({
+  name: "PG delete-rule drift: a delete-target trigger running another policy's body is replaced, once",
+  ignore: !canRunPgTests(),
+  fn: () =>
+    run(async pool => {
+      const sdl = schema("link program: Program { on source delete delete target if orphan; };");
+      assertEquals(await migrate(pool, sdl), 1);
+
+      /*** The body `delete target` gives the function: it deletes a target other bugs still link. ***/
+      await pool.query(
+        `CREATE OR REPLACE FUNCTION disc_source_delete_bug_program() RETURNS TRIGGER AS $$ BEGIN DELETE FROM program WHERE id = OLD.program_id; RETURN NULL; END; $$ LANGUAGE plpgsql`
+      );
+
+      assertStringIncludes(await preview(pool, sdl), "IF NOT EXISTS (SELECT 1 FROM bug WHERE program_id = OLD.program_id)");
+      assertEquals(await migrate(pool, sdl), 1);
+      assertEquals(await hasTrigger(pool, "trg_source_delete_bug_program"), true);
+
+      const program = (await pool.query(`INSERT INTO program (name) VALUES ('disc') RETURNING id`)).rows[0].id as string;
+      await pool.query(`INSERT INTO bug (title, program_id) VALUES ('first', $1), ('second', $1)`, [program]);
+      await pool.query(`DELETE FROM bug WHERE title = 'first'`);
+      assertEquals(await count(pool, "program"), 1, "still linked by 'second'");
+      await pool.query(`DELETE FROM bug`);
+      assertEquals(await count(pool, "program"), 0);
+
+      assertEquals(await migrate(pool, sdl), 0);
+    })
+});

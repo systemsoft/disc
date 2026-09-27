@@ -128,7 +128,7 @@ function assertOwnerScoped(compiled: Compiled, mutationPrefix: string): void {
   assertEquals(countOf(compiled.sql, OWNER_PREDICATE), 1, `policy applied more than once: ${compiled.sql}`);
   // An update also checks each object it wrote against the policy (update write).
   if (mutationPrefix.startsWith("UPDATE")) {
-    assertStringIncludes(mutation, `disc_access_check(COALESCE(((${OWNER_PREDICATE})), FALSE)`);
+    assertStringIncludes(mutation, `disc_access_check(COALESCE((__policy_rows.${OWNER_PREDICATE}), FALSE)`);
   }
 }
 
@@ -212,7 +212,7 @@ Deno.test("nested mutation access - upsert on a type with a row-level update pol
   );
   assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
   const action = compiled.sql.slice(compiled.sql.indexOf("DO UPDATE"));
-  assertStringIncludes(action, `WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE (${OWNER_PREDICATE}) )`);
+  assertStringIncludes(action, `WHERE doc.id IN ( SELECT id FROM doc AS __policy_rows WHERE __policy_rows.${OWNER_PREDICATE} )`);
   assertEquals(countOf(compiled.sql, OWNER_PREDICATE), 1, `an upsert must not overwrite rows the policies hide: ${compiled.sql}`);
 });
 

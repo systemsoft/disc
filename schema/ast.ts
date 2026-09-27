@@ -176,7 +176,7 @@ export interface LinkDeclaration extends SDLNode {
     | "deferred restrict"
     | "set empty"
     | "delete source";
-  onSourceDelete?: "allow" | "delete target";
+  onSourceDelete?: "allow" | "delete target" | "delete target if orphan";
 }
 
 // Constraint
@@ -224,6 +224,11 @@ export interface AccessPolicy extends SDLNode {
    * generic deny reason at runtime when omitted. (Gel #4095)
    */
   errmessage?: string;
+  /**
+   * Gel's `when (...)`: which objects the policy applies to at all. An object
+   * it does not hold for is neither allowed nor denied by the policy.
+   */
+  when?: Expression;
 }
 
 export interface AccessAction extends SDLNode {

@@ -78,7 +78,7 @@ module default {
 
 ### Write Checks
 
-As in Gel, `update` is `update read` (which objects an update reaches) plus `update write`, and `insert` / `update write` policies check each object a statement writes, with its new values: it must pass an allowing policy's `using` (and Disc's optional `with check`) and no denying one's, or the statement fails with `access policy violation on <insert|update> of <module::Type>` (SQLSTATE 42501, plus the policies' `errmessage`s) and writes nothing. The compiler reads the RETURNING rows of every insert and update through `disc_access_check` (`lib/stdlib-sql.ts`); see `AccessEvaluator.writePolicies`.
+As in Gel, `update` is `update read` (which objects an update reaches) plus `update write`, and `insert` / `update write` policies check each object a statement writes, with its new values: it must pass an allowing policy's `using` (and Disc's optional `with check`) and no denying one's, or the statement fails with `access policy violation on <insert|update> of <module::Type>` (SQLSTATE 42501, plus the policies' `errmessage`s) and writes nothing. Binary protocol clients receive it as Gel’s `AccessPolicyError`; `/query` answers 403 with `extensions.code` `ACCESS_POLICY_ERROR` (and `sqlState` 42501). The compiler reads the RETURNING rows of every insert and update through `disc_access_check` (`lib/stdlib-sql.ts`); see `AccessEvaluator.writePolicies`.
 
 ### Programmatic Usage
 
@@ -129,22 +129,36 @@ const decision = evaluator.evaluate("User", "select", context);
 - Any `deny` rule immediately denies
 - More secure but requires comprehensive policy coverage
 
-### Deny semantics: coarse gate, not row-level filter (P1-38)
+### Deny semantics: row-level subtraction
 
-`deny` rules apply at the **action level**, not the **row level**. When a `deny` rule matches the request’s operation (e.g. `deny delete;`), the evaluator rejects the entire request — it does not filter individual rows out of a candidate set the way `allow ... using (...)` does.
-
-Concretely:
+As in Gel, “all allow policies collectively form a union of allowed sets; all deny policies subtract from that union”. A `deny` with a condition (`using`, `when`) denies the objects it holds for: select, update read and delete filter them out; insert and update write fail on them (the write check). A `deny` without a condition denies the operation outright: a select sees no objects, and an update, delete or insert is refused at compile time.
 
 ```esdl
-access policy no_delete
-  deny delete;            # rejects ALL deletes on this type, full stop
-
+access policy open
+  allow all;
 access policy hide_drafts
-  allow select
-  using (.published);     # filters: only published rows are visible
+  deny select, update, delete
+  using (.draft ?= true);     # drafts are invisible and untouchable; the rest is open
+access policy no_delete
+  deny delete;                # rejects every delete on this type
 ```
 
-Need per-row deny ("everyone can read except rows where X")? Express it as the inverse `allow ... using (NOT X)` and let the permissive-mode fallthrough do the rest. Native row-level deny would require JOIN-style policy composition that disc doesn’t implement and Gel itself documents as out of scope for 5.x. The adapter source comment at `access/policy-adapter.ts:133-137` is the authoritative spec.
+### Policy expressions
+
+A policy’s `when`, `using` and `with check` are EdgeQL expressions over the object, compiled by the query compiler: they may follow single and multi links (`.owner.name`, `global current_user in .members.id`), backlinks (`exists .<team[is Project]`), call functions and read globals. The objects they read are not narrowed by those objects’ own policies — as in Gel, “policy expressions themselves do not take other policies into account” — so a policy never recurses into another.
+
+`when (<cond>)` (Gel) limits the objects a policy applies to: an object it does not hold for is neither allowed nor denied by the policy. It is written in Gel’s form or inside Disc’s block form:
+
+```esdl
+access policy admins
+  when (global role ?= 'admin')
+  allow all;
+
+access policy editors {
+  when (global role ?= 'editor');
+  allow select;
+};
+```
 
 ## `runtime::has_permission(...)` — Deno-permission-aware policies
 

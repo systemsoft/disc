@@ -248,6 +248,14 @@ Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError -> Integr
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.IntegrityError);
 });
 
+Deno.test("query-execution - mapErrorToGelCode: an access policy violation (SQLSTATE 42501) -> AccessPolicyError", () => {
+  // As PostgreSQL raises it from disc_access_check: the driver's error, with the SQLSTATE in `fields`.
+  const pgError = Object.assign(new Error("access policy violation on insert of default::Doc"), { fields: { code: "42501" } });
+  assertEquals(GEL_ERROR_CODES.AccessPolicyError, 0x05010003);
+  assertEquals(mapErrorToGelCode(pgError), GEL_ERROR_CODES.AccessPolicyError);
+  assertEquals(mapErrorToGelCode(new DatabaseExecutionError(pgError.message, "INSERT …", pgError)), GEL_ERROR_CODES.AccessPolicyError);
+});
+
 Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError with constraint -> ConstraintViolationError", () => {
   const err = new DatabaseExecutionError(
     "constraint violation",

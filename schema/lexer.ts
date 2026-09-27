@@ -212,6 +212,16 @@ export class SDLLexer {
             startPos
           );
         }
+        if (this.peek() === "?") {
+          this.advance();
+          return createToken(
+            TokenType.COALESCE,
+            "??",
+            startLine,
+            startColumn,
+            startPos
+          );
+        }
         throw new SyntaxError(`Unexpected character '?'`, {
           location: { line: startLine, column: startColumn, offset: startPos }
         });

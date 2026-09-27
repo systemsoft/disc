@@ -73,6 +73,7 @@ export enum TokenType {
   NOTEQUALS = "NOTEQUALS", // !=
   QUESTIONEQ = "QUESTIONEQ", // ?=
   QUESTIONNEQ = "QUESTIONNEQ", // ?!=
+  COALESCE = "COALESCE", // ??
   // Brackets
   LPAREN = "LPAREN", // (
   RPAREN = "RPAREN", // )

@@ -50,6 +50,7 @@ import {
   ConnectionError,
   DatabaseExecutionError,
   InternalError,
+  postgresErrorFields,
   QueryError,
   QueryTimeoutError,
   SchemaError,
@@ -1619,15 +1620,18 @@ export const GEL_ERROR_CODES = {
   InvalidConstraintDefinitionError: 0x04040000,
   InvalidValueError: 0x05010000,
   DivisionByZeroError: 0x05010001,
+  AccessPolicyError: 0x05010003,
   IntegrityError: 0x05030000,
   ConstraintViolationError: 0x05030100,
   CardinalityViolationError: 0x05030200,
   MissingRequiredError: 0x05030300,
   AuthenticationError: 0x06000000,
   AvailabilityError: 0x07000000,
-  AccessError: 0x08000000,
-  AccessPolicyError: 0x08000100
+  AccessError: 0x08000000
 } as const;
+
+/*** The SQLSTATE of an access policy violation (insufficient_privilege; see `disc_access_check` in lib/stdlib-sql.ts). ***/
+const ACCESS_POLICY_SQLSTATE = "42501";
 
 /**
  * Map a Disc error to the appropriate Gel protocol error code.
@@ -1638,6 +1642,8 @@ export const GEL_ERROR_CODES = {
  * - CompilationError -> QueryError
  * - QueryError -> QueryError
  * - ValidationError -> InvalidValueError
+ * - an access policy violation (SQLSTATE 42501, raised by
+ *   `disc_access_check`, whether the driver's error or wrapped) -> AccessPolicyError
  * - DatabaseExecutionError -> IntegrityError
  * - QueryTimeoutError -> AvailabilityError
  * - ConnectionError -> AvailabilityError
@@ -1645,6 +1651,9 @@ export const GEL_ERROR_CODES = {
  * - Unknown -> InternalServerError
  */
 export function mapErrorToGelCode(error: Error): number {
+  if (postgresErrorFields(error)?.sqlState === ACCESS_POLICY_SQLSTATE) {
+    return GEL_ERROR_CODES.AccessPolicyError;
+  }
   if (error instanceof SyntaxError) {
     return GEL_ERROR_CODES.EdgeQLSyntaxError;
   }

@@ -77,6 +77,10 @@ function formatPath(path: PathExpression): string {
   if (path.path.length === 0) {
     return "";
   }
+  // `global name` → ["global", "name"] (see schema/parser.ts `parsePrimaryExpression`).
+  if (path.path[0] === "global" && path.path.length === 2) {
+    return `global ${path.path[1]}`;
+  }
 
   let result = "";
   let needsDotBeforeNext = false;

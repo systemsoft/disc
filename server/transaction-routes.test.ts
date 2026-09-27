@@ -654,6 +654,26 @@ Deno.test("S11: a failed statement aborts the transaction — commit rolls back,
   }
 });
 
+Deno.test("an access policy violation is a 403 and, having run on PostgreSQL, aborts the transaction", async () => {
+  const scripted = scriptedPool(() => {});
+  const handler = createFailingHandler({ code: "ACCESS_POLICY_ERROR", sqlState: "42501" });
+  const { cleanup, port, server } = withPooledServer(handler, scripted.pool);
+
+  try {
+    const { transactionId } = await (await begin(port)).json() as { transactionId: string; };
+
+    const statement = await queryIn(port, transactionId);
+    assertEquals(statement.status, 403);
+    await statement.body?.cancel();
+
+    // deno-lint-ignore no-explicit-any
+    assertEquals((server as any).transaction_manager.getTransaction(transactionId).aborted, true);
+    await (await finish(port, "rollback", transactionId)).body?.cancel();
+  } finally {
+    await cleanup();
+  }
+});
+
 Deno.test("S11: a statement the server never executed (compile error) does not abort the transaction", async () => {
   const scripted = scriptedPool(() => {});
   const handler = createFailingHandler({ code: "COMPILATION_ERROR", phase: "compilation" });

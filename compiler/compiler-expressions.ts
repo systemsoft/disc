@@ -7,6 +7,7 @@
  * collection/subquery expression forms of the EdgeQL compiler.
  */
 
+import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
@@ -262,6 +263,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         binOp.op,
         binOp.right
       );
+      if (rewritten) {
+        return rewritten;
+      }
+    }
+
+    // Membership in a multi-link path, `x in .members.id`: some element is `x`,
+    // which is the existential comparison `.members.id = x`.
+    if (binOp.op === "IN" && this.isMultiLinkPath(binOp.right)) {
+      const rewritten = this.compileMultiLinkComparison(binOp.right as EdgeQLAST.Path, "=", binOp.left);
       if (rewritten) {
         return rewritten;
       }
@@ -992,6 +1002,19 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const parts = funcCall.name.parts.length > 1 && funcCall.name.parts[0] === "std" ? funcCall.name.parts.slice(1) : funcCall.name.parts;
     const functionName = parts.join("_");
     const qualifiedName = funcCall.name.parts.join("::");
+
+    // In a policy's condition, `runtime::has_permission('<spec>')` is the Deno
+    // process's permission, decided now (see AccessEvaluator.expressionToSQL).
+    if (qualifiedName === "runtime::has_permission" && this.compilingPolicy && this.accessEvaluator) {
+      const arg = funcCall.args[0]?.value;
+      const spec: AccessExpressionNode[] = arg?.kind === "Literal" && arg.type === "string" ?
+        [{ kind: "AccessLiteral", type: "string", value: String(arg.value) }] :
+        [];
+      return {
+        kind: "RawSQLExpression",
+        sql: this.accessEvaluator.expressionToSQL({ args: spec, kind: "AccessFunction", name: qualifiedName }, this.accessContext)
+      };
+    }
 
     // Check for schema:: / cfg:: introspection functions
     if (

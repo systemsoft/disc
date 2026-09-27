@@ -112,17 +112,23 @@ Deno.test("access policy reads - a bypass caller's SQL is unfiltered wherever th
 
 Deno.test("access policy reads - each read of a narrowed table is wrapped once, the top-level select included", async () => {
   const sql = await sqlOf("select Post { title }", { userId: USER });
-  assertEquals(sql, "SELECT jsonb_build_object('title', post_1.title) FROM ( SELECT * FROM post AS __policy_rows WHERE (published = true) ) AS post_1");
+  assertEquals(
+    sql,
+    "SELECT jsonb_build_object('title', post_1.title) FROM ( SELECT * FROM post AS __policy_rows WHERE __policy_rows.published IS NOT DISTINCT FROM TRUE ) AS post_1"
+  );
 
   // A path's intermediate hop through Post reads the visible posts, then the comments.
   const path = await sqlOf("select User.posts.comments { body }", { userId: USER });
-  assertEquals(path.split("FROM post AS __policy_rows WHERE (published = true)").length - 1, 1, path);
+  assertEquals(path.split("FROM post AS __policy_rows WHERE __policy_rows.published IS NOT DISTINCT FROM TRUE").length - 1, 1, path);
   assert(!path.includes("SELECT * FROM ( SELECT *"), path);
 });
 
 Deno.test("access policy reads - a with binding named like a narrowed table reads the binding in the body", async () => {
   const sql = await sqlOf("with post := (select Post filter .title = 'x') select post { title }", { userId: USER });
   // The binding's own query reads the table, narrowed; the body reads the CTE.
-  assertStringIncludes(sql, "WITH post AS ( SELECT * FROM ( SELECT * FROM post AS __policy_rows WHERE (published = true) ) AS post_1");
+  assertStringIncludes(
+    sql,
+    "WITH post AS ( SELECT * FROM ( SELECT * FROM post AS __policy_rows WHERE __policy_rows.published IS NOT DISTINCT FROM TRUE ) AS post_1"
+  );
   assertStringIncludes(sql, "FROM post AS post_2");
 });

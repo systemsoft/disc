@@ -47,6 +47,10 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
         };
       }
 
+      // Operators with no in-memory form: the compiled policy SQL handles them.
+      if (bin.op === "??" || bin.op === "not like" || bin.op === "not ilike")
+        throw new ValidationError(`Unsupported operator in access policy expression: ${bin.op}`);
+
       // Map optional comparison operators
       let operator: string = bin.op;
 
