@@ -171,8 +171,8 @@ Deno.test({
         `SELECT label, (big + 1)::text AS next, count::text AS count, spans::text[] AS spans FROM sct_item ORDER BY label`
       );
       assertEquals(rows.rows, [
-        { count: "7", label: "huge", next: "12345678901234567891", spans: ["1 day", "02:00:00"] },
-        { count: null, label: "json", next: "-2", spans: ["01:00:00"] },
+        { count: "7", label: "huge", next: "12345678901234567891", spans: ["P1D", "PT2H"] },
+        { count: null, label: "json", next: "-2", spans: ["PT1H"] },
         { count: null, label: "unset", next: null, spans: null }
       ]);
 
@@ -280,7 +280,7 @@ Deno.test({
           levels: ["High", "Low"],
           ordered: true,
           slots: ["[1,5)", "[7,9)"],
-          waits: ["1 day", "02:00:00"]
+          waits: ["P1D", "PT2H"]
         }
       ]);
 

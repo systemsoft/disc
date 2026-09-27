@@ -203,6 +203,11 @@ function widestIntSqlType(types: (string | null)[]): string {
   return [...INT_SQL_TYPES.values()].find(int => int.width === Math.max(...widths))!.sql;
 }
 
+/*** Whether the static type `type` is the built-in `name` (`datetime`, `date_duration`), however spelled (`std::datetime`, `cal::date_duration`). ***/
+function isStdType(type: string | null, name: string): boolean {
+  return type !== null && type.replace(/^(std|cal)::/, "") === name;
+}
+
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
@@ -499,6 +504,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     if (binOp.op === "/" || binOp.op === "//" || binOp.op === "%") {
       return this.compileDivision(binOp, left, right);
+    }
+
+    // `datetime - datetime` is a duration, which holds no days (`disc_datetime_sub`, lib/stdlib-sql.ts).
+    if (binOp.op === "-" && [binOp.left, binOp.right].every(operand => isStdType(this.staticScalarType(operand), "datetime"))) {
+      return SQL.createFunctionCall("disc_datetime_sub", [left, right]);
     }
 
     // Map EdgeQL operators to SQL operators
@@ -863,6 +873,31 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       default:
         return null;
     }
+  }
+
+  /*** The EdgeQL type of `expr` when it is known without running the query: `staticNumericType`'s forms, and a call to a function registered with its return type (`datetime_current()`). Null when unknown. ***/
+  protected staticScalarType(expr: EdgeQLAST.Expression): string | null {
+    const type = this.staticNumericType(expr);
+    if (type !== null || expr.kind !== "FunctionCall") {
+      return type;
+    }
+    return Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType ?? null;
+  }
+
+  /**
+   * `value` as the text Gel writes when `type`, its EdgeQL type if known, is
+   * `cal::date_duration` or an array of them: ISO 8601 like every interval
+   * (connections use `intervalstyle = iso_8601`, lib/database.ts), but zero is
+   * `P0D`, where PostgreSQL writes `PT0S` (`disc_date_duration_text`,
+   * lib/stdlib-sql.ts). For where a value leaves the query (a select's value,
+   * a shape element, a tuple element) or becomes text; any other value is
+   * returned as is. There is no expression type inference in the compiler, so
+   * a zero date duration of an expression whose type is not stated
+   * (`staticScalarType`) is still written `PT0S`.
+   */
+  protected dateDurationText(value: SQL.SQLExpression, type: string | null | undefined): SQL.SQLExpression {
+    const element = /^array<(.+)>$/.exec(type ?? "")?.[1] ?? type;
+    return isStdType(element ?? null, "date_duration") ? SQL.createFunctionCall("disc_date_duration_text", [value]) : value;
   }
 
   /*** The common type of set or array literal elements of these static types: a decimal, else float64, else the widest int. Null when one is unknown. ***/
@@ -1846,7 +1881,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         if (args.length !== 1) {
           throw new CompilationError("to_str() requires exactly 1 argument");
         }
-        return SQL.createCastExpression(args[0], "text");
+        {
+          const text = this.dateDurationText(args[0], this.staticScalarType(funcCall.args[0].value));
+          return text !== args[0] ? text : SQL.createCastExpression(args[0], "text");
+        }
 
       case "to_int64":
         if (args.length !== 1) {
@@ -2682,6 +2720,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const jsonbArray = pgType === "jsonb" && typeName.startsWith("array<") ? this.jsonbArrayLiteral(expr) : null;
     if (jsonbArray) {
       return jsonbArray;
+    }
+
+    // A duration as text or JSON is Gel's ISO 8601 text: `<str>` of a date
+    // duration writes zero `P0D`, and `<json>` of any duration is its text as a
+    // JSON string (PostgreSQL has no interval-to-jsonb cast).
+    const sourceType = this.staticScalarType(cast.expr);
+    if (pgType === "text" && !fromJson) {
+      const text = this.dateDurationText(expr, sourceType);
+      if (text !== expr) {
+        return text;
+      }
+    }
+    if (pgType === "jsonb" && ["duration", "relative_duration", "date_duration"].some(name => isStdType(sourceType, name))) {
+      return SQL.createFunctionCall("to_jsonb", [this.dateDurationText(expr, sourceType)]);
     }
 
     // A decimal or float cast to bigint is rounded, as Gel's
@@ -3703,7 +3755,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   private compileTupleExpr(tupleExpr: EdgeQLAST.TupleExpr): SQL.SQLExpression {
-    const elements = tupleExpr.elements.map(el => this.compileExpression(el));
+    const elements = tupleExpr.elements.map(el => this.dateDurationText(this.compileExpression(el), this.staticScalarType(el)));
     return SQL.createFunctionCall("jsonb_build_array", elements);
   }
 
@@ -3734,7 +3786,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   private compileNamedTuple(
     namedTuple: EdgeQLAST.NamedTuple
   ): SQL.SQLExpression {
-    const fields = namedTuple.elements.map(el => SQL.createJsonField(el.name, this.compileExpression(el.value)));
+    const fields = namedTuple.elements.map(el =>
+      SQL.createJsonField(el.name, this.dateDurationText(this.compileExpression(el.value), this.staticScalarType(el.value)))
+    );
     return SQL.createJsonBuildObject(fields);
   }
 

@@ -140,6 +140,18 @@ Deno.test("normalizeRows - timestamp (cal::local_datetime) and date (cal::local_
   assertEquals(normalizeRows([{ day: Infinity, local: -Infinity }], columnTypes), [{ day: "infinity", local: "-infinity" }]);
 });
 
+/*** PostgreSQL type OIDs of `interval` and `interval[]`. ***/
+const INTERVAL = 1186;
+const INTERVAL_ARRAY = 1187;
+
+Deno.test("normalizeRows - interval[] (array<duration>) is a JSON array of ISO 8601 text, nulls kept; interval stays its text", () => {
+  const columnTypes = { empty: INTERVAL_ARRAY, span: INTERVAL, spans: INTERVAL_ARRAY };
+  assertEquals(normalizeRows([{ empty: "{}", span: "PT1H2M", spans: "{PT1H,NULL,PT-1.5S,P1Y2M3DT4H}" }], columnTypes), [
+    { empty: [], span: "PT1H2M", spans: ["PT1H", null, "PT-1.5S", "P1Y2M3DT4H"] }
+  ]);
+  assertEquals(normalizeRows([{ spans: null }], columnTypes), [{ spans: null }]);
+});
+
 Deno.test("normalizeRows - timestamptz (datetime) stays a Date, written as an ISO-8601 instant", () => {
   const at = new Date("2026-01-15T10:20:30Z");
   assertStrictEquals(normalizeRows([{ at }], { at: 1184 })[0].at, at);

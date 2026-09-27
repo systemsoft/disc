@@ -45,6 +45,12 @@
  * `2026-01-15` as `2026-01-15T08:00:00.000Z` on a server at UTC−8. By the
  * column's type OID they are written as their wall-clock text instead, as a
  * shape writes them (`2026-01-15T10:20:30`, `2026-01-15`).
+ *
+ * interval array (`array<duration>` and the `cal::` durations): deno-postgres
+ * leaves an `interval[]` as PostgreSQL's array text (`{PT1H,PT-2M}`). By the
+ * column's type OID it is written as a JSON array of each element's text, as
+ * a shape writes it. Connections use `intervalstyle = iso_8601`
+ * (lib/database.ts), whose text never needs quoting in an array.
  */
 
 import { encodeBase64 } from "@std/encoding/base64";
@@ -88,6 +94,18 @@ const TIMESTAMP_OIDS = new Set([1114, 1115]);
 
 /*** PostgreSQL type OIDs of `date` and `date[]` (`cal::local_date`). ***/
 const DATE_OIDS = new Set([1082, 1182]);
+
+/*** PostgreSQL type OID of `interval[]`. ***/
+const INTERVAL_ARRAY_OID = 1187;
+
+/*** An `interval[]` column's array text (`{PT1H,NULL}`) as an array of its elements' text. ***/
+function intervalArrayValue(value: unknown): unknown {
+  if (typeof value !== "string" || !value.startsWith("{")) {
+    return value;
+  }
+  const body = value.slice(1, -1);
+  return body === "" ? [] : body.split(",").map(element => element === "NULL" ? null : element);
+}
 
 function pad(value: number, width = 2): string {
   return String(value).padStart(width, "0");
@@ -142,6 +160,8 @@ export function normalizeRows(rows: Record<string, unknown>[], columnTypes: Reco
         floatValue(value) :
         TIMESTAMP_OIDS.has(oid) || DATE_OIDS.has(oid) ?
         localValue(value, TIMESTAMP_OIDS.has(oid)) :
+        oid === INTERVAL_ARRAY_OID ?
+        intervalArrayValue(value) :
         normalizeValue(value);
     }
     return out;

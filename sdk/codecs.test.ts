@@ -312,8 +312,23 @@ Deno.test("reviveTyped - a value that is already revived is kept", () => {
 });
 
 Deno.test("reviveTyped - local date/time and duration fields stay strings", () => {
-  const row = { day: "2026-01-15", local: "2026-01-15T10:20:30", span: "01:02:00", time: "10:20:30.5" };
+  const row = { day: "2026-01-15", local: "2026-01-15T10:20:30", span: "PT1H2M", time: "10:20:30.5" };
   assertEquals(reviveTyped(wire(row), TEMPORAL_INFO), row);
+});
+
+Deno.test("reviveTyped - durations stay Gel's ISO 8601 strings, alone and inside arrays and tuples", () => {
+  const info: TypeInfo = {
+    casts: {
+      dateSpan: "<cal::date_duration>",
+      pair: "<tuple<duration, int64>>",
+      relative: "<cal::relative_duration>",
+      span: "<duration>",
+      spans: "<array<duration>>"
+    },
+    links: {}
+  };
+  const row = { dateSpan: "P0D", pair: ["PT-1.5S", 7], relative: "P1Y2M3DT4H5M6.5S", span: "PT49H", spans: ["PT1H", "PT0.000001S"] };
+  assertEquals(reviveTyped(wire(row), info), { ...row, pair: ["PT-1.5S", 7n] });
 });
 
 const TUPLE_INFO: TypeInfo = {

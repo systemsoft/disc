@@ -144,6 +144,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.parameterIndex = options?.parameterMap ??
         buildParameterIndex(query);
       this.cteNames.clear();
+      const body = query.kind === "WithBlock" ? query.body : query;
+      this.outputExpression = body.kind === "SelectQuery" && !body.shape ? body.expr : undefined;
 
       const statement = this.hoistMutations(this.compileQuery(query));
 

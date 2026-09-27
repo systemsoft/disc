@@ -27,6 +27,11 @@ const CLIENT_CONTROLS = {
   }
 };
 
+/*** Session settings sent at connection startup (so `RESET ALL` keeps them). `iso_8601` writes every interval — a
+     `duration`, `cal::relative_duration` or `cal::date_duration`, alone, in a `<str>` cast or inside JSON — as Gel does
+     (`PT1H2M`, not `01:02:00`); interval input is read the same in every style. ***/
+const SESSION_OPTIONS = { intervalstyle: "iso_8601" };
+
 export interface DatabaseConfig {
   connectionString?: string;
   host?: string;
@@ -186,7 +191,8 @@ export class DatabaseConnection {
           database: parsed.database,
           host_type: "socket" as const,
           applicationName,
-          controls: CLIENT_CONTROLS
+          controls: CLIENT_CONTROLS,
+          options: SESSION_OPTIONS
         };
       }
 
@@ -202,6 +208,7 @@ export class DatabaseConnection {
         database: parsed.database,
         applicationName,
         controls: CLIENT_CONTROLS,
+        options: SESSION_OPTIONS,
         ...(tls ? { tls } : {})
       };
     }
@@ -213,7 +220,8 @@ export class DatabaseConnection {
       password: this.config.password || "",
       database: this.config.database || "postgres",
       applicationName,
-      controls: CLIENT_CONTROLS
+      controls: CLIENT_CONTROLS,
+      options: SESSION_OPTIONS
     };
   }
 

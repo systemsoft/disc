@@ -340,12 +340,8 @@ Deno.test({
         "SELECT CAST('1 hour' AS interval) AS val"
       );
       const val = String(result.rows[0].val);
-      assertEquals(
-        val.includes("01:00:00") || val.includes("1:00:00") ||
-          val.includes("1 hour"),
-        true,
-        `Interval should represent 1 hour, got: ${val}`
-      );
+      // Disc's connections write intervals in ISO 8601, as Gel does.
+      assertEquals(val, "PT1H", `Interval should represent 1 hour, got: ${val}`);
     } finally {
       await pool.close();
     }

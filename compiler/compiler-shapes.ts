@@ -93,6 +93,9 @@ function namedPaths(node: unknown, names: Set<string>): { name: string; node: Ed
 const MUTATION_CTE_NAME = "m";
 
 export abstract class ShapeCompilerLayer extends PathCompilerLayer {
+  /** The expression the statement being compiled selects as its result (`select <expr>`), whose value leaves the query. */
+  protected outputExpression: EdgeQLAST.Expression | undefined;
+
   // Implemented by the top compiler layer (compiler.ts).
   protected abstract compileSelectQueryRaw(
     query: EdgeQLAST.SelectQuery
@@ -544,9 +547,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       }
     }
 
-    // For other expressions, compile directly
+    // For other expressions, compile directly; the statement's result is written as Gel writes it.
     const compiledExpr = this.compileExpression(expr);
-    const selectItems = [SQL.createSelectItem(compiledExpr)];
+    const selectItems = [
+      SQL.createSelectItem(expr === this.outputExpression ? this.dateDurationText(compiledExpr, this.staticScalarType(expr)) : compiledExpr)
+    ];
     const fromClause = SQL.createFromClause([]); // No FROM clause needed
 
     return { selectItems, fromClause };
@@ -1083,9 +1088,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (property.computed && property.computedExpr) {
       const parser = new EdgeQLParser(property.computedExpr);
       const expr = parser.parseExpressionOnly();
-      return this.bytesAsBase64(this.compileExpression(expr), this.bytesTypeOf(expr, typeName));
+      return this.dateDurationText(this.bytesAsBase64(this.compileExpression(expr), this.bytesTypeOf(expr, typeName)), this.staticScalarType(expr));
     }
-    return this.bytesAsBase64(SQL.createColumnReference(property.columnName, tableAlias), this.bytesTypeOfProperty(property, typeName));
+    return this.dateDurationText(
+      this.bytesAsBase64(SQL.createColumnReference(property.columnName, tableAlias), this.bytesTypeOfProperty(property, typeName)),
+      Context.propertyBaseType(property)
+    );
   }
 
   /**
@@ -1257,7 +1265,10 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const pathSelect = this.shapePathSelect(element);
         value = pathSelect ?
           this.compileJsonArray(pathSelect) :
-          this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName));
+          this.dateDurationText(
+            this.bytesAsBase64(this.compileExpression(element.expr), this.bytesTypeOf(element.expr, typeName)),
+            this.staticScalarType(element.expr)
+          );
       } else if (element.shape) {
         // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
@@ -1521,9 +1532,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // For single-FK link: `tableAlias.<fk_column>` (returns the
     // target's id; clients can drill in via a follow-up SELECT).
     const targetColumn = property ? property.columnName : link!.columnName!;
-    const columnRef = this.bytesAsBase64(
-      SQL.createColumnReference(targetColumn, tableAlias),
-      property ? this.bytesTypeOfProperty(property, filterTypeDef.name) : null
+    const columnRef = this.dateDurationText(
+      this.bytesAsBase64(
+        SQL.createColumnReference(targetColumn, tableAlias),
+        property ? this.bytesTypeOfProperty(property, filterTypeDef.name) : null
+      ),
+      property ? Context.propertyBaseType(property) : null
     );
     const caseExpr = SQL.createCaseExpression(
       [SQL.createWhenClause(condition, columnRef)],
@@ -1876,7 +1890,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           ]);
           this.bindSubject([typeName, typeDef.name], { alias: tableAlias, table: typeDef.tableName, type: typeDef.name });
           const column = SQL.createColumnReference(property.columnName, tableAlias);
-          const selectItems = [SQL.createSelectItem(column)];
+          const selectItems = [SQL.createSelectItem(this.dateDurationText(column, Context.propertyBaseType(property)))];
           // An object without the property adds no element (a set has no NULLs).
           const where = property.required ? undefined : SQL.isNotNull(column);
           return { selectItems, fromClause, where };

@@ -131,6 +131,29 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
 
+  // disc_datetime_sub(a, b) — `datetime - datetime`, a `duration`. PostgreSQL's
+  // `timestamptz - timestamptz` moves whole 24 hours into days (`2 days
+  // 01:00:00`, ISO `P2DT1H`); a Gel duration holds no days (`PT49H`), so the
+  // days are moved back into hours. Both parts of the difference share a sign.
+  `CREATE OR REPLACE FUNCTION disc_datetime_sub(a timestamptz, b timestamptz) RETURNS interval AS $$
+     SELECT (a - b) + extract(day FROM a - b)::integer * (interval '24 hours' - interval '1 day');
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  // disc_date_duration_text(d) — a `cal::date_duration` (or an array of them)
+  // as Gel writes it: ISO 8601, like every interval (connections use
+  // `intervalstyle = iso_8601`, lib/database.ts), except zero, which Gel
+  // writes `P0D` where PostgreSQL writes `PT0S`. The compiler applies it where
+  // a value leaves as text and its type is known (`dateDurationText`).
+  `CREATE OR REPLACE FUNCTION disc_date_duration_text(d interval) RETURNS text AS $$
+     SELECT CASE WHEN d::text = 'PT0S' THEN 'P0D' ELSE d::text END;
+   $$ LANGUAGE SQL IMMUTABLE STRICT SET intervalstyle = 'iso_8601';`,
+
+  `CREATE OR REPLACE FUNCTION disc_date_duration_text(d interval[]) RETURNS text[] AS $$
+     SELECT ARRAY(
+       SELECT disc_date_duration_text(e.v) FROM (SELECT unnest(d) AS v, generate_subscripts(d, 1) AS ord) AS e ORDER BY e.ord
+     );
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
   // Per-element checks for `multi` str properties, stored as `text[]`
   // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
   // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty

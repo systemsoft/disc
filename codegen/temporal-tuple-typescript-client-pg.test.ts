@@ -165,7 +165,7 @@ Deno.test({
             local: "2026-01-15T10:20:30",
             marks: [AT, LATER],
             pair: [BIG, "x"],
-            span: "PT1H",
+            span: "60 minutes",
             stamp: { at: AT, n: BIG },
             tag: tagId,
             tally: BIG,
@@ -179,7 +179,7 @@ Deno.test({
           assertEquals(event.local, "2026-01-15T10:20:30");
           assertEquals(event.day, "2026-01-15");
           assertEquals(event.time, "10:20:30.5");
-          assertEquals(typeof event.span, "string");
+          assertEquals(event.span, "PT1H");
           assertEquals(event.tally, BIG);
           assertEquals(event.pair, [BIG, "x"]);
           assertEquals(event.stamp, { at: AT, n: BIG });
@@ -198,6 +198,7 @@ Deno.test({
           const byId = await client.ttevent.selectById(eventId);
           assertEquals(byId?.at, AT);
           assertEquals(byId?.local, "2026-01-15T10:20:30");
+          assertEquals(byId?.span, "PT1H");
           assertEquals(byId?.stamp, { at: AT, n: BIG });
           assertEquals(sortedDates(byId?.marks), [AT.getTime(), LATER.getTime()]);
         });
