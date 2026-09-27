@@ -1065,6 +1065,15 @@ export class EdgeQLParser {
       expr = AST.createBinaryOp("OR", expr, right);
     }
 
+    // EdgeQL has no `xor` (neither does Gel); `!=` on two booleans is exclusive or.
+    if (this.check(TokenType.IDENT) && this.peek().value.toLowerCase() === "xor") {
+      const token = this.peek();
+      throw new SyntaxError("'xor' is not an operator in EdgeQL", {
+        hint: "For exactly one of two conditions, compare them as booleans: (exists .a) != (exists .b)",
+        location: { column: token.column, line: token.line, offset: token.offset }
+      });
+    }
+
     return expr;
   }
 

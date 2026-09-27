@@ -104,6 +104,103 @@ function containsDataModifying(node: unknown): boolean {
   return isDataModifying(node) || Object.values(node).some(containsDataModifying);
 }
 
+/*** The parameter a scalar constraint's subject compiles as (see `EdgeQLCompiler.subjectCheckSql`). ***/
+export const SUBJECT_PARAMETER = "__subject__";
+
+/**
+ * PostgreSQL functions whose value is not a function of their arguments (the
+ * time, randomness, sequences, settings such as a global's value) and
+ * aggregates: neither can be in a CHECK. Lowercase.
+ */
+const NOT_ROW_LOCAL_FUNCTIONS = new Set([
+  "array_agg",
+  "avg",
+  "bool_and",
+  "bool_or",
+  "clock_timestamp",
+  "count",
+  "current_setting",
+  "currval",
+  "disc_uuidv7",
+  "gen_random_bytes",
+  "gen_random_uuid",
+  "json_agg",
+  "jsonb_agg",
+  "lastval",
+  "max",
+  "min",
+  "nextval",
+  "now",
+  "random",
+  "setval",
+  "statement_timestamp",
+  "string_agg",
+  "sum",
+  "timeofday",
+  "transaction_timestamp",
+  "uuid_generate_v1mc",
+  "uuid_generate_v4"
+]);
+
+/**
+ * Why `expr` can't be the boolean of a CHECK on `tableName` — it reads
+ * something other than that table's row, or a value that changes between
+ * statements — or undefined when it can. See `checkConstraintSql`.
+ */
+function rowLocalViolation(expr: SQL.SQLExpression, tableName: string): string | undefined {
+  const reasons: string[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    const sqlNode = node as { kind?: string; };
+    switch (sqlNode.kind) {
+      case "SelectStatement":
+      case "SubqueryExpression":
+      case "AggregateExpression":
+      case "WindowFunctionExpression":
+      case "JsonAgg":
+        reasons.push("it reads more than the object's own row (a path through a link, a multi link or property, a backlink, an aggregate or a query)");
+        return;
+      case "ParameterReference":
+        reasons.push("it reads a query parameter");
+        return;
+      case "ColumnReference": {
+        const table = (node as SQL.ColumnReference).table;
+        if (table !== undefined && table !== tableName) {
+          reasons.push("it reads more than the object's own row (a path through a link, a multi link or property, a backlink, an aggregate or a query)");
+        }
+        return;
+      }
+      case "FunctionCall": {
+        const name = (node as SQL.FunctionCall).name.toLowerCase();
+        if (NOT_ROW_LOCAL_FUNCTIONS.has(name)) {
+          reasons.push(`constraint expressions must be immutable, and it calls ${name}()`);
+        }
+        break;
+      }
+      case "RawSQLExpression": {
+        const sql = (node as SQL.RawSQLExpression).sql;
+        if (/\bselect\b/i.test(sql)) {
+          reasons.push("it reads more than the object's own row (a path through a link, a multi link or property, a backlink, an aggregate or a query)");
+        }
+        const called = [...sql.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi)].map(match => match[1].toLowerCase()).find(name => NOT_ROW_LOCAL_FUNCTIONS.has(name));
+        if (called) {
+          reasons.push(`constraint expressions must be immutable, and it calls ${called}()`);
+        }
+        return;
+      }
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(expr);
+  return reasons[0];
+}
+
 /*** An update `set { link op targets }` on a junction-backed multi link. ***/
 interface MultiLinkOp {
   link: Context.LinkDef;
@@ -2662,6 +2759,75 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       outer.aliasCounter = this.ctx.aliasCounter;
       this.ctx = outer;
       this.compilingPolicy = compilingPolicy;
+    }
+  }
+
+  /**
+   * `edgeql`, a `constraint expression on (…)` of the object type stored in
+   * `tableName`, as the boolean of a PostgreSQL CHECK on that table: its
+   * columns read as `"<table>"."<column>"`. Unlike a filter, an empty
+   * operand leaves it NULL, which a CHECK lets through — as Gel lets an
+   * object through a constraint whose expression is empty. A CHECK sees one
+   * row, so the expression may read only that row's columns: anything
+   * compiling to a query (a link path, a multi link, a backlink, an
+   * aggregate) or to a value that changes between statements (the time, a
+   * random number, a global, a parameter) throws a CompilationError saying
+   * which.
+   */
+  checkConstraintSql(edgeql: string, tableName: string): string {
+    const typeDef = [...this.ctx.schema.types.values()].find(candidate => candidate.tableName === tableName && candidate.kind === "object");
+    if (!typeDef) {
+      throw new CompilationError(`Constraint on unknown table '${tableName}'`);
+    }
+    const outer = this.ctx;
+    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: typeDef.module };
+    this.ctx.currentScope.aliases.set(tableName, { alias: tableName, table: tableName, type: typeDef.name });
+    try {
+      const sql = this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly());
+      const notRowLocal = rowLocalViolation(sql, tableName);
+      if (notRowLocal) {
+        throw new CompilationError(notRowLocal);
+      }
+      return new SQLCodeGenerator().generateExpression(sql);
+    } finally {
+      this.ctx = outer;
+    }
+  }
+
+  /**
+   * `edgeql`, a scalar type's constraint with its subject written as the
+   * parameter `$__subject__` (cast to the scalar's base type), as the boolean
+   * of a CHECK on `column` — any column of that scalar type, in any table.
+   * Names resolve in `module`, the scalar's. Throws a CompilationError, as
+   * `checkConstraintSql` does, for anything else a CHECK can't read.
+   */
+  subjectCheckSql(edgeql: string, module: string, column: string): string {
+    const outer = this.ctx;
+    const parameterIndex = this.parameterIndex;
+    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: module };
+    this.parameterIndex = new Map([[SUBJECT_PARAMETER, 1]]);
+    try {
+      const replace = (node: unknown): unknown => {
+        if (Array.isArray(node)) {
+          return node.map(replace);
+        }
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        if ((node as SQL.SQLExpression).kind === "ParameterReference" && (node as SQL.ParameterReference).index === 1) {
+          return SQL.createColumnReference(column);
+        }
+        return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, replace(value)]));
+      };
+      const sql = replace(this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly())) as SQL.SQLExpression;
+      const notRowLocal = rowLocalViolation(sql, "");
+      if (notRowLocal) {
+        throw new CompilationError(notRowLocal);
+      }
+      return new SQLCodeGenerator().generateExpression(sql);
+    } finally {
+      this.ctx = outer;
+      this.parameterIndex = parameterIndex;
     }
   }
 

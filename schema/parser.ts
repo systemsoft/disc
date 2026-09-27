@@ -11,6 +11,10 @@ import * as AST from "./ast.ts";
 import { SDLLexer } from "./lexer.ts";
 import { KEYWORDS, Token, TokenType } from "./tokens.ts";
 
+/*** EdgeQL has no `xor` (neither does Gel); `!=` on two booleans is exclusive or. ***/
+const XOR_MESSAGE = "'xor' is not an operator in EdgeQL";
+const XOR_HINT = "For exactly one of two conditions, compare them as booleans: (exists .a) != (exists .b)";
+
 export class SDLParser {
   private source: string;
   private tokens: Token[];
@@ -916,6 +920,8 @@ export class SDLParser {
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after constraint body");
+      // `constraint … { … };` — the `;` after a body is optional.
+      this.match(TokenType.SEMICOLON);
       if (annotations.length > 0) {
         constraint.annotations = annotations;
       }
@@ -1587,6 +1593,10 @@ export class SDLParser {
       this.advance();
       const right = this.parseAndExpression();
       left = { kind: "BinaryOp", op: "or", left, right };
+    }
+
+    if (this.check(TokenType.IDENT) && this.peek().value === "xor") {
+      throw this.error(XOR_MESSAGE, XOR_HINT);
     }
 
     return left;

@@ -605,8 +605,13 @@ Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injec
  * that fails its check. IMMUTABLE, a check that fails whatever the row (no
  * allowing policy) would be folded, and raise, at plan time — even for a
  * statement that writes no rows.
+ *
+ * `disc_check_constraint` raises the violation of a type-level `constraint
+ * expression on (…)` CHECK. IMMUTABLE, a constant expression that fails (say
+ * `constraint expression on (false)`) would be folded, and raise, when the
+ * CHECK is created — even on an empty table.
  */
-const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_access_check", "disc_uuidv7"]);
+const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_access_check", "disc_check_constraint", "disc_uuidv7"]);
 
 Deno.test("Gel #8811: stdlib SQL declares no table reads", async () => {
   const src = await Deno.readTextFile(
@@ -1847,7 +1852,7 @@ Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade 
 // ability to pass an externally-generated UUID into INSERT and have it
 // stick on the row. Disc structurally addresses this via two paths:
 //   1. The `id` property is auto-registered as `uuid` on every type by
-//      `migration/schema-manager.ts:450` (the implicit-id block).
+//      `modulesToSchema` in `migration/runtime-schema.ts` (the implicit-id block).
 //   2. `insert User { id := <uuid>'...', ... }` flows through the
 //      normal INSERT compiler unchanged — Bundle F #5617 added the
 //      pinned compile-test in `migration/gel-issues.test.ts`.
@@ -1857,20 +1862,20 @@ Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #3510: schema-manager auto-registers id as uuid on every type", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/schema-manager.ts", import.meta.url)
+    new URL("../migration/runtime-schema.ts", import.meta.url)
   );
   // The implicit-id block must declare an `id` property of type
   // `uuid` with `required: true`. The exact phrasing in the comment
   // is also pinned because it documents the guarantee for users.
   assert(
     /Start with implicit id property/.test(src),
-    "schema-manager.ts must keep the implicit-id comment (Gel #3510 pin)."
+    "runtime-schema.ts must keep the implicit-id comment (Gel #3510 pin)."
   );
   assert(
     /properties\.set\("id", \{[\s\S]*?type: "uuid"[\s\S]*?required: true/.test(
       src
     ),
-    "schema-manager.ts must auto-register id: uuid required: true (Gel #3510 pin)."
+    "runtime-schema.ts must auto-register id: uuid required: true (Gel #3510 pin)."
   );
 });
 

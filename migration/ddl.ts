@@ -13,6 +13,7 @@ import {
   sequenceName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
+import { sqlStringLiteral } from "../lib/sql-escape.ts";
 import * as Types from "./types.ts";
 
 /** The empty-set value of a multi property's array column (its default). */
@@ -163,15 +164,17 @@ export class DDLGenerator {
     this.createdJunctionTables.clear();
     this.deferredStatements = [];
     const statements: string[] = [];
+    const addedChecks: string[] = [];
 
     for (const operation of operations) {
-      statements.push(...this.generateOperationDDL(operation));
+      (operation.kind === "AddCheck" ? addedChecks : statements).push(...this.generateOperationDDL(operation));
     }
 
     // Two-phase emission: all base CREATE TABLEs first, then deferred
     // FK constraints + junction tables. By the time deferred runs, all
     // base tables in the batch exist, so cross-references resolve.
-    statements.push(...this.deferredStatements);
+    // Constraint CHECKs last: a link property's is on a junction table.
+    statements.push(...this.deferredStatements, ...addedChecks);
 
     return statements;
   }
@@ -223,12 +226,15 @@ export class DDLGenerator {
       }
     }
 
-    // Process operations in reverse order for rollback
+    // Process operations in reverse order for rollback. A dropped CHECK comes
+    // back last: the column or table it reads may be one restored above.
+    const restoredChecks: string[] = [];
+
     for (const operation of [...operations].reverse()) {
-      statements.push(...this.generateRollbackOperationDDL(operation));
+      (operation.kind === "DropCheck" ? restoredChecks : statements).push(...this.generateRollbackOperationDDL(operation));
     }
 
-    return [...statements, ...restoreObjects];
+    return [...statements, ...restoreObjects, ...restoredChecks];
   }
 
   /**
@@ -291,6 +297,11 @@ export class DDLGenerator {
             objects.push(operation);
           break;
         }
+        case "AddCheck":
+          // A dropped CHECK comes back from its DropCheck; one of a dropped type, with the type.
+          if (dropped.has(`type:${(operation as Types.AddCheckOperation).check.ownerTable}`))
+            objects.push(operation);
+          break;
         case "AlterType": {
           const alter = operation as Types.AlterTypeOperation;
           const tableName = typeNameToTableName(alter.typeName);
@@ -509,6 +520,10 @@ export class DDLGenerator {
         const op = operation as Types.MirrorAbstractTypeOperation;
         return [`DROP TRIGGER IF EXISTS "disc_abstract_mirror" ON ${this.escapeIdentifier(op.tableName)};`];
       }
+      case "AddCheck":
+        return [this.dropCheck((operation as Types.AddCheckOperation).check)];
+      case "DropCheck":
+        return [this.addCheck((operation as Types.DropCheckOperation).check)];
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -590,6 +605,10 @@ export class DDLGenerator {
         const op = operation as Types.AddFiniteCheckOperation;
         return this.addFiniteCheck(op.tableName, op.columnName, op.propertyType, op.multi === true);
       }
+      case "AddCheck":
+        return [this.addCheck((operation as Types.AddCheckOperation).check)];
+      case "DropCheck":
+        return [this.dropCheck((operation as Types.DropCheckOperation).check)];
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -2121,6 +2140,28 @@ END $$;`,
   }
 
   /**
+   * The CHECK of a constraint (see `Types.CheckDefinition`). Its boolean goes
+   * through `disc_check_constraint` (lib/stdlib-sql.ts), which lets TRUE and
+   * NULL (an empty value) through and raises Gel's ConstraintViolationError —
+   * the check's message and detail, SQLSTATE 23514 with the constraint and
+   * table named — on FALSE, whether an insert or update writes the row or
+   * the migration adding the check finds one. The CHECK it `replaces`, if
+   * any, is dropped in the same statement.
+   */
+  private addCheck(check: Types.CheckDefinition): string {
+    const violation = [check.message, check.detail, check.name, check.table].map(sqlStringLiteral).join(", ");
+    const replaced = check.replaces === undefined ? "" : `DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(check.replaces)}, `;
+    return `ALTER TABLE ${this.escapeIdentifier(check.table)} ${replaced}ADD CONSTRAINT ${
+      this.escapeIdentifier(check.name)
+    } CHECK (disc_check_constraint(${check.expression}, ${violation}));`;
+  }
+
+  /*** `IF EXISTS` twice: a junction table's CHECK is dropped before its link, which may go with it. ***/
+  private dropCheck(check: Types.CheckDefinition): string {
+    return `ALTER TABLE IF EXISTS ${this.escapeIdentifier(check.table)} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(check.name)};`;
+  }
+
+  /**
    * Generate CHECK constraint statements from property constraint annotations.
    * Maps EdgeQL constraint names to SQL CHECK expressions.
    */
@@ -2379,16 +2420,11 @@ END $$;`
           return `${col} IN (${this.oneOfValues(arg).join(", ")})`;
         }
         break;
+      // `expression on (…)` compiles through the EdgeQL compiler into an
+      // AddCheck operation (see `SchemaDiffer.declaredChecks`), never here.
       case "expression":
-        // expression on (...) constraints - handled via "expression_on" format from differ
-        break;
       case "expression_on":
-        if (arg) {
-          // Replace __subject__ with the column name
-          const expr = arg.replace(/__subject__/g, col);
-          return expr;
-        }
-        break;
+        return null;
       // "exclusive" is handled as UNIQUE constraint, skip here
       case "exclusive":
         return null;

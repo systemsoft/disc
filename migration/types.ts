@@ -317,6 +317,44 @@ export interface AddFiniteCheckOperation extends MigrationOperation, DeclaredCol
   kind: "AddFiniteCheck";
 }
 
+/**
+ * A constraint compiled to a CHECK on one table (see
+ * `SchemaDiffer.declaredChecks`): a type-level or property-level
+ * `constraint expression on (…)`, or a scalar type's constraint on a column
+ * of that type. A violation raises Gel's ConstraintViolationError text:
+ * `message`, with `detail` as its details.
+ */
+export interface CheckDefinition {
+  /** The constraint as written in SDL, for messages: `constraint expression on (…)`, `constraint regexp('…')`. */
+  declaration: string;
+  detail: string;
+  /** The SQL boolean the CHECK holds, over the columns of `table` (see `EdgeQLCompiler.checkConstraintSql`). */
+  expression: string;
+  message: string;
+  /** `ck_<table>_<hash of what it enforces>`, fitted to PostgreSQL's identifier length. */
+  name: string;
+  /** The table of the object type the CHECK belongs to: `table`, or the type whose junction `table` is. */
+  ownerTable: string;
+  /** A CHECK an earlier Disc emitted for the same constraint, which this one replaces (dropped when it is added). */
+  replaces?: string;
+  /** What the constraint constrains, for messages: `type 'default::T'`, `property 'default::T.p'`, … */
+  subject: string;
+  table: string;
+  typeName: string;
+}
+
+/*** Add a type-level expression constraint's CHECK (see `CheckDefinition`). ***/
+export interface AddCheckOperation extends MigrationOperation {
+  check: CheckDefinition;
+  kind: "AddCheck";
+}
+
+/*** Drop a type-level expression constraint's CHECK; carries its definition so a rollback can add it back. ***/
+export interface DropCheckOperation extends MigrationOperation {
+  check: CheckDefinition;
+  kind: "DropCheck";
+}
+
 /*** A concrete type's table and the tables of the abstract types it extends (see `MirrorAbstractTypeOperation`). ***/
 export interface DeclaredAbstractMirror {
   /** The abstract ancestors' tables, nearest first; empty when the type extends no abstract type. */

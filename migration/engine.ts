@@ -17,6 +17,7 @@ import { SchemaDiffer } from "./differ.ts";
 import {
   reconcileAbstractMirrors,
   reconcileColumnTypes,
+  reconcileConstraintChecks,
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
@@ -412,6 +413,14 @@ export class MigrationEngine {
         planned,
         this.ddlGenerator,
         tableNames => this.readExistingTriggers(db, tableNames)
+      ),
+      // The CHECKs of expression and scalar-type constraints declared before
+      // Disc compiled them (see `reconcileConstraintChecks`). Last, so every
+      // column they read has its final type.
+      ...await reconcileConstraintChecks(
+        this.differ.declaredChecks(schema, false),
+        planned,
+        tableNames => this.readExistingFiniteChecks(db, tableNames)
       )
     ];
   }
@@ -1903,12 +1912,30 @@ export class MigrationEngine {
    * explained in schema terms instead of as a raw PostgreSQL message.
    *
    * Handled today: SQLSTATE 23505 while creating a unique index that came from
-   * a `CreateIndex` operation — existing rows violate the constraint. Anything
+   * a `CreateIndex` operation, and 23514 while adding the CHECK of an
+   * `AddCheck` operation — existing rows violate the constraint. Anything
    * else is returned as it was thrown.
    */
   private describeStatementFailure(error: unknown, statement: string, operations: Types.MigrationOperation[]): unknown {
     const fields = (error as { fields?: { code?: string; detail?: string; }; })?.fields ??
       (error as { cause?: { fields?: { code?: string; detail?: string; }; }; })?.cause?.fields;
+
+    if (fields?.code === "23514") {
+      const addCheck = operations.find((op): op is Types.AddCheckOperation =>
+        op.kind === "AddCheck" && this.ddlGenerator.generateDDL([op]).includes(statement)
+      );
+
+      if (!addCheck)
+        return error;
+
+      const { declaration, expression, message, subject, table } = addCheck.check;
+
+      return new MigrationError(
+        `Cannot add '${declaration}' to ${subject}: existing data violates it (${message}). Find it with:\n` +
+          `  SELECT * FROM ${table} WHERE NOT (${expression});\n` +
+          `Fix or delete those rows, then re-run the migration. Nothing was applied.`
+      );
+    }
 
     if (fields?.code !== "23505")
       return error;

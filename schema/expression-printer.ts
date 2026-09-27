@@ -58,7 +58,9 @@ export function sdlExpressionToEdgeQL(expr: Expression): string {
 
 function formatLiteral(lit: Literal): string {
   if (lit.type === "string") {
-    return `'${String(lit.value).replace(/'/g, "\\'")}'`;
+    // Backslashes first: the value is the string itself (a raw `r'…'` string
+    // keeps them), and EdgeQL reads `\` in a quoted string as an escape.
+    return `'${String(lit.value).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
   }
   return String(lit.value);
 }

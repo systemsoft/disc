@@ -27,6 +27,7 @@ import { MigrationError } from "../lib/errors.ts";
 import { PG_MAX_IDENTIFIER_BYTES, propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
 import { deletesTargets } from "./types.ts";
 import type {
+  AddCheckOperation,
   AddFiniteCheckOperation,
   AddLinkOperation,
   AddPropertyOperation,
@@ -34,6 +35,7 @@ import type {
   AlterLinkOperation,
   AlterPropertyOperation,
   AlterTypeOperation,
+  CheckDefinition,
   ConvertColumnTypeOperation,
   ConvertTextColumnOperation,
   CreateIndexOperation,
@@ -43,6 +45,7 @@ import type {
   DeclaredLink,
   DeclaredLinkProperty,
   DeclaredRewrites,
+  DropCheckOperation,
   DropRewriteOperation,
   DropTypeOperation,
   IndexDefinition,
@@ -1052,4 +1055,43 @@ export async function reconcileFiniteChecks(
       existing.columns.has(`${column.tableName}.${column.columnName}`) && !existing.checks.has(`${column.tableName}.${pgStoredName(name)}`)
     )
     .map(({ column }) => ({ ...column, kind: "AddFiniteCheck" }));
+}
+
+/**
+ * Add the constraint CHECKs (see `SchemaDiffer.declaredChecks`: type- and
+ * property-level `constraint expression on (…)`, and scalar types'
+ * constraints on their columns) that the database lacks. Disc created none
+ * of them before it compiled them — or, for a property's expression, created
+ * one from the expression's text, which the new CHECK replaces — while the
+ * stored schema snapshot already declared the constraints, so the differ,
+ * comparing two snapshots that agree, diffs to nothing. Returns one
+ * `AddCheck` per declared CHECK whose table exists without it, skipping those
+ * the pending migration (`planned`) adds or drops itself. Tables that don't
+ * exist yet are the pending migration's to create, with their CHECKs. A
+ * stored value the CHECK rejects fails the operation's DDL with the
+ * constraint's violation, so nothing changes. Idempotent: once added, it
+ * returns nothing.
+ */
+export async function reconcileConstraintChecks(
+  declared: CheckDefinition[],
+  planned: MigrationOperation[],
+  readExisting: ExistingFiniteCheckReader
+): Promise<AddCheckOperation[]> {
+  const handled = new Set(
+    planned
+      .filter((op): op is AddCheckOperation | DropCheckOperation => op.kind === "AddCheck" || op.kind === "DropCheck")
+      .map(op => `${op.check.table}.${op.check.name}`)
+  );
+  const candidates = declared.filter(check => !handled.has(`${check.table}.${check.name}`));
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const existing = await readExisting([...new Set(candidates.map(check => check.table))]);
+  const tables = new Set([...existing.columns].map(column => column.slice(0, column.indexOf("."))));
+
+  return candidates
+    .filter(check => tables.has(check.table) && !existing.checks.has(`${check.table}.${pgStoredName(check.name)}`))
+    .map(check => ({ check, kind: "AddCheck" }));
 }

@@ -327,10 +327,10 @@ Deno.test("Validator - expression with on expression is valid", () => {
     name: { kind: "Identifier", value: "expression" },
     on: {
       kind: "BinaryOp",
-      operator: ">",
+      op: ">",
       left: {
         kind: "PathExpression",
-        path: "__subject__"
+        path: ["__subject__"]
       } as unknown as AST.Expression,
       right: { kind: "Literal", type: "integer", value: 0 } as AST.Literal
     } as unknown as AST.Expression

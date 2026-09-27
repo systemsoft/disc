@@ -663,7 +663,10 @@ Deno.test("DDL Generator - one_of generates CHECK with IN clause for numeric val
   );
 });
 
-Deno.test("DDL Generator - expression_on generates CHECK with __subject__ replaced by column name", () => {
+// An `expression on` constraint compiles through the EdgeQL compiler into an
+// AddCheck operation (see migration/expression-constraints.test.ts); the DDL
+// generator no longer pastes its text into SQL with `__subject__` swapped.
+Deno.test("DDL Generator - expression_on in a property's constraints emits no CHECK of its own", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
@@ -686,11 +689,7 @@ Deno.test("DDL Generator - expression_on generates CHECK with __subject__ replac
   const statements = generator.generateDDL([operation]);
   const checkStatements = statements.filter(s => s.includes("CHECK"));
 
-  assertEquals(checkStatements.length, 1);
-  assertStringIncludes(
-    checkStatements[0],
-    "CHECK (percentage >= 0 AND percentage <= 100)"
-  );
+  assertEquals(checkStatements, []);
 });
 
 Deno.test("DDL Generator - combined exclusive and value constraints on same property", () => {

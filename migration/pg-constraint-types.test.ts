@@ -378,13 +378,7 @@ Deno.test({
       } catch (error: unknown) {
         underViolated = true;
         const message = error instanceof Error ? error.message : String(error);
-        assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
-          true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`
-        );
+        assertStringIncludes(message, "invalid percentage"); // Gel's text for a property's expression constraint
       }
 
       assertEquals(
@@ -404,13 +398,7 @@ Deno.test({
       } catch (error: unknown) {
         overViolated = true;
         const message = error instanceof Error ? error.message : String(error);
-        assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
-          true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`
-        );
+        assertStringIncludes(message, "invalid percentage"); // Gel's text for a property's expression constraint
       }
 
       assertEquals(

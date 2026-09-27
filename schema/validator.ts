@@ -10,6 +10,7 @@ import { ValidationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
 import * as AST from "./ast.ts";
 import { Module, SDLConverter } from "./converter.ts";
+import { sdlExpressionToEdgeQL } from "./expression-printer.ts";
 
 /**
  * Built-in annotation names that do not require an explicit
@@ -62,6 +63,49 @@ const CONSTRAINT_NAME_HINTS = new Map<string, string>([
   ["max_length", "max_len_value"],
   ["min_length", "min_len_value"],
   ["regex", "regexp"]
+]);
+
+/**
+ * Functions whose value is not a function of their arguments: a constraint
+ * expression calling one is not immutable (Gel: "constraint expressions must
+ * be immutable"). Without the `std::` prefix.
+ */
+const EXPRESSION_HINT = "A constraint expression becomes a PostgreSQL CHECK, so it may only read the object's own properties and single links.";
+
+/*** `edgeql` in the parentheses of `on (…)`, once. ***/
+function parenthesized(edgeql: string): string {
+  return edgeql.startsWith("(") && edgeql.endsWith(")") ? edgeql : `(${edgeql})`;
+}
+
+const NOT_IMMUTABLE_FUNCTIONS = new Set([
+  "datetime_current",
+  "datetime_of_statement",
+  "datetime_of_transaction",
+  "random",
+  "sequence_next",
+  "sequence_reset",
+  "uuid_generate_v1mc",
+  "uuid_generate_v4"
+]);
+
+/*** Functions of a whole set, which a constraint can't call (Gel: "cannot use SET OF function … in a constraint"). ***/
+const SET_OF_FUNCTIONS = new Set([
+  "all",
+  "any",
+  "array_agg",
+  "assert_distinct",
+  "assert_exists",
+  "assert_single",
+  "avg",
+  "count",
+  "enumerate",
+  "max",
+  "min",
+  "stddev",
+  "stddev_pop",
+  "sum",
+  "var",
+  "var_pop"
 ]);
 
 interface ValidationContext {
@@ -264,6 +308,7 @@ export class SchemaValidator {
           }
           propertyNames.add(member.name.value);
           this.validateProperty(member);
+          this.validatePropertyExpressions(type, member);
           break;
         case "LinkDeclaration":
           if (linkNames.has(member.name.value)) {
@@ -276,6 +321,7 @@ export class SchemaValidator {
           break;
         case "Constraint":
           this.validateConstraint(member);
+          this.validateTypeConstraint(type, member);
           break;
         case "Index":
           this.validateIndex(member);
@@ -304,10 +350,25 @@ export class SchemaValidator {
       }
     }
 
-    // Validate constraints
+    // Validate constraints. Each becomes a CHECK on every column of the
+    // scalar's type (`SchemaDiffer.declaredChecks`), so its expression may
+    // read only the value, `__subject__`.
     if (type.constraints) {
+      const scalarName = this.getQualifiedTypeName(type.name);
       for (const constraint of type.constraints) {
         this.validateConstraint(constraint);
+        if (constraint.name?.value === "exclusive") {
+          this.addConstraintError(`Scalar type '${scalarName}': abstract constraint 'std::exclusive' may not be used on scalar types`, constraint);
+        }
+        if (constraint.name?.value === "expression" && constraint.on) {
+          const problem = this.checkExpressionProblem(null, constraint.on);
+          if (problem) {
+            this.addConstraintError(
+              `Scalar type '${scalarName}': 'constraint expression on ${parenthesized(sdlExpressionToEdgeQL(constraint.on))}' can't be enforced — ${problem}`,
+              constraint
+            );
+          }
+        }
       }
     }
   }
@@ -442,6 +503,9 @@ export class SchemaValidator {
       const propertyType = property.type.name.parts.join("::");
       for (const constraint of property.constraints) {
         this.validateConstraint(constraint, propertyType);
+        if (isLink) {
+          this.validateLinkConstraint(property.name.value, constraint);
+        }
       }
     }
 
@@ -564,6 +628,9 @@ export class SchemaValidator {
     if (link.constraints) {
       for (const constraint of link.constraints) {
         this.validateConstraint(constraint);
+        if (!link.abstract && this.isObjectTypeName(targetName)) {
+          this.validateLinkConstraint(link.name.value, constraint);
+        }
       }
     }
 
@@ -746,6 +813,224 @@ export class SchemaValidator {
         );
       }
     }
+  }
+
+  /**
+   * A constraint in a link's body that Disc would otherwise drop without a
+   * trace: any but `exclusive`, the only one a link's storage enforces.
+   */
+  private validateLinkConstraint(pointer: string, constraint: AST.Constraint): void {
+    const name = constraint.name?.value;
+    if (!name || !SUPPORTED_CONSTRAINTS.has(name)) {
+      return; // reported by validateConstraint
+    }
+
+    if (name !== "exclusive") {
+      this.addConstraintError(
+        `Link '${pointer}': constraint '${name}' is not supported on a link — ` +
+          `write it on the type instead, e.g. \`constraint expression on (exists .${pointer})\``,
+        constraint
+      );
+    }
+  }
+
+  /**
+   * A constraint on an object type rather than on one of its properties or
+   * links. Disc enforces two kinds there: `exclusive on (…)`, a unique index,
+   * and `expression on (…)`, a PostgreSQL CHECK on the table of the type and
+   * of each concrete subtype (`SchemaDiffer.declaredChecks`). Any other kind,
+   * or an expression a CHECK can't hold, would silently not be enforced, so
+   * it is an error.
+   */
+  private validateTypeConstraint(type: AST.TypeDeclaration, constraint: AST.Constraint): void {
+    const name = constraint.name?.value;
+    if (!name || !SUPPORTED_CONSTRAINTS.has(name)) {
+      return; // reported by validateConstraint
+    }
+
+    const typeName = this.getQualifiedTypeName(type.name);
+
+    if (name !== "exclusive" && name !== "expression") {
+      this.addConstraintError(
+        `Type '${typeName}': constraint '${name}' is not supported on an object type — ` +
+          `declare it on the property it constrains, or write it as \`constraint expression on (…)\``,
+        constraint
+      );
+      return;
+    }
+
+    if (!constraint.on) {
+      if (name === "exclusive") {
+        this.addConstraintError(
+          `Type '${typeName}': constraint 'exclusive' on an object type needs 'on (…)', e.g. \`constraint exclusive on (.email)\``,
+          constraint
+        );
+      }
+      return; // `expression` without `on` is reported by validateConstraint
+    }
+
+    if (name === "expression") {
+      const problem = this.checkExpressionProblem(type, constraint.on);
+      if (problem) {
+        this.addConstraintError(
+          `Type '${typeName}': 'constraint expression on ${
+            parenthesized(sdlExpressionToEdgeQL(constraint.on))
+          }' can't be enforced — ${problem}. ${EXPRESSION_HINT}`,
+          constraint
+        );
+      }
+    }
+  }
+
+  /**
+   * A property's `constraint expression on (__subject__ …)` becomes a CHECK
+   * on its type's table with `__subject__` read as the property
+   * (`SchemaDiffer.declaredChecks`), so it may read what a type-level one
+   * may.
+   */
+  private validatePropertyExpressions(type: AST.TypeDeclaration, property: AST.PropertyDeclaration): void {
+    for (const constraint of property.constraints ?? []) {
+      if (constraint.name?.value !== "expression" || !constraint.on || property.multi || property.computed) {
+        continue;
+      }
+      const bound = AST.replaceSubject(constraint.on, { kind: "PathExpression", path: [".", property.name.value] });
+      const problem = this.checkExpressionProblem(type, bound);
+      if (problem) {
+        this.addConstraintError(
+          `Type '${this.getQualifiedTypeName(type.name)}', property '${property.name.value}': ` +
+            `'constraint expression on ${parenthesized(sdlExpressionToEdgeQL(constraint.on))}' can't be enforced — ${problem}. ${EXPRESSION_HINT}`,
+          constraint
+        );
+      }
+    }
+  }
+
+  /**
+   * Why a type-level constraint expression can't be a CHECK on the object's
+   * row, or undefined. Gel's own rules: no path with more than one hop, no
+   * set of values (a multi link or property, a backlink, an aggregate, a
+   * query), and only immutable values (no time, randomness, globals or
+   * parameters). What passes here still has to compile to a row-local
+   * boolean (see `EdgeQLCompiler.checkConstraintSql`). With no `type`, a
+   * scalar type's constraint: it may read only its value, `__subject__`.
+   */
+  private checkExpressionProblem(type: AST.TypeDeclaration | null, expr: AST.Expression): string | undefined {
+    const first = (exprs: AST.Expression[]): string | undefined => {
+      for (const e of exprs) {
+        const problem = this.checkExpressionProblem(type, e);
+        if (problem) {
+          return problem;
+        }
+      }
+      return undefined;
+    };
+
+    switch (expr.kind) {
+      case "Literal":
+        return undefined;
+      case "Parameter":
+        return `it reads the query parameter '$${expr.name.replace(/^\$/, "")}'`;
+      case "BinaryOp":
+        return first([expr.left, expr.right]);
+      case "UnaryOp":
+        return first([expr.operand]);
+      case "TypeCast":
+        return first([expr.expr]);
+      case "ConditionalExpression":
+        return first([expr.test, expr.consequent, expr.alternate]);
+      case "TupleExpression":
+        return first(expr.elements);
+      case "NamedTupleExpression":
+        return first(expr.elements.map(element => element.value));
+      case "FunctionCall": {
+        const fn = expr.name.parts.join("::").replace(/^std::/, "");
+        if (NOT_IMMUTABLE_FUNCTIONS.has(fn)) {
+          return `constraint expressions must be immutable, and ${fn}() is not`;
+        }
+        if (SET_OF_FUNCTIONS.has(fn)) {
+          return `it calls the aggregate ${fn}(), which reads a set rather than one object's values`;
+        }
+        return first(expr.args);
+      }
+      case "PathExpression":
+        return this.checkPathProblem(type, expr);
+    }
+  }
+
+  private checkPathProblem(type: AST.TypeDeclaration | null, path: AST.PathExpression): string | undefined {
+    if (path.source !== undefined) {
+      return "it contains a query";
+    }
+    if (path.path[0] === "global") {
+      return `constraint expressions must be immutable, and it reads the global '${path.path[1]}'`;
+    }
+    if (type === null) {
+      return path.path.length === 1 && path.path[0] === "__subject__" ?
+        undefined :
+        `a scalar type's constraint can only read its value, '__subject__' (not '${sdlExpressionToEdgeQL(path)}')`;
+    }
+    if (path.path[0] === "__subject__") {
+      return `write '.${path.path.slice(1).join(".")}' rather than '__subject__.…' in a type-level constraint`;
+    }
+    if (path.path[0] !== ".") {
+      const name = path.path.join("::");
+      return this.isObjectTypeName(name) ? `it reads every '${name}' object` : undefined;
+    }
+
+    const steps = path.path.slice(1);
+    const written = sdlExpressionToEdgeQL(path);
+    if (steps[0].startsWith("<")) {
+      return `it reads the backlink '${written}'`;
+    }
+    if (steps.length > 1) {
+      return `constraints cannot contain paths with more than one hop ('${written}')`;
+    }
+    if (steps[0] === "id") {
+      return undefined;
+    }
+
+    const member = this.findTypeMember(type, steps[0], new Set());
+    if (!member) {
+      return `'${written}' is not a property or link of '${type.name.value}'`;
+    }
+    const kind = member.kind === "LinkDeclaration" || this.isObjectTypeName(member.type.name.parts.join("::")) ? "link" : "property";
+    if (member.multi) {
+      return `it reads the multi ${kind} '${steps[0]}'`;
+    }
+    if (member.computed) {
+      return `it reads the computed ${kind} '${steps[0]}'`;
+    }
+    return undefined;
+  }
+
+  /*** A property or link of `type` or of a type it extends, nearest first. ***/
+  private findTypeMember(
+    type: AST.TypeDeclaration,
+    name: string,
+    seen: Set<AST.TypeDeclaration>
+  ): AST.PropertyDeclaration | AST.LinkDeclaration | undefined {
+    if (seen.has(type)) {
+      return undefined;
+    }
+    seen.add(type);
+
+    const own = type.members.find((member): member is AST.PropertyDeclaration | AST.LinkDeclaration =>
+      (member.kind === "PropertyDeclaration" || member.kind === "LinkDeclaration") && member.name.value === name
+    );
+    if (own) {
+      return own;
+    }
+
+    for (const base of type.extending ?? []) {
+      const baseName = base.name.parts.join("::");
+      const qualified = this.context.currentModule && !baseName.includes("::") ? `${this.context.currentModule}::${baseName}` : baseName;
+      const parent = this.context.types.get(qualified) ?? this.context.types.get(baseName);
+      const found = parent?.kind === "TypeDeclaration" ? this.findTypeMember(parent, name, seen) : undefined;
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
   }
 
   private validateIndex(index: AST.Index): void {

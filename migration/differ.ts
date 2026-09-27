@@ -5,17 +5,22 @@
  * Schema diff engine for generating migration operations
  */
 
+import { EdgeQLCompiler, SUBJECT_PARAMETER } from "../compiler/compiler.ts";
+import { edgeqlTypeToPgType } from "../compiler/compiler-base.ts";
 import { MigrationError } from "../lib/errors.ts";
 import {
   enumTypeName,
   fitIdentifier,
   linkColumnName,
+  nameHash,
   propNameToColumnName,
   sequenceName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
 import * as AST from "../schema/ast.ts";
 import { enumPgTypeNames, Module, qualifyScalarReferences } from "../schema/converter.ts";
+import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
+import { modulesToSchema } from "./runtime-schema.ts";
 import * as Types from "./types.ts";
 
 /**
@@ -35,6 +40,86 @@ interface DiffCache {
   subtypes: Map<string, string[]>;
   props: Map<AST.TypeDeclaration, Types.PropertyDefinition[]>;
   links: Map<AST.TypeDeclaration, Types.LinkDefinition[]>;
+}
+
+/*** The concrete object type whose table (or junction tables) a CHECK is on. ***/
+interface CheckOwner {
+  shortName: string;
+  table: string;
+  typeName: string;
+}
+
+/*** A CHECK before its expression compiles (see `SchemaDiffer.declaredChecks`). ***/
+interface PendingCheck {
+  check: Omit<Types.CheckDefinition, "expression">;
+  compile: (compiler: EdgeQLCompiler) => string;
+  /** Said after why the expression can't be a CHECK. */
+  hint: string;
+  /** Where the constraint is declared, for that error. */
+  where: string;
+}
+
+/*** A stored column that may hold a user scalar's values (see `SchemaDiffer.scalarColumns`). ***/
+interface ScalarColumn {
+  array: boolean;
+  column: string;
+  /** The multi link whose junction table holds the column, for a link property. */
+  junction?: string;
+  property: string;
+  table: string;
+  type: string;
+}
+
+const EXPRESSION_HINT = "A constraint expression becomes a PostgreSQL CHECK, so it may only read the object's own properties and single links.";
+
+/*** The parameter each scalar constraint's `errmessage` names (Gel's: `{min}`, `{pattern}`, …). ***/
+const SCALAR_CONSTRAINT_PARAMS = new Map([
+  ["max_ex_value", "max"],
+  ["max_len_value", "max"],
+  ["max_value", "max"],
+  ["min_ex_value", "min"],
+  ["min_len_value", "min"],
+  ["min_value", "min"],
+  ["one_of", "vals"],
+  ["regexp", "pattern"]
+]);
+
+/*** `edgeql` in the parentheses of `on (…)`, once. ***/
+function parenthesized(edgeql: string): string {
+  return edgeql.startsWith("(") && edgeql.endsWith(")") ? edgeql : `(${edgeql})`;
+}
+
+/*** A constraint argument as Gel shows it in a message: `0`, `-1`, `'a'`. ***/
+function argRepr(arg: AST.Expression): string {
+  if (arg.kind === "Literal") {
+    return arg.type === "string" ? `'${arg.value}'` : String(arg.value);
+  }
+  if (arg.kind === "UnaryOp" && arg.op === "-" && arg.operand.kind === "Literal") {
+    return `-${arg.operand.value}`;
+  }
+  return sdlExpressionToEdgeQL(arg);
+}
+
+/*** Gel's default message for a violated scalar constraint (`shown` is its parameter as `argRepr` shows it). ***/
+function scalarMessage(kind: string, scalar: string, shown: string): string {
+  switch (kind) {
+    case "min_value":
+      return `Minimum allowed value for ${scalar} is ${shown}.`;
+    case "max_value":
+      return `Maximum allowed value for ${scalar} is ${shown}.`;
+    case "min_ex_value":
+      return `${scalar} must be greater than ${shown}.`;
+    case "max_ex_value":
+      return `${scalar} must be less than ${shown}.`;
+    case "min_len_value":
+      return `${scalar} must be no shorter than ${shown} characters.`;
+    case "max_len_value":
+      return `${scalar} must be no longer than ${shown} characters.`;
+    case "one_of":
+      return `${scalar} must be one of: ${shown}.`;
+    default:
+      return `invalid ${scalar}`;
+  }
 }
 
 export class SchemaDiffer {
@@ -150,6 +235,10 @@ export class SchemaDiffer {
         operations.push(...indexOps.filter(op => !moved.has(this.indexOpName(op))));
       }
     }
+
+    /*** CHECKs of type-level `constraint expression on (…)`: dropped before and added after
+         every other change (see `reorderForCascade`), so the columns they read exist. ***/
+    operations.push(...this.diffChecks(oldSchema, newSchema, oldTypes, newTypes));
 
     // Diff scalar/enum declarations (gh/geldata#8517, #2564). Disc tracks
     // scalars alongside object types so enum-value changes produce real
@@ -399,13 +488,21 @@ export class SchemaDiffer {
   private reorderForCascade(
     operations: Types.MigrationOperation[]
   ): Types.MigrationOperation[] {
+    const checkDrops: Types.MigrationOperation[] = [];
     const renames: Types.MigrationOperation[] = [];
     const creates: Types.MigrationOperation[] = [];
     const middle: Types.MigrationOperation[] = [];
     const drops: Types.MigrationOperation[] = [];
     const renamesBack: Types.MigrationOperation[] = [];
+    const checkAdds: Types.MigrationOperation[] = [];
     for (const op of operations) {
       switch (op.kind) {
+        case "DropCheck":
+          checkDrops.push(op);
+          break;
+        case "AddCheck":
+          checkAdds.push(op);
+          break;
         case "RenameScalar": {
           const rename = op as Types.RenameScalarOperation;
           const toBareName = rename.toTypeName === enumTypeName(rename.module, rename.scalarName, false);
@@ -424,7 +521,7 @@ export class SchemaDiffer {
           middle.push(op);
       }
     }
-    return [...renames, ...creates, ...middle, ...drops, ...renamesBack];
+    return [...checkDrops, ...renames, ...creates, ...middle, ...drops, ...renamesBack, ...checkAdds];
   }
 
   /**
@@ -1317,6 +1414,416 @@ export class SchemaDiffer {
     // A link can be exclusive both in its block and via `constraint exclusive
     // on (.link)`; both declare the same index.
     return [...new Map(indexes.map(index => [index.name, index])).values()];
+  }
+
+  /**
+   * Every CHECK a schema's constraints compile to — what the database should
+   * contain (see `Types.CheckDefinition`):
+   *
+   * - a type-level `constraint expression on (…)`, on the table of the type
+   *   and of each concrete subtype (Gel's constraints hold for subtypes);
+   * - a property's `constraint expression on (__subject__ …)`, likewise, with
+   *   `__subject__` read as the property;
+   * - each constraint of a scalar type and of the scalars it extends, on every
+   *   column holding a value of it: properties (a multi property's or an
+   *   array's every element), in subtypes' tables too, and link properties in
+   *   junction tables.
+   *
+   * Abstract types get none: their tables only mirror their subtypes' rows
+   * (see `MirrorAbstractTypeOperation`), which pass their own table's CHECKs
+   * first. Enum scalars have none.
+   *
+   * Expressions compile like a query's (see `EdgeQLCompiler.checkConstraintSql`
+   * and `subjectCheckSql`), literals included; one that can't be a CHECK — it
+   * reads more than one row's values, or isn't immutable — throws when
+   * `strict` (the schema being migrated to), naming where it is declared. The
+   * stored baseline is read leniently: such a constraint never had a CHECK, so
+   * it is left out.
+   */
+  declaredChecks(input: Module[], strict: boolean): Types.CheckDefinition[] {
+    const schema = qualifyScalarReferences(input);
+    const types = this.extractTypes(schema);
+    const scalars = this.extractScalars(schema);
+    const moduleOf = new Map<AST.TypeDeclaration, string>();
+
+    for (const module of schema) {
+      for (const item of module.items) {
+        if (item.kind === "TypeDeclaration")
+          moduleOf.set(item, module.name);
+      }
+    }
+
+    const pending = [...types.values()]
+      .filter(typeDef => !typeDef.abstract)
+      .flatMap(typeDef => {
+        const shortName = typeDef.name.value.slice(typeDef.name.value.lastIndexOf(":") + 1);
+        const owner = { shortName, table: typeNameToTableName(typeDef.name.value), typeName: `${moduleOf.get(typeDef) ?? "default"}::${shortName}` };
+
+        return [
+          ...this.expressionConstraints(typeDef, types, new Set()).map(constraint => this.typeCheck(owner, constraint)),
+          ...this.propertyDeclarations(typeDef, types, new Map()).flatMap(property => this.propertyChecks(owner, property)),
+          ...this.scalarColumns(typeDef, types, owner.table).flatMap(column => this.scalarChecks(owner, column, scalars))
+        ];
+      });
+
+    if (pending.length === 0)
+      return [];
+
+    let compiler: EdgeQLCompiler;
+
+    try {
+      compiler = new EdgeQLCompiler(modulesToSchema(schema), { enableAccessControl: false });
+    } catch (error) {
+      if (strict)
+        throw error;
+
+      return [];
+    }
+
+    const checks = new Map<string, Types.CheckDefinition>();
+
+    for (const { check, compile, hint, where } of pending) {
+      try {
+        checks.set(`${check.table}.${check.name}`, { ...check, expression: compile(compiler) });
+      } catch (error) {
+        if (strict) {
+          throw new MigrationError(
+            `${where}: '${check.declaration}' can't be enforced — ${error instanceof Error ? error.message : String(error)}. ${hint}`
+          );
+        }
+      }
+    }
+
+    return [...checks.values()];
+  }
+
+  /*** The CHECK of a type-level `constraint expression on (…)` on the table of `owner`. ***/
+  private typeCheck(owner: CheckOwner, constraint: AST.Constraint): PendingCheck {
+    const edgeql = sdlExpressionToEdgeQL(constraint.on!);
+
+    return {
+      check: {
+        declaration: `constraint expression on ${parenthesized(edgeql)}`,
+        detail: `violated constraint 'std::expression' on object type '${owner.typeName}'`,
+        message: constraint.errmessage?.replaceAll("{__subject__}", owner.shortName) ?? `invalid ${owner.shortName}`,
+        name: fitIdentifier(`ck_${owner.table}_${nameHash(edgeql)}`),
+        ownerTable: owner.table,
+        subject: `type '${owner.typeName}'`,
+        table: owner.table,
+        typeName: owner.typeName
+      },
+      compile: compiler => compiler.checkConstraintSql(edgeql, owner.table),
+      hint: EXPRESSION_HINT,
+      where: `Type '${owner.typeName}'`
+    };
+  }
+
+  /**
+   * The CHECKs of a property's `constraint expression on (__subject__ …)`,
+   * with `__subject__` read as the property. Each replaces the CHECK Disc
+   * emitted for it before it compiled these (`replaces`), whose SQL was the
+   * expression's text with `__subject__` swapped for the column.
+   */
+  private propertyChecks(owner: CheckOwner, property: AST.PropertyDeclaration): PendingCheck[] {
+    const name = property.name.value;
+    const column = propNameToColumnName(name);
+
+    return (property.constraints ?? [])
+      .filter(constraint => constraint.name?.value === "expression" && constraint.on !== undefined)
+      .map(constraint => {
+        const written = sdlExpressionToEdgeQL(constraint.on!);
+        const edgeql = sdlExpressionToEdgeQL(AST.replaceSubject(constraint.on!, { kind: "PathExpression", path: [".", name] }));
+
+        return {
+          check: {
+            declaration: `constraint expression on ${parenthesized(written)}`,
+            detail: `violated constraint 'std::expression' on property '${name}' of object type '${owner.typeName}'`,
+            message: constraint.errmessage?.replaceAll("{__subject__}", name) ?? `invalid ${name}`,
+            name: fitIdentifier(`ck_${owner.table}_${nameHash(`property ${name}: ${written}`)}`),
+            ownerTable: owner.table,
+            replaces: `chk_${owner.table}_${column}_${this.extractConstraints([constraint])[0].replace(/[^a-zA-Z0-9_]/g, "_")}`,
+            subject: `property '${owner.typeName}.${name}'`,
+            table: owner.table,
+            typeName: owner.typeName
+          },
+          compile: (compiler: EdgeQLCompiler) => compiler.checkConstraintSql(edgeql, owner.table),
+          hint: EXPRESSION_HINT,
+          where: `Type '${owner.typeName}', property '${name}'`
+        };
+      });
+  }
+
+  /**
+   * The CHECKs the constraints of a column's scalar type (and of the scalars
+   * it extends, each reported as its declaring scalar's, as in Gel) put on
+   * that column: one boolean over the value, or over every element of an
+   * array column. Gel's default messages and details; `errmessage` fills in
+   * `{__subject__}` (the scalar's name) and the constraint's parameter.
+   */
+  private scalarChecks(owner: CheckOwner, column: ScalarColumn, scalars: Map<string, { decl: AST.ScalarTypeDeclaration; module: string; }>): PendingCheck[] {
+    const chain = this.scalarChain(column.type, scalars);
+
+    if (chain.length === 0)
+      return [];
+
+    const base = chain[chain.length - 1].decl.extending![0].name.parts.join("::");
+    const pgType = edgeqlTypeToPgType(base);
+    const target = column.junction ?
+      `link property '${owner.typeName}.${column.junction}@${column.property}'` :
+      `property '${owner.typeName}.${column.property}'`;
+
+    return chain.flatMap(({ decl, key, module }) =>
+      (decl.constraints ?? []).map(constraint => {
+        const kind = constraint.name?.value ?? "unnamed";
+        const scalar = decl.name.value;
+        const args = constraint.args ?? [];
+        const param = SCALAR_CONSTRAINT_PARAMS.get(kind);
+        const shown = kind === "one_of" ? `[${args.map(argRepr).join(", ")}]` : args[0] ? argRepr(args[0]) : "";
+        const declaration = kind === "expression" ?
+          `constraint expression on ${parenthesized(sdlExpressionToEdgeQL(constraint.on!))}` :
+          `constraint ${kind}(${args.map(sdlExpressionToEdgeQL).join(", ")})`;
+        const message = constraint.errmessage === undefined ?
+          scalarMessage(kind, scalar, shown) :
+          constraint.errmessage.replaceAll("{__subject__}", () => scalar).replaceAll(`{${param}}`, () => shown);
+
+        return {
+          check: {
+            declaration,
+            detail: `violated constraint 'std::${kind}' on scalar type '${key}'`,
+            message,
+            name: fitIdentifier(`ck_${column.table}_${nameHash(`scalar ${key} ${column.column}: ${declaration}`)}`),
+            ownerTable: owner.table,
+            subject: `${target} (scalar type '${key}')`,
+            table: column.table,
+            typeName: owner.typeName
+          },
+          compile: (compiler: EdgeQLCompiler) =>
+            column.array ?
+              this.arrayScalarCheck(compiler, kind, args, module, column.column, pgType) :
+              compiler.subjectCheckSql(this.scalarConstraintEdgeQL(constraint, base), module, column.column),
+          hint: "A scalar type's constraints become a PostgreSQL CHECK on each column holding a value of that type.",
+          where: `Scalar type '${key}' (on ${target})`
+        };
+      })
+    );
+  }
+
+  /**
+   * A scalar constraint as an EdgeQL boolean over the subject `$__subject__`
+   * (cast to the scalar's `base` type), as Gel defines each: `min_value(m)` is
+   * `__subject__ >= m`, `regexp(p)` is `re_test(p, __subject__)`, … .
+   */
+  private scalarConstraintEdgeQL(constraint: AST.Constraint, base: string): string {
+    const subject = `<${base}>$${SUBJECT_PARAMETER}`;
+    const args = (constraint.args ?? []).map(sdlExpressionToEdgeQL);
+
+    switch (constraint.name?.value) {
+      case "min_value":
+        return `${subject} >= ${args[0]}`;
+      case "max_value":
+        return `${subject} <= ${args[0]}`;
+      case "min_ex_value":
+        return `${subject} > ${args[0]}`;
+      case "max_ex_value":
+        return `${subject} < ${args[0]}`;
+      case "min_len_value":
+        return `len(${subject}) >= ${args[0]}`;
+      case "max_len_value":
+        return `len(${subject}) <= ${args[0]}`;
+      case "regexp":
+        return `re_test(${args[0]}, ${subject})`;
+      case "one_of":
+        return `${subject} in {${args.join(", ")}}`;
+      case "expression":
+        return sdlExpressionToEdgeQL(
+          AST.replaceSubject(constraint.on!, {
+            expr: { kind: "Parameter", name: SUBJECT_PARAMETER },
+            kind: "TypeCast",
+            type: AST.createTypeRef(AST.createQualifiedName(base.split("::")))
+          })
+        );
+      default:
+        throw new Error(`constraint '${constraint.name?.value}' is not supported on a scalar type`);
+    }
+  }
+
+  /**
+   * A scalar constraint over every element of an array column (a multi
+   * property, or an `array<…>` of the scalar), as property-level constraints
+   * on multi properties are (see `DDLGenerator.multiConstraintToCheckExpression`):
+   * bounds against `ALL(col)`, `one_of` as containment, the rest through the
+   * IMMUTABLE `disc_array_*` helpers. An empty array passes. The arguments
+   * compile like any literal (see `subjectCheckSql`).
+   */
+  private arrayScalarCheck(
+    compiler: EdgeQLCompiler,
+    kind: string,
+    args: AST.Expression[],
+    module: string,
+    column: string,
+    pgType: string
+  ): string {
+    const col = `"${column.replace(/"/g, "\"\"")}"`;
+    const values = args.map(arg => compiler.subjectCheckSql(sdlExpressionToEdgeQL(arg), module, column));
+
+    switch (kind) {
+      case "min_value":
+        return `${values[0]} <= ALL(${col})`;
+      case "max_value":
+        return `${values[0]} >= ALL(${col})`;
+      case "min_ex_value":
+        return `${values[0]} < ALL(${col})`;
+      case "max_ex_value":
+        return `${values[0]} > ALL(${col})`;
+      case "min_len_value":
+        return `disc_array_min_len(${col}) >= ${values[0]}`;
+      case "max_len_value":
+        return `disc_array_max_len(${col}) <= ${values[0]}`;
+      case "regexp":
+        return `disc_array_all_match(${col}, ${values[0]})`;
+      case "one_of":
+        return `${col} <@ ARRAY[${values.join(", ")}]::${pgType}[]`;
+      default:
+        throw new Error(`a scalar 'constraint ${kind}' can't be checked on each element of an array or multi property yet`);
+    }
+  }
+
+  /**
+   * `type` (a property's type as the differ records it) and the scalars it
+   * extends, nearest first: user-declared non-enum scalars only. Empty for a
+   * built-in type, an enum, or a sequence.
+   */
+  private scalarChain(
+    type: string,
+    scalars: Map<string, { decl: AST.ScalarTypeDeclaration; module: string; }>
+  ): { decl: AST.ScalarTypeDeclaration; key: string; module: string; }[] {
+    const chain: { decl: AST.ScalarTypeDeclaration; key: string; module: string; }[] = [];
+    let key: string | undefined = type.includes("::") ? type : `default::${type}`;
+
+    while (key !== undefined && scalars.has(key) && !chain.some(entry => entry.key === key)) {
+      const { decl, module }: { decl: AST.ScalarTypeDeclaration; module: string; } = scalars.get(key)!;
+
+      if (this.isEnumScalar(decl) || this.isSequenceScalar(key, scalars))
+        return [];
+
+      chain.push({ decl, key, module });
+      const base: string | undefined = decl.extending?.[0]?.name.parts.join("::");
+      key = base === undefined ? undefined : base.includes("::") ? base : [`${module}::${base}`, `default::${base}`].find(candidate => scalars.has(candidate));
+    }
+
+    const root = chain[chain.length - 1]?.decl.extending?.[0];
+    return root && !scalars.has(root.name.parts.join("::")) ? chain : [];
+  }
+
+  /**
+   * The stored columns of a concrete type that hold scalar values: its
+   * properties, own and inherited, and the link properties of its multi links
+   * (columns of the link's junction table). `array` for an array column: a
+   * multi property, or a property of `array<T>` (`type` is then `T`).
+   */
+  private scalarColumns(typeDef: AST.TypeDeclaration, types: Map<string, AST.TypeDeclaration>, table: string): ScalarColumn[] {
+    const column = (property: Types.PropertyDefinition, columnTable: string, junction?: string): ScalarColumn => {
+      const element = /^array<(.+)>$/.exec(property.type)?.[1];
+      return {
+        array: property.multi || element !== undefined,
+        column: propNameToColumnName(property.name),
+        junction,
+        property: property.name,
+        table: columnTable,
+        type: element ?? property.type
+      };
+    };
+
+    return [
+      ...this
+        .extractPropertiesWithInheritance(typeDef, types)
+        .filter(property => !property.computed)
+        .map(property => column(property, table)),
+      ...this
+        .extractLinksWithInheritance(typeDef, types)
+        .filter(link => link.multi)
+        .flatMap(link => (link.properties ?? []).map(property => column(property, `${table}_${link.name}`, link.name)))
+    ];
+  }
+
+  /*** The stored single properties of a type and of the types it extends (a type's own declaration of a name wins). ***/
+  private propertyDeclarations(
+    typeDef: AST.TypeDeclaration,
+    types: Map<string, AST.TypeDeclaration>,
+    found: Map<string, AST.PropertyDeclaration>
+  ): AST.PropertyDeclaration[] {
+    for (const member of typeDef.members) {
+      if (member.kind === "PropertyDeclaration" && !member.computed && !member.multi && !found.has(member.name.value))
+        found.set(member.name.value, member);
+    }
+
+    for (const ext of typeDef.extending ?? []) {
+      const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
+
+      if (parent && parent !== typeDef)
+        this.propertyDeclarations(parent, types, found);
+    }
+
+    return [...found.values()];
+  }
+
+  /*** The `constraint expression on (…)` members of a type and of the types it extends, at any depth. ***/
+  private expressionConstraints(
+    typeDef: AST.TypeDeclaration,
+    types: Map<string, AST.TypeDeclaration>,
+    seen: Set<AST.TypeDeclaration>
+  ): AST.Constraint[] {
+    if (seen.has(typeDef))
+      return [];
+
+    seen.add(typeDef);
+
+    const own = typeDef.members.filter((member): member is AST.Constraint =>
+      member.kind === "Constraint" && member.name?.value === "expression" && member.on !== undefined
+    );
+    const inherited = (typeDef.extending ?? []).flatMap(ext => {
+      const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
+      return parent ? this.expressionConstraints(parent, types, seen) : [];
+    });
+
+    return [...own, ...inherited];
+  }
+
+  /**
+   * AddCheck/DropCheck for the constraint CHECKs that differ
+   * between two schemas (see `declaredChecks`). A changed CHECK (another
+   * errmessage, or the same expression compiling differently) is dropped
+   * and added again. A dropped type's CHECKs go with its table.
+   */
+  private diffChecks(
+    oldSchema: Module[],
+    newSchema: Module[],
+    oldTypes: Map<string, AST.TypeDeclaration>,
+    newTypes: Map<string, AST.TypeDeclaration>
+  ): Types.MigrationOperation[] {
+    const key = (check: Types.CheckDefinition): string => `${check.table}.${check.name}`;
+    const same = (a: Types.CheckDefinition, b: Types.CheckDefinition): boolean =>
+      a.expression === b.expression && a.message === b.message && a.detail === b.detail;
+    const oldChecks = new Map(this.declaredChecks(oldSchema, false).map(check => [key(check), check]));
+    const newChecks = new Map(this.declaredChecks(newSchema, true).map(check => [key(check), check]));
+    const survivingTables = new Set([...oldTypes.keys()].filter(name => newTypes.has(name)).map(typeNameToTableName));
+    const operations: Types.MigrationOperation[] = [];
+
+    for (const [name, check] of oldChecks) {
+      const kept = newChecks.get(name);
+
+      if ((!kept || !same(check, kept)) && survivingTables.has(check.ownerTable))
+        operations.push({ check, kind: "DropCheck" } as Types.DropCheckOperation);
+    }
+
+    for (const [name, check] of newChecks) {
+      const old = oldChecks.get(name);
+
+      if (!old || !same(old, check))
+        operations.push({ check, kind: "AddCheck" } as Types.AddCheckOperation);
+    }
+
+    return operations;
   }
 
   /**

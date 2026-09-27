@@ -74,6 +74,23 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql VOLATILE;`,
 
+  // disc_check_constraint(holds, message, detail, constraint_name,
+  // table_name) — the CHECK of a type-level `constraint expression on (…)`
+  // (migration/ddl.ts `addCheck`): TRUE unless `holds` is FALSE — an empty
+  // expression (NULL) passes, as in Gel — else Gel's ConstraintViolationError
+  // ("invalid <Type>", or the constraint's errmessage), raised as SQLSTATE
+  // 23514 (check_violation) naming the constraint and table. STABLE, not
+  // IMMUTABLE, so a constant expression isn't folded (and raised) when the
+  // CHECK is created.
+  `CREATE OR REPLACE FUNCTION disc_check_constraint(holds boolean, message text, detail text, constraint_name text, table_name text) RETURNS boolean AS $$
+     BEGIN
+       IF holds IS FALSE THEN
+         RAISE EXCEPTION USING ERRCODE = 'check_violation', MESSAGE = message, DETAIL = detail, CONSTRAINT = constraint_name, TABLE = table_name;
+       END IF;
+       RETURN TRUE;
+     END;
+   $$ LANGUAGE plpgsql STABLE;`,
+
   // disc_assert_single(value, n) — `assert_single(<set>)` (compiler
   // `assertSingle`): `value`, one of the set's `n` rows, unless there are
   // more than one: Gel's CardinalityViolationError, SQLSTATE 21000

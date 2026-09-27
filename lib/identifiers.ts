@@ -103,6 +103,19 @@ export function globalSettingName(module: string, name: string): string {
 export const PG_MAX_IDENTIFIER_BYTES = 63;
 
 /**
+ * 8 hex digits of a hash (FNV-1a, 32-bit) of `text`, for generated names.
+ * Part of stored index and constraint names — never change it.
+ */
+export function nameHash(text: string): string {
+  let hash = 0x811c9dc5;
+
+  for (const byte of new TextEncoder().encode(text))
+    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
  * Make a generated identifier fit PostgreSQL's 63-byte limit.
  *
  * A name that fits is returned unchanged, so existing indexes are never
@@ -117,12 +130,7 @@ export function fitIdentifier(name: string): string {
   if (encoder.encode(name).length <= PG_MAX_IDENTIFIER_BYTES)
     return name;
 
-  let hash = 0x811c9dc5;
-
-  for (const byte of encoder.encode(name))
-    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-
-  const suffix = `_${hash.toString(16).padStart(8, "0")}`;
+  const suffix = `_${nameHash(name)}`;
   let head = name;
 
   while (encoder.encode(head).length > PG_MAX_IDENTIFIER_BYTES - suffix.length)

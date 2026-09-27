@@ -33,6 +33,7 @@ import {
   decodeClientMessage,
   encodeServerMessage,
   type ClientMessage,
+  type ErrorAttribute,
   type ServerMessage
 } from "./messages.ts";
 import {
@@ -1713,6 +1714,19 @@ function sqlStateToGelCode(sqlState: string): number | undefined {
   return undefined;
 }
 
+/*** Gel's `details` ErrorResponse attribute (FIELD_DETAILS). ***/
+const ERROR_ATTRIBUTE_DETAILS = 0x0002;
+
+/**
+ * The ErrorResponse attributes of `error`: the details line PostgreSQL sent
+ * with it, if any — as for a violated `constraint expression on (…)`, Gel's
+ * "violated constraint 'std::expression' on object type '…'".
+ */
+function errorAttributes(error: unknown): ErrorAttribute[] {
+  const detail = postgresErrorFields(error)?.detail;
+  return detail === undefined ? [] : [{ code: ERROR_ATTRIBUTE_DETAILS, value: new TextEncoder().encode(detail) }];
+}
+
 /**
  * Map a Disc error to the appropriate Gel protocol error code.
  *
@@ -2080,7 +2094,8 @@ export class BinaryConnection {
               GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
               err instanceof Error ? err.message : String(err),
-              errorCode
+              errorCode,
+              errorAttributes(err)
             );
             // After error, the client's next Sync gets the ReadyForCommand
             if (this.state === "ready") {
@@ -2424,7 +2439,8 @@ export class BinaryConnection {
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
-        errorCode
+        errorCode,
+        errorAttributes(err)
       );
       this.discardUntilSync = true;
     }
@@ -2574,7 +2590,8 @@ export class BinaryConnection {
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
-        errorCode
+        errorCode,
+        errorAttributes(err)
       );
       // Clients pair Execute with Sync: its ReadyForCommand follows the
       // error (a second one here would be left in the client's buffer).
@@ -2758,14 +2775,15 @@ export class BinaryConnection {
    */
   private async sendErrorWithCode(
     message: string,
-    errorCode: number
+    errorCode: number,
+    attributes: ErrorAttribute[] = []
   ): Promise<void> {
     await this.sendMessage({
       kind: "ErrorResponse",
       severity: ErrorSeverity.ERROR,
       errorCode,
       message,
-      attributes: []
+      attributes
     });
   }
 

@@ -381,3 +381,40 @@ export function createLiteral(
 ): Literal {
   return { kind: "Literal", type, value };
 }
+
+/**
+ * `expr` with every `__subject__` (a constraint's subject, alone or at the
+ * head of a path) replaced by `subject`: `.name` for a property's constraint
+ * written on its type, a typed value for a scalar's. Returns a new tree.
+ */
+export function replaceSubject(expr: Expression, subject: Expression): Expression {
+  const walk = (e: Expression): Expression => {
+    switch (e.kind) {
+      case "PathExpression":
+        if (e.path[0] !== "__subject__" || e.source !== undefined) {
+          return e;
+        }
+        if (e.path.length === 1) {
+          return subject;
+        }
+        return subject.kind === "PathExpression" ? { ...e, path: [...subject.path, ...e.path.slice(1)] } : e;
+      case "BinaryOp":
+        return { ...e, left: walk(e.left), right: walk(e.right) };
+      case "UnaryOp":
+        return { ...e, operand: walk(e.operand) };
+      case "FunctionCall":
+        return { ...e, args: e.args.map(walk) };
+      case "TypeCast":
+        return { ...e, expr: walk(e.expr) };
+      case "ConditionalExpression":
+        return { ...e, alternate: walk(e.alternate), consequent: walk(e.consequent), test: walk(e.test) };
+      case "TupleExpression":
+        return { ...e, elements: e.elements.map(walk) };
+      case "NamedTupleExpression":
+        return { ...e, elements: e.elements.map(element => ({ ...element, value: walk(element.value) })) };
+      default:
+        return e;
+    }
+  };
+  return walk(expr);
+}
