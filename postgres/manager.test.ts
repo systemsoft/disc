@@ -3,7 +3,7 @@
 
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { join } from "@std/path";
-import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
+import { canRunPgTests, cleanUpOnExit, findPgBinDir } from "../tests/pg-test-harness.ts";
 import { parsePostgresVersion, readInstanceVersionFile } from "./instance-version.ts";
 import { defaultInstancesDir, PostgresManager } from "./manager.ts";
 
@@ -12,6 +12,9 @@ const TEST_BASE_DIR = Deno.makeTempDirSync({
   dir: "/tmp",
   prefix: "disc-mgr-"
 });
+// Each test stops the servers it starts; this stops any a killed or crashed
+// run leaves behind, and removes the directory.
+await cleanUpOnExit(TEST_BASE_DIR);
 
 // Skip guard: tests that require real PostgreSQL binaries
 const RUN_PG = canRunPgTests();
@@ -61,21 +64,22 @@ Deno.test({
     const manager = new PostgresManager(TEST_BASE_DIR);
     const instanceName = "test-create";
 
-    const instance = await manager.createInstance(instanceName, {
-      pgBinDir: PG_BIN_DIR!,
-      port: 0, // Unix socket only
-      postgresVersion: "16.4"
-    });
+    try {
+      const instance = await manager.createInstance(instanceName, {
+        pgBinDir: PG_BIN_DIR!,
+        port: 0, // Unix socket only
+        postgresVersion: "16.4"
+      });
 
-    assertExists(instance);
-    assertEquals(instance.getPort(), 0);
+      assertExists(instance);
+      assertEquals(instance.getPort(), 0);
 
-    // Verify instance is tracked
-    const tracked = manager.getInstance(instanceName);
-    assertEquals(tracked, instance);
-
-    // Cleanup
-    await manager.destroyInstance(instanceName, true);
+      // Verify instance is tracked
+      const tracked = manager.getInstance(instanceName);
+      assertEquals(tracked, instance);
+    } finally {
+      await manager.destroyInstance(instanceName, true).catch(() => {});
+    }
   }
 });
 
@@ -86,17 +90,18 @@ Deno.test({
     const manager = new PostgresManager(TEST_BASE_DIR);
     const instanceName = "test-duplicate";
 
-    await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
+    try {
+      await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
-    // Attempt to create duplicate should throw
-    await assertRejects(
-      async () => await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
-      Error,
-      "already exists"
-    );
-
-    // Cleanup
-    await manager.destroyInstance(instanceName, true);
+      // Attempt to create duplicate should throw
+      await assertRejects(
+        async () => await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
+        Error,
+        "already exists"
+      );
+    } finally {
+      await manager.destroyInstance(instanceName, true).catch(() => {});
+    }
   }
 });
 
@@ -107,24 +112,25 @@ Deno.test({
     const manager = new PostgresManager(TEST_BASE_DIR);
     const instanceName = "test-lifecycle";
 
-    await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
+    try {
+      await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
-    // Start instance
-    await manager.startInstance(instanceName, false); // No monitor for testing
+      // Start instance
+      await manager.startInstance(instanceName, false); // No monitor for testing
 
-    const status = await manager.getInstanceStatus(instanceName);
-    assertExists(status);
-    assertEquals(status.running, true);
+      const status = await manager.getInstanceStatus(instanceName);
+      assertExists(status);
+      assertEquals(status.running, true);
 
-    // Stop instance
-    await manager.stopInstance(instanceName);
+      // Stop instance
+      await manager.stopInstance(instanceName);
 
-    const stoppedStatus = await manager.getInstanceStatus(instanceName);
-    assertExists(stoppedStatus);
-    assertEquals(stoppedStatus.running, false);
-
-    // Cleanup
-    await manager.destroyInstance(instanceName, true);
+      const stoppedStatus = await manager.getInstanceStatus(instanceName);
+      assertExists(stoppedStatus);
+      assertEquals(stoppedStatus.running, false);
+    } finally {
+      await manager.destroyInstance(instanceName, true).catch(() => {});
+    }
   }
 });
 
@@ -134,21 +140,21 @@ Deno.test({
   fn: async () => {
     const manager = new PostgresManager(TEST_BASE_DIR);
 
-    // Create multiple instances
-    await manager.createInstance("instance1", { pgBinDir: PG_BIN_DIR! });
-    await manager.createInstance("instance2", { pgBinDir: PG_BIN_DIR! });
-    await manager.createInstance("instance3", { pgBinDir: PG_BIN_DIR! });
+    try {
+      // Create multiple instances
+      await manager.createInstance("instance1", { pgBinDir: PG_BIN_DIR! });
+      await manager.createInstance("instance2", { pgBinDir: PG_BIN_DIR! });
+      await manager.createInstance("instance3", { pgBinDir: PG_BIN_DIR! });
 
-    const instances = manager.listInstances();
-    assertEquals(instances.length, 3);
-    assertEquals(instances.includes("instance1"), true);
-    assertEquals(instances.includes("instance2"), true);
-    assertEquals(instances.includes("instance3"), true);
-
-    // Cleanup
-    await manager.destroyInstance("instance1", true);
-    await manager.destroyInstance("instance2", true);
-    await manager.destroyInstance("instance3", true);
+      const instances = manager.listInstances();
+      assertEquals(instances.length, 3);
+      assertEquals(instances.includes("instance1"), true);
+      assertEquals(instances.includes("instance2"), true);
+      assertEquals(instances.includes("instance3"), true);
+    } finally {
+      for (const name of ["instance1", "instance2", "instance3"])
+        await manager.destroyInstance(name, true).catch(() => {});
+    }
   }
 });
 
@@ -192,24 +198,24 @@ Deno.test({
     const manager1 = new PostgresManager(TEST_BASE_DIR);
     const instanceName = "test-recover";
 
-    // Create instance with first manager
-    await manager1.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
-    await manager1.startInstance(instanceName, false);
+    try {
+      // Create instance with first manager
+      await manager1.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
+      await manager1.startInstance(instanceName, false);
 
-    // Create new manager and recover
-    const manager2 = new PostgresManager(TEST_BASE_DIR);
-    await manager2.discoverInstances();
+      // Create new manager and recover
+      const manager2 = new PostgresManager(TEST_BASE_DIR);
+      await manager2.discoverInstances();
 
-    const recovered = manager2.getInstance(instanceName);
-    assertExists(recovered);
+      const recovered = manager2.getInstance(instanceName);
+      assertExists(recovered);
 
-    // Should be able to manage recovered instance
-    const status = await manager2.getInstanceStatus(instanceName);
-    assertExists(status);
-
-    // Cleanup
-    await manager1.stopInstance(instanceName);
-    await manager1.destroyInstance(instanceName, true);
+      // Should be able to manage recovered instance
+      const status = await manager2.getInstanceStatus(instanceName);
+      assertExists(status);
+    } finally {
+      await manager1.destroyInstance(instanceName, true).catch(() => {});
+    }
   }
 });
 
@@ -220,23 +226,24 @@ Deno.test({
     const manager = new PostgresManager(TEST_BASE_DIR);
     const instanceName = "test-monitor";
 
-    await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
-    await manager.startInstance(instanceName, true); // With monitor
+    try {
+      await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
+      await manager.startInstance(instanceName, true); // With monitor
 
-    const status = await manager.getInstanceStatus(instanceName);
-    assertExists(status);
-    assertEquals(status.running, true);
+      const status = await manager.getInstanceStatus(instanceName);
+      assertExists(status);
+      assertEquals(status.running, true);
 
-    // Health status should be available when monitor is running
-    // Note: Initial health check might not be complete immediately
-    await new Promise(resolve => setTimeout(resolve, 1000));
+      // Health status should be available when monitor is running
+      // Note: Initial health check might not be complete immediately
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const statusWithHealth = await manager.getInstanceStatus(instanceName);
-    assertExists(statusWithHealth);
-    // Health might be undefined if check hasn't completed yet
-
-    await manager.stopInstance(instanceName);
-    await manager.destroyInstance(instanceName, true);
+      const statusWithHealth = await manager.getInstanceStatus(instanceName);
+      assertExists(statusWithHealth);
+      // Health might be undefined if check hasn't completed yet
+    } finally {
+      await manager.destroyInstance(instanceName, true).catch(() => {});
+    }
   }
 });
 
@@ -249,26 +256,30 @@ Deno.test({
     const restoredName = "test-backup-restored";
     const backupPath = join(TEST_BASE_DIR, "backup.tar.gz");
 
-    // Create and start original instance
-    await manager.createInstance(originalName, { pgBinDir: PG_BIN_DIR! });
-    await manager.startInstance(originalName, false);
-
-    // Create a backup
-    await manager.backupInstance(originalName, backupPath);
-
-    // Verify backup file exists
-    const backupStat = await Deno.stat(backupPath);
-    assertEquals(backupStat.isFile, true);
-
-    // A restored data dir carries no version.json; recovery runs it on
-    // cached binaries of its major, so stage the local PostgreSQL as one.
     const binaryDir = join(TEST_BASE_DIR, "backup-pg-cache");
     const previousBinaryDir = Deno.env.get("DISC_PG_BINARY_DIR");
-    await Deno.mkdir(join(binaryDir, manager.getInstance(originalName)!.getVersion()), { recursive: true });
-    await Deno.symlink(PG_BIN_DIR!, join(binaryDir, manager.getInstance(originalName)!.getVersion(), "bin"));
-    Deno.env.set("DISC_PG_BINARY_DIR", binaryDir);
 
+    // Any step can fail while the original runs (the backup restarts it), so
+    // all cleanup is in `finally`: it used to follow the assertions, and a
+    // failure left the original's server running.
     try {
+      // Create and start original instance
+      await manager.createInstance(originalName, { pgBinDir: PG_BIN_DIR! });
+      await manager.startInstance(originalName, false);
+
+      // Create a backup
+      await manager.backupInstance(originalName, backupPath);
+
+      // Verify backup file exists
+      const backupStat = await Deno.stat(backupPath);
+      assertEquals(backupStat.isFile, true);
+
+      // A restored data dir carries no version.json; recovery runs it on
+      // cached binaries of its major, so stage the local PostgreSQL as one.
+      await Deno.mkdir(join(binaryDir, manager.getInstance(originalName)!.getVersion()), { recursive: true });
+      await Deno.symlink(PG_BIN_DIR!, join(binaryDir, manager.getInstance(originalName)!.getVersion(), "bin"));
+      Deno.env.set("DISC_PG_BINARY_DIR", binaryDir);
+
       // Restore to new instance
       await manager.restoreInstance(restoredName, backupPath);
 
@@ -281,14 +292,12 @@ Deno.test({
         Deno.env.delete("DISC_PG_BINARY_DIR");
       else
         Deno.env.set("DISC_PG_BINARY_DIR", previousBinaryDir);
-    }
 
-    // Cleanup
-    await manager.stopInstance(originalName);
-    await manager.destroyInstance(originalName, true);
-    await manager.destroyInstance(restoredName, true);
-    await Deno.remove(backupPath);
-    await Deno.remove(binaryDir, { recursive: true });
+      await manager.destroyInstance(originalName, true).catch(() => {});
+      await manager.destroyInstance(restoredName, true).catch(() => {});
+      await Deno.remove(backupPath).catch(() => {});
+      await Deno.remove(binaryDir, { recursive: true }).catch(() => {});
+    }
   }
 });
 

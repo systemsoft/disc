@@ -4,12 +4,15 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
+import { canRunPgTests, cleanUpOnExit, findPgBinDir } from "../tests/pg-test-harness.ts";
 import { PostgresInstance } from "./instance.ts";
 
 // Use /tmp directly to keep Unix socket paths under the 108-char limit.
 // Default Deno temp dirs on macOS (/var/folders/...) are too long.
 const TEST_BASE_DIR = Deno.makeTempDirSync({ dir: "/tmp", prefix: "disc-pg-" });
+// A test that fails between start and stop, or a killed run, leaves its
+// server running; this stops it once the process exits, and removes the directory.
+await cleanUpOnExit(TEST_BASE_DIR);
 
 // Skip guard: tests that require real PostgreSQL binaries
 const RUN_PG = canRunPgTests();

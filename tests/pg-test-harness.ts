@@ -65,6 +65,13 @@ let tempBaseDir: string | undefined;
 /** Whether we have already registered the unload handler. */
 let cleanupRegistered = false;
 
+/** Where auto-started instances live: `/tmp/disc-pg-*`. */
+const TEMP_ROOT = "/tmp";
+const TEMP_PREFIX = "disc-pg-";
+
+/** File in an auto-started instance's directory holding the PID of the test process that created it. */
+const OWNER_FILE = "owner.pid";
+
 // ---------------------------------------------------------------------------
 // findPgBinDir
 // ---------------------------------------------------------------------------
@@ -189,7 +196,11 @@ export function canRunPgTests(): boolean {
  * same server.
  *
  * Cleanup is registered via `globalThis.addEventListener("unload", ...)` to
- * stop PG and remove the temp directory when the process exits.
+ * stop PG and remove the temp directory when the process exits. `unload`
+ * doesn't run when the process is killed (a Ctrl-C, a timeout), and the
+ * server outlives it, so `cleanUpOnExit` also stops it then; and instances
+ * whose test process is gone are swept before a new one starts (see
+ * `sweepStaleInstances`).
  */
 export async function getTestDsn(): Promise<string> {
   // Fast path: already resolved
@@ -215,6 +226,8 @@ export async function getTestDsn(): Promise<string> {
     );
   }
 
+  sweepStaleInstances(pgBinDir);
+
   // Find a free TCP port
   const port = await findFreePort();
 
@@ -223,7 +236,12 @@ export async function getTestDsn(): Promise<string> {
   // Create temp directories
   // Use /tmp directly to keep Unix socket paths under the 108-char limit.
   // Default Deno temp dirs on macOS (/var/folders/...) are too long.
-  tempBaseDir = await Deno.makeTempDir({ dir: "/tmp", prefix: "disc-pg-" });
+  tempBaseDir = await Deno.makeTempDir({ dir: TEMP_ROOT, prefix: TEMP_PREFIX });
+  await Deno.writeTextFile(join(tempBaseDir, OWNER_FILE), `${Deno.pid}\n`);
+  await cleanUpOnExit(tempBaseDir);
+  // Registered before PG starts, so a failure while it starts up (or while
+  // creating the test database) still stops it on exit.
+  registerCleanup();
   const dataDir = join(tempBaseDir, "data");
   const socketDir = join(tempBaseDir, "socket");
   const logsDir = join(tempBaseDir, "logs");
@@ -268,9 +286,6 @@ export async function getTestDsn(): Promise<string> {
   debugLog("disc_test database created");
 
   cachedDsn = `postgresql://disc@localhost:${port}/disc_test`;
-
-  // Register cleanup on process exit (only once)
-  registerCleanup();
 
   return cachedDsn;
 }
@@ -622,6 +637,121 @@ export function parseDsn(
 }
 
 /**
+ * Stop, with `pg_ctl stop -m immediate`, the PostgreSQL server running on
+ * `dataDir`. Returns whether none runs there any more.
+ */
+function stopServerSync(pgBinDir: string, dataDir: string): boolean {
+  const pgCtl = join(pgBinDir, "pg_ctl");
+  debugLog(`Stopping PG: ${pgCtl} stop -D ${dataDir}`);
+
+  try {
+    const out = new Deno.Command(pgCtl, {
+      args: ["stop", "-D", dataDir, "-m", "immediate", "-w", "-t", "10"],
+      stdout: "piped",
+      stderr: "piped"
+    })
+      .outputSync();
+    debugLog(`pg_ctl stop exited with code ${out.code}`);
+  } catch (stopErr) {
+    debugLog(`pg_ctl stop failed: ${stopErr}`);
+  }
+
+  try {
+    Deno.statSync(join(dataDir, "postmaster.pid"));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/*** Whether a process with `pid` exists (one of another user's counts). ***/
+function processExists(pid: number): boolean {
+  try {
+    Deno.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !(err instanceof Deno.errors.NotFound);
+  }
+}
+
+/**
+ * Stop and remove the auto-started instances (`/tmp/disc-pg-*`) whose test
+ * process is gone — left running when it was killed before its cleanup ran
+ * and before `cleanUpOnExit`'s watcher could stop them. Only a directory
+ * whose owner file names a process that no longer exists is touched: one
+ * without an owner file, or whose owner is alive (another test process's
+ * instance, in use), is left alone. A directory whose server does not stop
+ * is kept.
+ */
+function sweepStaleInstances(pgBinDir: string): void {
+  let entries: Deno.DirEntry[];
+  try {
+    entries = [...Deno.readDirSync(TEMP_ROOT)];
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory || !entry.name.startsWith(TEMP_PREFIX))
+      continue;
+
+    const baseDir = join(TEMP_ROOT, entry.name);
+    let owner: number;
+    try {
+      owner = parseInt(Deno.readTextFileSync(join(baseDir, OWNER_FILE)), 10);
+    } catch {
+      continue;
+    }
+
+    if (!Number.isInteger(owner) || owner <= 0 || processExists(owner))
+      continue;
+
+    debugLog(`Removing stale instance ${baseDir}: its test process ${owner} is gone`);
+
+    if (stopServerSync(pgBinDir, join(baseDir, "data"))) {
+      try {
+        Deno.removeSync(baseDir, { recursive: true });
+      } catch (err) {
+        debugLog(`Failed to remove ${baseDir}: ${err}`);
+      }
+    }
+  }
+}
+
+/**
+ * Once this process exits — however it exits, including SIGINT, SIGTERM or
+ * SIGKILL, which skip `unload` handlers — stop every PostgreSQL server whose
+ * data dir is `baseDir/data` or `baseDir/<name>/data*`, then remove `baseDir`
+ * unless one of them could not be stopped. `pg_ctl` starts the postmaster in
+ * a session of its own, so it outlives the test process; this starts a
+ * detached shell that waits for the process to go away. The shell ignores
+ * SIGINT, SIGTERM and SIGHUP, so a Ctrl-C to the test run does not take it
+ * down with the tests. Nothing happens on Windows.
+ */
+export async function cleanUpOnExit(baseDir: string): Promise<void> {
+  if (Deno.build.os === "windows")
+    return;
+
+  const pgBinDir = findPgBinDir();
+  const script = [
+    "trap '' INT TERM HUP",
+    `while kill -0 ${Deno.pid} 2>/dev/null; do sleep 1; done`,
+    `for data in "$1"/data "$1"/*/data*; do [ -f "$data/postmaster.pid" ] && "$0" stop -D "$data" -m immediate -w -t 10; done`,
+    `for data in "$1"/data "$1"/*/data*; do [ -f "$data/postmaster.pid" ] && exit 1; done`,
+    `rm -rf "$1"`
+  ]
+    .join("\n");
+
+  await new Deno.Command("sh", {
+    args: ["-c", `(${script}) </dev/null >/dev/null 2>&1 &`, pgBinDir ? join(pgBinDir, "pg_ctl") : "pg_ctl", baseDir],
+    stdin: "null",
+    stdout: "null",
+    stderr: "null"
+  })
+    .output();
+}
+
+/**
  * Register a process-exit handler that stops the temporary PG and removes
  * the temp directory. Only registered once.
  *
@@ -635,58 +765,23 @@ function registerCleanup(): void {
   cleanupRegistered = true;
 
   globalThis.addEventListener("unload", () => {
-    // Best-effort cleanup — we cannot await here, so use sync where possible
-    // and fire-and-forget the async stop.
-    if (tempInstance) {
-      try {
-        // pg_ctl stop is the cleanest path; run it synchronously via
-        // Deno.Command so the process waits for PG to shut down.
-        const pgBinDir = findPgBinDir();
+    // Best-effort cleanup — we cannot await here, so stop PG synchronously.
+    // The directory stays when the server does not stop (`cleanUpOnExit`'s
+    // watcher and the next run's sweep try again).
+    const pgBinDir = findPgBinDir();
+    const stopped = !tempBaseDir || !pgBinDir || stopServerSync(pgBinDir, join(tempBaseDir, "data"));
 
-        if (pgBinDir && tempBaseDir) {
-          const dataDir = join(tempBaseDir, "data");
-          const pgCtl = join(pgBinDir, "pg_ctl");
-          debugLog(`Stopping PG: ${pgCtl} stop -D ${dataDir}`);
-          const cmd = new Deno.Command(pgCtl, {
-            args: [
-              "stop",
-              "-D",
-              dataDir,
-              "-m",
-              "immediate",
-              "-w",
-              "-t",
-              "10"
-            ],
-            stdout: "piped",
-            stderr: "piped"
-          });
+    tempInstance = undefined;
 
-          try {
-            const out = cmd.outputSync();
-            debugLog(
-              `pg_ctl stop exited with code ${out.code}`
-            );
-          } catch (stopErr) {
-            debugLog(`pg_ctl stop failed: ${stopErr}`);
-          }
-        }
-      } catch (err) {
-        debugLog(`Cleanup error during PG shutdown: ${err}`);
-      }
-
-      tempInstance = undefined;
-    }
-
-    if (tempBaseDir) {
+    if (tempBaseDir && stopped) {
       try {
         Deno.removeSync(tempBaseDir, { recursive: true });
         debugLog(`Removed temp dir: ${tempBaseDir}`);
       } catch (err) {
         debugLog(`Failed to remove temp dir ${tempBaseDir}: ${err}`);
       }
-
-      tempBaseDir = undefined;
     }
+
+    tempBaseDir = undefined;
   });
 }

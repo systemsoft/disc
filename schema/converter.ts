@@ -298,13 +298,25 @@ export function qualifySharedEnumReferences(modules: Module[]): Module[] {
 }
 
 /**
- * Qualify every bare property type that names an enum of its own
- * (non-default) module, shared name or not. The migration differ diffs
- * both schemas this way, so an enum reference does not change when another
- * enum starts or stops sharing its name.
+ * Qualify every bare property type that names a scalar — enum or not — of
+ * its own (non-default) module: `amount: Money` in module `ledger` becomes
+ * `ledger::Money`, which a bare-name lookup would resolve to
+ * `default::Money`. The migration differ diffs both schemas this way, so
+ * every column type resolves in the property's own module first, and an
+ * enum reference does not change when another enum starts or stops sharing
+ * its name.
  */
-export function qualifyEnumReferences(modules: Module[]): Module[] {
-  return qualifyEnumReferencesTo(modules, () => true);
+export function qualifyScalarReferences(modules: Module[]): Module[] {
+  const keys = new Set<string>();
+
+  for (const module of modules) {
+    for (const item of module.items) {
+      if (module.name !== "default" && item.kind === "ScalarTypeDeclaration")
+        keys.add(`${module.name}::${item.name.value}`);
+    }
+  }
+
+  return qualifyReferencesTo(modules, keys);
 }
 
 function qualifyEnumReferencesTo(modules: Module[], include: (scalar: { shared: boolean; }) => boolean): Module[] {
@@ -315,7 +327,12 @@ function qualifyEnumReferencesTo(modules: Module[], include: (scalar: { shared: 
       enumKeys.add(key);
   }
 
-  if (enumKeys.size === 0)
+  return qualifyReferencesTo(modules, enumKeys);
+}
+
+/*** Qualify every bare property type naming one of `keys` (`module::Name`) in that module. ***/
+function qualifyReferencesTo(modules: Module[], keys: Set<string>): Module[] {
+  if (keys.size === 0)
     return modules;
 
   return modules.map(module => {
@@ -323,7 +340,7 @@ function qualifyEnumReferencesTo(modules: Module[], include: (scalar: { shared: 
       return module;
 
     const qualify = (ref: AST.TypeRef): AST.TypeRef => {
-      const bare = ref.name.parts.length === 1 && enumKeys.has(`${module.name}::${ref.name.parts[0]}`);
+      const bare = ref.name.parts.length === 1 && keys.has(`${module.name}::${ref.name.parts[0]}`);
       const params = ref.params?.map(qualify);
       return {
         ...ref,

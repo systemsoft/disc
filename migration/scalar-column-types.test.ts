@@ -22,7 +22,7 @@ import { SDLParser } from "../schema/parser.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { MigrationEngine } from "./engine.ts";
-import { reconcileTextColumns } from "./reconcile.ts";
+import { reconcileColumnTypes, reconcileTextColumns } from "./reconcile.ts";
 import * as Types from "./types.ts";
 
 function parseModules(src: string) {
@@ -329,4 +329,61 @@ Deno.test("ConvertTextColumn - rollback returns the column to text", () => {
   };
 
   assertEquals(new DDLGenerator().generateRollbackDDL([op]), ["ALTER TABLE item ALTER COLUMN big TYPE TEXT USING big::text;"]);
+});
+
+Deno.test("a bare scalar name resolves in the property's module before default, through a chain of that module's scalars", () => {
+  const e = engine();
+  const plan = e.planMigration(
+    null,
+    parseModules(`module default {
+  scalar type Money extending decimal;
+  scalar type Cents extending str;
+};
+module ledger {
+  scalar type Money extending int64;
+  scalar type Cents extending Money;
+  type Entry { amount: Cents; amounts: array<Cents>; };
+};`)
+  );
+  assert(plan.ok, "expected plan to succeed");
+  const statements = e.generateDDL(plan.value);
+  assert(statements.ok, "expected DDL generation to succeed");
+  const create = statements.value.map(s => s.replace(/\s+/g, " ")).find(s => s.startsWith("CREATE TABLE entry "));
+  assert(create, statements.value.join("\n"));
+
+  assert(create.includes("amount BIGINT"), create);
+  assert(create.includes("amounts BIGINT[]"), create);
+  assert(!create.includes("_finite"), create);
+});
+
+Deno.test("reconcileColumnTypes - converts a column of another type than its declared one, leaving TEXT and unknown types alone", async () => {
+  const declared: Types.DeclaredColumn[] = [
+    { columnName: "amount", pgType: "BIGINT", propertyType: "ledger::Money", tableName: "entry" },
+    { columnName: "parts", multi: true, pgType: "BIGINT[]", propertyType: "ledger::Money", tableName: "entry" },
+    { columnName: "note", pgType: "BIGINT", propertyType: "ledger::Money", tableName: "entry" },
+    { columnName: "total", pgType: "DECIMAL", propertyType: "Money", tableName: "entry" },
+    { columnName: "span", pgType: "INT4RANGE", propertyType: "Span", tableName: "entry" }
+  ];
+  const existing = [
+    { dataType: "numeric", name: "amount", udtName: "numeric" },
+    { dataType: "ARRAY", name: "parts", udtName: "_numeric" },
+    { dataType: "text", name: "note", udtName: "text" },
+    { dataType: "numeric", name: "total", udtName: "numeric" },
+    { dataType: "int8range", name: "span", udtName: "int8range" }
+  ];
+
+  const operations = await reconcileColumnTypes(declared, [], () => Promise.resolve(existing));
+
+  assertEquals(operations, [
+    { columnName: "amount", fromPgType: "NUMERIC", kind: "ConvertColumnType", pgType: "BIGINT", propertyType: "ledger::Money", tableName: "entry" },
+    {
+      columnName: "parts",
+      fromPgType: "NUMERIC[]",
+      kind: "ConvertColumnType",
+      multi: true,
+      pgType: "BIGINT[]",
+      propertyType: "ledger::Money",
+      tableName: "entry"
+    }
+  ]);
 });

@@ -34,6 +34,7 @@ import type {
   AlterLinkOperation,
   AlterPropertyOperation,
   AlterTypeOperation,
+  ConvertColumnTypeOperation,
   ConvertTextColumnOperation,
   CreateIndexOperation,
   CreateTypeOperation,
@@ -724,6 +725,93 @@ export async function reconcileTextColumns(
       column.pgType.endsWith("[]") && column.pgType.toUpperCase() !== "TEXT[]"
     ) {
       operations.push({ ...column, fromTextArray: true, kind: "ConvertTextColumn" });
+    }
+  }
+
+  return operations;
+}
+
+/*** The column type each `information_schema.columns.udt_name` stands for, as the DDL spells it. ***/
+const UDT_COLUMN_TYPES: Record<string, string> = {
+  bool: "BOOLEAN",
+  bytea: "BYTEA",
+  date: "DATE",
+  float4: "REAL",
+  float8: "DOUBLE PRECISION",
+  int2: "SMALLINT",
+  int4: "INTEGER",
+  int8: "BIGINT",
+  interval: "INTERVAL",
+  jsonb: "JSONB",
+  numeric: "NUMERIC",
+  text: "TEXT",
+  time: "TIME WITHOUT TIME ZONE",
+  timestamp: "TIMESTAMP WITHOUT TIME ZONE",
+  timestamptz: "TIMESTAMP WITH TIME ZONE",
+  uuid: "UUID"
+};
+
+/**
+ * The column type `udtName` names, as the DDL spells it (`int8` → `BIGINT`,
+ * `_numeric` → `NUMERIC[]`, an enum's `disc_enum_…` as is); undefined for
+ * any other.
+ */
+function udtColumnType(udtName: string): string | undefined {
+  const element = udtName.startsWith("_") ? udtName.slice(1) : udtName;
+  const type = UDT_COLUMN_TYPES[element] ?? (element.startsWith("disc_enum_") ? element : undefined);
+  return type === undefined || element === udtName ? type : `${type}[]`;
+}
+
+/*** `pgType` spelled as `udtColumnType` spells it (unquoted, `DECIMAL` as `NUMERIC`), or undefined when it can't be. ***/
+function comparableColumnType(pgType: string): string | undefined {
+  const spelled = pgType.replace(/"/g, "").replace(/^DECIMAL\b/, "NUMERIC").replace(/^TIMESTAMPTZ\b/, "TIMESTAMP WITH TIME ZONE");
+  const element = spelled.endsWith("[]") ? spelled.slice(0, -2) : spelled;
+  return Object.values(UDT_COLUMN_TYPES).includes(element) || element.startsWith("disc_enum_") ? spelled : undefined;
+}
+
+/**
+ * Convert the columns of properties of user scalars whose type isn't their
+ * declared type's column type (see `ConvertColumnTypeOperation`) — one
+ * created with the type of another module's same-named scalar. `declared`
+ * holds those properties' columns only (see `DDLGenerator.namesUserScalar`).
+ *
+ * Returns one `ConvertColumnType` per declared column the database has with
+ * another type than its declared one, both types being ones the DDL emits,
+ * skipping columns the database has as TEXT (`reconcileTextColumns` converts
+ * those) and columns whose type the pending migration (`planned`) already
+ * changes. Tables and columns that don't exist yet are the pending
+ * migration's to create, with the right type. Idempotent: once converted, the
+ * column has its declared type and it returns nothing.
+ */
+export async function reconcileColumnTypes(
+  declared: DeclaredColumn[],
+  planned: MigrationOperation[],
+  readExisting: ExistingColumnReader
+): Promise<ConvertColumnTypeOperation[]> {
+  const retyped = retypedColumns(planned);
+  const columnsByTable = new Map<string, ExistingColumn[] | null>();
+  const operations: ConvertColumnTypeOperation[] = [];
+
+  for (const column of declared) {
+    const expected = comparableColumnType(column.pgType);
+
+    if (
+      expected === undefined ||
+      retyped.has(`${column.tableName}.${column.columnName}`) ||
+      retyped.has(`${column.tableName}.*`)
+    ) {
+      continue;
+    }
+
+    if (!columnsByTable.has(column.tableName)) {
+      columnsByTable.set(column.tableName, await readExisting(column.tableName));
+    }
+
+    const existing = columnsByTable.get(column.tableName)?.find(c => c.name === column.columnName);
+    const actual = existing?.udtName === undefined ? undefined : udtColumnType(existing.udtName);
+
+    if (actual !== undefined && actual !== expected && actual !== "TEXT" && actual !== "TEXT[]") {
+      operations.push({ ...column, fromPgType: actual, kind: "ConvertColumnType" });
     }
   }
 

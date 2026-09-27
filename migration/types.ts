@@ -282,6 +282,22 @@ export interface ConvertTextColumnOperation extends MigrationOperation, Declared
   kind: "ConvertTextColumn";
 }
 
+/**
+ * Convert the column of a property of a user scalar to its declared type's
+ * column type from another type (not TEXT; see `ConvertTextColumnOperation`).
+ * Before a bare scalar name resolved in the property's own module, a module
+ * declaring a scalar that `default` also declares got the default one's
+ * column type (`numeric` for `ledger::Money extending int64` when
+ * `default::Money extends decimal`), and the stored schema snapshot already
+ * declares the type, so the differ never sees the change;
+ * `reconcileColumnTypes` finds them in the database.
+ */
+export interface ConvertColumnTypeOperation extends MigrationOperation, DeclaredColumn {
+  /** The column type the database has, as the DDL spells it (e.g. `NUMERIC`, `BIGINT[]`, `disc_enum_level`). */
+  fromPgType: string;
+  kind: "ConvertColumnType";
+}
+
 /*** A type's table and the rewrites of its properties, own and inherited, as CREATE TYPE creates them (see `reconcileRewrites`). ***/
 export interface DeclaredRewrites {
   rewrites: { propertyName: string; rewrite: RewriteDefinition; }[];

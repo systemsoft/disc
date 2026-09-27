@@ -15,7 +15,7 @@ import {
   typeNameToTableName
 } from "../lib/identifiers.ts";
 import * as AST from "../schema/ast.ts";
-import { enumPgTypeNames, Module, qualifyEnumReferences } from "../schema/converter.ts";
+import { enumPgTypeNames, Module, qualifyScalarReferences } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 /**
@@ -75,9 +75,10 @@ export class SchemaDiffer {
   }
 
   diff(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
-    // `status: Status` inside `agents` names `agents::Status`; qualify it on
-    // both sides so column emission can't resolve it to `default::Status`.
-    return this.diffModules(qualifyEnumReferences(oldSchema), qualifyEnumReferences(newSchema));
+    // `status: Status` inside `agents` names `agents::Status` (likewise any
+    // scalar the module declares); qualify it on both sides so column
+    // emission can't resolve it to `default::Status`.
+    return this.diffModules(qualifyScalarReferences(oldSchema), qualifyScalarReferences(newSchema));
   }
 
   private diffModules(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
@@ -460,19 +461,24 @@ export class SchemaDiffer {
    * `DDLGenerator.setScalarBaseTypes(...)` so a property of such a scalar
    * gets the column type of the type it extends. Keyed like
    * `enumScalarNames`: qualified, and bare (the default module's when
-   * scalars share a name).
+   * scalars share a name). A bare base naming a scalar of the same module
+   * (`scalar type Money extending Cents` in `ledger`) is qualified, as
+   * `diff` qualifies property types, so it can't resolve to `default::Cents`.
    */
   scalarBaseTypes(schema: Module[]): Map<string, string> {
     const bases = new Map<string, string>();
-    for (const [qualifiedName, { decl }] of this.extractScalars(schema)) {
+    const scalars = this.extractScalars(schema);
+    for (const [qualifiedName, { decl, module }] of scalars) {
       const base = decl.extending?.[0];
       if (!base || this.isEnumScalar(decl)) {
         continue;
       }
       const bareName = qualifiedName.slice(qualifiedName.lastIndexOf("::") + 2);
-      bases.set(qualifiedName, this.typeToString(base));
+      const baseName = this.typeToString(base);
+      const baseType = module !== "default" && scalars.has(`${module}::${baseName}`) ? `${module}::${baseName}` : baseName;
+      bases.set(qualifiedName, baseType);
       if (qualifiedName.startsWith("default::") || !bases.has(bareName)) {
-        bases.set(bareName, this.typeToString(base));
+        bases.set(bareName, baseType);
       }
     }
     return bases;
@@ -1355,7 +1361,7 @@ export class SchemaDiffer {
    * them, so diffing two snapshots alone would never add their columns.
    */
   declaredLinkProperties(schema: Module[]): Types.DeclaredLinkProperty[] {
-    const types = this.extractTypes(schema);
+    const types = this.extractTypes(qualifyScalarReferences(schema));
 
     return [...types.values()].flatMap(typeDef =>
       this
@@ -1445,7 +1451,7 @@ export class SchemaDiffer {
    * converts them.
    */
   declaredColumns(schema: Module[], columnType: (property: Types.PropertyDefinition) => string): Types.DeclaredColumn[] {
-    const types = this.extractTypes(qualifyEnumReferences(schema));
+    const types = this.extractTypes(qualifyScalarReferences(schema));
     const columns = (tableName: string, properties: Types.PropertyDefinition[]): Types.DeclaredColumn[] =>
       properties
         .filter(property => !property.computed)

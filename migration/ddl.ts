@@ -483,6 +483,21 @@ export class DDLGenerator {
             `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
         ];
       }
+      case "ConvertColumnType": {
+        // Back to the type the column had; its finite CHECK, if it had one, is not restored.
+        const op = operation as Types.ConvertColumnTypeOperation;
+        const column = this.escapeIdentifier(op.columnName);
+        return [
+          this.retypeColumn(
+            op.tableName,
+            op.columnName,
+            op.fromPgType,
+            this.castExpression(column, op.pgType, op.fromPgType) ?? `${column}::text${op.fromPgType.endsWith("[]") ? "[]" : ""}::${op.fromPgType}`,
+            true,
+            op.multi ? EMPTY_ARRAY : undefined
+          )
+        ];
+      }
       case "AddFiniteCheck": {
         const op = operation as Types.AddFiniteCheckOperation;
         return [
@@ -562,6 +577,10 @@ export class DDLGenerator {
       case "ConvertTextColumn":
         return this.generateConvertTextColumn(
           operation as Types.ConvertTextColumnOperation
+        );
+      case "ConvertColumnType":
+        return this.generateConvertColumnType(
+          operation as Types.ConvertColumnTypeOperation
         );
       case "MirrorAbstractType":
         return this.generateMirrorAbstractType(
@@ -676,6 +695,68 @@ export class DDLGenerator {
       ),
       ...(element === undefined ? [] : [`UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`]),
       this.retypeColumn(operation.tableName, operation.columnName, pgType, `${column}::${pgType}`, declaredDefault !== undefined, declaredDefault)
+    ];
+  }
+
+  /**
+   * Convert a column created with another type than its property's (see
+   * `ConvertColumnTypeOperation`) as a property type change converts one
+   * (see {@link propertyConversion}): every stored value is checked first, so
+   * one that doesn't convert fails the migration naming the column and the
+   * value — as does one that would round to an integer type — rather than
+   * being changed; then the column changes type. An enum the schema may no
+   * longer declare converts through its text form. The finite CHECK of the
+   * old type goes (`reconcileFiniteChecks` adds the new type's), and the
+   * column's default is set again: the empty set of a multi property, else
+   * its declared default, else its sequence's next value.
+   */
+  private generateConvertColumnType(
+    operation: Types.ConvertColumnTypeOperation
+  ): string[] {
+    const table = this.escapeIdentifier(operation.tableName);
+    const column = this.escapeIdentifier(operation.columnName);
+    const array = operation.fromPgType.endsWith("[]") ? "[]" : "";
+    const fromEnum = operation.fromPgType.startsWith("disc_enum_");
+    const sourceType = fromEnum ? `TEXT${array}` : operation.fromPgType;
+    const source = (value: string): string => fromEnum ? `${value}::text${array}` : value;
+    const using = this.castExpression(source(column), sourceType, operation.pgType);
+    const from = operation.fromPgType.toLowerCase();
+
+    if (using === undefined) {
+      throw new Error(
+        `Cannot convert ${operation.tableName}.${operation.columnName} from ${from} to ${operation.propertyType}: ` +
+          `PostgreSQL has no conversion from ${operation.fromPgType} to ${operation.pgType}.`
+      );
+    }
+
+    // numeric → bigint rounds; a value it would change doesn't convert, so its text form is cast to fail naming it.
+    const element = (type: string): string => type.replace(/\[\]$/, "");
+    const rounds = ["BIGINT", "INTEGER", "SMALLINT"].includes(element(operation.pgType)) &&
+      ["DOUBLE PRECISION", "NUMERIC", "REAL"].includes(element(sourceType));
+    const convert = this.castExpression(source("disc_value"), sourceType, operation.pgType)!;
+    const check = rounds ?
+      `CASE WHEN ${convert}::${operation.fromPgType} = disc_value THEN NULL ELSE disc_value::text::${operation.pgType} END` :
+      convert;
+    const expected = operation.multi ? `a set of ${operation.propertyType} values` : `a valid ${operation.propertyType}`;
+    const columnDefault = this.propertyColumnDefault({
+      annotations: {},
+      constraints: [],
+      ...(operation.default !== undefined ? { default: operation.default } : {}),
+      multi: operation.multi === true,
+      name: operation.columnName,
+      required: false,
+      type: operation.propertyType
+    });
+
+    return [
+      `ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(finiteCheckName(operation.tableName, operation.columnName))};`,
+      this.valueCheck(
+        `${table}.${column}%TYPE`,
+        `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL`,
+        check,
+        `Cannot convert ${operation.tableName}.${operation.columnName} from ${from} to ${operation.propertyType}: stored value % is not ${expected}`
+      ),
+      this.retypeColumn(operation.tableName, operation.columnName, operation.pgType, using, true, columnDefault)
     ];
   }
 
@@ -2348,6 +2429,12 @@ END $$;`
 
     const sequence = this.sequenceScalars.get(property.type);
     return sequence === undefined ? undefined : `nextval('${sequence}')`;
+  }
+
+  /*** Whether `type` (or its array element) names a user scalar, whose column type depends on the module it resolves in. ***/
+  namesUserScalar(type: string): boolean {
+    const name = /^array<(.+)>$/.exec(type)?.[1] ?? type;
+    return this.enumScalars.has(name) || this.scalarBaseTypes.has(name);
   }
 
   /*** The column type of a stored property as the DDL emits it (public for the TEXT-column backfill). ***/

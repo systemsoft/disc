@@ -16,6 +16,7 @@ import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import {
   reconcileAbstractMirrors,
+  reconcileColumnTypes,
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
@@ -378,6 +379,14 @@ export class MigrationEngine {
       // plan creates or renames already has its final name.
       ...await reconcileTextColumns(
         declaredColumns,
+        planned,
+        tableName => this.readExistingColumns(db, tableName)
+      ),
+      // Columns of user scalars created with another module's same-named
+      // scalar's type, before a bare scalar name resolved in the property's
+      // own module (see `reconcileColumnTypes`).
+      ...await reconcileColumnTypes(
+        declaredColumns.filter(column => this.ddlGenerator.namesUserScalar(column.propertyType)),
         planned,
         tableName => this.readExistingColumns(db, tableName)
       ),
