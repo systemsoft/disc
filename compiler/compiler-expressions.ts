@@ -85,6 +85,12 @@ const SET_ARGUMENT_FUNCTIONS = new Set([
   "sum"
 ]);
 
+/*** `any` / `all` of a set of booleans: the SQL aggregate, and the value for no element. ***/
+const BOOLEAN_AGGREGATES = new Map<string, { empty: boolean; sql: string; }>([
+  ["all", { empty: true, sql: "BOOL_AND" }],
+  ["any", { empty: false, sql: "BOOL_OR" }]
+]);
+
 /*** Unary operators applied to each element of a set operand (`-{1, 2}` is `{-1, -2}`); `exists` and `distinct` take the set as a whole. ***/
 const ELEMENT_WISE_UNARY_OPERATORS = new Set(["+", "-", "NOT", "~"]);
 
@@ -2586,6 +2592,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    *   sum((select X.size filter …)) → (SELECT COALESCE(SUM(__set.value), 0)
    *                                      FROM (…) AS __set(value))
    *   std::exists((select X …))     → EXISTS (…)
+   *   any(.best.tags.name = 'x')    → (SELECT COALESCE(BOOL_OR(__set.value), false)
+   *                                      FROM (…) AS __set(value))
+   *
+   * `any` of no element is false and `all` of none true, as in Gel.
    *
    * Wrapping the subquery itself (`COUNT((SELECT …))`) makes it a scalar
    * subquery, which fails as soon as it yields more than one row. The subquery
@@ -2599,7 +2609,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (funcName === "exists") {
       return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(subquery) };
     }
-    const sqlAgg = funcName === "array_agg" ? "ARRAY_AGG" : ExpressionCompilerLayer.SET_AGGREGATES.get(funcName);
+    const sqlAgg = funcName === "array_agg" ? "ARRAY_AGG" : ExpressionCompilerLayer.SET_AGGREGATES.get(funcName) ?? BOOLEAN_AGGREGATES.get(funcName)?.sql;
     if (!sqlAgg) {
       return null;
     }
@@ -2614,6 +2624,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     } else if (funcName === "array_agg") {
       // EdgeQL's array_agg of an empty set is []; SQL ARRAY_AGG() yields NULL.
       aggregate = SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall("ARRAY_AGG", [value]), SQL.createLiteral("string", "{}")]);
+    } else if (BOOLEAN_AGGREGATES.has(funcName)) {
+      aggregate = SQL.createFunctionCall("COALESCE", [
+        SQL.createFunctionCall(sqlAgg, [value]),
+        SQL.createLiteral("boolean", BOOLEAN_AGGREGATES.get(funcName)!.empty)
+      ]);
     } else {
       aggregate = SQL.createFunctionCall(sqlAgg, [value]);
     }
@@ -2631,7 +2646,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
-    if (expr.kind !== "Path" || expr.steps.length !== 2) {
+    if (expr.kind !== "Path" || expr.steps.length !== 2 || this.endsInMultiProperty(expr)) {
       return false;
     }
     const [first] = expr.steps;
@@ -2646,6 +2661,27 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const td = Context.resolveTypeName(this.ctx, ta.type);
       const link = td?.links.get(first.name);
       if (link?.multi) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * True when `path` (`.link….prop`) ends in a multi property of the type its
+   * links lead to: an array column, which the EXISTS rewrites of a link path
+   * (compileMultiLinkComparison, compileMultiHopComparison) would compare with
+   * one value as a whole. Its comparison compiles element-wise instead.
+   */
+  private endsInMultiProperty(path: EdgeQLAST.Path): boolean {
+    const last = path.steps[path.steps.length - 1];
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      let type = Context.resolveTypeName(this.ctx, ta.type);
+      for (const step of path.steps.slice(0, -1)) {
+        const target = step.type === "backlink" ? backlinkIntersectionName(step.filter) : type?.links.get(step.name)?.target;
+        type = target ? Context.resolveTypeName(this.ctx, target) : undefined;
+      }
+      if (type?.properties.get(last.name)?.multi) {
         return true;
       }
     }
@@ -2807,7 +2843,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (expr.kind !== "Path" || expr.steps.length < 3) {
       return false;
     }
-    if (!expr.steps.every(s => s.type === "property")) {
+    if (!expr.steps.every(s => s.type === "property") || this.endsInMultiProperty(expr)) {
       return false;
     }
     const first = expr.steps[0];

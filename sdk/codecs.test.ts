@@ -183,7 +183,7 @@ Deno.test("parseResponseJson - a large integer revives to the same bigint", () =
 
 const PROGRAM_INFO: TypeInfo = { casts: { name: "<str>" }, links: {} };
 const OBJECT_INFO: TypeInfo = {
-  casts: { chunks: "<array<bytes>>", content: "<bytes>", object_id: "<str>", size: "<int64>" },
+  casts: { chunks: "<array<bytes>>", content: "<bytes>", object_id: "<str>", size: "<int32>" },
   links: { parent: () => OBJECT_INFO, program: () => PROGRAM_INFO }
 };
 
@@ -226,7 +226,7 @@ Deno.test("reviveTyped - recurses through links, as a one-element array or a pla
 });
 
 const PRECISE_INFO: TypeInfo = {
-  casts: { big: "<bigint>", bigs: "<array<bigint>>", dec: "<decimal>", decs: "<array<decimal>>", size: "<int64>" },
+  casts: { big: "<bigint>", bigs: "<array<bigint>>", dec: "<decimal>", decs: "<array<decimal>>", size: "<int64>", sizes: "<array<int64>>" },
   links: {}
 };
 
@@ -243,8 +243,31 @@ Deno.test("reviveTyped - <decimal> fields become strings with every digit", () =
   assertEquals(reviveTyped(wire({ decs: [1.25, "-7", null] }), PRECISE_INFO), { decs: ["1.25", "-7", null] });
 });
 
-Deno.test("reviveTyped - <int64> is left as the wire gave it", () => {
-  assertEquals(reviveTyped(wire({ size: 4 }), PRECISE_INFO), { size: 4 });
+Deno.test("reviveTyped - <int64> fields become bigint, as codegen declares them", () => {
+  assertEquals(reviveTyped(wire({ size: 4 }), PRECISE_INFO), { size: 4n });
+  assertEquals(reviveTyped(wire({ size: "9007199254740993" }), PRECISE_INFO), { size: 9007199254740993n });
+  assertEquals(reviveTyped(wire({ size: null }), PRECISE_INFO), { size: null });
+  // A multi property or an array: element-wise.
+  assertEquals(reviveTyped(wire({ sizes: [1, "9007199254740993", null] }), PRECISE_INFO), { sizes: [1n, 9007199254740993n, null] });
+  assertEquals(reviveTyped(wire({ size: [2, 3] }), PRECISE_INFO), { size: [2n, 3n] });
+});
+
+Deno.test("reviveTyped - int64 fields of linked objects and link properties become bigint", () => {
+  const tag: TypeInfo = { casts: { name: "<str>", rank: "<int64>" }, links: {} };
+  const item: TypeInfo = {
+    casts: { label: "<str>" },
+    linkProperties: { tags: { note: "<str>", weight: "<int64>" } },
+    links: { tag: () => tag, tags: () => tag }
+  };
+  assertEquals(
+    reviveTyped(
+      wire([{ label: "a", tag: [{ rank: 1 }], tags: [{ "@note": "7", "@weight": 5, rank: "9007199254740993" }, { "@weight": null, rank: 2 }] }]),
+      item
+    ),
+    [{ label: "a", tag: [{ rank: 1n }], tags: [{ "@note": "7", "@weight": 5n, rank: 9007199254740993n }, { "@weight": null, rank: 2n }] }]
+  );
+  // A link property is read only on the link that declares it.
+  assertEquals(reviveTyped(wire({ tag: [{ "@weight": 5 }] }), item), { tag: [{ "@weight": 5 }] });
 });
 
 Deno.test("reviveTyped - accepts the hex form an older server sends", () => {

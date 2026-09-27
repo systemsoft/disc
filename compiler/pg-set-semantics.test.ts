@@ -316,6 +316,15 @@ Deno.test({
       assertEquals(await names("not any(.posts.tags.name = 't2')"), ["bob"]);
       assertEquals(await names("any(.posts.title = 'Nope') or .name = 'bob'"), ["bob"]);
       assertEquals(await run("select SetUser { b := any(.nicks = 'a1') } order by .name"), [{ b: true }, { b: false }]);
+      // Of any other set of booleans too, as through a single link then a multi link.
+      assertEquals(await names("any(.best.tags.name = 't1')"), ["ann"]);
+      assertEquals(await names("not any(.best.tags.name = 't1')"), ["bob"]);
+      assertEquals(await names("not any(.best.tags.name = 't2')"), ["ann", "bob"]);
+      assertEquals(await names("any(.best.tags.name = 't2') or .name = 'bob'"), ["bob"]);
+      assertEquals(await run("select SetUser { b := any(.best.tags.name = 't1') } order by .name"), [{ b: true }, { b: false }]);
+      // `all(…)`: true for no element.
+      assertEquals(await run("select SetUser { b := all(.nicks = 'a1') } order by .name"), [{ b: false }, { b: true }]);
+      assertEquals(await names("all(.posts.tags.name = 't1')"), ["bob"]);
 
       // A mutation's filter too.
       await run("update SetUser filter not (.nicks = 'a1') set { visits := 9 }");

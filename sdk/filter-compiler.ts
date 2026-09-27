@@ -37,6 +37,12 @@ export interface TypeInfo {
    */
   computed?: Record<string, Record<string, string>>;
   /**
+   * The link properties of each link that has some, keyed by link name →
+   * { property → EdgeQL cast }. `reviveTyped` reads a linked object's
+   * `"@name"` keys by them. Omitted for types with none.
+   */
+  linkProperties?: Record<string, Record<string, string>>;
+  /**
    * The multi properties and multi links. A condition on a multi property or
    * through a multi link holds when some element satisfies it, and compiles
    * to `any(<comparison>)`: one boolean, false with no element, so `not`,

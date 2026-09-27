@@ -898,6 +898,18 @@ class TypeScriptEmitter {
       content += `\n    }`;
     }
 
+    // Link properties' casts, by link: `reviveTyped` reads a linked object's
+    // `"@name"` keys by them (an `int64` one becomes a `bigint`).
+    const typeInfoLinkProperties = obj
+      .fields
+      .filter(field => field.isLink && field.linkProperties && field.linkProperties.length > 0)
+      .map(field => {
+        const casts = field.linkProperties!.map(p => `${p.name}: "${Types.mapEdgeQLTypeToEdgeQLCast(p.sourceType)}"`).join(", ");
+        return `${field.name}: { ${casts} }`;
+      });
+    if (typeInfoLinkProperties.length > 0)
+      content += `,\n    linkProperties: { ${typeInfoLinkProperties.join(", ")} }`;
+
     // Multi properties and multi links: the filter compiler tests any element
     // of them with `any(<comparison>)`.
     const typeInfoMulti = obj.fields.filter(field => !field.isComputed && isMulti(field.cardinality)).map(field => field.name);

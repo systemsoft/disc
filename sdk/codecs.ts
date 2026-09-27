@@ -49,6 +49,9 @@ const ISO_DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[
 
 const NUMERIC_STRING_REGEX = /^-?\d+$/;
 
+/*** The casts of the fields codegen types `bigint`, which `reviveTyped` reads as one. ***/
+const BIGINT_CASTS = new Set(["<bigint>", "<array<bigint>>", "<int64>", "<array<int64>>"]);
+
 const HEX_BYTES_REGEX = /^\\x((?:[0-9a-fA-F]{2})*)$/;
 
 /*** A JSON number (RFC 8259): sign, integer part, fraction, exponent. ***/
@@ -235,36 +238,37 @@ export function reviveResponse<T = unknown>(
 
 /**
  * Revive a typed query builder's result from its `TypeInfo`: every field cast
- * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, every `<bigint>` a
- * `bigint` and every `<decimal>` a string of its digits (the TS types codegen
- * declares for them), recursing through `links`. A single link arrives as a
+ * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, every `<int64>` and
+ * `<bigint>` a `bigint` and every `<decimal>` a string of its digits (the TS
+ * types codegen declares for them), recursing through `links`, and reading a
+ * link's `@name` keys by its `linkProperties`. A single link arrives as a
  * one-element array of rows today, a multi link as a longer one; a plain
  * object works too. Returns a new structure — input is not mutated. Other wire
- * strings (datetime, big int64) are left to `reviveResponse`, as before.
+ * strings (datetime) are left to `reviveResponse`, as before.
  */
 export function reviveTyped<T>(data: T, typeInfo: TypeInfo): T {
   return reviveTypedValue(data, typeInfo) as T;
 }
 
-function reviveTypedValue(value: unknown, typeInfo: TypeInfo): unknown {
+function reviveTypedValue(value: unknown, typeInfo: TypeInfo, linkCasts?: Record<string, string>): unknown {
   if (Array.isArray(value)) {
-    return value.map(item => reviveTypedValue(item, typeInfo));
+    return value.map(item => reviveTypedValue(item, typeInfo, linkCasts));
   }
   if (value === null || typeof value !== "object" || value instanceof Uint8Array) {
     return value;
   }
   const out: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(value)) {
-    const cast = typeInfo.casts[key];
+    const cast = key.startsWith("@") ? linkCasts?.[key.slice(1)] : typeInfo.casts[key];
     const link = typeInfo.links[key];
     if (cast === "<bytes>" || cast === "<array<bytes>>") {
       out[key] = reviveBytes(field);
-    } else if (cast === "<bigint>" || cast === "<array<bigint>>") {
+    } else if (cast !== undefined && BIGINT_CASTS.has(cast)) {
       out[key] = reviveBigint(field);
     } else if (cast === "<decimal>" || cast === "<array<decimal>>") {
       out[key] = reviveDecimal(field);
     } else if (link) {
-      out[key] = reviveTypedValue(field, link());
+      out[key] = reviveTypedValue(field, link(), typeInfo.linkProperties?.[key]);
     } else {
       out[key] = field;
     }
@@ -280,7 +284,7 @@ function reviveBytes(value: unknown): unknown {
   return Array.isArray(value) ? value.map(reviveBytes) : value;
 }
 
-/*** A bigint wire value — a number, or a numeric string past 2^53 — as a `bigint`; arrays element-wise. Anything else is returned as is. ***/
+/*** A bigint or int64 wire value — a number, or a numeric string past 2^53 — as a `bigint`; arrays element-wise. Anything else is returned as is. ***/
 function reviveBigint(value: unknown): unknown {
   if (typeof value === "number" && Number.isSafeInteger(value)) {
     return BigInt(value);

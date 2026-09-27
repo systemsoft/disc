@@ -88,3 +88,11 @@ Deno.test("codegen link properties - the TS type adds optional `@name` keys to t
   assertStringIncludes(types, `members?: (User & { "@role"?: string | null; "@weight"?: bigint; })[] | null;`);
   assertStringIncludes(types, "viewers?: User[] | null;");
 });
+
+Deno.test("codegen link properties - the query builder's TypeInfo carries their casts, for reviveTyped", () => {
+  const files = emitTypeScript(schemaToIR(schema()), config());
+  const queries = files.find(f => f.path.endsWith("queries.ts"))!.content;
+
+  assertStringIncludes(queries, `linkProperties: { members: { role: "<str>", weight: "<int64>" } }`);
+  assertEquals(queries.match(/linkProperties:/g)?.length, 1);
+});

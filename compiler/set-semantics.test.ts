@@ -381,3 +381,14 @@ Deno.test("any() of a comparison of a multi path: one boolean, tested in place",
   assertStringIncludes(sdk, "WHERE ((NOT CAST($1 AS text) = ANY(user_1.nicks)) AND (EXISTS (SELECT 1 FROM \"user_posts\"");
   assertEquals(sdk.includes("__arg_"), false, sdk);
 });
+
+Deno.test("any() and all() of another set of booleans aggregate its rows", () => {
+  assertMatch(
+    compile("select User { name } filter not any(.best.tags.name = 't1')"),
+    /WHERE NOT \(SELECT COALESCE\(BOOL_OR\(__set\.value\), FALSE\) FROM \(SELECT __arg_\d+\.value = 't1' FROM .*\) AS __set\(value\)\)$/
+  );
+  assertMatch(
+    compile("select User { b := all(.nicks = 'a1') }"),
+    /'b', \(SELECT COALESCE\(BOOL_AND\(__set\.value\), TRUE\) FROM \(SELECT __arg_\d+\.value = 'a1' FROM .*\) AS __set\(value\)\)/
+  );
+});

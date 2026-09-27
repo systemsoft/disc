@@ -18,8 +18,8 @@
  * - `or` holds when either condition does.
  *
  * Seed: users ann (visits 3, nicks {a1, a2}, best Hello, posts {Hello,
- * World}) and bob (nothing optional set); post Hello has tags {t1}, World
- * {t1, t2}.
+ * World}) and bob (nothing optional set); post Hello has tags {t1}, lead t2
+ * and labels {l1}, World tags {t1, t2} and no lead or label.
  *
  * Requires PostgreSQL: set DISC_PG_TEST_URL or DISC_PG_AUTO=1.
  */
@@ -41,6 +41,8 @@ const SDL = `module default {
   type FltPost {
     required title: str;
     multi tags: FltTag;
+    lead: FltTag;
+    multi labels: str;
   };
   type FltUser {
     required name: str;
@@ -119,7 +121,10 @@ async function withUsers(fn: (filter: (arg: FilterArg) => Promise<unknown[]>) =>
 
     await run("insert FltTag { name := 't1' }");
     await run("insert FltTag { name := 't2' }");
-    await run("insert FltPost { title := 'Hello', tags := (select FltTag filter .name = 't1') }");
+    await run(
+      "insert FltPost { title := 'Hello', tags := (select FltTag filter .name = 't1'), " +
+        "lead := (select FltTag filter .name = 't2' limit 1), labels := {'l1'} }"
+    );
     await run("insert FltPost { title := 'World', tags := (select FltTag) }");
     await run(
       "insert FltUser { name := 'ann', visits := 3, nicks := {'a1', 'a2'}, " +
@@ -182,7 +187,30 @@ Deno.test({
         ["best Hello", { best: { title: "Hello" } }, ["ann"]],
         ["not best Hello", not({ best: { title: "Hello" } }), []],
         ["best Nope or name bob", or({ best: { title: "Nope" } }, { name: "bob" }), ["bob"]],
-        ["best Hello and a post tagged t2", { best: { title: "Hello" }, posts: { tags: { name: "t2" } } }, ["ann"]]
+        ["best Hello and a post tagged t2", { best: { title: "Hello" }, posts: { tags: { name: "t2" } } }, ["ann"]],
+        // A single link then a multi link: some tag of the best post.
+        ["best tagged t1", { best: { tags: { name: "t1" } } }, ["ann"]],
+        ["best tagged t2", { best: { tags: { name: "t2" } } }, []],
+        ["best not tagged t1", not({ best: { tags: { name: "t1" } } }), ["bob"]],
+        ["best not tagged t2", not({ best: { tags: { name: "t2" } } }), ["ann", "bob"]],
+        ["best tagged t2 or name bob", or({ best: { tags: { name: "t2" } } }, { name: "bob" }), ["bob"]],
+        ["best has a tag other than t1", { best: { tags: { name: { ne: "t1" } } } }, []],
+        ["best Hello and tagged t1", { best: { tags: { name: "t1" }, title: "Hello" } }, ["ann"]],
+        ["best tagged t1 and not tagged t2", { best: and({ tags: { name: "t1" } }, not({ tags: { name: "t2" } })) }, ["ann"]],
+        // A multi link then a single link: the lead of some post.
+        ["a post led by t2", { posts: { lead: { name: "t2" } } }, ["ann"]],
+        ["no post led by t2", not({ posts: { lead: { name: "t2" } } }), ["bob"]],
+        ["a post led by t1 or name bob", or({ posts: { lead: { name: "t1" } } }, { name: "bob" }), ["bob"]],
+        // Single link then single link.
+        ["best led by t2", { best: { lead: { name: "t2" } } }, ["ann"]],
+        ["not best led by t2", not({ best: { lead: { name: "t2" } } }), []],
+        // A multi property through a single link or a multi link.
+        ["best labelled l1", { best: { labels: "l1" } }, ["ann"]],
+        ["best not labelled l1", not({ best: { labels: "l1" } }), ["bob"]],
+        ["a post labelled l1", { posts: { labels: "l1" } }, ["ann"]],
+        ["no post labelled l1", not({ posts: { labels: "l1" } }), ["bob"]],
+        ["a post labelled in [l1, zz]", { posts: { labels: { in: ["l1", "zz"] } } }, ["ann"]],
+        ["a post labelled other than l1 or name bob", or({ posts: { labels: { ne: "l1" } } }, { name: "bob" }), ["bob"]]
       ];
       for (const [description, arg, expected] of cases) {
         assertEquals(await names(arg), expected, description);
