@@ -232,9 +232,9 @@ Deno.test("Stage 43 — sequence_next compiles to NEXTVAL", () => {
 // 9. to_json (confirm existing registration)
 // ---------------------------------------------------------------------------
 
-Deno.test("Stage 43 — to_json compiles to TO_JSONB", () => {
+Deno.test("Stage 43 — to_json parses its JSON text (a cast to jsonb)", () => {
   const sql = compileEdgeQL("SELECT to_json('hello')");
-  assertStringIncludes(sql, "TO_JSONB");
+  assertStringIncludes(sql, "CAST('hello' AS jsonb)");
 });
 
 // ---------------------------------------------------------------------------

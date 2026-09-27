@@ -126,7 +126,7 @@ Deno.test({
       await rejects("select <decimal>(<float64>'Infinity' / <float64>'Infinity')", "std::decimal");
       await rejects("select to_decimal('NaN')", "std::decimal");
       await rejects("select to_bigint('-Infinity')", "std::bigint");
-      await rejects("select <decimal><json>'\"NaN\"'", "std::decimal");
+      await rejects("select <decimal>to_json('\"NaN\"')", "std::decimal");
       await rejects("select <array<decimal>>['1', 'NaN']", "std::decimal");
 
       /*** Writes from variables: nothing is stored. ***/
@@ -179,7 +179,7 @@ Deno.test({
       /*** Finite values are untouched, whatever they are cast from. ***/
       assertEquals(
         await data(
-          "select Reading { big, dec, decs, from_float := <decimal><float64>'2.25', from_json := <decimal><json>'\"3.5\"', parsed := to_decimal('4.75') } filter .dec = <decimal>$d",
+          "select Reading { big, dec, decs, from_float := <decimal><float64>'2.25', from_json := <decimal>to_json('3.5'), parsed := to_decimal('4.75') } filter .dec = <decimal>$d",
           { d: "1.5" }
         ),
         [{ big: 12, dec: 1.5, decs: [2.5], from_float: 2.25, from_json: 3.5, parsed: 4.75 }]

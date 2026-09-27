@@ -679,9 +679,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
 
     const colToProp = new Map<string, string>();
+    // A zero `cal::date_duration` is `P0D` in Gel; PostgreSQL's ISO 8601 text of it is `PT0S`.
+    const dateDurationColumns = new Set<string>();
     for (const [propName, prop] of typeDef.properties) {
       if (prop.columnName) {
         colToProp.set(prop.columnName, propName);
+        if (/(^|[:<])date_duration>?$/.test(Context.propertyBaseType(prop) ?? "")) {
+          dateDurationColumns.add(prop.columnName);
+        }
       }
     }
     for (const [linkName, link] of typeDef.links) {
@@ -691,8 +696,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
 
     const out: Record<string, any> = {};
+    const dateDurationText = (value: unknown): unknown => value === "PT0S" ? "P0D" : value;
     for (const [k, v] of Object.entries(data)) {
-      out[colToProp.get(k) ?? k] = v;
+      out[colToProp.get(k) ?? k] = !dateDurationColumns.has(k) ? v : Array.isArray(v) ? v.map(dateDurationText) : dateDurationText(v);
     }
     return out;
   }

@@ -1096,41 +1096,6 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     );
   }
 
-  /**
-   * The wire form of `bytes` inside a shape. `jsonb_build_object` would render
-   * a bytea as PostgreSQL hex text (`"\\x1f8b…"`); JSON carries `bytes` as
-   * base64 (RFC 4648), and `encode` breaks lines every 76 characters, hence the
-   * `translate`. An `array<bytes>` is encoded element by element, in order;
-   * NULL stays NULL and `{}` stays `[]`.
-   *
-   * The value stays a SQL AST node (for the array, in the `IS NULL` test) so
-   * that a parameter inside it — `x := <bytes>$p` — is still found by
-   * `buildParameterTypeMap`, which is how the server knows to decode it.
-   */
-  private bytesAsBase64(value: SQL.SQLExpression, bytesType: "bytea" | "bytea[]" | null): SQL.SQLExpression {
-    const newline: SQL.RawSQLExpression = { kind: "RawSQLExpression", sql: "E'\\n'" };
-    const encoded = (bytes: SQL.SQLExpression): SQL.SQLExpression =>
-      SQL.createFunctionCall("translate", [
-        SQL.createFunctionCall("encode", [bytes, SQL.createLiteral("string", "base64")]),
-        newline,
-        SQL.createLiteral("string", "")
-      ]);
-
-    if (bytesType === "bytea") {
-      return encoded(value);
-    }
-    if (bytesType === "bytea[]") {
-      const elements = `ARRAY(SELECT ${this.renderSqlExpr(encoded(SQL.createColumnReference("b")))} FROM unnest(${
-        this.renderSqlExpr(value)
-      }) WITH ORDINALITY AS u(b, ord) ORDER BY ord)`;
-      return SQL.createCaseExpression(
-        [SQL.createWhenClause(SQL.createBinaryExpression("IS", value, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
-        { kind: "RawSQLExpression", sql: elements }
-      );
-    }
-    return value;
-  }
-
   private bytesTypeOfProperty(property: Context.PropertyDef, typeName: string): "bytea" | "bytea[]" | null {
     if (property.computed && property.computedExpr) {
       return this.bytesTypeOf(new EdgeQLParser(property.computedExpr).parseExpressionOnly(), typeName);
@@ -1954,7 +1919,10 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           ]);
           this.bindSubject([typeName, typeDef.name], { alias: tableAlias, table: typeDef.tableName, type: typeDef.name });
           const column = SQL.createColumnReference(property.columnName, tableAlias);
-          const selectItems = [SQL.createSelectItem(this.dateDurationText(column, Context.propertyBaseType(property)))];
+          // Written as Gel writes it when it is the result (an element-wise operand is the operator's to write).
+          const selectItems = [
+            SQL.createSelectItem(path === this.outputExpression ? this.dateDurationText(column, Context.propertyBaseType(property)) : column)
+          ];
           // An object without the property adds no element (a set has no NULLs).
           const where = property.required ? undefined : SQL.isNotNull(column);
           return { selectItems, fromClause, where };

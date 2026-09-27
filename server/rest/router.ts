@@ -587,7 +587,7 @@ function renderScalarLiteral(prop: PropertyDef, value: unknown): string {
       }
       return `<${prop.edgeqlType ?? prop.type}>${edgeqlString(value)}`;
     case "json":
-      return `<json>${edgeqlString(JSON.stringify(value))}`;
+      return `to_json(${edgeqlString(JSON.stringify(value))})`;
     default:
       // Fall-through covers `str`, enum scalars, custom scalars: the
       // compiler validates these against the actual schema later.

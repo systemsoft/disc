@@ -121,7 +121,34 @@ const GEL_SCALARS: [string, unknown][] = [
   [`select <array<str>>[<duration>'1 hour']`, ["PT1H"]],
   [`select <json><duration>'1 hour 2 minutes'`, "PT1H2M"],
   [`select <json><cal::date_duration>'0 days'`, "P0D"],
-  [`select <json>(<duration>'1 hour', [<cal::date_duration>'2 days'])`, ["PT1H", ["P2D"]]]
+  [`select <json>(<duration>'1 hour', [<cal::date_duration>'2 days'])`, ["PT1H", ["P2D"]]],
+  // Date and time arithmetic: the result type and its text
+  [`select <cal::local_date>'2024-01-04' - <cal::local_date>'2024-01-01'`, "P3D"],
+  [`select <cal::local_date>'2024-01-01' - <cal::local_date>'2024-01-04'`, "P-3D"],
+  [`select <cal::local_date>'2024-01-01' - <cal::local_date>'2024-01-01'`, "P0D"],
+  [`select <cal::local_date>'2024-03-01' - <cal::local_date>'2023-01-01'`, "P425D"],
+  [`select <str>(<cal::local_date>'2024-01-04' - <cal::local_date>'2024-01-01')`, "P3D"],
+  [`select <json>(<cal::local_date>'2024-01-04' - <cal::local_date>'2024-01-01')`, "P3D"],
+  [`select [<cal::local_date>'2024-01-01' - <cal::local_date>'2024-01-01']`, ["P0D"]],
+  [`select (<cal::local_date>'2024-01-01' - <cal::local_date>'2024-01-01', 1)`, ["P0D", 1]],
+  [`select <cal::local_date>'2024-01-31' + <cal::date_duration>'1 month'`, "2024-02-29"],
+  [`select <cal::date_duration>'1 month' + <cal::local_date>'2024-01-31'`, "2024-02-29"],
+  [`select <cal::local_date>'2024-03-31' - <cal::date_duration>'1 month'`, "2024-02-29"],
+  [`select <cal::local_date>'2024-01-01' + <cal::date_duration>'3 days'`, "2024-01-04"],
+  [`select <cal::local_date>'2024-01-01' + <duration>'24 hours'`, "2024-01-02T00:00:00"],
+  [`select <cal::local_date>'2024-01-01' + <cal::relative_duration>'1 day 2 hours'`, "2024-01-02T02:00:00"],
+  [`select <cal::local_datetime>'2024-01-01T00:00' - <cal::local_datetime>'2024-01-01T00:00'`, "PT0S"],
+  [`select <cal::local_datetime>'2024-01-01T00:00' - <cal::local_datetime>'2024-03-01T01:00:00.5'`, "P-60DT-1H-0.5S"],
+  [`select <cal::local_datetime>'2024-01-01T00:00' + <cal::date_duration>'1 month'`, "2024-02-01T00:00:00"],
+  [`select <cal::local_time>'10:00' - <cal::local_time>'08:30'`, "PT1H30M"],
+  [`select <cal::local_time>'08:30' - <cal::local_time>'10:00'`, "PT-1H-30M"],
+  [`select <cal::local_time>'08:30' - <cal::local_time>'08:30'`, "PT0S"],
+  [`select <cal::local_time>'23:00' + <duration>'2 hours'`, "01:00:00"],
+  [`select <cal::date_duration>'1 month' - <cal::date_duration>'5 days'`, "P1M-5D"],
+  [`select <cal::date_duration>'5 days' - <cal::date_duration>'5 days'`, "P0D"],
+  [`select <cal::date_duration>'1 day' + <duration>'1 hour'`, "P1DT1H"],
+  // A zero date duration in an array literal
+  [`select [<cal::date_duration>'0 days', <cal::date_duration>'1 day']`, ["P0D", "P1D"]]
 ];
 
 Deno.test({
@@ -138,8 +165,11 @@ Deno.test({
       const one = async (query: string): Promise<unknown> => Object.values((await run(query))[0] as Record<string, unknown>)[0];
 
       await t.step("scalars, casts, tuples, arrays and JSON", async () => {
-        const answers = await Promise.all(GEL_SCALARS.map(([query]) => one(query)));
-        assertEquals(GEL_SCALARS.map(([query], i) => [query, answers[i]]), GEL_SCALARS);
+        const answers: [string, unknown][] = [];
+        for (const [query] of GEL_SCALARS) {
+          answers.push([query, await one(query)]);
+        }
+        assertEquals(answers, GEL_SCALARS);
       });
 
       await t.step("a difference from datetime_current() holds no days", async () => {
@@ -158,9 +188,13 @@ Deno.test({
         const row = (Array.isArray(inserted) ? inserted[0] : inserted) as Record<string, unknown>;
         assertEquals([row.d, row.r, row.dd, row.ds], ["PT1H2M", "P1MT3H", "P2D", ["PT1S", "PT-1.5S"]]);
 
-        await run(
+        const zero = await run(
           `insert DurIso { label := 'zero', d := <duration>'0 seconds', dd := <cal::date_duration>'0 days', dds := [<cal::date_duration>'0 days', <cal::date_duration>'1 day'], at := <datetime>'2024-01-01T00:00:00Z' }`
         );
+        const zeroRow = zero as unknown as Record<string, unknown>;
+        assertEquals([zeroRow.d, zeroRow.dd, zeroRow.dds], ["PT0S", "P0D", ["P0D", "P1D"]]);
+        const updated = await run(`update DurIso filter .label = 'zero' set { dd := <cal::date_duration>'0 days' }`) as unknown as Record<string, unknown>;
+        assertEquals([updated.dd, updated.dds], ["P0D", ["P0D", "P1D"]]);
         assertEquals(await run(`select DurIso { label, d, r, dd, ds, dds } order by .label`), [
           { d: "PT1H2M", dd: "P2D", dds: null, ds: ["PT1S", "PT-1.5S"], label: "a", r: "P1MT3H" },
           { d: "PT0S", dd: "P0D", dds: ["P0D", "P1D"], ds: null, label: "zero", r: null }

@@ -251,9 +251,9 @@ Deno.test("Stage 27 — cal::to_local_datetime compiles to CAST with timestamp w
 // JSON functions
 // ---------------------------------------------------------------------------
 
-Deno.test("Stage 27 — to_json compiles to TO_JSONB", () => {
+Deno.test("Stage 27 — to_json parses its JSON text (a cast to jsonb)", () => {
   const sql = compileEdgeQL(`SELECT to_json('hello')`);
-  assertStringIncludes(sql, "TO_JSONB");
+  assertStringIncludes(sql, "CAST('hello' AS jsonb)");
 });
 
 Deno.test("Stage 27 — json_typeof compiles to JSONB_TYPEOF", () => {

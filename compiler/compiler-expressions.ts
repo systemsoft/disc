@@ -208,6 +208,25 @@ function isStdType(type: string | null, name: string): boolean {
   return type !== null && type.replace(/^(std|cal)::/, "") === name;
 }
 
+/**
+ * The type of `left op right` where Gel types date arithmetic apart from
+ * PostgreSQL: `cal::local_date - cal::local_date` is a `cal::date_duration`
+ * (PostgreSQL: an integer of days), `cal::local_date ± cal::date_duration` a
+ * `cal::local_date` (PostgreSQL: a timestamp), and `cal::date_duration ±
+ * cal::date_duration` a `cal::date_duration`. Null for other operands.
+ */
+function dateArithmeticType(op: "+" | "-", left: string | null, right: string | null): string | null {
+  const date = (type: string | null): boolean => isStdType(type, "local_date");
+  const dateDuration = (type: string | null): boolean => isStdType(type, "date_duration");
+  if ((dateDuration(left) && dateDuration(right)) || (op === "-" && date(left) && date(right))) {
+    return "cal::date_duration";
+  }
+  if ((date(left) && dateDuration(right)) || (op === "+" && dateDuration(left) && date(right))) {
+    return "cal::local_date";
+  }
+  return null;
+}
+
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
@@ -509,6 +528,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // `datetime - datetime` is a duration, which holds no days (`disc_datetime_sub`, lib/stdlib-sql.ts).
     if (binOp.op === "-" && [binOp.left, binOp.right].every(operand => isStdType(this.staticScalarType(operand), "datetime"))) {
       return SQL.createFunctionCall("disc_datetime_sub", [left, right]);
+    }
+
+    // Date arithmetic typed as Gel types it (`dateArithmeticType`): PostgreSQL's
+    // `date - date` is an integer of days and `date ± interval` a timestamp.
+    if (binOp.op === "+" || binOp.op === "-") {
+      const operands = [this.staticScalarType(binOp.left), this.staticScalarType(binOp.right)];
+      const type = dateArithmeticType(binOp.op, operands[0], operands[1]);
+      if (isStdType(type, "local_date")) {
+        return SQL.createCastExpression(SQL.createBinaryExpression(binOp.op, left, right), "date");
+      }
+      if (isStdType(type, "date_duration") && operands.every(operand => isStdType(operand, "local_date"))) {
+        const days = SQL.createBinaryExpression("-", left, right);
+        return SQL.createBinaryExpression("*", days, SQL.createCastExpression(SQL.createLiteral("string", "1 day"), "interval"));
+      }
     }
 
     // Map EdgeQL operators to SQL operators
@@ -875,13 +908,32 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
   }
 
-  /*** The EdgeQL type of `expr` when it is known without running the query: `staticNumericType`'s forms, and a call to a function registered with its return type (`datetime_current()`). Null when unknown. ***/
+  /**
+   * The EdgeQL type of `expr` when it is known without running the query:
+   * `staticNumericType`'s forms, a call to a function registered with its
+   * return type (`datetime_current()`), date arithmetic over operands of known
+   * types (`dateArithmeticType`), and an array literal whose elements are all
+   * of one known type. Null when unknown.
+   */
   protected staticScalarType(expr: EdgeQLAST.Expression): string | null {
     const type = this.staticNumericType(expr);
-    if (type !== null || expr.kind !== "FunctionCall") {
+    if (type !== null) {
       return type;
     }
-    return Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType ?? null;
+    switch (expr.kind) {
+      case "FunctionCall":
+        return Context.lookupFunction(this.ctx.schema, expr.name.parts)?.returnType ?? null;
+      case "BinaryOp":
+        return expr.op === "+" || expr.op === "-" ?
+          dateArithmeticType(expr.op, this.staticScalarType(expr.left), this.staticScalarType(expr.right)) :
+          null;
+      case "ArrayExpr": {
+        const types = expr.elements.map(element => this.staticScalarType(element)?.replace(/^(std|cal)::/, "") ?? null);
+        return types[0] && types.every(element => element === types[0]) ? `array<${types[0]}>` : null;
+      }
+      default:
+        return null;
+    }
   }
 
   /**
@@ -898,6 +950,41 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected dateDurationText(value: SQL.SQLExpression, type: string | null | undefined): SQL.SQLExpression {
     const element = /^array<(.+)>$/.exec(type ?? "")?.[1] ?? type;
     return isStdType(element ?? null, "date_duration") ? SQL.createFunctionCall("disc_date_duration_text", [value]) : value;
+  }
+
+  /**
+   * The wire form of `bytes` inside a shape or JSON. `jsonb_build_object` and
+   * `to_jsonb` would render a bytea as PostgreSQL hex text (`"\\x1f8b…"`);
+   * JSON carries `bytes` as base64 (RFC 4648), and `encode` breaks lines every
+   * 76 characters, hence the `translate`. An `array<bytes>` is encoded element
+   * by element, in order; NULL stays NULL and `{}` stays `[]`.
+   *
+   * The value stays a SQL AST node (for the array, in the `IS NULL` test) so
+   * that a parameter inside it — `x := <bytes>$p` — is still found by
+   * `buildParameterTypeMap`, which is how the server knows to decode it.
+   */
+  protected bytesAsBase64(value: SQL.SQLExpression, bytesType: "bytea" | "bytea[]" | null): SQL.SQLExpression {
+    const newline: SQL.RawSQLExpression = { kind: "RawSQLExpression", sql: "E'\\n'" };
+    const encoded = (bytes: SQL.SQLExpression): SQL.SQLExpression =>
+      SQL.createFunctionCall("translate", [
+        SQL.createFunctionCall("encode", [bytes, SQL.createLiteral("string", "base64")]),
+        newline,
+        SQL.createLiteral("string", "")
+      ]);
+
+    if (bytesType === "bytea") {
+      return encoded(value);
+    }
+    if (bytesType === "bytea[]") {
+      const elements = `ARRAY(SELECT ${this.renderSqlExpr(encoded(SQL.createColumnReference("b")))} FROM unnest(${
+        this.renderSqlExpr(value)
+      }) WITH ORDINALITY AS u(b, ord) ORDER BY ord)`;
+      return SQL.createCaseExpression(
+        [SQL.createWhenClause(SQL.createBinaryExpression("IS", value, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
+        { kind: "RawSQLExpression", sql: elements }
+      );
+    }
+    return value;
   }
 
   /*** The common type of set or array literal elements of these static types: a decimal, else float64, else the widest int. Null when one is unknown. ***/
@@ -2119,6 +2206,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
 
       // JSON special compilation
+      case "to_json":
+        // to_json(str) parses the JSON text; `<json>` of a str is a JSON string.
+        if (args.length !== 1) {
+          throw new CompilationError("to_json() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "jsonb");
+
       case "json_get":
         // json_get(val, key) → val -> key
         if (args.length !== 2) {
@@ -2722,9 +2816,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return jsonbArray;
     }
 
-    // A duration as text or JSON is Gel's ISO 8601 text: `<str>` of a date
-    // duration writes zero `P0D`, and `<json>` of any duration is its text as a
-    // JSON string (PostgreSQL has no interval-to-jsonb cast).
+    // `<str>` of a date duration writes zero `P0D`; `<json>` of a value that is
+    // not json already is `jsonValue`.
     const sourceType = this.staticScalarType(cast.expr);
     if (pgType === "text" && !fromJson) {
       const text = this.dateDurationText(expr, sourceType);
@@ -2732,8 +2825,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return text;
       }
     }
-    if (pgType === "jsonb" && ["duration", "relative_duration", "date_duration"].some(name => isStdType(sourceType, name))) {
-      return SQL.createFunctionCall("to_jsonb", [this.dateDurationText(expr, sourceType)]);
+    if (isStdType(typeName, "json") && !fromJson) {
+      const json = this.jsonValue(cast.expr, expr, sourceType);
+      if (json) {
+        return json;
+      }
     }
 
     // A decimal or float cast to bigint is rounded, as Gel's
@@ -2769,6 +2865,30 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
       { kind: "RawSQLExpression", sql: rounded }
     );
+  }
+
+  /**
+   * `<json>` of `value`, the compiled `operand`, whose EdgeQL type is `type`
+   * when known: the JSON value Gel makes, which is `to_jsonb`'s — a str is a
+   * JSON string, a bigint or decimal keeps its digits, a float's NaN and
+   * ±Infinity are strings, a date or time is its ISO text, an enum its label,
+   * an array a JSON array of its elements, a tuple (jsonb already) itself —
+   * but for a duration, Gel's ISO 8601 text (`dateDurationText`), and bytes,
+   * base64. A string literal is made text first (PostgreSQL leaves its type
+   * unknown). Null for a parameter (`<json>$p` binds JSON text) and an empty
+   * set, which keep the plain cast.
+   */
+  private jsonValue(operand: EdgeQLAST.Expression, value: SQL.SQLExpression, type: string | null): SQL.SQLExpression | null {
+    const empty = (value.kind === "LiteralExpression" && value.type === "null") || (value.kind === "RawSQLExpression" && value.sql === "NULL");
+    if (operand.kind === "Parameter" || empty) {
+      return null;
+    }
+    const element = this.staticArrayElementType(operand);
+    const bytes = isStdType(element ?? type, "bytes") ? element ? "bytea[]" : "bytea" : null;
+    const typed = value.kind === "LiteralExpression" && value.type === "string" ?
+      SQL.createCastExpression(value, "text") :
+      this.bytesAsBase64(this.dateDurationText(value, element ? `array<${element}>` : type), bytes);
+    return SQL.createFunctionCall("to_jsonb", [typed]);
   }
 
   /*** The built-in type the user scalar `typeName` names extends (a sequence scalar is an `int64`); undefined when it names none. A bare name is the `with module`'s scalar first. ***/

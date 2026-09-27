@@ -536,9 +536,8 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
     // JSON functions
     ["to_json", {
       name: "to_json",
-      args: [{ name: "val", type: "any", required: true }],
-      returnType: "json",
-      sqlName: "TO_JSONB"
+      args: [{ name: "str", type: "str", required: true }],
+      returnType: "json"
     }],
     ["json_typeof", {
       name: "json_typeof",
