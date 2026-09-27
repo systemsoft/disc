@@ -49,7 +49,8 @@ import {
   CompilationError,
   ConnectionError,
   DatabaseExecutionError,
-  InternalError,
+  DiscError,
+  InvalidReferenceError,
   postgresErrorFields,
   QueryError,
   QueryTimeoutError,
@@ -1604,61 +1605,135 @@ export function buildOutputDescriptor(
 // Gel protocol error codes
 // ---------------------------------------------------------------------------
 
+/**
+ * Gel's error codes (edb/api/errors.txt). A client picks the error class
+ * from the code — and, for the transaction conflicts and availability
+ * errors, whether to retry — so each must match Gel's exactly.
+ */
 export const GEL_ERROR_CODES = {
   InternalServerError: 0x01000000,
+  UnsupportedFeatureError: 0x02000000,
   ProtocolError: 0x03000000,
   QueryError: 0x04000000,
   InvalidSyntaxError: 0x04010000,
   EdgeQLSyntaxError: 0x04010100,
   SchemaSyntaxError: 0x04010200,
-  SchemaDefinitionError: 0x04020000,
-  InvalidTypeError: 0x04020100,
-  InvalidTargetError: 0x04020200,
-  InvalidLinkTargetError: 0x04020201,
+  InvalidTypeError: 0x04020000,
+  InvalidTargetError: 0x04020100,
+  InvalidLinkTargetError: 0x04020101,
   InvalidReferenceError: 0x04030000,
-  UnknownModuleError: 0x04030100,
-  InvalidConstraintDefinitionError: 0x04040000,
+  UnknownModuleError: 0x04030001,
+  UnknownDatabaseError: 0x04030005,
+  SchemaError: 0x04040000,
+  SchemaDefinitionError: 0x04050000,
+  InvalidConstraintDefinitionError: 0x04050109,
+  DuplicateDatabaseDefinitionError: 0x04050205,
+  IdleSessionTimeoutError: 0x04060100,
+  QueryTimeoutError: 0x04060200,
+  IdleTransactionTimeoutError: 0x04060a01,
+  ExecutionError: 0x05000000,
   InvalidValueError: 0x05010000,
   DivisionByZeroError: 0x05010001,
+  NumericOutOfRangeError: 0x05010002,
   AccessPolicyError: 0x05010003,
-  IntegrityError: 0x05030000,
-  ConstraintViolationError: 0x05030100,
-  CardinalityViolationError: 0x05030200,
-  MissingRequiredError: 0x05030300,
-  AuthenticationError: 0x06000000,
-  AvailabilityError: 0x07000000,
-  AccessError: 0x08000000
+  IntegrityError: 0x05020000,
+  ConstraintViolationError: 0x05020001,
+  CardinalityViolationError: 0x05020002,
+  MissingRequiredError: 0x05020003,
+  TransactionError: 0x05030000,
+  TransactionSerializationError: 0x05030101,
+  TransactionDeadlockError: 0x05030102,
+  AccessError: 0x07000000,
+  AuthenticationError: 0x07010000,
+  AvailabilityError: 0x08000000,
+  BackendUnavailableError: 0x08000001,
+  UnsupportedBackendFeatureError: 0x09000100
 } as const;
 
-/*** The SQLSTATE of an access policy violation (insufficient_privilege; see `disc_access_check` in lib/stdlib-sql.ts). ***/
-const ACCESS_POLICY_SQLSTATE = "42501";
+/**
+ * PostgreSQL SQLSTATEs and the Gel error each is reported as, after Gel's
+ * edb/server/compiler/errormech.py. Constraint violations are
+ * ConstraintViolationError — including a foreign key's, which is how a
+ * `restrict` delete fails — except a missing required value (not-null).
+ * 42501 is also how `disc_access_check` (lib/stdlib-sql.ts) raises an
+ * access policy violation.
+ */
+const SQLSTATE_GEL_CODES: Record<string, number> = {
+  "0A000": GEL_ERROR_CODES.UnsupportedBackendFeatureError,
+  "21000": GEL_ERROR_CODES.CardinalityViolationError,
+  "22003": GEL_ERROR_CODES.NumericOutOfRangeError,
+  "22012": GEL_ERROR_CODES.DivisionByZeroError,
+  "22015": GEL_ERROR_CODES.NumericOutOfRangeError,
+  "23000": GEL_ERROR_CODES.ConstraintViolationError,
+  "23001": GEL_ERROR_CODES.ConstraintViolationError,
+  "23502": GEL_ERROR_CODES.MissingRequiredError,
+  "23503": GEL_ERROR_CODES.ConstraintViolationError,
+  "23505": GEL_ERROR_CODES.ConstraintViolationError,
+  "23514": GEL_ERROR_CODES.ConstraintViolationError,
+  "23P01": GEL_ERROR_CODES.ConstraintViolationError,
+  "25006": GEL_ERROR_CODES.TransactionError,
+  "25P02": GEL_ERROR_CODES.TransactionError,
+  "25P03": GEL_ERROR_CODES.IdleTransactionTimeoutError,
+  "3D000": GEL_ERROR_CODES.UnknownDatabaseError,
+  "40001": GEL_ERROR_CODES.TransactionSerializationError,
+  "40P01": GEL_ERROR_CODES.TransactionDeadlockError,
+  "42501": GEL_ERROR_CODES.AccessPolicyError,
+  "42P04": GEL_ERROR_CODES.DuplicateDatabaseDefinitionError,
+  "54000": GEL_ERROR_CODES.InvalidValueError,
+  "55006": GEL_ERROR_CODES.ExecutionError,
+  "57014": GEL_ERROR_CODES.QueryTimeoutError,
+  "57P01": GEL_ERROR_CODES.BackendUnavailableError,
+  "57P02": GEL_ERROR_CODES.BackendUnavailableError,
+  "57P03": GEL_ERROR_CODES.BackendUnavailableError,
+  "57P05": GEL_ERROR_CODES.IdleSessionTimeoutError
+};
+
+/*** The Gel error code of a PostgreSQL SQLSTATE; undefined for one Gel reports as an internal error. ***/
+function sqlStateToGelCode(sqlState: string): number | undefined {
+  const code = SQLSTATE_GEL_CODES[sqlState];
+  if (code !== undefined) {
+    return code;
+  }
+  // Class 22 (data exception): a value the operation can't take. Class 08
+  // (connection exception): PostgreSQL is unreachable.
+  if (sqlState.startsWith("22")) {
+    return GEL_ERROR_CODES.InvalidValueError;
+  }
+  if (sqlState.startsWith("08")) {
+    return GEL_ERROR_CODES.BackendUnavailableError;
+  }
+  return undefined;
+}
 
 /**
  * Map a Disc error to the appropriate Gel protocol error code.
  *
- * The mapping is based on the Disc error class hierarchy:
+ * - an error PostgreSQL raised (the driver's error, or a wrapper whose
+ *   `cause` is it) -> by SQLSTATE (see SQLSTATE_GEL_CODES)
  * - SyntaxError -> EdgeQLSyntaxError
  * - SchemaError -> SchemaDefinitionError
- * - CompilationError -> QueryError
- * - QueryError -> QueryError
+ * - InvalidReferenceError -> InvalidReferenceError
+ * - CompilationError, QueryError -> QueryError
  * - ValidationError -> InvalidValueError
- * - an access policy violation (SQLSTATE 42501, raised by
- *   `disc_access_check`, whether the driver's error or wrapped) -> AccessPolicyError
- * - DatabaseExecutionError -> IntegrityError
- * - QueryTimeoutError -> AvailabilityError
- * - ConnectionError -> AvailabilityError
- * - InternalError -> InternalServerError
- * - Unknown -> InternalServerError
+ * - DatabaseExecutionError -> its `cause`'s code (a compile error the
+ *   binary path wraps), else InternalServerError
+ * - QueryTimeoutError -> QueryTimeoutError
+ * - ConnectionError -> BackendUnavailableError
+ * - InternalError, unknown -> InternalServerError
  */
 export function mapErrorToGelCode(error: Error): number {
-  if (postgresErrorFields(error)?.sqlState === ACCESS_POLICY_SQLSTATE) {
-    return GEL_ERROR_CODES.AccessPolicyError;
+  const sqlState = postgresErrorFields(error)?.sqlState;
+  if (sqlState !== undefined) {
+    return sqlStateToGelCode(sqlState) ?? GEL_ERROR_CODES.InternalServerError;
   }
   if (error instanceof SyntaxError) {
     return GEL_ERROR_CODES.EdgeQLSyntaxError;
   }
   if (error instanceof SchemaError) {
     return GEL_ERROR_CODES.SchemaDefinitionError;
+  }
+  if (error instanceof InvalidReferenceError) {
+    return GEL_ERROR_CODES.InvalidReferenceError;
   }
   if (error instanceof CompilationError) {
     return GEL_ERROR_CODES.QueryError;
@@ -1670,23 +1745,13 @@ export function mapErrorToGelCode(error: Error): number {
     return GEL_ERROR_CODES.InvalidValueError;
   }
   if (error instanceof DatabaseExecutionError) {
-    // Check for constraint-related messages
-    if (error.message.includes("constraint")) {
-      return GEL_ERROR_CODES.ConstraintViolationError;
-    }
-    if (error.message.includes("cardinality")) {
-      return GEL_ERROR_CODES.CardinalityViolationError;
-    }
-    return GEL_ERROR_CODES.IntegrityError;
+    return error.cause instanceof DiscError ? mapErrorToGelCode(error.cause) : GEL_ERROR_CODES.InternalServerError;
   }
   if (error instanceof QueryTimeoutError) {
-    return GEL_ERROR_CODES.AvailabilityError;
+    return GEL_ERROR_CODES.QueryTimeoutError;
   }
   if (error instanceof ConnectionError) {
-    return GEL_ERROR_CODES.AvailabilityError;
-  }
-  if (error instanceof InternalError) {
-    return GEL_ERROR_CODES.InternalServerError;
+    return GEL_ERROR_CODES.BackendUnavailableError;
   }
   return GEL_ERROR_CODES.InternalServerError;
 }
@@ -1889,6 +1954,12 @@ export class BinaryConnection {
   private scramStoredKey?: Uint8Array;
   private scramServerKey?: Uint8Array;
   private closed = false;
+  /**
+   * Set after an ErrorResponse: as in Gel's server (`recover_from_error`),
+   * the messages up to the client's next Sync are discarded, and that Sync
+   * is answered with the ReadyForCommand.
+   */
+  private discardUntilSync = false;
 
   // Phase 4.1: Session state
   private sessionState: ConnectionState = {
@@ -1964,6 +2035,9 @@ export class BinaryConnection {
         // Decode and dispatch
         try {
           const msg = decodeClientMessage(mtype, payload);
+          if (this.discardUntilSync && msg.kind !== "Sync") {
+            continue;
+          }
           await this.dispatch(msg);
         } catch (err) {
           // Send error and continue (unless closed)
@@ -1975,9 +2049,9 @@ export class BinaryConnection {
               err instanceof Error ? err.message : String(err),
               errorCode
             );
-            // After error, send ReadyForCommand if in ready state
+            // After error, the client's next Sync gets the ReadyForCommand
             if (this.state === "ready") {
-              await this.sendReadyForCommand();
+              this.discardUntilSync = true;
             }
           }
         }
@@ -2318,7 +2392,7 @@ export class BinaryConnection {
         err instanceof Error ? err.message : String(err),
         errorCode
       );
-      await this.sendReadyForCommand();
+      this.discardUntilSync = true;
     }
   }
 
@@ -2468,16 +2542,14 @@ export class BinaryConnection {
         err instanceof Error ? err.message : String(err),
         errorCode
       );
-      // Errors get an RFC immediately because the client may not send a
-      // Sync after a failed Execute (it can't tell from the network
-      // that we hit an error before its Sync arrives). The dispatch
-      // loop's catch path already does this for unexpected errors;
-      // mirror it here for protocol-consistent error handling.
-      await this.sendReadyForCommand();
+      // Clients pair Execute with Sync: its ReadyForCommand follows the
+      // error (a second one here would be left in the client's buffer).
+      this.discardUntilSync = true;
     }
   }
 
   private async handleSync(): Promise<void> {
+    this.discardUntilSync = false;
     await this.sendReadyForCommand();
   }
 

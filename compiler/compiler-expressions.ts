@@ -9,7 +9,7 @@
 
 import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { CompilationError, type ErrorContext } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
 import {
   backlinkIntersectionName,
@@ -130,9 +130,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "TypeCast":
         return this.compileTypeCast(expr);
       case "Path":
-        return this.compilePathInExpression(expr);
+        return this.isTypeRoot(expr) ? this.readingSnapshot(() => this.compilePathInExpression(expr)) : this.compilePathInExpression(expr);
       case "TypeName":
-        return this.compileTypeName(expr);
+        return this.readingSnapshot(() => this.compileTypeName(expr));
       case "SetExpr":
         return this.compileSetExpr(expr);
       case "Subquery":
@@ -518,6 +518,21 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       default:
         return null;
     }
+  }
+
+  /**
+   * Whether `expr` starts from an object type — `Item`, `Item.tags` — rather
+   * than from a variable, a `with` binding or the implicit subject. Such a
+   * read sees the tables as they were before the statement (see `readingSnapshot`).
+   */
+  protected isTypeRoot(expr: EdgeQLAST.Expression): boolean {
+    const name = expr.kind === "TypeName" ?
+      expr.name.parts.join("::") :
+      expr.kind === "Path" && expr.rooted ?
+      expr.steps[0]?.name :
+      undefined;
+    return name !== undefined && !this.scopeVariable(name) && !Context.getCTEAlias(this.ctx, name) &&
+      Context.resolveTypeName(this.ctx, name)?.kind === "object";
   }
 
   /*** The variable `name` names in the current or an enclosing scope (a `for` variable, an inlined `with` binding). ***/
@@ -2107,7 +2122,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // schema type nor a known scalar. Without this it reaches Postgres as
     // `CAST(… AS Progam)`.
     if (pgType === typeName && !isUuidTypeName(typeName) && cast.expr.kind === "TypeCast" && isUuidTypeName(renderEdgeQLTypeName(cast.expr.type))) {
-      throw new CompilationError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
+      throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
     }
 
     return fromJson ? this.compileCastFromJson(expr, pgType, typeName) : SQL.createCastExpression(expr, pgType);

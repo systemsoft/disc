@@ -581,7 +581,7 @@ export class SchemaDiffer {
   ): Types.CreateTypeOperation {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
     const inheritedLinks = this.extractLinksWithInheritance(typeDef, allTypes);
-    const links = allTypes ? this.withOrphanTables(typeDef, inheritedLinks, allTypes) : inheritedLinks;
+    const links = allTypes ? this.withAbstractTargets(this.withOrphanTables(typeDef, inheritedLinks, allTypes), allTypes) : inheritedLinks;
     const triggers = this.extractTriggers(typeDef);
 
     const op: Types.CreateTypeOperation = {
@@ -756,6 +756,11 @@ export class SchemaDiffer {
 
       return ownOnly ? link : { ...link, orphanTables: tables };
     });
+  }
+
+  /*** `links` with `targetAbstract` set on each link whose target is an abstract type (see `LinkDefinition.targetAbstract`). ***/
+  private withAbstractTargets(links: Types.LinkDefinition[], allTypes: Map<string, AST.TypeDeclaration>): Types.LinkDefinition[] {
+    return links.map(link => this.resolveExtendsTarget(link.target, allTypes)?.abstract ? { ...link, targetAbstract: true } : link);
   }
 
   /**
@@ -989,7 +994,7 @@ export class SchemaDiffer {
       this.extractLinksWithInheritance(oldType, oldAllTypes) :
       this.extractLinks(oldType);
     const newLinks = newAllTypes ?
-      this.withOrphanTables(newType, this.extractLinksWithInheritance(newType, newAllTypes), newAllTypes) :
+      this.withAbstractTargets(this.withOrphanTables(newType, this.extractLinksWithInheritance(newType, newAllTypes), newAllTypes), newAllTypes) :
       this.extractLinks(newType);
 
     operations.push(...this.diffLinks(oldLinks, newLinks));
@@ -1379,7 +1384,7 @@ export class SchemaDiffer {
     const types = this.extractTypes(schema);
 
     return [...types.values()].flatMap(typeDef =>
-      this.withOrphanTables(typeDef, this.extractLinksWithInheritance(typeDef, types), types).map(link => ({
+      this.withAbstractTargets(this.withOrphanTables(typeDef, this.extractLinksWithInheritance(typeDef, types), types), types).map(link => ({
         link,
         tableName: typeNameToTableName(typeDef.name.value),
         typeName: typeDef.name.value

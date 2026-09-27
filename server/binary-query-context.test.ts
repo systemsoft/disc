@@ -84,10 +84,10 @@ Deno.test("executeBinaryQuery - does not inherit a bypass from the previous HTTP
   await handler.executeBinaryQuery("select Doc { owner_id, title }", {});
   assert(statements.at(-1)!.includes("WHERE"), `the binary query ran without the select policy: ${statements.at(-1)}`);
 
-  // An anonymous caller has no `global current_user`, so the owner policy allows it no write at all.
-  const executed = statements.length;
-  await assertRejects(() => handler.executeBinaryQuery("update Doc set { title := 'taken' }", {}), Error, "UPDATE not allowed on Doc");
-  assertEquals(statements.length, executed, "the denied update must not reach the database");
+  // An anonymous caller has no `global current_user`, so the owner policy lets its update reach no
+  // object: as in Gel, the update runs and modifies nothing.
+  await handler.executeBinaryQuery("update Doc set { title := 'taken' }", {});
+  assert(statements.at(-1)!.includes("WHERE doc.owner_id = NULL"), `the update ran without the owner policy: ${statements.at(-1)}`);
 });
 
 Deno.test("executeBinaryQuery - does not run as the previous HTTP caller", async () => {

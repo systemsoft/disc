@@ -370,6 +370,48 @@ Deno.test("wire-integration - error recovery: bad query then good query succeeds
   await server.stop();
 });
 
+Deno.test("wire-integration - a failed Execute answers ErrorResponse, skips to the Sync, then one ReadyForCommand", async () => {
+  // As Gel's server does (recover_from_error): after an error it discards
+  // messages until Sync and answers the Sync alone with ReadyForCommand, so
+  // a client pairing Execute with Sync never sees a second, stray one.
+  const server = new BinaryProtocolServer({
+    executor: (commandText: string) => {
+      if (commandText.startsWith("insert")) {
+        throw Object.assign(new Error("duplicate key value violates unique constraint"), { fields: { code: "23505" } });
+      }
+      return Promise.resolve({ rows: [], status: "SELECT" });
+    },
+    port: 0,
+    schema: createSchema()
+  });
+  server.start();
+
+  const conn = await Deno.connect({ hostname: "127.0.0.1", port: server.port });
+  await performNoAuthHandshake(conn);
+
+  // Execute (fails), Execute (discarded), Sync, then a good Execute and Sync.
+  await sendMessage(conn, executeMsg("insert User { name := 'a' }"));
+  await sendMessage(conn, executeMsg("select User { name }"));
+  await sendMessage(conn, { kind: "Sync" });
+  await sendMessage(conn, executeMsg("select User { name }"));
+  await sendMessage(conn, { kind: "Sync" });
+
+  const kinds: string[] = [];
+  let errorCode: number | undefined;
+  while (kinds.filter(kind => kind === "ReadyForCommand").length < 2) {
+    const message = decode((await readMessage(conn))!);
+    kinds.push(message.kind);
+    if (message.kind === "ErrorResponse") {
+      errorCode = message.errorCode;
+    }
+  }
+  assertEquals(kinds, ["CommandDataDescription", "ErrorResponse", "ReadyForCommand", "CommandDataDescription", "CommandComplete", "ReadyForCommand"]);
+  assertEquals(errorCode, 0x05020001); // ConstraintViolationError
+
+  conn.close();
+  await server.stop();
+});
+
 // ---------------------------------------------------------------------------
 // Test 5: Full SCRAM auth flow -> Execute query -> succeeds
 // ---------------------------------------------------------------------------

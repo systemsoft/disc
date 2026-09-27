@@ -10,7 +10,7 @@
  * script at tests/gel-compat/run.sh handles that.
  */
 
-import { createClient } from "gel";
+import { ConstraintViolationError, createClient } from "gel";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
@@ -138,4 +138,13 @@ test("tuples and named tuples decode as tuples", async () => {
   assert.deepEqual([named.a, named.b], [1, "x"]);
   const pairs = await client.query("SELECT enumerate({'x', 'y'})");
   assert.deepEqual(pairs.map(pair => [...pair]), [[0, "x"], [1, "y"]]);
+});
+
+test("an exclusive violation raises ConstraintViolationError", async () => {
+  const code = `label-${Date.now()}-${Math.random()}`;
+  await client.query("INSERT Label { code := <str>$code }", { code });
+  await assert.rejects(
+    client.query("INSERT Label { code := <str>$code }", { code }),
+    ConstraintViolationError
+  );
 });

@@ -208,7 +208,8 @@ function assertSucceeded(result: QueryResult): void {
 /** An ordinary caller was refused: a policy denial, or a row set the policy filtered to nothing. */
 function assertDenied(result: QueryResult, what: string): void {
   if (result.errors) {
-    const notDenial = result.errors.find(error => !/not allowed/i.test(error.message));
+    // An insert fails with Gel's access policy violation, when it runs.
+    const notDenial = result.errors.find(error => !/not allowed|access policy violation/i.test(error.message));
     assert(!notDenial, `${what}: expected an access denial, got: ${notDenial?.message}`);
     return;
   }

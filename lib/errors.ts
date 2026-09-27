@@ -77,6 +77,16 @@ export class CompilationError extends DiscError {
   }
 }
 
+/**
+ * A query names a type, global or link property the schema does not have
+ * (Gel's `InvalidReferenceError`).
+ */
+export class InvalidReferenceError extends CompilationError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
 export class ValidationError extends DiscError {
   constructor(message: string, context?: ErrorContext) {
     super(message, context);

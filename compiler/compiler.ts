@@ -11,7 +11,7 @@
 import { BUILTIN_ACCESS_GLOBALS } from "../access/evaluator.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
 import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
@@ -246,13 +246,17 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   /**
-   * Access policy for one mutation node. Called by the three mutation
+   * Access policy for one update or delete node. Called by the mutation
    * compilers, so the policy follows the node wherever it sits in the query
    * instead of depending on the top-level query kind.
    *
-   * Throws when the operation is denied. Returns the row predicate to AND
-   * into the mutation's WHERE, or undefined when there is none (access control
-   * off, bypass caller, or an unconditional allow).
+   * Returns the row predicate to AND into the mutation's WHERE — FALSE when
+   * the operation is denied outright: as in Gel, an update or delete no
+   * policy allows (or an unconditional deny denies) reaches no object, and
+   * so modifies nothing, without an error — or undefined when there is none
+   * (access control off, bypass caller, or an unconditional allow). An
+   * insert has no rows to narrow: its objects are checked after the write
+   * (see `writeCheck`).
    *
    * `objectType` must be `TypeDef.name`: policies are registered under it
    * (see `adaptAccessPolicies`), whatever spelling the query used
@@ -261,7 +265,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    */
   private mutationAccessCondition(
     objectType: string,
-    operation: "insert" | "update" | "delete"
+    operation: "update" | "delete"
   ): SQL.SQLExpression | undefined {
     if (!this.enableAccessControl || !this.accessEvaluator || !this.accessInjector) {
       return undefined;
@@ -278,10 +282,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.accessContext
     );
     if (!decision.allowed) {
-      throw new CompilationError(
-        decision.denialMessage ??
-          `${operation.toUpperCase()} not allowed on ${objectType}: ${decision.reason}`
-      );
+      return SQL.createLiteral("boolean", false);
     }
 
     return this.decisionFilter(decision);
@@ -291,8 +292,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * The rows of `typeDef` an update or delete may touch, as a predicate on the
    * statement's target: those the select policy shows AND the update or
    * delete policy allows — as in Gel, "any object that cannot be selected,
-   * cannot be modified either". Throws when the operation itself is denied
-   * (see `mutationAccessCondition`); a denied select leaves no rows (FALSE).
+   * cannot be modified either". A denied operation or select leaves no rows
+   * (FALSE; see `mutationAccessCondition`).
    *
    * The policies read the object's row by the target table's name, which
    * holds directly in the statement's WHERE. Where the statement also reads
@@ -335,23 +336,27 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * `disc_access_check(<passes>, <message>)` (lib/stdlib-sql.ts), which raises
    * Gel's "access policy violation on <insert|update> of <module::Type>" —
    * with the errmessages of the allowing policies when none allowed, and of
-   * the denying ones that matched — for an object that fails. Undefined when
-   * nothing is checked: access control off, a bypass caller, or a type
-   * without policies.
+   * the denying ones that matched — for an object that fails. An operation
+   * denied outright (no policy allows it, or an unconditional deny, as
+   * `AccessEvaluator.evaluate` decides) fails every object it writes, so a
+   * statement writing none succeeds, as in Gel. Undefined when nothing is
+   * checked: access control off, a bypass caller, or a type without policies
+   * that the default allows.
    */
   private writeCheck(typeDef: Context.TypeDef, operation: "insert" | "update write"): string | undefined {
     if (!this.enableAccessControl || !this.accessEvaluator || this.accessContext.bypass) {
       return undefined;
     }
-    const policies = this.accessEvaluator.writePolicies(typeDef.name, operation, this.accessContext);
-    if (!policies) {
+    const decision = this.accessEvaluator.evaluate(typeDef.name, operation, this.accessContext);
+    const policies = this.accessEvaluator.writePolicies(typeDef.name, operation, this.accessContext) ?? { allow: [], deny: [] };
+    if (decision.allowed && policies.allow.length === 0 && policies.deny.length === 0) {
       return undefined;
     }
 
     const anyHolds = (conditions: string[]): string => conditions.length === 0 ? "FALSE" : `COALESCE(${conditions.join(" OR ")}, FALSE)`;
     const allowed = anyHolds(policies.allow.map(policy => policy.condition));
     const denied = policies.deny.length > 0 ? anyHolds(policies.deny.map(policy => policy.condition)) : undefined;
-    const passes = denied ? `${allowed} AND NOT ${denied}` : allowed;
+    const passes = !decision.allowed ? "FALSE" : denied ? `${allowed} AND NOT ${denied}` : allowed;
 
     const typeName = `${typeDef.module ?? "default"}::${typeDef.name.split("::").pop()}`;
     const violation = sqlStringLiteral(`access policy violation on ${operation === "insert" ? "insert" : "update"} of ${typeName}`);
@@ -360,7 +365,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       ...allowMessages.length > 0 ? [`CASE WHEN NOT ${allowed} THEN ${sqlStringLiteral(allowMessages.join("; "))} END`] : [],
       ...policies.deny.flatMap(policy =>
         policy.errmessage === undefined ? [] : [`CASE WHEN COALESCE(${policy.condition}, FALSE) THEN ${sqlStringLiteral(policy.errmessage)} END`]
-      )
+      ),
+      ...!decision.allowed && decision.denialMessage !== undefined && policies.deny.length === 0 ?
+        [sqlStringLiteral(decision.denialMessage)] :
+        []
     ];
     const message = hints.length > 0 ?
       `${violation} || COALESCE(' (' || NULLIF(concat_ws('; ', ${hints.join(", ")}), '') || ')', '')` :
@@ -377,6 +385,75 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    */
   private writtenRowCheck(typeDef: Context.TypeDef, check: string): SQL.RawSQLExpression {
     return { kind: "RawSQLExpression", sql: `(SELECT ${check} FROM (SELECT "${typeDef.tableName}".*) AS "${POLICY_ROWS}")` };
+  }
+
+  /**
+   * `run` — compiling the check on the objects a statement writes — with the
+   * junction of each multi link in `writes` read as the statement leaves it
+   * (see `junctionAfterWrite`). The check runs on the rows the insert or
+   * update returns, and every part of a statement reads the snapshot it
+   * started with, so without this a condition over a multi link the
+   * statement writes (`exists .tags`) would see the object's old links: none
+   * for an inserted object.
+   */
+  private withJunctionWrites<T>(writes: MultiLinkOp[], run: () => T): T {
+    const outer = this.junctionOverlays;
+    this.junctionOverlays = new Map(outer);
+    for (const write of writes) {
+      if (write.link.junctionTable) {
+        this.junctionOverlays.set(write.link.junctionTable, () => this.junctionAfterWrite(write));
+      }
+    }
+    try {
+      return run();
+    } finally {
+      this.junctionOverlays = outer;
+    }
+  }
+
+  /**
+   * The rows of `link`'s junction once `operator` has written `targets` for
+   * the object being checked (`__policy_rows`): the rows it keeps — every row
+   * of another object, and the object's own rows except those `:=` replaces
+   * or `+=` / `-=` name — and, for `:=` and `+=` (an insert's links), a row
+   * for each target, with the link properties the target sets.
+   */
+  private junctionAfterWrite({ link, operator, targets }: MultiLinkOp): SQL.SQLStatement {
+    const sourceColumn = link.junctionSourceColumn ?? "source_id";
+    const targetColumn = link.junctionTargetColumn ?? "target_id";
+    const propertyColumns = [...(link.properties?.values() ?? [])]
+      .filter(property => !property.computed)
+      .map(property => property.columnName);
+    const object = SQL.createColumnReference("id", this.policySubject);
+    const ofObject = SQL.createBinaryExpression("=", SQL.createColumnReference(sourceColumn), object);
+    const named = targets
+      .map(target => SQL.createBinaryExpression("IN", SQL.createColumnReference(targetColumn), SQL.createSubqueryExpression(structuredClone(target.idSelect))))
+      .reduce<SQL.SQLExpression | undefined>((all, next) => all ? SQL.createBinaryExpression("OR", all, next) : next, undefined);
+    const replaced = operator === ":=" ? ofObject : named && SQL.createBinaryExpression("AND", ofObject, named);
+
+    const kept = SQL.createSelectStatement({
+      from: SQL.createFromClause([this.exemptTableReference(link.junctionTable!)]),
+      select: SQL.createSelectClause([sourceColumn, targetColumn, ...propertyColumns].map(column => SQL.createSelectItem(SQL.createColumnReference(column)))),
+      where: replaced ? SQL.createWhereClause({ kind: "UnaryExpression", operand: replaced, operator: "NOT" }) : undefined
+    });
+    if (operator === "-=") {
+      return kept;
+    }
+
+    const added = targets.map(target =>
+      SQL.createSelectStatement({
+        from: SQL.createFromClause([{ alias: "sub", kind: "TableReference", name: "(subquery)", subquery: structuredClone(target.idSelect) }]),
+        select: SQL.createSelectClause([
+          SQL.createSelectItem(object),
+          SQL.createSelectItem(SQL.createColumnReference("id", "sub")),
+          ...propertyColumns.map(column => {
+            const value = target.linkProperties.find(property => property.column === column)?.value;
+            return SQL.createSelectItem(value ? structuredClone(value) : SQL.createLiteral("null", null));
+          })
+        ])
+      })
+    );
+    return SQL.unionAll([kept, ...added]);
   }
 
   // AND an access predicate into a (possibly absent) WHERE clause.
@@ -756,7 +833,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
-      throw new CompilationError(`Type '${typeName}' not found`);
+      throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
     if (typeDef.abstract) {
       throw new CompilationError(
@@ -765,9 +842,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       );
     }
 
-    // An insert has no rows to narrow: it is allowed or denied here, and
-    // each object it inserts is checked after the write (`writeCheck`).
-    this.mutationAccessCondition(typeDef.name, "insert");
+    // An insert has no rows to narrow: each object it inserts is checked
+    // after the write (`writeCheck`).
     const insertCheck = this.writeCheck(typeDef, "insert");
     let updateCheck: string | undefined;
 
@@ -896,10 +972,19 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
       ]
     };
+    // The inserted object's multi links, as the check reads them (see withJunctionWrites).
+    const linkWrites = [...new Set(multiLinks.map(({ link }) => link))].map((link): MultiLinkOp => ({
+      link,
+      operator: "+=",
+      targets: multiLinks.filter(write => write.link === link).map(write => write.target)
+    }));
+    const checkedInsert = insertCheck && linkWrites.length > 0 ?
+      this.withJunctionWrites(linkWrites, () => this.writeCheck(typeDef, "insert")) :
+      insertCheck;
     // An upsert's row was inserted when it has no xmax, else updated by the else branch.
     const check = updateCheck ?
-      `CASE WHEN "${typeDef.tableName}".xmax = 0 THEN ${insertCheck ?? "TRUE"} ELSE ${updateCheck} END` :
-      insertCheck;
+      `CASE WHEN "${typeDef.tableName}".xmax = 0 THEN ${checkedInsert ?? "TRUE"} ELSE ${updateCheck} END` :
+      checkedInsert;
     if (check) {
       sourceInsert.writeCheck = this.writtenRowCheck(typeDef, check);
     }
@@ -1208,7 +1293,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
-      throw new CompilationError(`Type '${typeName}' not found`);
+      throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
     if (this.concreteSubtypes(typeDef).length > 0) {
       return this.compileAbstractMutation(typeDef, "upd", subtype => this.compileUpdateQuery({ ...query, type: subtypeName(subtype) }));
@@ -1363,8 +1448,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       whereClause,
       this.mutationRowCondition(typeDef, "update")
     );
-    // Each updated object is checked after the write (`writeCheck`).
-    const check = this.writeCheck(typeDef, "update write");
+    // Each updated object is checked after the write (`writeCheck`), with the
+    // multi links the update writes as it leaves them (see withJunctionWrites).
+    const check = this.withJunctionWrites(multiLinkOps, () => this.writeCheck(typeDef, "update write"));
     const writeCheck = check ? this.writtenRowCheck(typeDef, check) : undefined;
 
     if (multiLinkOps.length === 0) {
@@ -1544,7 +1630,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
-      throw new CompilationError(`Type '${typeName}' not found`);
+      throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
     if (this.concreteSubtypes(typeDef).length > 0) {
       return this.compileAbstractMutation(typeDef, "del", subtype => this.compileDeleteQuery({ ...query, type: subtypeName(subtype) }));
@@ -1815,7 +1901,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         const typeName = query.expr.name.parts.join("::");
         const typeDef = Context.resolveTypeName(this.ctx, typeName);
         if (!typeDef) {
-          throw new CompilationError(`Type '${typeName}' not found`);
+          throw new InvalidReferenceError(`Type '${typeName}' not found`);
         }
 
         const tableAlias = Context.addTableAlias(
@@ -2280,7 +2366,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const typeName = query.expr.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
-      throw new CompilationError(`Type '${typeName}' not found`);
+      throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
 
     const tableAlias = Context.addTableAlias(
@@ -2471,7 +2557,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return { kind: "RawSQLExpression", sql: this.accessEvaluator.expressionToSQL({ kind: "AccessGlobal", name: qualifiedName }, this.accessContext) };
     }
     if (!globalDef) {
-      throw new CompilationError(`Unknown global: ${qualifiedName}`);
+      throw new InvalidReferenceError(`Unknown global: ${qualifiedName}`);
     }
 
     return this.globalValue(globalDef);
@@ -2500,7 +2586,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       this.ctx.moduleScope
     );
     if (!globalDef) {
-      throw new CompilationError(`Unknown global: ${qualifiedName}`);
+      throw new InvalidReferenceError(`Unknown global: ${qualifiedName}`);
     }
     if (globalDef.readonly) {
       throw new CompilationError(
@@ -2660,7 +2746,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const name = typeName.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, name);
     if (!typeDef) {
-      throw new CompilationError(`Type '${name}' not found`);
+      throw new InvalidReferenceError(`Type '${name}' not found`);
     }
 
     // Generate a simple column reference for the primary table

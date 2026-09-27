@@ -12,7 +12,7 @@
  * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import type { AccessExpressionNode } from "../access/ast.ts";
 import type {
   AccessConfig,
@@ -305,7 +305,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Access PG: deny INSERT at compile time",
+  name: "Access PG: deny INSERT fails each inserted object with an access policy violation",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -330,7 +330,7 @@ Deno.test({
         ["insert"]
       );
 
-      // Compile INSERT — should fail at compilation
+      // As in Gel, the insert compiles, and fails each object it inserts when it runs.
       const compiled = compileWithAccess(
         "insert RestrictedUser { name := \"Hacker\" }",
         schema,
@@ -339,13 +339,12 @@ Deno.test({
         { userId: "some-user" }
       );
 
-      assertEquals(compiled.ok, false, "INSERT compilation should be denied");
-      if (!compiled.ok) {
-        assertEquals(
-          compiled.error.includes("not allowed"),
-          true,
-          `Error should mention 'not allowed', got: ${compiled.error}`
-        );
+      assertEquals(compiled.ok, true, compiled.ok ? "" : compiled.error);
+      if (compiled.ok) {
+        const error = await assertRejects(() => pool.query(compiled.sql)) as Error & { fields?: { code?: string; }; };
+        assertEquals(error.fields?.code, "42501", error.message);
+        assertEquals(error.message.includes("access policy violation on insert of default::RestrictedUser"), true, error.message);
+        assertEquals((await pool.query(`SELECT count(*)::int AS n FROM ${TABLE}`)).rows, [{ n: 0 }]);
       }
 
       await manager.close();

@@ -530,48 +530,44 @@ Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async
 // projects the conflict-target row through the access-policy filter
 // (which returns nothing → no conflict detected → duplicate insert).
 //
-// Disc's compiler treats an insert as binary: the access check either
-// allows or throws (`CompilationError`). It never injects a WHERE filter
-// on the INSERT path. The compiled SQL is plain
-// `INSERT INTO ... ON CONFLICT (col) DO ...`, so PG's unique index —
-// which is policy-blind by design — handles conflict detection.
+// Disc's compiler treats an insert as binary: each object it inserts
+// passes the access check or fails the statement (Gel's AccessPolicyError).
+// It never injects a WHERE filter on the INSERT path. The compiled SQL is
+// plain `INSERT INTO ... ON CONFLICT (col) DO ...` (the check reads the
+// RETURNING rows), so PG's unique index — which is policy-blind by
+// design — handles conflict detection.
 //
-// The check lives in `compileInsertQuery` (via `mutationAccessCondition`),
-// not in the top-level `applyAccessControl`, so an insert nested in a
-// `with` binding or a `for` body gets it too.
+// The check lives in `compileInsertQuery` (via `writeCheck`), not in the
+// top-level `applyAccessControl`, so an insert nested in a `with` binding
+// or a `for` body gets it too.
 //
-// This pin asserts the structural property: `compileInsertQuery` runs the
-// check for its allow/deny effect only and does not synthesize a WHERE
-// clause from it.
+// This pin asserts the structural property: `compileInsertQuery` checks the
+// objects it inserts after the write (`writeCheck`, which raises Gel's
+// AccessPolicyError for each object that fails — every one when insert is
+// denied outright) and does not synthesize a WHERE clause from the policy.
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injection)", async () => {
   const src = await Deno.readTextFile(
     new URL("../compiler/compiler.ts", import.meta.url)
   );
-  // Locate compileInsertQuery and the shared mutation policy check.
   const insertCompiler = src.match(
     /private compileInsertQuery\([\s\S]*?\n {2}\}\n/
   );
-  const policyCheck = src.match(
-    /private mutationAccessCondition\([\s\S]*?\n {2}\}\n/
-  );
   assert(
-    insertCompiler !== null && policyCheck !== null,
-    "compileInsertQuery and mutationAccessCondition must exist (Gel #5504 pin)."
+    insertCompiler !== null,
+    "compileInsertQuery must exist (Gel #5504 pin)."
   );
   const body = insertCompiler![0];
-  // The insert check is a bare call: it runs for its throw-on-denial effect
-  // and the row predicate it returns is discarded.
+  // Each inserted object is checked after the write …
   assert(
-    /^\s*this\.mutationAccessCondition\(typeDef\.name, "insert"\);$/m.test(body),
-    "compileInsertQuery must run the insert policy check and discard its predicate (Gel #5504 pin)."
+    /this\.writeCheck\(typeDef, "insert"\)/.test(body),
+    "compileInsertQuery must check the objects it inserts (Gel #5504 pin)."
   );
-  // Denial must throw (not silently filter) …
+  // … and no policy narrows the insert itself.
   assert(
-    /throw new CompilationError/.test(policyCheck![0]),
-    "INSERT access denial must throw CompilationError, not return a filtered statement (Gel #5504 pin)."
+    !/mutationAccessCondition|mutationRowCondition\(typeDef, "insert"/.test(body),
+    "INSERT must not take a row predicate from the policy (Gel #5504 pin)."
   );
-  // … and the insert path must not build a WhereClause from the policy.
   assert(
     !/WhereClause/.test(body) && !/where: \{/.test(body) &&
       !/withAccessCondition/.test(body),

@@ -177,7 +177,7 @@ Deno.test("Access Compilation - allow policy with using expression injects SQL c
 // 4. Deny INSERT policy causes compile error
 // ---------------------------------------------------------------------------
 
-Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
+Deno.test("Access Compilation - deny INSERT policy fails each inserted object at run time", () => {
   const denyInsertPolicy: AccessPolicy = {
     name: "deny_insert",
     objectType: "User",
@@ -203,15 +203,11 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
   const ast = parser.parse();
   const result = compiler.compile(ast);
 
-  assertEquals(
-    result.ok,
-    false,
-    "Expected compilation to fail when INSERT is denied by policy"
-  );
-  assertExists(
-    result.ok === false && result.error,
-    "Expected an error on denied INSERT"
-  );
+  // As in Gel, the insert compiles and each object it inserts fails Gel's
+  // access policy violation (SQLSTATE 42501), so inserting none succeeds.
+  assertEquals(result.ok, true, "Expected the denied INSERT to compile");
+  const sql = result.ok ? new SQLCodeGenerator().generate(result.value) : "";
+  assertEquals(sql.includes("disc_access_check(FALSE, E'access policy violation on insert of default::User')"), true, sql);
 });
 
 // ---------------------------------------------------------------------------

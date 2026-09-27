@@ -7,4 +7,10 @@ module default {
     };
     index on (.name);
   };
+
+  type Label {
+    required code: str {
+      constraint exclusive;
+    };
+  };
 };

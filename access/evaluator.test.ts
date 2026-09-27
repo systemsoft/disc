@@ -391,8 +391,8 @@ Deno.test("AccessEvaluator - a condition over a custom global the context lacks 
   assertEquals(decision.allowed, true);
   assertEquals(decision.sqlConditions, ["NULLIF(current_setting('disc.global_default__is_admin', true), '')"]);
 
-  // Supplied by the context, it is decided in memory.
-  assertEquals(evaluator.evaluate("Tenant", "select", { globals: new Map([["is_admin", false]]) }).allowed, false);
+  // Supplied by the context, it is inlined in the SQL, which still decides.
+  assertEquals(evaluator.evaluate("Tenant", "select", { globals: new Map([["is_admin", false]]) }).sqlConditions, ["FALSE"]);
 });
 
 Deno.test("AccessEvaluator - built-in globals still work with backward compatibility", () => {
@@ -607,6 +607,54 @@ Deno.test("AccessEvaluator - update is update read and update write", () => {
   assertEquals(evaluator.evaluate("Doc", "update write", { userId: "u1" }).allowed, true);
   assertEquals(evaluator.evaluate("Note", "update read", { userId: "u1" }).allowed, true);
   assertEquals(evaluator.evaluate("Note", "update write", { userId: "u1" }).allowed, false);
+});
+
+Deno.test("AccessEvaluator - an in-memory condition compares globals by value, not as booleans", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const role = (operator: "=" | "!=", value: string): AccessExpressionNode => ({
+    kind: "AccessComparison",
+    left: { kind: "AccessGlobal", name: "current_role" },
+    operator,
+    right: { kind: "AccessLiteral", type: "string", value }
+  });
+
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["select"] }], condition: role("=", "admin"), name: "admins", objectType: "Doc" });
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["select"] }], condition: role("!=", "guest"), name: "members", objectType: "Note" });
+
+  assertEquals(evaluator.evaluate("Doc", "select", { userRole: "admin" }).allowed, true);
+  assertEquals(evaluator.evaluate("Doc", "select", { userRole: "member" }).allowed, false);
+  assertEquals(evaluator.evaluate("Doc", "select", {}).allowed, false);
+  assertEquals(evaluator.evaluate("Note", "select", { userRole: "admin" }).allowed, true);
+  assertEquals(evaluator.evaluate("Note", "select", { userRole: "guest" }).allowed, false);
+});
+
+Deno.test("AccessEvaluator - a condition with SQL is left to the SQL, never decided in memory", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  evaluator.setPolicyCompiler(edgeql => `<sql of ${edgeql}>`);
+  // As the adapter builds it for `using (.public ?= true or .owner ?= global current_user)`:
+  // an in-memory guard requiring current_user, which is wrong for an anonymous caller.
+  evaluator.registerPolicy({
+    actions: [{ allow: true, operations: ["select"] }],
+    condition: { kind: "AccessGlobal", name: "current_user" },
+    name: "visible",
+    objectType: "Doc",
+    usingSource: ".public ?= true or .owner ?= global current_user"
+  });
+
+  const decision = evaluator.evaluate("Doc", "select", {});
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.sqlConditions, ["<sql of .public ?= true or .owner ?= global current_user>"]);
+});
+
+Deno.test("AccessEvaluator - an allowing policy without a condition leaves the objects unfiltered", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  evaluator.setPolicyCompiler(edgeql => `<sql of ${edgeql}>`);
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["select"] }], name: "own", objectType: "Doc", usingSource: ".mine" });
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["select"] }], name: "everyone", objectType: "Doc" });
+
+  const decision = evaluator.evaluate("Doc", "select", {});
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.sqlConditions, undefined);
 });
 
 Deno.test("AccessEvaluator - writePolicies gives each policy's condition on written objects", () => {

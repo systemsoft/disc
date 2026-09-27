@@ -357,14 +357,16 @@ export async function testPolicyImpl(
   };
 
   /*** Evaluate each target policy in isolation against a fresh evaluator so global
-       mode/defaultAllow don’t muddy the per-policy verdict. ***/
+       mode/defaultAllow don’t muddy the per-policy verdict. Row-level security is off:
+       with it, a condition is left to its SQL (the compiler’s evaluator never decides one
+       in memory); off, the verdict is the condition evaluated against the given context. ***/
   for (const sdlPolicy of targets) {
     const runtimePolicy = adaptAccessPolicies(typeName, [sdlPolicy])[0];
 
     const evaluator = new AccessEvaluator({
       defaultAllow: false,
       enableAudit: false,
-      enableRLS: true,
+      enableRLS: false,
       mode: "permissive"
     });
 

@@ -48,6 +48,14 @@ const ABSTRACT_MIRROR_FUNCTION = `CREATE OR REPLACE FUNCTION disc_abstract_mirro
 $$ LANGUAGE plpgsql;`;
 
 /**
+ * How a link to an abstract type defers its FK (see
+ * `LinkDefinition.targetAbstract`). Only the check that the target exists
+ * waits for the commit: PostgreSQL never defers a RESTRICT, CASCADE or SET
+ * NULL action, so deleting a target behaves the same as without it.
+ */
+const DEFERRED = " DEFERRABLE INITIALLY DEFERRED";
+
+/**
  * Column types PostgreSQL casts between directly (numbers among numbers,
  * dates and timestamps among themselves). See `DDLGenerator.castExpression`.
  */
@@ -748,6 +756,7 @@ END $$;`,
           references: {
             table: typeNameToTableName(link.target),
             column: "id",
+            deferred: link.targetAbstract,
             onDelete: this.targetOnDelete(link)
           }
         });
@@ -812,6 +821,7 @@ END $$;`,
             references: {
               table: targetTable,
               column: "id",
+              deferred: link.targetAbstract,
               onDelete: this.targetOnDelete(link)
             }
           },
@@ -1372,6 +1382,7 @@ END $$;`,
           references: {
             table: targetTable,
             column: "id",
+            deferred: link.targetAbstract,
             onDelete: this.targetOnDelete(link)
           }
         },
@@ -1401,7 +1412,7 @@ END $$;`,
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(`fk_${tableName}_${columnName}`)} FOREIGN KEY (${
           this.escapeIdentifier(columnName)
-        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${this.targetOnDelete(link)};`
+        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${this.targetOnDelete(link)}${link.targetAbstract ? DEFERRED : ""};`
       );
       statements.push(
         `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${columnName}`)} ON ${this.escapeIdentifier(tableName)} (${this.escapeIdentifier(columnName)});`
@@ -1554,15 +1565,17 @@ END $$;`,
 
   /**
    * The FK from a link to its target as CREATE and ALTER LINK emit it: the
-   * table holding it, its constraint name and its ON DELETE action. The
+   * table holding it, its constraint name, its ON DELETE action and whether
+   * it is deferred (see `LinkDefinition.targetAbstract`). The
    * delete-rule repair (`reconcileLinkDeleteRules`) compares the database's
    * foreign keys against it.
    */
-  targetForeignKey(tableName: string, link: Types.LinkDefinition): { constraint: string; onDelete: string; table: string; } {
+  targetForeignKey(tableName: string, link: Types.LinkDefinition): { constraint: string; deferred: boolean; onDelete: string; table: string; } {
     const table = link.multi ? `${tableName}_${link.name}` : tableName;
 
     return {
       constraint: this.foreignKeyName(table, link.multi ? "target_id" : linkColumnName(link.name)),
+      deferred: link.targetAbstract ?? false,
       onDelete: this.targetOnDelete(link),
       table
     };
@@ -1595,6 +1608,7 @@ END $$;`,
       primaryKey: false,
       references: {
         column: "id",
+        deferred: link.targetAbstract,
         onDelete: this.targetOnDelete(link),
         table: typeNameToTableName(link.target)
       },
@@ -1820,7 +1834,7 @@ END $$;`,
 
     return `CONSTRAINT ${this.escapeIdentifier(constraintName)} FOREIGN KEY (${this.escapeIdentifier(column.name)}) REFERENCES ${
       this.escapeIdentifier(column.references.table)
-    } (${this.escapeIdentifier(column.references.column)})${onDelete}${onUpdate}`;
+    } (${this.escapeIdentifier(column.references.column)})${onDelete}${onUpdate}${column.references.deferred ? DEFERRED : ""}`;
   }
 
   /**

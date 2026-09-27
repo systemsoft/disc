@@ -434,6 +434,14 @@ export interface LinkDefinition {
    * `target_id`. Set only when true.
    */
   exclusive?: boolean;
+  /**
+   * The target is an abstract type. Its table holds copies of the subtypes'
+   * rows that an AFTER trigger writes (see `MirrorAbstractTypeOperation`), so
+   * the FK's check that the target exists is deferred to commit: checked at
+   * the end of the statement, it can run before the trigger has copied an
+   * object inserted in the same statement. Set only when true.
+   */
+  targetAbstract?: boolean;
 }
 
 export interface PropertyChange {
@@ -479,6 +487,8 @@ export interface ColumnDefinition {
   references?: {
     table: string;
     column: string;
+    /** `DEFERRABLE INITIALLY DEFERRED` (see `LinkDefinition.targetAbstract`). */
+    deferred?: boolean;
     onDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
     onUpdate?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   };

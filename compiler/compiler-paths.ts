@@ -20,7 +20,7 @@
  */
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { backlinkIntersectionName, locationOf } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
 import * as Context from "./context.ts";
@@ -327,7 +327,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     }
     const target = Context.resolveTypeName(this.ctx, intersection);
     if (!target) {
-      throw new CompilationError(`Backlink intersection target '${intersection}' not found in schema`, locationOf(step));
+      throw new InvalidReferenceError(`Backlink intersection target '${intersection}' not found in schema`, locationOf(step));
     }
     const link = target.links.get(step.name);
     if (!link || (!link.columnName && !link.junctionTable)) {
@@ -336,8 +336,12 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
         locationOf(step)
       );
     }
+    // The link leads back when it can hold objects of `source`: it targets
+    // `source`, a type `source` extends (a policy inherited from an abstract
+    // type, compiled for each subtype), or a subtype of it.
     const linkTarget = Context.resolveTypeName(this.ctx, link.target);
-    if (linkTarget && linkTarget.name !== source.name) {
+    const related = (from: string, to: string): boolean => Context.getTypeHierarchy(this.ctx.schema, from).includes(to);
+    if (linkTarget && !related(source.name, linkTarget.name) && !related(linkTarget.name, source.name)) {
       throw new CompilationError(
         `Link '${target.name}.${step.name}' targets '${linkTarget.name}', not '${source.name}' — the backlink does not lead back from '${source.name}'`,
         locationOf(step)

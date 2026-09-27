@@ -156,3 +156,10 @@ def test_tuples_and_named_tuples_decode_as_tuples(client):
     assert (named.a, named.b) == (1, "x")
     pairs = client.query("SELECT enumerate({'x', 'y'})")
     assert [tuple(pair) for pair in pairs] == [(0, "x"), (1, "y")]
+
+
+def test_exclusive_violation_raises_constraint_violation_error(client):
+    code = f"label-{uuid.uuid4()}"
+    client.query("INSERT Label { code := <str>$code }", code=code)
+    with pytest.raises(gel.ConstraintViolationError):
+        client.query("INSERT Label { code := <str>$code }", code=code)

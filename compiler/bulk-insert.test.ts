@@ -257,12 +257,12 @@ Deno.test("bulk insert policy: an allowed type compiles to the same statement fo
   assertEquals(asUser.sql, open.sql);
 });
 
-Deno.test("bulk insert policy: a using (false) type is denied for an ordinary user", async () => {
+Deno.test("bulk insert policy: a using (false) type fails each object an ordinary user inserts", async () => {
   const { error, sql } = await compile(Q4_LOCKED, { userId: USER_ID });
 
-  assertEquals(sql, undefined);
-  assertStringIncludes(error ?? "", "not allowed");
-  assertStringIncludes(error ?? "", "Locked");
+  // As in Gel: checked at run time, so an empty array inserts nothing and succeeds.
+  assertEquals(error, undefined);
+  assertStringIncludes(sql!, "disc_access_check(COALESCE((FALSE), FALSE), E'access policy violation on insert of default::Locked')");
 });
 
 Deno.test("bulk insert policy: a bypass caller is not denied", async () => {

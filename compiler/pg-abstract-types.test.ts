@@ -38,6 +38,7 @@ const ABSTRACT_SDL = `module default {
   }
   type AbsPerson extending AbsNamed {
     age: int32;
+    mentor: AbsNamed;
   }
   type AbsCompany extending AbsNamed {
     city: str;
@@ -370,6 +371,119 @@ Deno.test({
       assertEquals(await values(pool, schema, "select AbsThing { owner: { name } }"), [{ owner: [{ name: "ann" }] }]);
 
       // Once in place, there is nothing more to migrate.
+      const again = await manager.applySchema(ABSTRACT_SDL);
+      assertEquals(again.ok && again.value.length, 0);
+      await manager.close();
+    })
+});
+
+// ---------------------------------------------------------------------------
+// Nested inserts as the target of a link to an abstract type
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "PG abstract: a nested insert can be the target of a single link to an abstract type",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      await run(pool, schema, `insert AbsThing { title := "t1", owner := (insert AbsPerson { name := "cid" }) }`);
+      assertEquals(await values(pool, schema, "select AbsThing { title, owner: { name } }"), [{ owner: [{ name: "cid" }], title: "t1" }]);
+    })
+});
+
+Deno.test({
+  name: "PG abstract: nested inserts can be the targets of a multi link to an abstract type",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      await run(
+        pool,
+        schema,
+        `insert AbsThing { title := "t1", owner := (select AbsPerson filter .name = "ann" limit 1), fans := {(insert AbsPerson { name := "dan" }), (insert AbsCompany { name := "globex" })} }`
+      );
+      assertEquals(await values(pool, schema, "select AbsThing { fans: { name } order by .name }"), [{ fans: [{ name: "dan" }, { name: "globex" }] }]);
+    })
+});
+
+Deno.test({
+  name: "PG abstract: a nested insert two levels deep can be the target of links to an abstract type",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      await run(
+        pool,
+        schema,
+        `insert AbsThing { title := "t1", owner := (insert AbsPerson { name := "eve", mentor := (insert AbsCompany { name := "hooli" }) }) }`
+      );
+      assertEquals(await values(pool, schema, "select AbsThing { owner: { name } }"), [{ owner: [{ name: "eve" }] }]);
+      assertEquals(await values(pool, schema, "select AbsPerson { mentor: { name } } filter .name = 'eve'"), [{ mentor: [{ name: "hooli" }] }]);
+    })
+});
+
+Deno.test({
+  name: "PG abstract: an update can link a nested insert through links to an abstract type",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      await run(pool, schema, `insert AbsThing { title := "t1", owner := (select AbsPerson filter .name = "ann" limit 1) }`);
+      await run(
+        pool,
+        schema,
+        `update AbsThing filter .title = "t1" set { owner := (insert AbsCompany { name := "umbrella" }), fans += (insert AbsPerson { name := "fay" }) }`
+      );
+      assertEquals(await values(pool, schema, "select AbsThing { owner: { name }, fans: { name } }"), [{
+        fans: [{ name: "fay" }],
+        owner: [{ name: "umbrella" }]
+      }]);
+    })
+});
+
+Deno.test({
+  name: "PG abstract: in a transaction, a link to no object fails at commit and restrict still fails at the delete",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      const bad = `insert AbsThing { title := "bad", owner := <AbsNamed><uuid>"01234567-89ab-7cde-8f01-000000000099" }`;
+      const conn = await pool.acquire();
+      try {
+        await conn.query("BEGIN");
+        await conn.query(compileEdgeQL(bad, schema));
+        await assertRejects(() => conn.query("COMMIT"), Error, `violates foreign key constraint "fk_abs_thing_owner_id"`);
+        await conn.query("ROLLBACK");
+
+        await conn.query("BEGIN");
+        await conn.query(compileEdgeQL(`insert AbsThing { title := "t1", owner := (select AbsPerson filter .name = "ann" limit 1) }`, schema));
+        // `restrict` is checked at the delete, not deferred to the commit.
+        await assertRejects(() => conn.query(compileEdgeQL("delete AbsPerson filter .name = 'ann'", schema)), Error, "foreign key");
+        await conn.query("ROLLBACK");
+      } finally {
+        pool.release(conn);
+      }
+      assertEquals(await values(pool, schema, "select count(AbsThing)"), [0]);
+    })
+});
+
+Deno.test({
+  name: "PG abstract: a database whose links to an abstract type check their target immediately gets them deferred on its next migration",
+  ignore: !RUN_PG,
+  fn: () =>
+    withAbstractSchema(async (pool, schema) => {
+      // As before: the target check of every link to an abstract type immediate.
+      await pool.query(`ALTER TABLE abs_thing ALTER CONSTRAINT fk_abs_thing_owner_id NOT DEFERRABLE`);
+      await pool.query(`ALTER TABLE abs_thing_fans ALTER CONSTRAINT fk_abs_thing_fans_target_id NOT DEFERRABLE`);
+      const nested = `insert AbsThing { title := "t1", owner := (insert AbsPerson { name := "cid" }), fans := (insert AbsCompany { name := "co" }) }`;
+      await assertRejects(() => run(pool, schema, nested));
+
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+      const migrated = await manager.applySchema(ABSTRACT_SDL);
+      assertEquals(migrated.ok && migrated.value.length, 1);
+      await run(pool, schema, nested);
+      assertEquals(await values(pool, schema, "select AbsThing { owner: { name }, fans: { name } }"), [{
+        fans: [{ name: "co" }],
+        owner: [{ name: "cid" }]
+      }]);
+
       const again = await manager.applySchema(ABSTRACT_SDL);
       assertEquals(again.ok && again.value.length, 0);
       await manager.close();

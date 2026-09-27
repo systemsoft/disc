@@ -132,9 +132,18 @@ function assertOwnerScoped(compiled: Compiled, mutationPrefix: string): void {
   }
 }
 
+/**
+ * As in Gel, a mutation of objects no policy lets the caller reach compiles:
+ * an update or delete reaches no row (the policy's condition is FALSE), and
+ * an insert fails each object it writes, at run time.
+ */
 function assertDenied(compiled: Compiled, operation: string): void {
-  assertEquals(compiled.sql, undefined, `expected a denial, got SQL: ${compiled.sql}`);
-  assertStringIncludes(compiled.error ?? "", `${operation} not allowed on Locked`);
+  assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
+  if (operation === "INSERT") {
+    assertStringIncludes(compiled.sql, "disc_access_check(COALESCE((FALSE), FALSE), E'access policy violation on insert of default::Locked')");
+    return;
+  }
+  assertStringIncludes(withoutWriteChecks(compiled.sql), "WHERE FALSE", `the ${operation} must reach no row: ${compiled.sql}`);
 }
 
 function assertUnfiltered(compiled: Compiled): void {
@@ -200,10 +209,11 @@ Deno.test("nested mutation access - an allowed insert stays allow/deny only, wit
 // its WHERE, so a conflicting row they exclude is left as it is.
 // ---------------------------------------------------------------------------
 
-Deno.test("nested mutation access - upsert is denied when the update policy denies", async () => {
+Deno.test("nested mutation access - upsert leaves a conflicting row as it is when no policy allows update", async () => {
   const compiled = await asUser("insert Journal { title := 't' } unless conflict on .title else (update Journal set { title := 'u' })");
-  assertEquals(compiled.sql, undefined, `expected a denial, got SQL: ${compiled.sql}`);
-  assertStringIncludes(compiled.error ?? "", "UPDATE not allowed on Journal");
+  assert(compiled.sql, `expected SQL, got error: ${compiled.error}`);
+  const action = compiled.sql.slice(compiled.sql.indexOf("DO UPDATE"));
+  assertStringIncludes(withoutWriteChecks(action), "WHERE FALSE", `the else branch must update no row: ${compiled.sql}`);
 });
 
 Deno.test("nested mutation access - upsert on a type with a row-level update policy updates only rows the policies allow", async () => {

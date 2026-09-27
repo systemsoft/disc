@@ -16,7 +16,7 @@
  * the consumer's contract, against the same fixture.
  */
 
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
 import type { AccessContext } from "../access/types.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
@@ -280,7 +280,7 @@ Deno.test("select over mutation + policy - update and delete carry the owner pre
   }
 });
 
-Deno.test("select over mutation + policy - every form on Locked is denied", async () => {
+Deno.test("select over mutation + policy - every form on Locked reaches no row, or fails each object it inserts", async () => {
   const forms = [
     "select (update Locked filter .name = <str>$n set { name := <str>$new }) { id }",
     "select (delete Locked filter .name = <str>$n) { id }",
@@ -290,10 +290,15 @@ Deno.test("select over mutation + policy - every form on Locked is denied", asyn
     "with m := (insert Locked { name := <str>$n }) select m { id }"
   ];
 
+  // As in Gel: an update or delete of objects the policies hide modifies nothing; an insert fails each object it writes.
   for (const form of forms) {
-    const compiled = await compile(form, { userId: USER_ID });
+    const sql = await sqlOf(form, { userId: USER_ID });
 
-    assert(/not allowed on Locked/i.test(compiled.error ?? ""), `expected a denial for '${form}', got: ${JSON.stringify(compiled)}`);
+    if (form.includes("insert")) {
+      assertStringIncludes(sql, "access policy violation on insert of default::Locked", form);
+    } else {
+      assertMatch(withoutWriteChecks(sql), /WHERE \(?FALSE\b/, form);
+    }
   }
 });
 

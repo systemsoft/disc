@@ -91,6 +91,9 @@ export class AccessEvaluator {
     // Evaluate each policy
     let hasAllow = false;
     let hasDeny = false;
+    /*** An allowing policy without a condition allows every object: the others' conditions
+         then narrow nothing. ***/
+    let allowsEveryObject = false;
     /*** Track the first denying policy’s custom errmessage so we can surface it on the
          AccessDecision (Gel #4095). Callers prefer this over the generic `reason` when raising
          an error. ***/
@@ -109,6 +112,8 @@ export class AccessEvaluator {
 
         if (decision.sqlCondition)
           sqlConditions.push(decision.sqlCondition);
+        else
+          allowsEveryObject = true;
       } else if (decision.denied) {
         hasDeny = true;
 
@@ -155,7 +160,7 @@ export class AccessEvaluator {
       denialMessage: !allowed ? denialMessage : undefined,
       denySqlConditions: allowed && denySqlConditions.length > 0 ? denySqlConditions : undefined,
       reason,
-      sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined
+      sqlConditions: sqlConditions.length > 0 && !allowsEveryObject ? sqlConditions : undefined
     };
   }
 
@@ -265,7 +270,7 @@ export class AccessEvaluator {
 
           default: {
             /*** A custom global is the value the context supplies for it, if
-                 any (as in `evaluateGlobal`). Otherwise it is read from the
+                 any (as in `globalValue`). Otherwise it is read from the
                  setting `set global` writes: its declaration (type, default)
                  resolved by the compiler when one is set, else the untyped
                  setting of the global's name (default module when unqualified). An unset setting reads as '' once
@@ -369,6 +374,25 @@ export class AccessEvaluator {
     return this.policySQL(policy, policy.usingSource, policy.using, context);
   }
 
+  /**
+   * The SQL deciding which objects `policy` applies to: its `using` (see
+   * `usingSQL`), else — for a policy with only an in-memory condition — that
+   * condition as SQL when it reads a custom global the context does not
+   * supply, which only PostgreSQL holds. Undefined when the policy applies
+   * to every object, or its condition is decided in memory.
+   */
+  private conditionSQL(policy: AccessPolicy, context: AccessContext): string | undefined {
+    const using = this.usingSQL(policy, context);
+
+    if (using !== undefined)
+      return using;
+
+    if (policy.condition && readsSessionGlobal(policy.condition, context))
+      return this.expressionToSQL(policy.condition, context, policy.objectType);
+
+    return undefined;
+  }
+
   /*** The SQL of `policy`'s `with check`, as `usingSQL`. ***/
   private withCheckSQL(policy: AccessPolicy, context: AccessContext): string | undefined {
     return this.policySQL(policy, policy.withCheckSource, policy.withCheck, context);
@@ -393,11 +417,13 @@ export class AccessEvaluator {
   }
 
   /**
-   * Evaluate a comparison expression
+   * The value of a comparison. An absent value (a global with none) is null;
+   * two absent values are equal (`?=`), as the policy converter maps `?=` to
+   * `=`.
    */
   private evaluateComparison(comp: AccessComparisonNode, context: AccessContext): boolean {
-    const left = this.evaluateExpression(comp.left, context);
-    const right = this.evaluateExpression(comp.right, context);
+    const left = this.evaluateValue(comp.left, context) ?? null;
+    const right = this.evaluateValue(comp.right, context) ?? null;
 
     switch (comp.operator) {
       case "=": {
@@ -406,22 +432,6 @@ export class AccessEvaluator {
 
       case "!=": {
         return left !== right;
-      }
-
-      case "<": {
-        return left < right;
-      }
-
-      case ">": {
-        return left > right;
-      }
-
-      case "<=": {
-        return left <= right;
-      }
-
-      case ">=": {
-        return left >= right;
       }
 
       case "in": {
@@ -435,7 +445,31 @@ export class AccessEvaluator {
       case "like":
       case "ilike": {
         // Simple pattern matching (would need more sophisticated impl)
-        return String(left).includes(String(right));
+        return left !== null && right !== null && String(left).includes(String(right));
+      }
+    }
+
+    /*** An ordering needs two values of one comparable type. ***/
+    if (left === null || right === null || typeof left !== typeof right || (typeof left !== "number" && typeof left !== "string"))
+      return false;
+
+    const [a, b] = [left as number | string, right as number | string];
+
+    switch (comp.operator) {
+      case "<": {
+        return a < b;
+      }
+
+      case ">": {
+        return a > b;
+      }
+
+      case "<=": {
+        return a <= b;
+      }
+
+      case ">=": {
+        return a >= b;
       }
 
       default: {
@@ -444,21 +478,28 @@ export class AccessEvaluator {
     }
   }
 
-  /**
-   * Evaluate an expression against the context
-   */
+  /*** Whether an expression holds for the context: its value, as a condition. ***/
   private evaluateExpression(expr: AccessExpressionNode, context: AccessContext): boolean {
+    return Boolean(this.evaluateValue(expr, context));
+  }
+
+  /**
+   * The value of an expression against the context: a literal's value, a
+   * global's value (not whether it is set), a path's value in the context, or
+   * the truth of a comparison, logical expression or function.
+   */
+  private evaluateValue(expr: AccessExpressionNode, context: AccessContext): unknown {
     switch (expr.kind) {
       case "AccessLiteral": {
-        return Boolean(expr.value);
+        return expr.value;
       }
 
       case "AccessGlobal": {
-        return this.evaluateGlobal(expr.name, context);
+        return this.globalValue(expr.name, context);
       }
 
       case "AccessPath": {
-        return Boolean(this.resolvePath(expr.path, context));
+        return this.resolvePath(expr.path, context);
       }
 
       case "AccessComparison": {
@@ -488,8 +529,8 @@ export class AccessEvaluator {
     // Built-in functions
     switch (func.name) {
       case "has_role": {
-        const requiredRole = String(this.evaluateExpression(func.args[0], context));
-        return context.userRole === requiredRole;
+        const requiredRole = this.evaluateValue(func.args[0], context);
+        return context.userRole !== undefined && context.userRole === requiredRole;
       }
 
       case "is_owner": {
@@ -517,30 +558,30 @@ export class AccessEvaluator {
   }
 
   /**
-   * Evaluate a global variable
+   * The value of a global in the context, as its SQL reads it (see
+   * `expressionToSQL`): a custom global's value from `globals`, the caller's
+   * id or role, `'true'` for a session; null when it has none.
    */
-  private evaluateGlobal(name: string, context: AccessContext): boolean {
-    // Check custom globals map first
+  private globalValue(name: string, context: AccessContext): unknown {
     if (context.globals?.has(name)) {
-      return Boolean(context.globals.get(name));
+      return context.globals.get(name) ?? null;
     }
 
-    // Fall back to built-in globals
     switch (name) {
       case "current_user": {
-        return Boolean(context.userId);
+        return context.userId ?? null;
       }
 
       case "current_role": {
-        return Boolean(context.userRole);
+        return context.userRole ?? null;
       }
 
       case "current_session": {
-        return Boolean(context.sessionData);
+        return context.sessionData ? "true" : null;
       }
 
       default: {
-        return false;
+        return null;
       }
     }
   }
@@ -586,37 +627,35 @@ export class AccessEvaluator {
       if (!this.operationMatches(operation, action.operations))
         continue;
 
-      /*** A deny with a condition denies the objects that meet it, which only the SQL can
-           tell (Gel: denies subtract from what the allows give): the write check decides
-           for each object an insert or update writes (see `writePolicies`), a filter for
-           the objects a select, update or delete reads. ***/
-      if (!action.allow && this.config.enableRLS && (policy.using || policy.usingSource !== undefined)) {
-        if (operation !== "insert" && operation !== "update write")
-          denySqlCondition = this.usingSQL(policy, context);
+      /*** A condition with SQL is decided for each object by its SQL — compiled by the
+           query compiler, it reads globals, links and the object exactly — never in memory,
+           where the policy's in-memory form (or its guard over the globals it reads) is only
+           an approximation. An allow applies with its condition as the filter; a deny
+           removes the objects that meet it (Gel: denies subtract from what the allows give),
+           as a filter on the objects a select, update or delete reads, and through the write
+           check on each object an insert or update writes (see `writePolicies`). ***/
+      const conditionSql = this.config.enableRLS ? this.conditionSQL(policy, context) : undefined;
+
+      if (conditionSql !== undefined) {
+        if (action.allow) {
+          allowed = true;
+          sqlCondition = conditionSql;
+        } else if (operation !== "insert" && operation !== "update write") {
+          denySqlCondition = conditionSql;
+        }
 
         continue;
       }
 
-      /*** Evaluate condition if present. A custom global the context does not supply is
-           session state only the policy's SQL can read, so a condition over one is left to
-           the SQL. ***/
-      if (policy.condition && !readsSessionGlobal(policy.condition, context)) {
-        const conditionMet = this.evaluateExpression(policy.condition, context);
-
-        if (!conditionMet)
-          continue;
-      }
+      /*** Without SQL, a condition over the context alone is evaluated here. ***/
+      if (policy.condition && !this.evaluateExpression(policy.condition, context))
+        continue;
 
       // Apply the action
-      if (action.allow) {
+      if (action.allow)
         allowed = true;
-
-        // Generate SQL condition for row-level security
-        if (this.config.enableRLS)
-          sqlCondition = this.usingSQL(policy, context);
-      } else {
+      else
         denied = true;
-      }
     }
 
     return { allowed, denied, denySqlCondition, sqlCondition };

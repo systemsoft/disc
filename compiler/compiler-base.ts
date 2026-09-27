@@ -455,6 +455,12 @@ export abstract class CompilerBase {
    * a table (see `mutationTargetTable`).
    */
   private exemptTables = new WeakSet<SQL.TableReference>();
+  /**
+   * The table references of reads that start from a type rather than from a
+   * mutation's result (see `readingSnapshot`): they read the table as it was
+   * before the statement, while select policies still narrow them.
+   */
+  private snapshotTables = new WeakSet<SQL.TableReference>();
   /** The CTE names this compilation has taken (see `claimCteName`). */
   protected cteNames = new Set<string>();
   /**
@@ -463,6 +469,13 @@ export abstract class CompilerBase {
    * statement (see `mutationOverlay`).
    */
   protected mutationWrites: Context.MutationWrite[] | undefined;
+  /**
+   * The rows each junction table a statement writes holds once it is done,
+   * as a policy's condition in the check on the objects the statement writes
+   * reads them (see `EdgeQLCompiler.withJunctionWrites`): a factory of the
+   * rows, by junction table. Empty while anything else compiles.
+   */
+  protected junctionOverlays = new Map<string, () => SQL.SQLStatement>();
 
   constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
@@ -655,6 +668,13 @@ export abstract class CompilerBase {
     return this.decisionFilter(decision);
   }
 
+  /*** A read of `table` as it is, which the pass that narrows object reads (and overlays junction writes) leaves alone. ***/
+  protected exemptTableReference(table: string, alias?: string): SQL.TableReference {
+    const reference = SQL.createTableReference(table, alias);
+    this.exemptTables.add(reference);
+    return reference;
+  }
+
   /**
    * `SELECT * FROM "<table>" AS "__policy_rows" WHERE <filter>`: the rows of
    * `typeDef` a policy filter keeps. The filter's unqualified columns resolve
@@ -662,9 +682,9 @@ export abstract class CompilerBase {
    * table's name (a mutation's target, a self link) pointing outward. The
    * pass that narrows object reads leaves this table as it is.
    */
-  protected tableRowsWhere(typeDef: Context.TypeDef, filter: SQL.SQLExpression): SQL.SelectStatement {
+  protected tableRowsWhere(typeDef: Context.TypeDef, filter: SQL.SQLExpression, snapshot = false): SQL.SelectStatement {
     // While a select of a mutation's result compiles, the rows as the statement leaves them.
-    const overlay = this.mutationOverlay(typeDef.tableName);
+    const overlay = snapshot ? undefined : this.mutationOverlay(typeDef.tableName);
     const table: SQL.TableReference = overlay ?
       { alias: POLICY_ROWS, kind: "TableReference", name: "", subquery: overlay } :
       SQL.createTableReference(typeDef.tableName, POLICY_ROWS);
@@ -703,9 +723,14 @@ export abstract class CompilerBase {
    * the union of its subtypes' junctions (see abstractTableRows), aliased by
    * `alias` or else by the junction's name, so `"<junction>".col` still resolves.
    * So is a junction a mutation writes, for a select of its result (see
-   * `mutationOverlay`).
+   * `mutationOverlay`), and a junction the statement writes, read by the
+   * check on the objects it writes (see `junctionOverlays`).
    */
   protected junctionTableSql(junctionTable: string, alias?: string): string {
+    const overlay = this.junctionOverlays.get(junctionTable);
+    if (overlay) {
+      return `(${this.renderSqlStatement(overlay())}) "${alias ?? junctionTable}"`;
+    }
     const rows = this.abstractTableRows(junctionTable) ?? this.mutationOverlay(junctionTable);
     if (rows) {
       return `(${this.renderSqlStatement(rows)}) "${alias ?? junctionTable}"`;
@@ -832,14 +857,24 @@ export abstract class CompilerBase {
 
     if (sqlNode.kind === "TableReference") {
       const table = node as SQL.TableReference;
-      if (!table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
+      const overlay = this.exemptTables.has(table) ? undefined : this.junctionOverlays.get(table.name);
+      if (overlay && !table.subquery && !table.expression && !shadowed.has(table.name)) {
+        table.subquery = overlay();
+        table.alias = table.alias ?? table.name;
+        table.name = "";
+      } else if (!table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
         const abstractRows = this.abstractTableRows(table.name);
         const exempt = this.exemptTables.has(table);
+        const snapshot = this.snapshotTables.has(table);
         const typeDef = abstractRows || !restrict || exempt ? undefined : this.objectTypeOfTable(table.name);
         const filter = typeDef ? this.selectPolicyFilter(typeDef) : undefined;
         const rows = abstractRows ??
-          (typeDef && filter ? this.tableRowsWhere(typeDef, filter) : exempt ? undefined : this.mutationOverlay(table.name));
+          (typeDef && filter ? this.tableRowsWhere(typeDef, filter, snapshot) : exempt || snapshot ? undefined : this.mutationOverlay(table.name));
         if (rows) {
+          if (snapshot) {
+            // An abstract type's subtype tables, read before the statement too.
+            this.markSnapshotReads(rows);
+          }
           table.subquery = rows;
           table.alias = table.alias ?? table.name;
           table.name = "";
@@ -944,6 +979,48 @@ export abstract class CompilerBase {
     } finally {
       this.mutationWrites = outer;
     }
+  }
+
+  /**
+   * Compile a read that starts from a type (`select Item`, `Item.name`) while
+   * a select of a mutation's result compiles (see `readingMutation`). As in
+   * Gel, where only the sets a mutation contributes to see its writes (the
+   * overlays of `get_dml_sources`), such a read sees the tables as they were
+   * before the statement — `with o := (insert Item {…}) select o { n := count((select Item)) }`
+   * does not count the new item — even inside the result's shape. So it
+   * compiles without the mutation's tables, and its table references are
+   * left as they are by the pass that replaces them (`markSnapshotReads`).
+   * A select of the result nested in it (`(select o.items)`) sees the writes
+   * again: it compiles, and has its reads replaced, by `readingMutation`.
+   */
+  protected readingSnapshot<T>(compile: () => T): T {
+    const writes = this.mutationWrites;
+    if (!writes) {
+      return compile();
+    }
+    this.mutationWrites = undefined;
+    try {
+      const compiled = compile();
+      this.markSnapshotReads(compiled);
+      return compiled;
+    } finally {
+      this.mutationWrites = writes;
+    }
+  }
+
+  /*** Mark every table reference under `node` as a read before the statement (see `readingSnapshot`). ***/
+  private markSnapshotReads(node: unknown): void {
+    if (Array.isArray(node)) {
+      node.forEach(item => this.markSnapshotReads(item));
+      return;
+    }
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if ((node as { kind?: string; }).kind === "TableReference") {
+      this.snapshotTables.add(node as SQL.TableReference);
+    }
+    Object.values(node).forEach(value => this.markSnapshotReads(value));
   }
 
   /**

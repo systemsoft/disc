@@ -230,9 +230,9 @@ Deno.test("service token: the service may insert into a type closed to everyone"
     assertEquals(service.status, 200);
     assertStringIncludes(service.body.extensions?.sql as string, "INSERT INTO locked");
 
+    // Anyone else's insert fails each object it writes, when it runs (as in Gel).
     const anonymous = await query(port, {}, "/query", { query: "insert Locked { name := 'x' }" });
-    assertEquals(anonymous.status, 400);
-    assert(anonymous.body.errors?.some(e => /not allowed on Locked/.test(e.message)), JSON.stringify(anonymous.body));
+    assertStringIncludes(anonymous.body.extensions?.sql as string, "access policy violation on insert of default::Locked");
   } finally {
     await cleanup();
   }

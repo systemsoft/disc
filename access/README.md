@@ -131,7 +131,7 @@ const decision = evaluator.evaluate("User", "select", context);
 
 ### Deny semantics: row-level subtraction
 
-As in Gel, “all allow policies collectively form a union of allowed sets; all deny policies subtract from that union”. A `deny` with a condition (`using`, `when`) denies the objects it holds for: select, update read and delete filter them out; insert and update write fail on them (the write check). A `deny` without a condition denies the operation outright: a select sees no objects, and an update, delete or insert is refused at compile time.
+As in Gel, “all allow policies collectively form a union of allowed sets; all deny policies subtract from that union”. A `deny` with a condition (`using`, `when`) denies the objects it holds for: select, update read and delete filter them out; insert and update write fail on them (the write check). A `deny` without a condition denies the operation outright: a select sees no objects and an update or delete reaches none, so modifies nothing (no error), while an insert fails each object it inserts with the access policy violation (so inserting none succeeds). An update or delete no policy allows is the same.
 
 ```esdl
 access policy open
@@ -140,12 +140,14 @@ access policy hide_drafts
   deny select, update, delete
   using (.draft ?= true);     # drafts are invisible and untouchable; the rest is open
 access policy no_delete
-  deny delete;                # rejects every delete on this type
+  deny delete;                # every delete on this type deletes nothing
 ```
 
 ### Policy expressions
 
 A policy’s `when`, `using` and `with check` are EdgeQL expressions over the object, compiled by the query compiler: they may follow single and multi links (`.owner.name`, `global current_user in .members.id`), backlinks (`exists .<team[is Project]`), call functions and read globals. The objects they read are not narrowed by those objects’ own policies — as in Gel, “policy expressions themselves do not take other policies into account” — so a policy never recurses into another.
+
+A condition is decided for each object by its SQL, never in memory: whether a policy's `using` holds for a caller — `global current_role != 'guest'`, `.public ?= true or .owner ?= global current_user` for an anonymous caller — is what PostgreSQL computes. An insert or update write check reads the multi links the statement writes as it leaves them, so `using (exists .tags)` holds for `insert … { tags := … }`. A policy an abstract type declares applies to each of its subtypes, and may follow a backlink whose link targets the abstract type.
 
 `when (<cond>)` (Gel) limits the objects a policy applies to: an object it does not hold for is neither allowed nor denied by the policy. It is written in Gel’s form or inside Disc’s block form:
 

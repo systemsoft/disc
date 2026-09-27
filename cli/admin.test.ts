@@ -421,8 +421,8 @@ Deno.test("admin test-policy — denial surfaces the policy’s errmessage", asy
 
     /*** Force a deny path: the eval path defaults `defaultAllow: false`, and admin_override only
          allows when `global is_admin` is true. With it false, admin_override doesn’t allow →
-         permissive mode falls through to "no allow found". (Left out, the global is session
-         state only the policy’s SQL can read, so the verdict is ALLOW with that SQL.) Pin the
+         permissive mode falls through to "no allow found". (test-policy evaluates the
+         condition against the given context, a global left out having no value.) Pin the
          reason string path stays intact. ***/
     await testPolicyImpl(
       {

@@ -468,6 +468,8 @@ export async function reconcileDeclaredLinkProperties(
 
 /** The delete rules the database has on the tables it was asked about. */
 export interface ExistingDeleteRules {
+  /** The foreign keys (keyed like `foreignKeys`) that are `DEFERRABLE INITIALLY DEFERRED`. */
+  deferredForeignKeys: Set<string>;
   /** ON DELETE action (`CASCADE`, `RESTRICT`, …) of each foreign key, keyed `<table>.<constraint>`. */
   foreignKeys: Map<string, string>;
   /** The asked-about tables that exist. */
@@ -487,7 +489,7 @@ export type ExistingDeleteRuleReader = (tableNames: string[]) => Promise<Existin
 /** How the DDL generator names a link's delete rules and which FK action it gives the link (see `DDLGenerator`). */
 export interface LinkDeleteRuleNaming {
   sourceDeleteTrigger(tableName: string, link: LinkDefinition): { body: string; name: string; table: string; timing: string; };
-  targetForeignKey(tableName: string, link: LinkDefinition): { constraint: string; onDelete: string; table: string; };
+  targetForeignKey(tableName: string, link: LinkDefinition): { constraint: string; deferred: boolean; onDelete: string; table: string; };
 }
 
 /** The repairs `reconcileLinkDeleteRules` plans, and the foreign keys it found missing and left alone. */
@@ -517,7 +519,8 @@ function pgStoredName(name: string): string {
  *
  * Compares every declared link (`declared`) with the database: the ON DELETE
  * action of its target FK (`fk_<table>_<link>_id`, or `fk_<junction>_target_id`
- * on a multi link), and whether its `trg_source_delete_…` trigger exists —
+ * on a multi link) and whether that FK is deferred (a link to an abstract
+ * type's is, see `LinkDefinition.targetAbstract`), and whether its `trg_source_delete_…` trigger exists —
  * with the timing, on the table and running the function body Disc creates
  * it with now (AFTER DELETE; a multi link's on its junction; `if orphan`
  * adds a check). Earlier Disc created it BEFORE DELETE on the source table,
@@ -601,7 +604,9 @@ export async function reconcileLinkDeleteRules(
           `link '${entry.link.name}' on '${entry.typeName}' has no foreign key "${foreignKey.constraint}" on "${foreignKey.table}" ` +
             `(expected ON DELETE ${foreignKey.onDelete}); not re-created — add it by hand`
         );
-      } else if (actual !== foreignKey.onDelete) {
+      } else if (
+        actual !== foreignKey.onDelete || existing.deferredForeignKeys.has(`${foreignKey.table}.${pgStoredName(foreignKey.constraint)}`) !== foreignKey.deferred
+      ) {
         changes.push({ kind: "ChangeOnDelete", newValue: entry.link.onTargetDelete, oldValue: actual });
       }
     }

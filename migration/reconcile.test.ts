@@ -78,6 +78,7 @@ function restrictingDatabase(asked: string[][]): (tableNames: string[]) => Promi
   return tableNames => {
     asked.push(tableNames);
     return Promise.resolve({
+      deferredForeignKeys: new Set<string>(),
       foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
       tables: new Set(["bug"]),
       triggerBodies: new Map<string, string>(),
@@ -93,6 +94,53 @@ Deno.test("reconcileLinkDeleteRules re-adds a foreign key whose ON DELETE action
   assertEquals(new DDLGenerator().generateDDL(result.operations), [
     "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE CASCADE;"
   ]);
+});
+
+Deno.test("reconcileLinkDeleteRules defers the foreign key of a link to an abstract type, and only that", async () => {
+  const toAbstract: DeclaredLink = { ...DELETE_SOURCE, link: { ...DELETE_SOURCE.link, onTargetDelete: "RESTRICT", targetAbstract: true } };
+  const result = await reconcileLinkDeleteRules([toAbstract], [], new DDLGenerator(), restrictingDatabase([]));
+
+  assertEquals(new DDLGenerator().generateDDL(result.operations), [
+    "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;"
+  ]);
+
+  // Deferred already: nothing to repair. A link to a concrete type whose FK is deferred is made immediate.
+  const deferred = (): Promise<ExistingDeleteRules> =>
+    Promise.resolve({
+      deferredForeignKeys: new Set(["bug.fk_bug_program_id"]),
+      foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
+      tables: new Set(["bug"]),
+      triggerBodies: new Map<string, string>(),
+      triggers: new Map<string, string>()
+    });
+  assertEquals((await reconcileLinkDeleteRules([toAbstract], [], new DDLGenerator(), deferred)).operations, []);
+  const toConcrete: DeclaredLink = { ...DELETE_SOURCE, link: { ...DELETE_SOURCE.link, onTargetDelete: "RESTRICT" } };
+  assertEquals(new DDLGenerator().generateDDL((await reconcileLinkDeleteRules([toConcrete], [], new DDLGenerator(), deferred)).operations), [
+    "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE RESTRICT;"
+  ]);
+});
+
+Deno.test("SchemaDiffer marks the links whose target is abstract, and DDL defers their foreign keys", () => {
+  const modules = new SDLConverter().convertToModules(
+    new SDLParser(`module default {
+  abstract type Named { required name: str; };
+  type Person extending Named {};
+  type Thing {
+    link owner -> Named;
+    multi link fans -> Named;
+    link buyer -> Person;
+  };
+};`)
+      .parse()
+  );
+  const differ = new SchemaDiffer();
+  const links = differ.declaredLinks(modules).filter(entry => entry.tableName === "thing");
+  assertEquals(links.map(entry => [entry.link.name, entry.link.targetAbstract ?? false]), [["owner", true], ["fans", true], ["buyer", false]]);
+
+  const ddl = new DDLGenerator().generateDDL(differ.diff([], modules)).join("\n");
+  assert(ddl.includes("REFERENCES named (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;"), ddl);
+  assert(/FOREIGN KEY \(target_id\) REFERENCES named \(id\) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED/.test(ddl), ddl);
+  assert(ddl.includes("REFERENCES person (id) ON DELETE RESTRICT;"), ddl);
 });
 
 Deno.test("reconcileLinkDeleteRules leaves a link whose on target delete the migration itself changes", async () => {
@@ -114,7 +162,14 @@ Deno.test("reconcileLinkDeleteRules reports a foreign key that doesn't exist ins
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set(["bug"]), triggerBodies: new Map<string, string>(), triggers: new Map<string, string>() })
+    () =>
+      Promise.resolve({
+        deferredForeignKeys: new Set<string>(),
+        foreignKeys: new Map(),
+        tables: new Set(["bug"]),
+        triggerBodies: new Map<string, string>(),
+        triggers: new Map<string, string>()
+      })
   );
 
   assertEquals(result.operations, []);
@@ -126,7 +181,14 @@ Deno.test("reconcileLinkDeleteRules skips a table that doesn't exist yet", async
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set<string>(), triggerBodies: new Map<string, string>(), triggers: new Map<string, string>() })
+    () =>
+      Promise.resolve({
+        deferredForeignKeys: new Set<string>(),
+        foreignKeys: new Map(),
+        tables: new Set<string>(),
+        triggerBodies: new Map<string, string>(),
+        triggers: new Map<string, string>()
+      })
   );
 
   assertEquals(result, { missingForeignKeys: [], operations: [] });
@@ -142,6 +204,7 @@ const IF_ORPHAN: DeclaredLink = {
 function triggerDatabase(body: string): () => Promise<ExistingDeleteRules> {
   return () =>
     Promise.resolve({
+      deferredForeignKeys: new Set<string>(),
       foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
       tables: new Set(["bug"]),
       triggerBodies: new Map([["bug.trg_source_delete_bug_program", body]]),

@@ -21,6 +21,7 @@ import {
   ConnectionError,
   DatabaseExecutionError,
   InternalError,
+  InvalidReferenceError,
   QueryError,
   QueryTimeoutError,
   SchemaError,
@@ -239,13 +240,92 @@ Deno.test("query-execution - mapErrorToGelCode: ValidationError -> InvalidValueE
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.InvalidValueError);
 });
 
-Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError -> IntegrityError", () => {
-  const err = new DatabaseExecutionError(
-    "execution failed",
-    "SELECT 1",
-    new Error("pg error")
-  );
-  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.IntegrityError);
+Deno.test("query-execution - GEL_ERROR_CODES match Gel's edb/api/errors.txt", () => {
+  // Real Gel clients pick the error class (and whether to retry) from these codes.
+  assertEquals(GEL_ERROR_CODES.InternalServerError, 0x01000000);
+  assertEquals(GEL_ERROR_CODES.UnsupportedFeatureError, 0x02000000);
+  assertEquals(GEL_ERROR_CODES.ProtocolError, 0x03000000);
+  assertEquals(GEL_ERROR_CODES.QueryError, 0x04000000);
+  assertEquals(GEL_ERROR_CODES.InvalidSyntaxError, 0x04010000);
+  assertEquals(GEL_ERROR_CODES.EdgeQLSyntaxError, 0x04010100);
+  assertEquals(GEL_ERROR_CODES.SchemaSyntaxError, 0x04010200);
+  assertEquals(GEL_ERROR_CODES.InvalidTypeError, 0x04020000);
+  assertEquals(GEL_ERROR_CODES.InvalidTargetError, 0x04020100);
+  assertEquals(GEL_ERROR_CODES.InvalidLinkTargetError, 0x04020101);
+  assertEquals(GEL_ERROR_CODES.InvalidReferenceError, 0x04030000);
+  assertEquals(GEL_ERROR_CODES.UnknownModuleError, 0x04030001);
+  assertEquals(GEL_ERROR_CODES.UnknownDatabaseError, 0x04030005);
+  assertEquals(GEL_ERROR_CODES.SchemaError, 0x04040000);
+  assertEquals(GEL_ERROR_CODES.SchemaDefinitionError, 0x04050000);
+  assertEquals(GEL_ERROR_CODES.InvalidConstraintDefinitionError, 0x04050109);
+  assertEquals(GEL_ERROR_CODES.DuplicateDatabaseDefinitionError, 0x04050205);
+  assertEquals(GEL_ERROR_CODES.IdleSessionTimeoutError, 0x04060100);
+  assertEquals(GEL_ERROR_CODES.QueryTimeoutError, 0x04060200);
+  assertEquals(GEL_ERROR_CODES.IdleTransactionTimeoutError, 0x04060a01);
+  assertEquals(GEL_ERROR_CODES.ExecutionError, 0x05000000);
+  assertEquals(GEL_ERROR_CODES.InvalidValueError, 0x05010000);
+  assertEquals(GEL_ERROR_CODES.DivisionByZeroError, 0x05010001);
+  assertEquals(GEL_ERROR_CODES.NumericOutOfRangeError, 0x05010002);
+  assertEquals(GEL_ERROR_CODES.AccessPolicyError, 0x05010003);
+  assertEquals(GEL_ERROR_CODES.IntegrityError, 0x05020000);
+  assertEquals(GEL_ERROR_CODES.ConstraintViolationError, 0x05020001);
+  assertEquals(GEL_ERROR_CODES.CardinalityViolationError, 0x05020002);
+  assertEquals(GEL_ERROR_CODES.MissingRequiredError, 0x05020003);
+  assertEquals(GEL_ERROR_CODES.TransactionError, 0x05030000);
+  assertEquals(GEL_ERROR_CODES.TransactionSerializationError, 0x05030101);
+  assertEquals(GEL_ERROR_CODES.TransactionDeadlockError, 0x05030102);
+  assertEquals(GEL_ERROR_CODES.AccessError, 0x07000000);
+  assertEquals(GEL_ERROR_CODES.AuthenticationError, 0x07010000);
+  assertEquals(GEL_ERROR_CODES.AvailabilityError, 0x08000000);
+  assertEquals(GEL_ERROR_CODES.BackendUnavailableError, 0x08000001);
+  assertEquals(GEL_ERROR_CODES.UnsupportedBackendFeatureError, 0x09000100);
+});
+
+/*** A PostgreSQL error as the driver raises it: the SQLSTATE in `fields.code`. ***/
+function pgError(code: string): Error {
+  return Object.assign(new Error(`pg error ${code}`), { fields: { code } });
+}
+
+Deno.test("query-execution - mapErrorToGelCode: PostgreSQL errors map by SQLSTATE as Gel's errormech does", () => {
+  const cases: Array<[string, number]> = [
+    ["23000", GEL_ERROR_CODES.ConstraintViolationError], // integrity_constraint_violation
+    ["23001", GEL_ERROR_CODES.ConstraintViolationError], // restrict_violation
+    ["23502", GEL_ERROR_CODES.MissingRequiredError], // not_null_violation
+    ["23503", GEL_ERROR_CODES.ConstraintViolationError], // foreign_key_violation
+    ["23505", GEL_ERROR_CODES.ConstraintViolationError], // unique_violation (exclusive)
+    ["23514", GEL_ERROR_CODES.ConstraintViolationError], // check_violation
+    ["23P01", GEL_ERROR_CODES.ConstraintViolationError], // exclusion_violation
+    ["21000", GEL_ERROR_CODES.CardinalityViolationError], // cardinality_violation
+    ["40001", GEL_ERROR_CODES.TransactionSerializationError], // serialization_failure
+    ["40P01", GEL_ERROR_CODES.TransactionDeadlockError], // deadlock_detected
+    ["25006", GEL_ERROR_CODES.TransactionError], // read_only_sql_transaction
+    ["25P02", GEL_ERROR_CODES.TransactionError], // in_failed_sql_transaction
+    ["57014", GEL_ERROR_CODES.QueryTimeoutError], // query_canceled (statement_timeout)
+    ["25P03", GEL_ERROR_CODES.IdleTransactionTimeoutError], // idle_in_transaction_session_timeout
+    ["57P05", GEL_ERROR_CODES.IdleSessionTimeoutError], // idle_session_timeout
+    ["22012", GEL_ERROR_CODES.DivisionByZeroError], // division_by_zero
+    ["22003", GEL_ERROR_CODES.NumericOutOfRangeError], // numeric_value_out_of_range
+    ["22015", GEL_ERROR_CODES.NumericOutOfRangeError], // interval_field_overflow
+    ["22P02", GEL_ERROR_CODES.InvalidValueError], // invalid_text_representation
+    ["22007", GEL_ERROR_CODES.InvalidValueError], // invalid_datetime_format
+    ["2201B", GEL_ERROR_CODES.InvalidValueError], // invalid_regular_expression
+    ["54000", GEL_ERROR_CODES.InvalidValueError], // program_limit_exceeded
+    ["42501", GEL_ERROR_CODES.AccessPolicyError], // insufficient_privilege
+    ["55006", GEL_ERROR_CODES.ExecutionError], // object_in_use
+    ["3D000", GEL_ERROR_CODES.UnknownDatabaseError], // invalid_catalog_name
+    ["42P04", GEL_ERROR_CODES.DuplicateDatabaseDefinitionError], // duplicate_database
+    ["0A000", GEL_ERROR_CODES.UnsupportedBackendFeatureError], // feature_not_supported
+    ["08006", GEL_ERROR_CODES.BackendUnavailableError], // connection_failure
+    ["57P01", GEL_ERROR_CODES.BackendUnavailableError], // admin_shutdown
+    ["57P03", GEL_ERROR_CODES.BackendUnavailableError], // cannot_connect_now
+    ["42P01", GEL_ERROR_CODES.InternalServerError] // undefined_table: a Disc bug, as in Gel
+  ];
+  for (const [sqlState, code] of cases) {
+    assertEquals(mapErrorToGelCode(pgError(sqlState)), code, `SQLSTATE ${sqlState}`);
+    // The handlers wrap the driver's error; the SQLSTATE is read through `cause`.
+    const wrapped = new DatabaseExecutionError(`Database query failed: ${sqlState}`, "SELECT 1", pgError(sqlState));
+    assertEquals(mapErrorToGelCode(wrapped), code, `wrapped SQLSTATE ${sqlState}`);
+  }
 });
 
 Deno.test("query-execution - mapErrorToGelCode: an access policy violation (SQLSTATE 42501) -> AccessPolicyError", () => {
@@ -256,26 +336,31 @@ Deno.test("query-execution - mapErrorToGelCode: an access policy violation (SQLS
   assertEquals(mapErrorToGelCode(new DatabaseExecutionError(pgError.message, "INSERT …", pgError)), GEL_ERROR_CODES.AccessPolicyError);
 });
 
-Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError with constraint -> ConstraintViolationError", () => {
-  const err = new DatabaseExecutionError(
-    "constraint violation",
-    "INSERT INTO ...",
-    new Error("pg constraint error")
-  );
-  assertEquals(
-    mapErrorToGelCode(err),
-    GEL_ERROR_CODES.ConstraintViolationError
-  );
+Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError wrapping a compile error maps the compile error", () => {
+  const compile = new DatabaseExecutionError("bad query", "select 1", new CompilationError("bad query"));
+  assertEquals(mapErrorToGelCode(compile), GEL_ERROR_CODES.QueryError);
+  const reference = new DatabaseExecutionError("Type 'Nope' not found", "select Nope", new InvalidReferenceError("Type 'Nope' not found"));
+  assertEquals(mapErrorToGelCode(reference), GEL_ERROR_CODES.InvalidReferenceError);
 });
 
-Deno.test("query-execution - mapErrorToGelCode: QueryTimeoutError -> AvailabilityError", () => {
+Deno.test("query-execution - mapErrorToGelCode: InvalidReferenceError -> InvalidReferenceError", () => {
+  assertEquals(mapErrorToGelCode(new InvalidReferenceError("Type 'Nope' not found")), GEL_ERROR_CODES.InvalidReferenceError);
+});
+
+Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError without a SQLSTATE -> InternalServerError", () => {
+  // Not IntegrityError: nothing says an integrity constraint failed; Gel reports unrecognized backend errors as internal.
+  const err = new DatabaseExecutionError("constraint violation", "INSERT INTO ...", new Error("pg constraint error"));
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.InternalServerError);
+});
+
+Deno.test("query-execution - mapErrorToGelCode: QueryTimeoutError -> QueryTimeoutError", () => {
   const err = new QueryTimeoutError("SELECT 1", 5000);
-  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.AvailabilityError);
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.QueryTimeoutError);
 });
 
-Deno.test("query-execution - mapErrorToGelCode: ConnectionError -> AvailabilityError", () => {
+Deno.test("query-execution - mapErrorToGelCode: ConnectionError -> BackendUnavailableError", () => {
   const err = new ConnectionError("connection refused");
-  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.AvailabilityError);
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.BackendUnavailableError);
 });
 
 Deno.test("query-execution - mapErrorToGelCode: InternalError -> InternalServerError", () => {

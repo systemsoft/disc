@@ -7,7 +7,7 @@
 
 import type { AccessPolicy } from "../access/types.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { InvalidReferenceError } from "../lib/errors.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import * as SQL from "./sql.ts";
 
@@ -299,7 +299,7 @@ export function createContext(schema: Schema): CompilationContext {
 export function getLinkProperty(link: LinkDef, name: string): PropertyDef {
   const property = link.properties?.get(name);
   if (!property) {
-    throw new CompilationError(`Link '${link.name}' has no link property '${name}'`);
+    throw new InvalidReferenceError(`Link '${link.name}' has no link property '${name}'`);
   }
   return property;
 }

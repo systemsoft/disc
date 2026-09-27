@@ -246,6 +246,47 @@ Deno.test({
 });
 
 Deno.test({
+  name: "PG mutation result links: reads that don't start from the result see the database as before the statement",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      // As in Gel: only what is reached through the mutation's result reflects its writes.
+      assertEquals(
+        await shapes(
+          pool,
+          schema,
+          "with o := (insert MrOrder { label := 'v1', items := (insert MrItem { name := 'new' }) }) " +
+            "select o { items: { name }, names := MrItem.name, selected := (select MrItem.name), " +
+            "n_items := count((select MrItem filter .name != 'x')), is_new := not exists (select MrOrder filter .label = 'v1') }"
+        ),
+        [{ is_new: true, items: [{ name: "new" }], n_items: 2, names: ["i1", "i2"], selected: ["i1", "i2"] }]
+      );
+
+      // A type's links read from the type are those before the statement; the result's are those after.
+      assertEquals(
+        await shapes(
+          pool,
+          schema,
+          "select (update MrOrder filter .label = 'seed' set { items += (select MrItem filter .name = 'i2') }) " +
+            "{ items: { name }, before := (select MrOrder { items: { name } } filter .label = 'seed') }"
+        ),
+        [{ before: { items: [{ name: "i1" }] }, items: [{ name: "i1" }, { name: "i2" }] }]
+      );
+
+      // A path from the result inside a read of the type still reflects the writes.
+      assertEquals(
+        await shapes(
+          pool,
+          schema,
+          "with o := (update MrOrder filter .label = 'seed' set { items += (select MrItem filter .name = 'i2') }) " +
+            "select o { linked := count((select MrItem filter .id in (select o.items.id))) }"
+        ),
+        [{ linked: 2 }]
+      );
+    })
+});
+
+Deno.test({
   name: "PG mutation result links: an update's :=, += and -= of a multi link",
   ignore: !RUN_PG,
   fn: () =>
@@ -329,6 +370,11 @@ Deno.test({
       assertEquals(box.label, "bx");
       assertEquals(box.secrets, [{ name: "shown" }]);
       assertEquals(box.secret ?? [], []);
+
+      // A read of the type sees the objects from before the statement its policy shows.
+      await pool.query("INSERT INTO mr_secret (name, shown) VALUES ('old-shown', true), ('old-hidden', false)");
+      const counted = "select (insert MrSecret { name := 'new-shown', shown := true }) { name, n_shown := count((select MrSecret)) }";
+      assertEquals(await shapes(pool, schema, counted, compileWithPolicies(counted, schema)), [{ n_shown: 2, name: "new-shown" }]);
     })
 });
 

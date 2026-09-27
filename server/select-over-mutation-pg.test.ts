@@ -290,8 +290,10 @@ Deno.test({
         const stored = await pool.query("SELECT owner_id, title FROM doc ORDER BY title");
         assertEquals(stored.rows, [{ owner_id: OTHER_USER_ID, title: "shared" }, { owner_id: USER_ID, title: "shared!" }]);
 
+        // As in Gel, a delete of objects no policy lets the caller reach deletes nothing, without an error.
         const denied = compiler.compile(new EdgeQLParser("select (delete Locked filter .name = <str>$n) { id }").parse());
-        assert(!denied.ok && /not allowed on Locked/i.test(denied.error.message), JSON.stringify(denied));
+        assert(denied.ok, denied.ok ? "" : denied.error.message);
+        assertEquals((await pool.query(new SQLCodeGenerator().generate(denied.value), ["x"])).rows, []);
       });
     } finally {
       await listener.shutdown();

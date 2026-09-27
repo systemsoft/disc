@@ -1713,7 +1713,8 @@ export class MigrationEngine {
 
   /**
    * The existing tables among `tableNames`, with their foreign keys' ON
-   * DELETE actions and their triggers. Feeds the delete-rule repair.
+   * DELETE actions (and which are deferred) and their triggers. Feeds the
+   * delete-rule repair.
    */
   private async readExistingDeleteRules(db: SqlReader, tableNames: string[]): Promise<ExistingDeleteRules> {
     const onDeleteActions: Record<string, string> = { a: "NO ACTION", c: "CASCADE", d: "SET DEFAULT", n: "SET NULL", r: "RESTRICT" };
@@ -1722,7 +1723,7 @@ export class MigrationEngine {
       [tableNames]
     );
     const foreignKeys = await db.query(
-      `SELECT t.relname AS table_name, c.conname AS constraint_name, c.confdeltype AS on_delete
+      `SELECT t.relname AS table_name, c.conname AS constraint_name, c.confdeltype AS on_delete, c.condeferred AS deferred
          FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
         WHERE c.contype = 'f' AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
       [tableNames]
@@ -1737,6 +1738,10 @@ export class MigrationEngine {
     );
 
     return {
+      deferredForeignKeys: new Set(foreignKeys.rows.flatMap(row => {
+        const r = row as { constraint_name: string; deferred: boolean; table_name: string; };
+        return r.deferred ? [`${r.table_name}.${r.constraint_name}`] : [];
+      })),
       foreignKeys: new Map(foreignKeys.rows.map(row => {
         const r = row as { constraint_name: string; on_delete: string; table_name: string; };
         return [`${r.table_name}.${r.constraint_name}`, onDeleteActions[r.on_delete] ?? r.on_delete];

@@ -9,7 +9,7 @@
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
 import {
   backlinkIntersectionName,
@@ -85,6 +85,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const writes = this.writesReadBy(query.expr).filter(write => !this.mutationWrites?.includes(write));
     if (writes.length > 0) {
       return this.readingMutation([...this.mutationWrites ?? [], ...writes], () => this.compileSelectQuery(query));
+    }
+    // Inside a select of a mutation's result, a select of a type
+    // (`select o { n := count((select Item)) }`) reads it as it was before the statement.
+    if (this.mutationWrites && this.isTypeRoot(query.expr)) {
+      return this.readingSnapshot(() => this.compileSelectQuery(query));
     }
 
     Context.pushScope(this.ctx);
@@ -206,7 +211,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         if (aliasDef) {
           return this.compileAliasExpression(aliasDef, shape);
         }
-        throw new CompilationError(`Type '${typeName}' not found`);
+        throw new InvalidReferenceError(`Type '${typeName}' not found`);
       }
 
       // `select <Enum>` enumerates the enum's members as a set of scalars

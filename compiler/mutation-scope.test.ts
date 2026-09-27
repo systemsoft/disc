@@ -12,7 +12,7 @@
  * tests/git-forge-acceptance-pg.test.ts) as bare statements.
  */
 
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
 import type { AccessContext } from "../access/types.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
@@ -272,12 +272,13 @@ Deno.test("mutation scope + policy - delete carries the owner predicate next to 
   assertDirect(sql);
 });
 
-Deno.test("mutation scope + policy - a denied type is still denied before its filter matters", async () => {
-  const update = await compile("update Locked filter .program.id = <uuid>$p set { name := 'x' }", { userId: USER_ID });
-  const remove = await compile("delete Locked filter .program.id = <uuid>$p", { userId: USER_ID });
+Deno.test("mutation scope + policy - a type no policy lets the caller reach is modified nowhere, whatever its filter", async () => {
+  // As in Gel, an update or delete of objects the policies hide reaches no row, without an error.
+  const update = await sqlOf("update Locked filter .program.id = <uuid>$p set { name := 'x' }", { userId: USER_ID });
+  const remove = await sqlOf("delete Locked filter .program.id = <uuid>$p", { userId: USER_ID });
 
-  assert(/not allowed on Locked/i.test(update.error ?? ""), `expected a denial, got: ${JSON.stringify(update)}`);
-  assert(/not allowed on Locked/i.test(remove.error ?? ""), `expected a denial, got: ${JSON.stringify(remove)}`);
+  assertMatch(withoutWriteChecks(update), /WHERE \(?FALSE\)? AND/);
+  assertMatch(withoutWriteChecks(remove), /WHERE \(?FALSE\)? AND/);
 });
 
 Deno.test("mutation scope + policy - a bypass caller gets the qualified filter and no predicate", async () => {

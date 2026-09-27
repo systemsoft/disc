@@ -259,7 +259,7 @@ Deno.test("EdgeQLProtocolHandler — with-form update is policy-filtered unless 
   );
 });
 
-Deno.test("EdgeQLProtocolHandler — with-form write on a using(false) type is denied unless bypassed", async () => {
+Deno.test("EdgeQLProtocolHandler — with-form write on a using(false) type reaches no object unless bypassed", async () => {
   const schema = await schemaFromSDL(SDL_WITH_WRITE_POLICIES);
   const handler = new EdgeQLProtocolHandler({
     schema,
@@ -274,10 +274,16 @@ Deno.test("EdgeQLProtocolHandler — with-form write on a using(false) type is d
     "with m := (delete Locked) select m"
   ];
 
+  // As in Gel: the update and delete reach no row, and the insert fails each
+  // object it writes, when it runs (access policy violation, SQLSTATE 42501).
   for (const query of queries) {
     const denied = await handler.handleRequest({ query }, makeContext({ userId: "u1" }, false));
-    assertEquals(denied.errors?.[0].extensions?.code, "COMPILATION_ERROR", query);
-    assert(/not allowed on Locked/.test(denied.errors?.[0].message ?? ""), `${query}: ${denied.errors?.[0].message}`);
+    const deniedSql = denied.extensions?.sql as string | undefined;
+    assert(deniedSql, `${query}: must compile; got: ${JSON.stringify(denied.errors)}`);
+    assert(
+      query.includes("insert") ? deniedSql.includes("access policy violation on insert of default::Locked") : /WHERE \(?FALSE\b/.test(deniedSql),
+      `${query}: ${deniedSql}`
+    );
 
     const bypassed = await handler.handleRequest({ query }, makeContext({ userId: "u1", roles: ["admin"] }, true));
     const sql = bypassed.extensions?.sql as string | undefined;
