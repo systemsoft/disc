@@ -1741,7 +1741,7 @@ Deno.test({
       // Insert with the link assigned via a bare select subquery — the
       // canonical Gel pattern. Must store the user's id in the FK column.
       await pool.query(compileEdgeQL(
-        `insert LinkPost { title := "Hello", author := (select LinkUser filter .email = "ada@example.com") }`,
+        `insert LinkPost { title := "Hello", author := (select LinkUser filter .email = "ada@example.com" limit 1) }`,
         schema
       ));
 
@@ -1755,7 +1755,7 @@ Deno.test({
 
       // Re-point the link via update with the same subquery pattern
       await pool.query(compileEdgeQL(
-        `update LinkPost filter .title = "Hello" set { author := (select LinkUser filter .email = "billie@example.com") }`,
+        `update LinkPost filter .title = "Hello" set { author := (select LinkUser filter .email = "billie@example.com" limit 1) }`,
         schema
       ));
 

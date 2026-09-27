@@ -105,6 +105,19 @@ Deno.test("finite numeric - a cast from a decimal or a float to bigint rounds, a
   assertStringIncludes(compile("select <bigint><float64>$f"), "disc_finite_numeric(");
 });
 
+Deno.test("finite numeric - a float cast to an integer or bigint is a float8 first: PostgreSQL rounds it half to even, as Gel does", () => {
+  // A float literal is numeric to PostgreSQL, whose round and int casts go half away from zero.
+  assertStringIncludes(compile("select <bigint>2.5"), "round(CAST(2.5 AS double precision))");
+  assertStringIncludes(compile("select <int64>2.5"), "CAST(CAST(2.5 AS double precision) AS bigint)");
+  assertStringIncludes(compile("select <int32>(2.5 + 1)"), "CAST(CAST(2.5 + 1 AS double precision) AS integer)");
+  assertStringIncludes(compile("select Reading { x := <int16>.f64 }"), "CAST(CAST(reading_1.f64 AS double precision) AS smallint)");
+  assertStringIncludes(compile("select <array<int64>>[2.5, 3.5]"), "CAST(CAST(ARRAY[2.5, 3.5] AS double precision[]) AS bigint[])");
+  // A decimal rounds half away from zero, as PostgreSQL's numeric does.
+  assertStringIncludes(compile("select <bigint>2.5n"), "round(CAST(2.5 AS numeric))");
+  assertEquals(compile("select <int64>2.5n").includes("double precision"), false);
+  assertEquals(compile("select <int64>'2'").includes("double precision"), false);
+});
+
 Deno.test("finite numeric - a decimal or float written to a bigint property is checked, an integer is not", () => {
   assertStringIncludes(compile("insert Reading { label := 'a', big := 1.5 }"), "'std::bigint')");
   assertStringIncludes(compile("insert Reading { label := 'a', big := 1.5n }"), "'std::bigint')");

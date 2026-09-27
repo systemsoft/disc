@@ -172,9 +172,11 @@ Deno.test("compileFilter — or() across two Filter objects emits OR", () => {
     or({ status: "paid" }, { status: "refunded" }),
     paymentInfo
   );
+  // An empty value makes a comparison empty, and an `or` over it: `?? false`
+  // keeps the other side able to hold, as with SQL NULL.
   assertEquals(
     result.clause,
-    "(.status = <str>$p0) or (.status = <str>$p1)"
+    "((.status = <str>$p0) ?? false) or ((.status = <str>$p1) ?? false)"
   );
   assertEquals(result.variables, { p0: "paid", p1: "refunded" });
 });
@@ -190,7 +192,7 @@ Deno.test("compileFilter — and() makes implicit-AND across an object explicit 
   );
   assertEquals(
     result.clause,
-    "((.status = <str>$p0 and .amount > <float64>$p1)) or (.status = <str>$p2)"
+    "(((.status = <str>$p0) ?? false and (.amount > <float64>$p1) ?? false)) or ((.status = <str>$p2) ?? false)"
   );
 });
 
@@ -669,7 +671,7 @@ Deno.test("Stage F — select link `filter` accepts combinators", () => {
   );
   assertEquals(
     result.selectShape,
-    "{ videos: { * } filter (.isDraft = <int64>$p0) or (.title = <str>$p1) }"
+    "{ videos: { * } filter ((.isDraft = <int64>$p0) ?? false) or ((.title = <str>$p1) ?? false) }"
   );
 });
 
@@ -835,9 +837,28 @@ Deno.test("compileFilter — a single link to a type with a multi link wraps onl
   assertEquals(result.clause, "(.best.title = <str>$p0 and (any(.best.tags.name = <str>$p1)))");
 });
 
-Deno.test("compileFilter — single properties and links stay bare comparisons", () => {
+Deno.test("compileFilter — single properties and links are comparisons, `?? false` under or", () => {
   const result = compileFilter("Member", or({ visits: 3 }, not({ best: { title: "x" } })), memberInfo);
-  assertEquals(result.clause, "(.visits = <int64>$p0) or (not ((.best.title = <str>$p1)))");
+  assertEquals(result.clause, "((.visits = <int64>$p0) ?? false) or (((not (.best.title = <str>$p1)) ?? false))");
+  assertEquals(compileFilter("Member", { visits: 3, best: { title: "x" } }, memberInfo).clause, ".visits = <int64>$p0 and (.best.title = <str>$p1)");
+  assertEquals(compileFilter("Member", not({ visits: 3 }), memberInfo).clause, "not (.visits = <int64>$p0)");
+});
+
+Deno.test("compileFilter — not() moves inwards: of an and it is an or of the negated conditions, of an or an and", () => {
+  assertEquals(
+    compileFilter("Member", not(and({ visits: 3 }, { name: "x" })), memberInfo).clause,
+    "((not (.visits = <int64>$p0)) ?? false) or ((not (.name = <str>$p1)) ?? false)"
+  );
+  assertEquals(
+    compileFilter("Member", not({ visits: 3, name: "x" }), memberInfo).clause,
+    "(not (.visits = <int64>$p0)) ?? false or (not (.name = <str>$p1)) ?? false"
+  );
+  assertEquals(compileFilter("Member", not(or({ visits: 3 }, { name: "x" })), memberInfo).clause, "(not (.visits = <int64>$p0)) and (not (.name = <str>$p1))");
+  assertEquals(compileFilter("Member", not(not({ visits: 3 })), memberInfo).clause, ".visits = <int64>$p0");
+  assertEquals(
+    compileFilter("Member", not(and({ nicks: "a1" }, { visits: 3 })), memberInfo).clause,
+    "(not (any(.nicks = <str>$p0))) or ((not (.visits = <int64>$p1)) ?? false)"
+  );
 });
 
 Deno.test("compileFilter — a link's select filter reads the linked object: only its own multi paths are any()", () => {

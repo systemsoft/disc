@@ -1371,7 +1371,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * infers it: `limit 1`, or a filter requiring `.id` or an exclusive
    * property to equal one value.
    */
-  private selectsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
+  protected selectsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
     if (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) {
       return true;
     }

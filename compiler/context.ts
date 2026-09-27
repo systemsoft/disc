@@ -58,6 +58,8 @@ export interface CTEAlias {
   typeName?: string;
   /** The resolved TypeDef for shape compilation, if available */
   typeDef?: TypeDef;
+  /*** The select the name is bound to (`u := (select User filter …)`), when it is one. ***/
+  select?: EdgeQLAST.SelectQuery;
   /**
    * The CTE is an insert/update/delete (`RETURNING *`). Selecting it without a
    * shape keeps returning its rows as they are (`SELECT alias.*`).
@@ -283,6 +285,8 @@ export interface VariableDef {
   type: string;
   expression: EdgeQLAST.Expression;
   sqlOverride?: SQL.SQLExpression;
+  /*** An element of a set an element-wise expression reads (`compileElementWise`): never empty. ***/
+  element?: boolean;
   /**
    * A `for` variable over objects: the iterator row holding the current
    * object's columns (`sqlOverride` is its `id`), so `x { name }`, `x.name`

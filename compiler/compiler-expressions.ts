@@ -50,6 +50,9 @@ const NUMERIC_LITERAL_TYPES = new Map<string, string>([
 /*** The literals that are integers: `7`, `7n`. ***/
 const INTEGER_LITERAL_TYPES = new Set(["bigint", "integer"]);
 
+/*** The PostgreSQL types of int16, int32 and int64. ***/
+const INTEGER_PG_TYPES = new Set(["bigint", "integer", "smallint"]);
+
 /*** The types a cast to bigint rounds, as Gel's `round($1)::edgedbt.bigint_t` casts do. ***/
 const ROUNDED_TO_BIGINT = new Set(["decimal", "float32", "float64"]);
 
@@ -85,10 +88,18 @@ const SET_ARGUMENT_FUNCTIONS = new Set([
   "sum"
 ]);
 
-/*** `any` / `all` of a set of booleans: the SQL aggregate, and the value for no element. ***/
-const BOOLEAN_AGGREGATES = new Map<string, { empty: boolean; sql: string; }>([
-  ["all", { empty: true, sql: "BOOL_AND" }],
-  ["any", { empty: false, sql: "BOOL_OR" }]
+/*** Aggregates and set tests with a value for every set, the empty one too. ***/
+const NEVER_EMPTY_AGGREGATES = new Set(["all", "any", "array_agg", "count", "exists", "sum"]);
+
+/*** Aggregates whose SQL form over a set's values is the SQL aggregate named, an empty set's being the empty set (NULL). ***/
+const VALUE_AGGREGATES = new Map([
+  ["avg", "AVG"],
+  ["math_mean", "AVG"],
+  ["max", "MAX"],
+  ["min", "MIN"],
+  ["stddev", "STDDEV"],
+  ["stddev_pop", "STDDEV_POP"],
+  ["stddev_samp", "STDDEV_SAMP"]
 ]);
 
 /*** Unary operators applied to each element of a set operand (`-{1, 2}` is `{-1, -2}`); `exists` and `distinct` take the set as a whole. ***/
@@ -108,6 +119,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
   /*** Comparisons of a multi path a filter's condition is a conjunction of, or `any()`'s argument (see `markAnyElementComparisons`), compiled as "any element matches". ***/
   private readonly anyElementComparisons = new WeakSet<EdgeQLAST.BinaryOp>();
+  /*** The `and`, `or` and `??` of a filter's condition read only for being true (see `markTruthContexts`). ***/
+  private readonly truthContexts = new WeakSet<EdgeQLAST.BinaryOp>();
   /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
   private detachedFrom = -1;
 
@@ -371,8 +384,18 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       );
     }
 
+    // Read only for being true, `x ?? false` is `x`: the SDK's filters wrap
+    // conditions so, and a bare `x` keeps an index usable.
+    if (binOp.op === "??" && this.truthContexts.has(binOp)) {
+      return this.compileExpression(binOp.left);
+    }
+
     const left = this.compileExpression(binOp.left);
     const right = this.compileExpression(binOp.right);
+
+    if (binOp.op === "AND" || binOp.op === "OR") {
+      return this.compileLogical(binOp, left, right);
+    }
 
     // Coalescing: `a ?? b` → `COALESCE(a, b)`. A chain `a ?? b ?? c` nests
     // (`COALESCE(COALESCE(a, b), c)`), which is equivalent. Scalar operands
@@ -430,6 +453,105 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
+  }
+
+  /**
+   * `and` / `or` with Gel's empty-set semantics: an empty operand (SQL NULL)
+   * makes the result empty, where SQL's `NULL OR TRUE` is TRUE and
+   * `NULL AND FALSE` is FALSE. Each operand that may be empty (`mayBeEmpty`)
+   * is tested:
+   *
+   *   select User { b := .visits = 1 or .name = 'bob' }
+   *   → CASE WHEN (visits = 1) IS NOT NULL THEN (visits = 1) OR (name = 'bob') END
+   *
+   * In a filter's condition, read only for being true (`markTruthContexts`),
+   * an `and` needs no test (NULL and FALSE keep no object alike), and an `or`
+   * ANDs its tests instead: `(visits = 1 OR name = 'bob') AND (visits = 1) IS NOT NULL`.
+   */
+  private compileLogical(binOp: EdgeQLAST.BinaryOp, left: SQL.SQLExpression, right: SQL.SQLExpression): SQL.SQLExpression {
+    const logical = SQL.createBinaryExpression(binOp.op, left, right);
+    const truth = this.truthContexts.has(binOp);
+    if (truth && binOp.op === "AND") {
+      return logical;
+    }
+    const tests = [...(this.mayBeEmpty(binOp.left) ? [SQL.isNotNull(left)] : []), ...(this.mayBeEmpty(binOp.right) ? [SQL.isNotNull(right)] : [])];
+    if (tests.length === 0) {
+      return logical;
+    }
+    const nonEmpty = tests.slice(1).reduce<SQL.SQLExpression>((all, test) => SQL.createBinaryExpression("AND", all, test), tests[0]);
+    return truth ? SQL.createBinaryExpression("AND", logical, nonEmpty) : SQL.createCaseExpression([SQL.createWhenClause(nonEmpty, logical)]);
+  }
+
+  /**
+   * Mark the `and`, `or` and `x ?? false` of a filter's condition that are
+   * read only for being true, where SQL NULL and FALSE mean the same: the
+   * condition itself, the operands of such an `and`, the operands of such an
+   * `or` that are never empty (an empty operand makes the `or` empty, so its
+   * operands' emptiness matters), and the `x` of such an `x ?? false`.
+   */
+  private markTruthContexts(expr: EdgeQLAST.Expression): void {
+    if (expr.kind !== "BinaryOp") {
+      return;
+    }
+    const isFalse = expr.right.kind === "Literal" && expr.right.value === false;
+    if (expr.op === "OR" || expr.op === "AND" || (expr.op === "??" && isFalse)) {
+      this.truthContexts.add(expr);
+    }
+    if (expr.op === "AND" || (expr.op === "OR" && !this.mayBeEmpty(expr.left) && !this.mayBeEmpty(expr.right))) {
+      this.markTruthContexts(expr.left);
+      this.markTruthContexts(expr.right);
+    } else if (expr.op === "??" && isFalse) {
+      this.markTruthContexts(expr.left);
+    }
+  }
+
+  /**
+   * False when `expr` is never empty (never SQL NULL): a literal, a required
+   * single property, a parameter not cast `<optional …>`, a `with` name bound
+   * to such a value, an element of a set, an aggregate or set test that is
+   * never empty (`count`, `exists`, `any`, …), `?=` and `?!=`, and an
+   * operator over never-empty operands. Anything else may be empty.
+   */
+  protected mayBeEmpty(expr: EdgeQLAST.Expression): boolean {
+    switch (expr.kind) {
+      case "Literal":
+      case "Parameter":
+        return false;
+      case "TypeCast":
+        return expr.cardinality?.required === false || this.mayBeEmpty(expr.expr);
+      case "Path": {
+        // An enum's value (`Status.active`) is a literal.
+        const [first, second] = expr.steps;
+        const isEnumValue = expr.steps.length === 2 && first.type === "property" && second.type === "property" &&
+          (Context.resolveTypeName(this.ctx, first.name)?.enumValues?.length ?? 0) > 0;
+        return !isEnumValue && !this.isNeverEmpty(expr);
+      }
+      case "Identifier": {
+        const variable = this.scopeVariable(expr.name);
+        if (variable?.element || variable?.row) {
+          return false;
+        }
+        return !variable || variable.sqlOverride !== undefined || this.mayBeEmpty(variable.expression);
+      }
+      case "UnaryOp":
+        return expr.op !== "EXISTS" && this.mayBeEmpty(expr.operand);
+      case "BinaryOp":
+        if (OPTIONAL_OPERAND_OPERATORS.has(expr.op)) {
+          return false;
+        }
+        if (expr.op === "??") {
+          return this.mayBeEmpty(expr.left) && this.mayBeEmpty(expr.right);
+        }
+        // `in`'s right operand is a whole set: `x in {}` is false.
+        if (expr.op === "IN" || expr.op === "NOT IN" || expr.op === "IS" || expr.op === "IS NOT") {
+          return this.mayBeEmpty(expr.left);
+        }
+        return this.mayBeEmpty(expr.left) || this.mayBeEmpty(expr.right);
+      case "FunctionCall":
+        return !NEVER_EMPTY_AGGREGATES.has(Context.lookupFunction(this.ctx.schema, expr.name.parts)?.name ?? "");
+      default:
+        return true;
+    }
   }
 
   /*** The select `in` reads for a right operand that is a type's objects or a path's set (see `membershipSelect`), else null. ***/
@@ -859,6 +981,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const alias = Context.generateAlias(this.ctx, "__arg");
       from.push({ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery: this.compileQuery(set.query) });
       this.ctx.currentScope.variables.set(alias, {
+        element: true,
         expression: operand,
         name: alias,
         sqlOverride: SQL.createColumnReference("value", alias),
@@ -941,6 +1064,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   protected compileFilter(filter: EdgeQLAST.Expression): SQL.SQLExpression {
     this.markAnyElementComparisons(filter);
+    this.markTruthContexts(filter);
     const sets = this.elementWiseSets(filter);
     if (!sets) {
       return this.compileExpression(filter);
@@ -1438,6 +1562,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (funcCall.args.length === 1) {
       const value = funcCall.args[0].value;
       const arg = this.typeSetQuery(value) ?? this.bindingSetQuery(value) ?? this.setQuery(value) ?? value;
+      // `assert_single(<set>)` checks the set's rows; one value is itself.
+      if (functionName === "assert_single") {
+        const set = arg.kind === "Subquery" ?
+          arg :
+          this.isSetPath(arg) ?
+          { kind: "Subquery" as const, query: { distinct: false, expr: arg, kind: "SelectQuery" as const } } :
+          null;
+        return set ? this.assertSingle(this.compileQuery(set.query)) : this.compileExpression(value);
+      }
       const multi = functionName === "count" ? this.multiPropertyColumn(arg) : null;
       if (multi) {
         return SQL.createFunctionCall("CARDINALITY", [multi.column]);
@@ -1471,6 +1604,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));
+
+    // An aggregate over one value (or none) aggregates that value's set. A
+    // group's filter aggregates the group's rows instead (`count(User)` is
+    // `COUNT(*)` there).
+    const isGroupRows = args[0]?.kind === "ColumnReference" && args[0].column === "*";
+    const overValue = args.length === 1 && !isGroupRows ? this.compileAggregateOverValue(functionName, args[0]) : null;
+    if (overValue) {
+      return overValue;
+    }
 
     // Special compilation for functions that aren't simple 1:1 mappings
     switch (functionName) {
@@ -2322,9 +2464,17 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // so a fractional one is rejected (see `finiteNumeric`).
     const array = pgType === "numeric[]";
     const toBigint = (pgType === "numeric" || array) && this.numericBaseType(typeName) === "bigint";
-    const source = array ? this.staticArrayElementType(cast.expr) : this.staticNumericType(cast.expr);
+    const source = pgType.endsWith("[]") ? this.staticArrayElementType(cast.expr) : this.staticNumericType(cast.expr);
     const rounded = toBigint && source !== null && ROUNDED_TO_BIGINT.has(this.numericBaseType(source) ?? "");
-    const operand = !rounded ? expr : array ? this.roundElements(expr) : SQL.createFunctionCall("round", [expr]);
+    // A float rounds half to even, as Gel's do: PostgreSQL's float8 `round`
+    // and int casts use rint(). A float literal (or arithmetic over one) is
+    // numeric to PostgreSQL, which rounds half away from zero, as a decimal
+    // does in both; so a float is made a float8 first.
+    const toInteger = toBigint || INTEGER_PG_TYPES.has(pgType.replace(/\[\]$/, ""));
+    const isFloatCast = expr.kind === "CastExpression" && /^(double precision|real)(\[\])?$/.test(expr.targetType);
+    const float = toInteger && !isFloatCast && source !== null && FLOAT_TYPES.has(this.numericBaseType(source) ?? "");
+    const value = float ? SQL.createCastExpression(expr, pgType.endsWith("[]") ? "double precision[]" : "double precision") : expr;
+    const operand = !rounded ? value : array ? this.roundElements(value) : SQL.createFunctionCall("round", [value]);
     const compiled = fromJson ? this.compileCastFromJson(operand, pgType, typeName) : SQL.createCastExpression(operand, pgType);
     return this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
   }
@@ -2609,28 +2759,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (funcName === "exists") {
       return { kind: "UnaryExpression", operator: "EXISTS", operand: this.compileSubqueryExpression(subquery) };
     }
-    const sqlAgg = funcName === "array_agg" ? "ARRAY_AGG" : ExpressionCompilerLayer.SET_AGGREGATES.get(funcName) ?? BOOLEAN_AGGREGATES.get(funcName)?.sql;
-    if (!sqlAgg) {
+    const aggregate = this.setAggregate(funcName);
+    if (!aggregate) {
       return null;
-    }
-
-    const value = SQL.createColumnReference("value", "__set");
-    let aggregate: SQL.SQLExpression;
-    if (funcName === "count") {
-      aggregate = SQL.createFunctionCall("COUNT", [SQL.star()]);
-    } else if (funcName === "sum") {
-      // EdgeQL's sum of an empty set is 0; SQL SUM() yields NULL.
-      aggregate = SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall("SUM", [value]), SQL.createLiteral("number", 0)]);
-    } else if (funcName === "array_agg") {
-      // EdgeQL's array_agg of an empty set is []; SQL ARRAY_AGG() yields NULL.
-      aggregate = SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall("ARRAY_AGG", [value]), SQL.createLiteral("string", "{}")]);
-    } else if (BOOLEAN_AGGREGATES.has(funcName)) {
-      aggregate = SQL.createFunctionCall("COALESCE", [
-        SQL.createFunctionCall(sqlAgg, [value]),
-        SQL.createLiteral("boolean", BOOLEAN_AGGREGATES.get(funcName)!.empty)
-      ]);
-    } else {
-      aggregate = SQL.createFunctionCall(sqlAgg, [value]);
     }
 
     return SQL.createSubqueryExpression(SQL.createSelectStatement({
@@ -2643,6 +2774,84 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         columnAliases: funcName === "count" ? undefined : ["value"]
       }])
     }));
+  }
+
+  /**
+   * An aggregate over one value — a property or single link of the current
+   * object (`any(.visits > 1)`, `count(.best)`), a `for` variable's — or
+   * none: the aggregate of that set of at most one element, SQL NULL being
+   * the empty set, as a scalar subquery of its own:
+   *
+   *   select User { b := any(.visits > 1) }
+   *   → (SELECT COALESCE(BOOL_OR(__set.value), false) FROM (SELECT user_1.visits > 1) AS __set(value)
+   *      WHERE __set.value IS NOT NULL)
+   *
+   * `BOOL_OR(user_1.visits > 1)` in place would aggregate the enclosing
+   * select's rows: one value for the whole table. Null for a function that is
+   * not an aggregate.
+   */
+  private compileAggregateOverValue(funcName: string, arg: SQL.SQLExpression): SQL.SQLExpression | null {
+    const aggregate = this.setAggregate(funcName);
+    if (!aggregate) {
+      return null;
+    }
+    const value = SQL.createColumnReference("value", "__set");
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(aggregate)]),
+      from: SQL.createFromClause([{
+        kind: "TableReference",
+        name: "",
+        subquery: SQL.createSelectStatement({ select: SQL.createSelectClause([SQL.createSelectItem(arg)]) }),
+        alias: "__set",
+        columnAliases: ["value"]
+      }]),
+      where: SQL.createWhereClause(SQL.isNotNull(value))
+    }));
+  }
+
+  /**
+   * `assert_single(<set>)` over the set's rows (one column): its one element,
+   * or none. More than one is Gel's CardinalityViolationError, raised at run
+   * time by `disc_assert_single` (lib/stdlib-sql.ts, SQLSTATE 21000):
+   *
+   *   (SELECT disc_assert_single(__set.value, COUNT(*) OVER ()) FROM (<rows>) AS __set(value) LIMIT 1)
+   */
+  protected assertSingle(rows: SQL.SQLStatement): SQL.SQLExpression {
+    const count = SQL.windowFunction("COUNT", [SQL.star()], { kind: "WindowClause" });
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias: "__set", columnAliases: ["value"], kind: "TableReference", name: "", subquery: rows }]),
+      limit: { count: SQL.createLiteral("number", 1), kind: "LimitClause" },
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(SQL.createFunctionCall("disc_assert_single", [SQL.createColumnReference("value", "__set"), count]))
+      ])
+    }));
+  }
+
+  /**
+   * The SQL aggregate of EdgeQL aggregate `funcName` over the rows of `__set`
+   * (`__set.value` each), or null for a function that is not one. An empty
+   * set's aggregate is Gel's: 0 for `count` and `sum`, `[]` for `array_agg`,
+   * false for `any`, true for `all` (SQL yields NULL for all but COUNT), and
+   * the empty set (NULL) for the others.
+   */
+  private setAggregate(funcName: string): SQL.SQLExpression | null {
+    const value = SQL.createColumnReference("value", "__set");
+    const orEmpty = (name: string, empty: SQL.SQLExpression): SQL.SQLExpression =>
+      SQL.createFunctionCall("COALESCE", [SQL.createFunctionCall(name, [value]), empty]);
+    switch (funcName) {
+      case "all":
+        return orEmpty("BOOL_AND", SQL.createLiteral("boolean", true));
+      case "any":
+        return orEmpty("BOOL_OR", SQL.createLiteral("boolean", false));
+      case "array_agg":
+        return orEmpty("ARRAY_AGG", SQL.createLiteral("string", "{}"));
+      case "count":
+        return SQL.createFunctionCall("COUNT", [SQL.star()]);
+      case "sum":
+        return orEmpty("SUM", SQL.createLiteral("number", 0));
+    }
+    const sqlAgg = VALUE_AGGREGATES.get(funcName);
+    return sqlAgg ? SQL.createFunctionCall(sqlAgg, [value]) : null;
   }
 
   private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
@@ -3200,6 +3409,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const thenExpr = this.compileExpression(ifElse.then);
     const elseExpr = this.compileExpression(ifElse.else);
 
+    // An empty condition makes the result empty (Gel), not the else branch.
+    if (this.mayBeEmpty(ifElse.condition)) {
+      return SQL.createCaseExpression([
+        SQL.createWhenClause(condition, thenExpr),
+        SQL.createWhenClause({ kind: "UnaryExpression", operand: condition, operator: "NOT" }, elseExpr)
+      ]);
+    }
     return SQL.createCaseExpression(
       [SQL.createWhenClause(condition, thenExpr)],
       elseExpr

@@ -33,6 +33,13 @@
  *   an empty operand leaves no element to be true.
  * - `any(<such a comparison>)` is one boolean, tested in place: the form the
  *   SDK's filters compile to (`not any(.nicks = 'a1')`: no nick is a1).
+ * - An aggregate (`any`, `count`, `sum`, …) over one value of the current
+ *   object (`any(.visits > 1)`, `count(.best)`) aggregates that value's set
+ *   of at most one element, not the enclosing select's rows.
+ * - `and`, `or` and `if … else` over an operand that may be empty (an
+ *   optional property) are empty when it is, where SQL has `NULL OR TRUE`
+ *   true: `filter .visits = 1 or .name = 'bob'` keeps no object without
+ *   visits. `?=`, `??` and `exists` give an empty operand a value.
  * - Two comparisons of the same multi path are independent (`.nicks = 'a1'
  *   and .nicks = 'a2'` needs a nick of each), as with Gel's `future
  *   simple_scoping`; pinned in `tests/gel-divergence-pins.test.ts`.
@@ -391,4 +398,100 @@ Deno.test("any() and all() of another set of booleans aggregate its rows", () =>
     compile("select User { b := all(.nicks = 'a1') }"),
     /'b', \(SELECT COALESCE\(BOOL_AND\(__set\.value\), TRUE\) FROM \(SELECT __arg_\d+\.value = 'a1' FROM .*\) AS __set\(value\)\)/
   );
+});
+
+// ── aggregates over a value of the current object ────────────────────────
+
+Deno.test("aggregate over a path of the current object in a shape aggregates that object's set, not the table's", () => {
+  const perObject = (edgeql: string, aggregate: string): void => {
+    const sql = compile(edgeql);
+    assertStringIncludes(sql, `(SELECT ${aggregate} FROM (SELECT `, edgeql);
+    assertMatch(sql, /\) AS __set\(value\) WHERE __set\.value IS NOT NULL\)/, edgeql);
+    assertEquals(/(BOOL_OR|BOOL_AND|COUNT|SUM|MIN|MAX|ARRAY_AGG|AVG)\(user_/.test(sql), false, sql);
+  };
+  perObject("select User { b := any(.visits > 1) }", "COALESCE(BOOL_OR(__set.value), FALSE)");
+  perObject("select User { b := all(.visits > 1) }", "COALESCE(BOOL_AND(__set.value), TRUE)");
+  perObject("select User { c := count(.visits) }", "COUNT(*)");
+  perObject("select User { s := sum(.visits) }", "COALESCE(SUM(__set.value), 0)");
+  perObject("select User { m := min(.visits) }", "MIN(__set.value)");
+  perObject("select User { m := max(.best.title) }", "MAX(__set.value)");
+  perObject("select User { a := array_agg(.visits) }", "COALESCE(ARRAY_AGG(__set.value), '{}')");
+  perObject("select User { m := math::mean(.visits) }", "AVG(__set.value)");
+  perObject("select User { c := count(.best) }", "COUNT(*)");
+});
+
+Deno.test("aggregate over a value of the current object in a filter, an order by or a for body: one per object", () => {
+  assertMatch(
+    compile("select User { name } filter any(.visits > 1)"),
+    /WHERE \(SELECT COALESCE\(BOOL_OR\(__set\.value\), FALSE\) FROM \(SELECT user_\d+\.visits > 1\)/
+  );
+  assertMatch(compile("select User { name } filter count(.visits) = 0"), /WHERE \(SELECT COUNT\(\*\) FROM \(SELECT user_\d+\.visits\)/);
+  assertMatch(compile("select User { name } order by count(.visits)"), /ORDER BY \(SELECT COUNT\(\*\) FROM \(SELECT user_\d+\.visits\)/);
+  assertMatch(compile("for u in User union count(u.visits)"), /LATERAL \(SELECT \(SELECT COUNT\(\*\) FROM \(SELECT for_iter_\d+\.visits\)/);
+});
+
+Deno.test("all() and other aggregates over a comparison of a multi path aggregate its elements", () => {
+  assertMatch(
+    compile("select User { b := all(.nicks = 'a1') }"),
+    /'b', \(SELECT COALESCE\(BOOL_AND\(__set\.value\), TRUE\) FROM \(SELECT __arg_\d+\.value = 'a1' FROM /
+  );
+  assertMatch(compile("select User { b := any(.nicks ++ '!' = 'a1!') }"), /'b', \(SELECT COALESCE\(BOOL_OR\(__set\.value\), FALSE\) FROM /);
+});
+
+// ── empty operands of and, or and if ─────────────────────────────────────
+
+Deno.test("or / and over an operand that may be empty is empty when it is (Gel), not SQL's NULL OR TRUE", () => {
+  // In a filter: the `or` holds only when its operands have values.
+  assertMatch(
+    compile("select User { name } filter .visits = 1 or .name = 'bob'"),
+    /WHERE \(\(user_(\d+)\.visits = 1\) OR \(user_\1\.name = 'bob'\)\) AND \(\(user_\1\.visits = 1\) IS NOT NULL\)$/
+  );
+  // Elsewhere, the empty set (NULL) when an operand is empty.
+  assertStringIncludes(
+    compile("select User { b := .visits = 1 or .name = 'bob' }"),
+    "'b', CASE WHEN (user_1.visits = 1) IS NOT NULL THEN (user_1.visits = 1) OR (user_1.name = 'bob') END"
+  );
+  assertStringIncludes(
+    compile("select User { b := .visits = 1 and false }"),
+    "'b', CASE WHEN (user_1.visits = 1) IS NOT NULL THEN (user_1.visits = 1) AND (FALSE) END"
+  );
+  assertStringIncludes(compile("select User { name } filter not (.visits = 1 and .name = 'x')"), "WHERE NOT CASE WHEN (user_1.visits = 1) IS NOT NULL THEN");
+});
+
+Deno.test("or / and over operands that are never empty compile as they are", () => {
+  assertMatch(compile("select User { name } filter .name = 'a' or .name = 'b'"), /WHERE \(user_\d+\.name = 'a'\) OR \(user_\d+\.name = 'b'\)$/);
+  // A filter's conjunction: NULL and FALSE keep no object alike.
+  assertMatch(compile("select User { name } filter .visits = 1 and .name = 'x'"), /WHERE \(user_\d+\.visits = 1\) AND \(user_\d+\.name = 'x'\)$/);
+  // `?=`, `exists`, `any()` and `count()` have a value for an empty operand.
+  assertMatch(
+    compile("select User { name } filter .visits ?= 1 or .name = 'x'"),
+    /WHERE \(user_\d+\.visits IS NOT DISTINCT FROM 1\) OR \(user_\d+\.name = 'x'\)$/
+  );
+  assertMatch(compile("select User { name } filter not exists .visits or .name = 'x'"), /WHERE \(user_\d+\.visits IS NULL\) OR \(user_\d+\.name = 'x'\)$/);
+  assertMatch(
+    compile("select User { name } filter any(.nicks = <str>$a) or .name = <str>$b"),
+    /WHERE \(CAST\(\$1 AS text\) = ANY\(user_\d+\.nicks\)\) OR \(user_\d+\.name = CAST\(\$2 AS text\)\)$/
+  );
+});
+
+Deno.test("`x ?? false` in a filter's condition is `x`: the SDK's form keeps an index usable", () => {
+  assertMatch(
+    compile("select User { name } filter ((.visits = <int64>$a) ?? false) or ((.name = <str>$b) ?? false)"),
+    /WHERE \(user_\d+\.visits = CAST\(\$1 AS bigint\)\) OR \(user_\d+\.name = CAST\(\$2 AS text\)\)$/
+  );
+  // Under `not` it is not read only for being true: the COALESCE stays.
+  assertStringIncludes(compile("select User { name } filter not ((.visits = 1) ?? false)"), "WHERE NOT COALESCE(user_1.visits = 1, FALSE)");
+  assertStringIncludes(compile("select User { b := (.visits = 1) ?? false }"), "'b', COALESCE(user_1.visits = 1, FALSE)");
+});
+
+Deno.test("if / else over a condition that may be empty is empty when it is (Gel), not the else branch", () => {
+  assertStringIncludes(
+    compile("select User { i := 'y' if .visits = 1 else 'n' }"),
+    "'i', CASE WHEN user_1.visits = 1 THEN 'y' WHEN NOT user_1.visits = 1 THEN 'n' END"
+  );
+  assertStringIncludes(compile("select User { i := 'y' if .name = 'x' else 'n' }"), "'i', CASE WHEN user_1.name = 'x' THEN 'y' ELSE 'n' END");
+});
+
+Deno.test("a group's filter still aggregates the group's rows", () => {
+  assertStringIncludes(compile("group User by .name filter count(User) > 1"), "HAVING COUNT(*) > 1");
 });

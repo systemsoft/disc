@@ -75,12 +75,12 @@ Deno.test("aggregate - sum(backlink.prop) sums the target column, coalesced to 0
   assertStringIncludes(sql, `FROM "post" "__bl_author" WHERE "__bl_author"."author_id" =`);
 });
 
-Deno.test("aggregate - count over a scalar property is unaffected (generic mapping)", () => {
-  // `count(.size)` on Post counts the row's own scalar — must stay a plain
-  // COUNT(column), not a correlated subquery.
+Deno.test("aggregate - count over a scalar property counts the row's own value, 0 or 1", () => {
+  // `count(.size)` on Post counts the row's own scalar. A plain
+  // COUNT(post_1.size) in place would count the whole table's.
   const sql = compile(`select Post { c := count(.size) }`);
-  assertStringIncludes(sql, "COUNT(post_1.size)");
-  assertEquals(/SELECT COUNT\(\*\) FROM/.test(sql), false, sql);
+  assertStringIncludes(sql, "( SELECT COUNT(*) FROM ( SELECT post_1.size ) AS __set(value) WHERE __set.value IS NOT NULL )");
+  assertEquals(sql.includes("COUNT(post_1.size)"), false, sql);
 });
 
 Deno.test("select <enum> enumerates its members, not a phantom relation", () => {

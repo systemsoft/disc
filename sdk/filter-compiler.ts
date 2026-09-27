@@ -94,9 +94,23 @@ const SET_OPS = new Set(["in", "not_in"]);
 /** Reserved keys handled by Stage D (select/order_by/limit/offset). */
 const RESERVED_KEYS = new Set(["select", "order_by", "limit", "offset"]);
 
+/**
+ * A condition on a single property or link compares as SQL does, an empty
+ * value as NULL: `not` of it does not hold, and `or` holds when the other
+ * side does. EdgeQL makes an operator over an empty value empty instead, and
+ * an `or` or `and` with an empty operand empty, so each condition is compiled
+ * for what it must hold for — `negate`: the condition is false, not true —
+ * and, where an empty value would make an enclosing `or` empty (`total`), as
+ * `(<comparison>) ?? false`. `not` flips `negate` and moves inwards: `not`
+ * of an `and` is an `or` of the negated conditions, and of an `or` an `and`.
+ */
 interface Ctx {
   /** True when `pathPrefix` goes through a multi link. */
   multiPath: boolean;
+  /** Compile for the condition being false (under an odd number of `not`s). */
+  negate: boolean;
+  /** Compile to a condition that is never empty: it is an operand of an `or`. */
+  total: boolean;
   vars: Record<string, unknown>;
   nextN: number;
   /** EdgeQL field path prefix; "" at root, ".merchant" inside a link, etc. */
@@ -142,7 +156,7 @@ export function compileFilter<T extends object>(
   typeInfo: TypeInfo
 ): CompiledFilter {
   void typeName; // reserved for future error-context messages
-  const ctx: Ctx = { multiPath: false, nextN: 0, pathPrefix: "", vars: {} };
+  const ctx: Ctx = { multiPath: false, negate: false, nextN: 0, pathPrefix: "", total: false, vars: {} };
 
   let selectShape: string | null = null;
   let orderBy: string | null = null;
@@ -330,16 +344,19 @@ function compileArg(arg: FilterArg, info: TypeInfo, ctx: Ctx): string {
 
 function compileExpr(expr: Expr, info: TypeInfo, ctx: Ctx): string {
   switch (expr.kind) {
-    case "and": {
-      const parts = expr.exprs.map(c => `(${compileArg(c, info, ctx)})`);
-      return parts.join(" and ");
-    }
+    case "and":
     case "or": {
-      const parts = expr.exprs.map(c => `(${compileArg(c, info, ctx)})`);
-      return parts.join(" or ");
+      const join = junction(expr.kind, ctx);
+      const parts = withTotal(ctx, (join === "or" && expr.exprs.length > 1) || ctx.total, () => expr.exprs.map(c => `(${compileArg(c, info, ctx)})`));
+      return parts.join(` ${join} `);
     }
     case "not": {
-      return `not (${compileArg(expr.expr, info, ctx)})`;
+      ctx.negate = !ctx.negate;
+      try {
+        return compileArg(expr.expr, info, ctx);
+      } finally {
+        ctx.negate = !ctx.negate;
+      }
     }
     case "binop":
     case "exists":
@@ -350,11 +367,41 @@ function compileExpr(expr: Expr, info: TypeInfo, ctx: Ctx): string {
   }
 }
 
+/*** The operator joining an `and` or `or`'s conditions: negated, `and` is `or` and `or` is `and`. ***/
+function junction(kind: "and" | "or", ctx: Ctx): "and" | "or" {
+  return ctx.negate ? (kind === "and" ? "or" : "and") : kind;
+}
+
+/*** `compile()` with `ctx.total` set to `total`. ***/
+function withTotal<T>(ctx: Ctx, total: boolean, compile: () => T): T {
+  const saved = ctx.total;
+  ctx.total = total;
+  try {
+    return compile();
+  } finally {
+    ctx.total = saved;
+  }
+}
+
 function compileObject(
   obj: Record<string, unknown>,
   info: TypeInfo,
   ctx: Ctx
 ): string {
+  // The object's conditions are an `and`: one per key, and one per operator of an operator object.
+  const count = Object
+    .entries(obj)
+    .filter(([key, value]) => !RESERVED_KEYS.has(key) && value !== undefined)
+    .reduce((sum, [key, value]) => sum + (!info.links[key] && !info.computed?.[key] && isOperatorObject(value) ? Object.keys(value).length : 1), 0);
+  const join = junction("and", ctx);
+  return withTotal(ctx, (join === "or" && count > 1) || ctx.total, () => compileObjectClauses(obj, info, ctx).join(` ${join} `));
+}
+
+function compileObjectClauses(
+  obj: Record<string, unknown>,
+  info: TypeInfo,
+  ctx: Ctx
+): string[] {
   const clauses: string[] = [];
 
   for (const [key, value] of Object.entries(obj)) {
@@ -410,9 +457,16 @@ function compileObject(
     const cast = info.casts[key] ?? "<str>";
     const path = `${ctx.pathPrefix}.${escapeEdgeQLIdent(key)}`;
     // Over a multi property or a multi link: whether some element matches,
-    // one boolean (see `TypeInfo.multi`).
+    // one boolean (see `TypeInfo.multi`), never empty. Over a single one, the
+    // comparison, empty for an empty value (see `Ctx`).
     const multi = ctx.multiPath || (info.multi?.includes(key) ?? false);
-    const condition = (comparison: string): string => multi ? `any(${comparison})` : comparison;
+    const condition = (comparison: string): string => {
+      if (multi) {
+        return ctx.negate ? `not (any(${comparison}))` : `any(${comparison})`;
+      }
+      const holds = ctx.negate ? `not (${comparison})` : comparison;
+      return ctx.total ? `(${holds}) ?? false` : holds;
+    };
 
     if (isOperatorObject(value)) {
       for (const [op, opValue] of Object.entries(value)) {
@@ -447,7 +501,7 @@ function compileObject(
     clauses.push(condition(`${path} = ${cast}$${param}`));
   }
 
-  return clauses.join(" and ");
+  return clauses;
 }
 
 /**

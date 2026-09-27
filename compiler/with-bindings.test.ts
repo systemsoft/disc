@@ -78,7 +78,8 @@ Deno.test("with-binding: a set-valued binding used twice is one CTE", async () =
   );
 
   assertEquals(sql.split("prog AS (").length - 1, 1);
-  assertEquals(sql.split("( SELECT id FROM prog )").length - 1, 2);
+  // Each use reads the CTE; `prog` may be empty, so the `or` also tests each comparison for a value.
+  assertEquals(sql.split("( SELECT id FROM prog )").length - 1, 4);
 });
 
 Deno.test("with-binding: selecting a plain binding still reads it from a CTE", async () => {

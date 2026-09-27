@@ -217,7 +217,7 @@ Deno.test("result shape - simple handler: a select answers with the row set, [] 
 // --- Phase 7, 5a: the bare-mutation shape comes from the query, not from words in its SQL ---
 
 Deno.test("result shape - a bare insert whose SQL contains a link subselect still answers with the row, mapped, on both runs", async () => {
-  const query = "insert Post { title := 't', author := (select Author filter .name = 'ada') }";
+  const query = "insert Post { title := 't', author := (select Author filter .name = 'ada' limit 1) }";
   const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
 
   const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });

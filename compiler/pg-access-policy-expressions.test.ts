@@ -287,7 +287,7 @@ Deno.test({
   ignore: !RUN_PG,
   fn: () =>
     withSchema(async (pool, schema) => {
-      await run(pool, schema, "insert ApxProject { title := 'mine', owner := (select ApxUser filter .name = 'ann') }");
+      await run(pool, schema, "insert ApxProject { title := 'mine', owner := (select ApxUser filter .name = 'ann' limit 1) }");
       await assertViolation(pool, schema, "access policy violation on insert of default::ApxProject (not your project)", "insert ApxProject { title := 'x' }");
       await assertViolation(
         pool,
@@ -300,9 +300,9 @@ Deno.test({
         pool,
         schema,
         "access policy violation on insert of default::ApxTask",
-        "insert ApxTask { title := 'k', project := (select ApxProject filter .title = 'P2') }"
+        "insert ApxTask { title := 'k', project := (select ApxProject filter .title = 'P2' limit 1) }"
       );
-      await run(pool, schema, "insert ApxTask { title := 'k', project := (select ApxProject filter .title = 'P1') }");
+      await run(pool, schema, "insert ApxTask { title := 'k', project := (select ApxProject filter .title = 'P1' limit 1) }");
       assertEquals(await column(pool, "SELECT title FROM apx_project"), ["P1", "P2", "Public", "mine", "secret"]);
       assertEquals(await column(pool, "SELECT title FROM apx_task"), ["K1", "K2", "k"]);
     })

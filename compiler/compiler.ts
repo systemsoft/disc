@@ -525,11 +525,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         `Link property '@${linkProperty.name?.name}' on link '${link.name}': link properties are only supported on multi links`
       );
     }
-    if (this.bareTypeSelect(expr)) {
+    if (this.bareTypeSelect(expr) || this.selectsManyObjects(expr)) {
       throw new CompilationError(
         `possibly more than one element returned by an expression for a link '${link.name}' declared as 'single'`,
-        locationOf(expr)
+        locationOf(expr) ?? (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" ? locationOf(expr.query.expr) : undefined)
       );
+    }
+    // `assert_single(<objects>)`: their one id, checked at run time.
+    if (expr.kind === "FunctionCall" && expr.name.parts.join("::").replace(/^std::/, "") === "assert_single" && expr.args.length === 1) {
+      return this.assertSingle(this.compileTargetIdSelect(expr.args[0].value));
     }
     const query = expr.kind === "Subquery" ?
       (expr as EdgeQLAST.Subquery).query :
@@ -557,6 +561,34 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
 
     return this.compileExpression(expr);
+  }
+
+  /**
+   * True when `expr`, assigned to a single link, may be several objects, as
+   * Gel infers it: a select of a type's objects (or a `with` name bound to
+   * one) with neither `limit 1` nor a filter of `.id` or an exclusive
+   * property on one value (`selectsAtMostOne`). Anything else — a uuid, a
+   * parameter, `assert_single(…)`, an insert — is one object or none.
+   */
+  private selectsManyObjects(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind === "Identifier") {
+      const variable = this.scopeVariable(expr.name);
+      if (variable) {
+        return !variable.row && !variable.sqlOverride &&
+          (this.bareTypeSelect(variable.expression) !== undefined || this.selectsManyObjects(variable.expression));
+      }
+    }
+    const query = expr.kind === "Subquery" ?
+      expr.query :
+      expr.kind === "Identifier" ?
+      Context.getCTEAlias(this.ctx, expr.name)?.select :
+      undefined;
+    if (query?.kind !== "SelectQuery" || query.expr.kind !== "TypeName") {
+      return false;
+    }
+    const name = query.expr.name.parts.join("::");
+    const typeDef = this.scopeVariable(name) ? undefined : Context.resolveTypeName(this.ctx, name);
+    return typeDef?.kind === "object" && !this.selectsAtMostOne(query, typeDef);
   }
 
   // Compile a multi-link assignment value down to a SELECT yielding the
@@ -1886,6 +1918,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       const cteAlias: Context.CTEAlias = {
         cteName,
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
+        select: value.kind === "Subquery" && value.query.kind === "SelectQuery" ? value.query : undefined,
         typeName: underlyingTypeName,
         typeDef,
         values,

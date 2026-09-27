@@ -3,7 +3,8 @@
 
 /**
  * PG end-to-end: bigint (`10n`) and decimal (`1.5n`) literals are numeric
- * values, and a cast applies to a prefix-operator operand (`<int64>-7`).
+ * values, a cast applies to a prefix-operator operand (`<int64>-7`), and a
+ * float cast to an integer or bigint rounds half to even (`<bigint>2.5` is 2).
  *
  * `10n` was the int64 10, `1.5n` did not parse and `<int64>-7` was a syntax
  * error. PostgreSQL hands a numeric back as its text, so a numeric result is
@@ -14,6 +15,7 @@
 
 import { assertEquals } from "@std/assert";
 import type { ConnectionPool } from "../lib/connection-pool.ts";
+import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 import { createTestSchema } from "./context.ts";
 import { compileEdgeQL } from "./test-helpers.ts";
@@ -81,5 +83,31 @@ Deno.test({
       assertEquals(await value(pool, "select <str>-1"), "-1");
       assertEquals(Number(await value(pool, "select <float64>+2")), 2);
       assertEquals(await value(pool, "select <bool>not true"), false);
+    })
+});
+
+Deno.test({
+  name: "PG a float cast to an integer or bigint rounds half to even, a decimal half away from zero (Gel)",
+  ignore: !RUN_PG,
+  fn: () =>
+    withPool(async pool => {
+      // A cast to bigint of a value that is not a literal is checked by disc_finite_numeric.
+      await bootstrapStdlib(pool);
+      // Gel 7.1 answers each with the value asserted.
+      assertEquals(await value(pool, "select <bigint>2.5"), "2");
+      assertEquals(await value(pool, "select <bigint>3.5"), "4");
+      assertEquals(await value(pool, "select <bigint>-2.5"), "-2");
+      assertEquals(await value(pool, "select <bigint><float32>2.5"), "2");
+      assertEquals(await value(pool, "select <int64>2.5"), 2n);
+      assertEquals(await value(pool, "select <int64>3.5"), 4n);
+      assertEquals(await value(pool, "select <int64>(2.5 + 1.0)"), 4n);
+      assertEquals(await value(pool, "select <int32>2.5"), 2);
+      assertEquals(await value(pool, "select <int16>-2.5"), -2);
+      assertEquals(await value(pool, "select <bigint>2.5n"), "3");
+      assertEquals(await value(pool, "select <bigint>-2.5n"), "-3");
+      assertEquals(await value(pool, "select <int64>2.5n"), 3n);
+      assertEquals(await value(pool, "select <int64>-2.5n"), -3n);
+      assertEquals(await value(pool, "select <array<bigint>>[2.5, 3.5]"), ["2", "4"]);
+      assertEquals(await value(pool, "select <array<int64>>[2.5, 3.5]"), [2n, 4n]);
     })
 });

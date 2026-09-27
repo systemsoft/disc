@@ -16,6 +16,9 @@
  *   need not hold for the same linked object.
  * - `not` negates a condition: `not({ nicks: "a1" })` is "no nick is a1".
  * - `or` holds when either condition does.
+ * - A condition on a single property or link compares as SQL does, an empty
+ *   value as NULL: neither it nor its `not` holds, and `or` holds when the
+ *   other side does.
  *
  * Seed: users ann (visits 3, nicks {a1, a2}, best Hello, posts {Hello,
  * World}) and bob (nothing optional set); post Hello has tags {t1}, lead t2
@@ -210,7 +213,14 @@ Deno.test({
         ["a post labelled l1", { posts: { labels: "l1" } }, ["ann"]],
         ["no post labelled l1", not({ posts: { labels: "l1" } }), ["bob"]],
         ["a post labelled in [l1, zz]", { posts: { labels: { in: ["l1", "zz"] } } }, ["ann"]],
-        ["a post labelled other than l1 or name bob", or({ posts: { labels: { ne: "l1" } } }, { name: "bob" }), ["bob"]]
+        ["a post labelled other than l1 or name bob", or({ posts: { labels: { ne: "l1" } } }, { name: "bob" }), ["bob"]],
+        // EdgeQL makes `or` over an empty comparison empty; the SDK's `?? false` keeps SQL's answers.
+        ["visits 1 or name bob", or({ visits: 1 }, { name: "bob" }), ["bob"]],
+        ["not visits 3 or name bob", or(not({ visits: 3 }), { name: "bob" }), ["bob"]],
+        ["not (visits 3 and name x)", not(and({ visits: 3 }, { name: "x" })), ["ann", "bob"]],
+        ["not { visits 3, name x }", not({ name: "x", visits: 3 }), ["ann", "bob"]],
+        ["not (visits 1 or name x)", not(or({ visits: 1 }, { name: "x" })), ["ann"]],
+        ["not not visits 3", not(not({ visits: 3 })), ["ann"]]
       ];
       for (const [description, arg, expected] of cases) {
         assertEquals(await names(arg), expected, description);

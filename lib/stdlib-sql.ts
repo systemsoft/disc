@@ -74,6 +74,19 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql VOLATILE;`,
 
+  // disc_assert_single(value, n) — `assert_single(<set>)` (compiler
+  // `assertSingle`): `value`, one of the set's `n` rows, unless there are
+  // more than one: Gel's CardinalityViolationError, SQLSTATE 21000
+  // (cardinality_violation).
+  `CREATE OR REPLACE FUNCTION disc_assert_single(value anyelement, n bigint) RETURNS anyelement AS $$
+     BEGIN
+       IF n > 1 THEN
+         RAISE EXCEPTION USING ERRCODE = 'cardinality_violation', MESSAGE = 'assert_single violation: more than one element returned by an expression';
+       END IF;
+       RETURN value;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE;`,
+
   // disc_finite_numeric(value, type_name) — every cast to `decimal` or
   // `bigint` (compiler `finiteNumeric`): the value, unless it is NaN or
   // ±Infinity. PostgreSQL's numeric has them; Gel's decimal and bigint do not

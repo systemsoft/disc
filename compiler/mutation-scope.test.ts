@@ -210,7 +210,7 @@ Deno.test("mutation scope - delete: a three-step path walks the link chain", asy
 });
 
 Deno.test("mutation scope - a subselect in a set expression keeps its own scope", async () => {
-  const sql = await sqlOf("update GitRef filter .name = 'main' set { program := (select Program filter .name = 'p') }");
+  const sql = await sqlOf("update GitRef filter .name = 'main' set { program := (select Program filter .name = 'p' limit 1) }");
 
   assertStringIncludes(sql, "WHERE git_ref.name = 'main'");
   assert(/FROM program AS (program_\d+) WHERE \1\.name = 'p'/.test(sql), sql);

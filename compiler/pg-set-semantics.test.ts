@@ -14,6 +14,9 @@
  *
  * - comparisons of multi paths: one boolean per element selected, as shape
  *   elements and function arguments; any element in a filter
+ * - aggregates over one value of the current object, per object
+ * - `assert_single()` assigned to a single link, checked at run time
+ * - `and` / `or` / `if` over an empty optional value: empty, as in Gel
  *
  * Seed: users ann (visits 3, nicks {a1, a2}, tags [x, y], best Hello, posts
  * {Hello, World}) and bob (nothing optional set); post Hello has tags {t1},
@@ -329,6 +332,104 @@ Deno.test({
       // A mutation's filter too.
       await run("update SetUser filter not (.nicks = 'a1') set { visits := 9 }");
       assertEquals(await names(".visits = 9"), ["ann"]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG aggregates over a value of the current object aggregate that object's set (Gel), not the table's",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async (run, values) => {
+      // Gel 7.1 answers these (same data) with the values asserted.
+      assertEquals(
+        await run(
+          "select SetUser { name, a := any(.visits > 1), l := all(.visits > 1), c := count(.visits), s := sum(.visits), " +
+            "mn := min(.visits), mx := max(.visits), ag := array_agg(.visits), cb := count(.best), mt := min(.best.title), " +
+            "an := all(.nicks = 'a1') } order by .name"
+        ),
+        [
+          { a: true, ag: [3], an: false, c: 1, cb: 1, l: true, mn: 3, mt: "Hello", mx: 3, name: "ann", s: 3 },
+          { a: false, ag: [], an: true, c: 0, cb: 0, l: true, mn: null, mt: null, mx: null, name: "bob", s: 0 }
+        ]
+      );
+      const names = async (filter: string): Promise<unknown[]> =>
+        ((await run(`select SetUser { name } filter ${filter} order by .name`)) as { name: string; }[]).map(user => user.name);
+      assertEquals(await names("any(.visits > 1)"), ["ann"]);
+      assertEquals(await names("count(.visits) = 0"), ["bob"]);
+      assertEquals(await names("all(.visits > 5)"), ["bob"]);
+      assertEquals(((await run("select SetUser { name } order by count(.visits) desc")) as { name: string; }[]).map(user => user.name), ["ann", "bob"]);
+      assertEquals(await values("for u in SetUser union count(u.visits)"), [0, 1]);
+      assertEquals(await values("for u in SetUser union any(u.visits > 1)"), [false, true]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG single link: assert_single() links the one object, and raises for several at run time (Gel)",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async (run, values) => {
+      await run("update SetUser filter .name = 'bob' set { best := assert_single((select SetPost filter .title = 'World')) }");
+      assertEquals(await values("select SetUser { t := .best.title } filter .name = 'bob'"), ["World"]);
+      await run("update SetUser filter .name = 'bob' set { best := assert_single((select SetPost filter .title = 'Nope')) }");
+      assertEquals(await values("select SetUser { t := .best.title } filter .name = 'bob'"), [null]);
+      assertEquals(await values("select assert_single((select SetUser.name filter SetUser.name = 'ann'))"), ["ann"]);
+
+      // Gel 7.1: "CardinalityViolationError: assert_single violation: more than one element returned by an expression".
+      const failure = async (query: string): Promise<{ message: string; }> => {
+        try {
+          await run(query);
+        } catch (error) {
+          return { message: (error as Error).message };
+        }
+        return { message: "" };
+      };
+      for (
+        const query of ["update SetUser filter .name = 'bob' set { best := assert_single((select SetPost)) }", "select assert_single((select SetUser.name))"]
+      ) {
+        const { message } = await failure(query);
+        assertEquals(message.includes("assert_single violation: more than one element returned by an expression"), true, `${query}: ${message}`);
+        assertEquals(message.includes("21000"), true, `${query}: ${message}`);
+      }
+      // The failed update linked nothing.
+      assertEquals(await values("select SetUser { t := .best.title } filter .name = 'bob'"), [null]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG and / or / if over an empty optional value are empty (Gel), not SQL's NULL OR TRUE",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async run => {
+      // Gel 7.1 answers these (same data) with the values asserted.
+      const names = async (filter: string): Promise<unknown[]> =>
+        ((await run(`select SetUser { name } filter ${filter} order by .name`)) as { name: string; }[]).map(user => user.name);
+      // bob has no visits: `.visits = 1` is empty, and so is the `or`.
+      assertEquals(await names(".visits = 1 or .name = 'bob'"), []);
+      assertEquals(await names(".name = 'bob' or .visits = 3"), ["ann"]);
+      assertEquals(await names(".best.title = 'Hello' or .name = 'bob'"), ["ann"]);
+      assertEquals(await names("not exists .visits or .visits = 3"), ["ann"]);
+      assertEquals(await names("not (.visits = 1 or .name = 'x')"), ["ann"]);
+      assertEquals(await names("not (.visits = 1 and .name = 'bob')"), ["ann"]);
+      // `?=`, `??` and `exists` give an empty operand a value.
+      assertEquals(await names(".visits ?= 1 or .name = 'bob'"), ["bob"]);
+      assertEquals(await names("(.visits = 1 or .name = 'bob') ?? true"), ["bob"]);
+      assertEquals(await names("(.visits = 1 and .name = 'bob') ?= false"), ["ann"]);
+      assertEquals(await names("((.visits = 1) ?? false) or ((.name = 'bob') ?? false)"), ["bob"]);
+
+      assertEquals(
+        await run(
+          "select SetUser { name, o := .visits = 1 or .name = 'bob', a := .visits = 1 and .name = 'bob', af := .visits = 1 and false, " +
+            "ot := .visits = 3 or true, co := (.visits = 1 or true) ?? false, e := exists (.visits = 1 or true), " +
+            "i := 'y' if .visits = 3 else 'n' } order by .name"
+        ),
+        [
+          { a: false, af: false, co: true, e: true, i: "y", name: "ann", o: false, ot: true },
+          { a: null, af: null, co: false, e: false, i: null, name: "bob", o: null, ot: null }
+        ]
+      );
     });
   }
 });
