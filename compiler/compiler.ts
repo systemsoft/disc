@@ -14,7 +14,7 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, ConfigurationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
-import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS, tupleTypeElements } from "./compiler-base.ts";
+import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -2564,139 +2564,112 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     });
   }
 
+  /**
+   * `group T [{ shape }] [using k := …, …] by .p | k, …` as one row per group,
+   * Gel's free object `{ key, grouping, elements }`: `key` holds each `by`
+   * key's value under its name, `grouping` the keys' names in `by` order, and
+   * `elements` the group's objects as `select T [{ shape }]` gives them.
+   *
+   *   group User { name } using n := len(.name) by n, .team
+   *   → SELECT jsonb_build_object('key', jsonb_build_object('n', LENGTH(user_1.name), 'team', user_1.team),
+   *       'grouping', jsonb_build_array('n', 'team'), 'elements', jsonb_agg(jsonb_build_object('name', user_1.name)))
+   *     FROM users AS user_1 GROUP BY LENGTH(user_1.name), user_1.team
+   */
   private compileGroupQuery(query: EdgeQLAST.GroupQuery): SQL.SelectStatement {
+    const subject = query.expr.kind === "ShapeExpr" ? query.expr.expr : query.expr;
     // The expr must be a TypeName so we can resolve the table
-    if (query.expr.kind !== "TypeName") {
+    if (subject.kind !== "TypeName") {
       throw new CompilationError(
         "GROUP query expression must be a type name"
       );
     }
 
-    const typeName = query.expr.name.parts.join("::");
-    const typeDef = Context.resolveTypeName(this.ctx, typeName);
-    if (!typeDef) {
+    const typeName = subject.name.parts.join("::");
+    if (!Context.resolveTypeName(this.ctx, typeName)) {
       throw new InvalidReferenceError(`Type '${typeName}' not found`);
     }
 
-    const tableAlias = Context.addTableAlias(
-      this.ctx,
-      typeName.toLowerCase(),
-      typeDef.tableName,
-      typeName
-    );
+    Context.pushScope(this.ctx);
+    try {
+      // The group's objects, bound as the subject the keys and the filter read.
+      const { fromClause, selectItems, where } = this.compileSelectExpression(subject, query.expr.kind === "ShapeExpr" ? query.expr.shape : undefined);
 
-    const fromClause = SQL.createFromClause([
-      SQL.createTableReference(typeDef.tableName, tableAlias)
-    ]);
-
-    // A property's column; a tuple's canonical, so equal tuples stored as
-    // different JSON are one group (`canonicalTuple`).
-    const groupKey = (property: Context.PropertyDef): SQL.SQLExpression => {
-      const column = SQL.createColumnReference(property.columnName, tableAlias);
-      const type = Context.propertyBaseType(property);
-      return type !== undefined && tupleTypeElements(type) ? this.canonicalTuple(column, type) : column;
-    };
-
-    // Build GROUP BY expressions from the BY clause
-    const groupByExprs: SQL.SQLExpression[] = [];
-    const keyFields: SQL.JsonField[] = [];
-
-    for (const byExpr of query.by.elements) {
-      if (byExpr.kind === "Path" && byExpr.steps.length === 1) {
-        const propName = byExpr.steps[0].name;
-        const property = Context.getProperty(this.ctx, typeName, propName);
-        if (property) {
-          const colRef = groupKey(property);
-          groupByExprs.push(colRef);
-          keyFields.push(SQL.createJsonField(propName, colRef));
-        } else {
-          throw new CompilationError(
-            `Property '${propName}' not found on type '${typeName}'`
-          );
-        }
-      } else if (byExpr.kind === "Identifier") {
-        // Bare identifier — look up as property
-        const propName = byExpr.name;
-        const property = Context.getProperty(this.ctx, typeName, propName);
-        if (property) {
-          const colRef = groupKey(property);
-          groupByExprs.push(colRef);
-          keyFields.push(SQL.createJsonField(propName, colRef));
-        } else {
-          throw new CompilationError(
-            `Property '${propName}' not found on type '${typeName}'`
-          );
-        }
-      } else {
-        // Fallback: compile the expression directly
-        const compiled = this.compileExpression(byExpr);
-        groupByExprs.push(compiled);
-        keyFields.push(SQL.createJsonField("expr", compiled));
-      }
-    }
-
-    // Build the 'key' as jsonb_build_object of the BY fields
-    const keyObject = SQL.createJsonBuildObject(keyFields);
-
-    // Build 'elements' as jsonb_agg of all properties
-    const allFields: SQL.JsonField[] = [];
-    for (const [name, property] of typeDef.properties) {
-      allFields.push(
-        SQL.createJsonField(
-          name,
-          SQL.createColumnReference(property.columnName, tableAlias)
-        )
-      );
-    }
-    const elementsAgg = SQL.createJsonAgg(
-      SQL.createJsonBuildObject(allFields)
-    );
-
-    // Final SELECT: jsonb_build_object('key', key_obj, 'elements', elements_agg)
-    const resultObject = SQL.createJsonBuildObject([
-      SQL.createJsonField("key", keyObject),
-      SQL.createJsonField("elements", elementsAgg)
-    ]);
-
-    const selectClause = SQL.createSelectClause([
-      SQL.createSelectItem(resultObject)
-    ]);
-    const groupByClause: SQL.GroupByClause = {
-      kind: "GroupByClause",
-      expressions: groupByExprs
-    };
-
-    // Compile FILTER to HAVING clause
-    let havingClause: SQL.HavingClause | undefined;
-    if (query.filter) {
-      // In the filter, the grouped type is the group's rows: `count(User)` is `COUNT(*)`.
-      const variables = this.ctx.currentScope.variables;
-      const outer = variables.get(typeName);
-      variables.set(typeName, { expression: query.expr, name: typeName, sqlOverride: SQL.star(), type: typeName });
-      let havingCondition: SQL.SQLExpression;
-      this.ctx.currentScope.groupRows = true;
-      try {
-        havingCondition = this.compileExpression(query.filter);
-      } finally {
-        delete this.ctx.currentScope.groupRows;
-        if (outer) {
-          variables.set(typeName, outer);
-        } else {
-          variables.delete(typeName);
-        }
-      }
-      havingClause = {
-        kind: "HavingClause",
-        condition: havingCondition
+      // A key's value; a tuple's, or an array of tuples', canonical, so equal
+      // ones stored as different JSON are one group (`canonicalTuple`).
+      const groupKey = (expr: EdgeQLAST.Expression): SQL.SQLExpression => {
+        const tupleType = this.staticTupleType(expr);
+        const tupleArrayType = tupleType ? null : this.staticTupleArrayType(expr);
+        const sql = this.compileExpression(expr);
+        return tupleType ?
+          this.canonicalTuple(sql, tupleType) :
+          tupleArrayType ?
+          this.canonicalTupleArray(sql, tupleArrayType) :
+          sql;
       };
-    }
+      const bound = new Map(query.using.map(binding => [binding.name.name, groupKey(binding.value)]));
 
-    return SQL.createSelectStatement({
-      select: selectClause,
-      from: fromClause,
-      groupBy: groupByClause,
-      having: havingClause
-    });
+      const keys = query.by.elements.map(byExpr => {
+        if (byExpr.kind === "Identifier" && bound.has(byExpr.name)) {
+          return { name: byExpr.name, sql: bound.get(byExpr.name)! };
+        }
+        // `.p`, or a bare `p` naming a property as `.p` does.
+        const propName = byExpr.kind === "Path" && !byExpr.rooted && byExpr.steps.length === 1 ?
+          byExpr.steps[0].name :
+          byExpr.kind === "Identifier" ?
+          byExpr.name :
+          undefined;
+        if (propName === undefined) {
+          return { name: "expr", sql: this.compileExpression(byExpr) };
+        }
+        if (!Context.getProperty(this.ctx, typeName, propName)) {
+          throw new CompilationError(
+            `Property '${propName}' not found on type '${typeName}'`
+          );
+        }
+        return { name: propName, sql: groupKey(EdgeQLAST.createPath([{ kind: "PathStep", name: propName, type: "property" }])) };
+      });
+
+      const resultObject = SQL.createJsonBuildObject([
+        SQL.createJsonField("key", SQL.createJsonBuildObject(keys.map(key => SQL.createJsonField(key.name, key.sql)))),
+        SQL.createJsonField("grouping", SQL.createFunctionCall("jsonb_build_array", keys.map(key => SQL.createLiteral("string", key.name)))),
+        SQL.createJsonField("elements", SQL.createJsonAgg(selectItems[0].expression))
+      ]);
+
+      // Compile FILTER to HAVING clause
+      let havingClause: SQL.HavingClause | undefined;
+      if (query.filter) {
+        // In the filter, the grouped type is the group's rows: `count(User)` is `COUNT(*)`.
+        const variables = this.ctx.currentScope.variables;
+        const outer = variables.get(typeName);
+        variables.set(typeName, { expression: subject, name: typeName, sqlOverride: SQL.star(), type: typeName });
+        let havingCondition: SQL.SQLExpression;
+        this.ctx.currentScope.groupRows = true;
+        try {
+          havingCondition = this.compileExpression(query.filter);
+        } finally {
+          delete this.ctx.currentScope.groupRows;
+          if (outer) {
+            variables.set(typeName, outer);
+          } else {
+            variables.delete(typeName);
+          }
+        }
+        havingClause = {
+          kind: "HavingClause",
+          condition: havingCondition
+        };
+      }
+
+      return SQL.createSelectStatement({
+        select: SQL.createSelectClause([SQL.createSelectItem(resultObject)]),
+        from: fromClause,
+        where: where ? SQL.createWhereClause(where) : undefined,
+        groupBy: { kind: "GroupByClause", expressions: keys.map(key => key.sql) },
+        having: havingClause
+      });
+    } finally {
+      Context.popScope(this.ctx);
+    }
   }
 
   /**

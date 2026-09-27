@@ -147,6 +147,20 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       return this.readingSnapshot(() => this.compileSelectQuery(query));
     }
 
+    // `select distinct <expr> order by <key>`: `distinct` makes a new set, so a
+    // key from a type or a set (`TupRow.name`, not `.name`) is not bound to its
+    // elements and is a set; Gel 7.1 rejects it with this QueryError. Checked
+    // before the subject is bound, which would bind the key's path to it too.
+    const setKey = query.distinct ?
+      query.orderBy?.find(item => !(item.expr.kind === "Path" && !item.expr.rooted) && this.setArgument(item.expr)) :
+      undefined;
+    if (setKey) {
+      throw new CompilationError(
+        "possibly more than one element returned by an expression where only singletons are allowed",
+        locationOf(setKey.expr) ?? (setKey.expr.kind === "Path" ? locationOf(setKey.expr.steps[0]) : undefined)
+      );
+    }
+
     Context.pushScope(this.ctx);
 
     try {
@@ -164,18 +178,6 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         whereClause = SQL.createWhereClause(where ? SQL.createBinaryExpression("AND", where, condition) : condition);
       } else if (where) {
         whereClause = SQL.createWhereClause(where);
-      }
-
-      // `select distinct <tuple> order by <tuple>`: the key is not bound to the
-      // distinct subject, so it is a set; Gel 7.1 rejects it with this QueryError.
-      const setKey = query.distinct && !query.shape && this.staticTupleType(query.expr) ?
-        query.orderBy?.find(item => this.staticTupleType(item.expr)) :
-        undefined;
-      if (setKey) {
-        throw new CompilationError(
-          "possibly more than one element returned by an expression where only singletons are allowed",
-          locationOf(setKey.expr) ?? (setKey.expr.kind === "Path" ? locationOf(setKey.expr.steps[0]) : undefined)
-        );
       }
 
       // Compile ORDER BY clause
@@ -207,10 +209,15 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         };
       }
 
-      // `select distinct <tuple>`: equal tuples stored as different JSON are one (`canonicalTuple`).
-      const tupleType = query.distinct && !query.shape && selectItems.length === 1 ? this.staticTupleType(query.expr) : null;
+      // `select distinct <tuple>`: equal tuples stored as different JSON are one
+      // (`canonicalTuple`), and so are equal arrays of tuples (`canonicalTupleArray`).
+      const distinctOne = query.distinct && !query.shape && selectItems.length === 1;
+      const tupleType = distinctOne ? this.staticTupleType(query.expr) : null;
+      const tupleArrayType = distinctOne && !tupleType ? this.staticTupleArrayType(query.expr) : null;
       if (tupleType) {
         selectItems[0] = { ...selectItems[0], expression: this.canonicalTuple(selectItems[0].expression, tupleType) };
+      } else if (tupleArrayType) {
+        selectItems[0] = { ...selectItems[0], expression: this.canonicalTupleArray(selectItems[0].expression, tupleArrayType) };
       }
       const selectClause = SQL.createSelectClause(selectItems, query.distinct);
 
@@ -299,7 +306,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     return [...writes];
   }
 
-  private compileSelectExpression(
+  protected compileSelectExpression(
     expr: EdgeQLAST.Expression,
     shape?: EdgeQLAST.Shape
   ): {

@@ -606,6 +606,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       "delete",
       "with",
       "for",
+      "group",
       "describe",
       "configure"
     ];

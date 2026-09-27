@@ -209,6 +209,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "delete",
       "with",
       "for",
+      "group",
       "describe",
       "configure"
     ];

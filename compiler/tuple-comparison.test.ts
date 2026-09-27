@@ -185,3 +185,57 @@ Deno.test("Tuple write - a parameter written to a tuple property is stored canon
   const literal = compileEdgeQL(`insert TupRow { name := "a", t := (n := 1, at := <datetime>'2024-01-01T00:00:00Z') }`, schema);
   assert(!literal.includes("to_jsonb"), literal);
 });
+
+Deno.test("array<tuple> write - a parameter written to an array<tuple> property has each tuple stored canonical", () => {
+  const insert = compileEdgeQL(`insert TupRow { name := "a", ts := <array<tuple<n: int64, s: str>>>$ts }`, schema);
+  assertStringIncludes(insert, "jsonb_array_elements(CAST($1 AS jsonb))");
+  assertStringIncludes(insert, "jsonb_build_object('n', to_jsonb(CAST(");
+
+  const update = compileEdgeQL(`update TupRow filter .name = "a" set { ts := <array<tuple<n: int64, s: str>>>$ts }`, schema);
+  assertStringIncludes(update, "jsonb_array_elements(CAST($1 AS jsonb))");
+});
+
+Deno.test("array<tuple> expressions - literals are jsonb arrays wherever they appear", () => {
+  for (const query of [`select [(1, 'a')]`, `select [(1, 'a')] ++ <array<tuple<int64, str>>>$p`, `select len([(1, 'a')])`]) {
+    const sql = compileEdgeQL(query, schema);
+    assert(!sql.includes("ARRAY["), `${query}: ${sql}`);
+  }
+  assertStringIncludes(compileEdgeQL(`select len(<array<tuple<int64, str>>>$p)`, schema), "jsonb_array_length(CAST($1 AS jsonb))");
+  assertStringIncludes(compileEdgeQL(`select array_unpack(<array<tuple<int64, str>>>$p)`, schema), "jsonb_array_elements(CAST($1 AS jsonb))");
+  assertStringIncludes(compileEdgeQL(`select (<array<tuple<int64, str>>>$p)[0]`, schema), "CAST($1 AS jsonb) -> 0");
+  assertStringIncludes(compileEdgeQL(`select array_agg((1, 'a'))`, schema), "to_jsonb(");
+});
+
+Deno.test("Distinct - an order key not bound to the distinct subject is Gel's singleton QueryError", () => {
+  // Gel 7.1: `distinct` makes a new set; a path from a type or a set binding
+  // in the order by is not bound to its elements.
+  for (
+    const query of [
+      `select distinct TupRow.t order by TupRow.t`,
+      `select distinct TupRow.name order by TupRow.name`,
+      `select distinct TupRow order by TupRow.name`,
+      `select distinct TupRow { name } order by TupRow.name`,
+      `select distinct TupRow.name order by len(TupRow.name)`,
+      `with n := TupRow.name select distinct n order by n`
+    ]
+  ) {
+    assertThrows(
+      () => compileEdgeQL(query, schema),
+      Error,
+      "possibly more than one element returned by an expression where only singletons are allowed",
+      query
+    );
+  }
+  for (
+    const query of [
+      `select distinct TupRow { name } order by .name`,
+      `select distinct TupRow order by .name`,
+      `select distinct TupRow.name order by count(TupRow)`,
+      `select distinct {1, 2, 2} order by 1`,
+      `select TupRow.name order by TupRow.name`,
+      `for x in (select TupRow) union (select distinct x.name order by x.name)`
+    ]
+  ) {
+    compileEdgeQL(query, schema);
+  }
+});

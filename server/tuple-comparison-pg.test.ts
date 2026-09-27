@@ -239,9 +239,8 @@ Deno.test({
       const distinct = await run(`select distinct TupRow.t`);
       assertEquals(distinct.length, 2, JSON.stringify(distinct));
 
-      // The handler does not take `group`; its SQL is run as compiled.
-      const groups = await sql(`group TupRow by .t`);
-      const sizes = groups.map(row => (Object.values(row)[0] as { elements: unknown[]; }).elements.length).sort();
+      const groups = await run(`group TupRow by .t`);
+      const sizes = groups.map(row => (row.elements as unknown[]).length).sort();
       assertEquals(sizes, [1, 3], JSON.stringify(groups));
     });
   }
@@ -309,6 +308,105 @@ Deno.test({
       const rows = await run(`select TupRow { name, t, u } order by .name`);
       assertEquals(rows[0].t, rows[1].t);
       assertEquals(rows[0].u, rows[1].u);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG array<tuple> write: a parameter is stored as the jsonb array a literal of the same value writes",
+  ignore: !RUN_PG,
+  fn: async () => {
+    await withSchema(async (run, sql) => {
+      await run(`insert TupRow { name := "lit", ts := [(n := 3, s := "c"), (n := 4, s := "d")] }`);
+      await run(`insert TupRow { name := "param", ts := <array<tuple<n: int64, s: str>>>$ts }`, {
+        ts: [{ n: "3", s: "c" }, { n: 4, s: "d" }]
+      });
+      await run(`insert TupRow { name := "upd" }`);
+      await run(`update TupRow filter .name = "upd" set { ts := <array<tuple<n: int64, s: str>>>$ts }`, {
+        ts: [{ n: "3", s: "c" }, { n: 4, s: "d" }]
+      });
+      const stored = await sql.raw(`SELECT name, ts::text AS ts FROM tup_row`);
+      assertEquals(new Set(stored.map(row => row.ts)).size, 1, JSON.stringify(stored));
+
+      // Written before array<tuple> parameters were stored canonical: still equal by value.
+      await sql.raw(`INSERT INTO tup_row (name, ts) VALUES ('old', '[{"n": "3", "s": "c"}, {"n": "4", "s": "d"}]')`);
+      const all = ["lit", "old", "param", "upd"];
+      assertEquals(await names(run, `select TupRow { name } filter .ts = [(n := 3, s := "c"), (n := 4, s := "d")]`), all);
+      assertEquals(
+        await names(run, `select TupRow { name } filter .ts = <array<tuple<n: int64, s: str>>>$p`, { p: [{ n: 3, s: "c" }, { n: "4", s: "d" }] }),
+        all
+      );
+      assertEquals((await run(`select distinct TupRow.ts`)).length, 1);
+    });
+  }
+});
+
+/*** The one value `query` selects. ***/
+async function value(run: Run, query: string, variables?: Record<string, unknown>): Promise<unknown> {
+  const rows = await run(query, variables);
+  assertEquals(rows.length, 1, `${query}: ${JSON.stringify(rows)}`);
+  return Object.values(rows[0])[0];
+}
+
+/*** The values `query` selects, in order. ***/
+async function values(run: Run, query: string, variables?: Record<string, unknown>): Promise<unknown[]> {
+  return (await run(query, variables)).map(row => Object.values(row)[0]);
+}
+
+Deno.test({
+  name: "PG array<tuple> expressions: literals, parameters and aggregates are one jsonb array form (Gel 7.1)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    await withSchema(async run => {
+      const p = { p: [[2, "b"]] };
+      assertEquals(await value(run, `select [(1, 'a')] ++ <array<tuple<int64, str>>>$p`, p), [[1, "a"], [2, "b"]]);
+      assertEquals(await value(run, `select [(1, 'a')] ++ [(2, 'b')]`), [[1, "a"], [2, "b"]]);
+      assertEquals(await value(run, `select array_agg({(1, 'a'), (2, 'b')})`), [[1, "a"], [2, "b"]]);
+      assertEquals(await value(run, `select array_agg((2, 'b')) = <array<tuple<int64, str>>>$p`, p), true);
+      assertEquals(await value(run, `select [(1, 'a')] = [(a := 1, b := 'a')]`), true);
+      assertEquals(await value(run, `select [(2, 'b')] = <array<tuple<int64, str>>>$p`, p), true);
+      assertEquals(await value(run, `select [(1, 'a')] != <array<tuple<int64, str>>>$p`, p), true);
+      assertEquals(await value(run, `select [(1, 'a')] < [(1, 'b')]`), true);
+      assertEquals(await value(run, `select [(1, 'a')] < [(0, 'b'), (0, 'c')]`), false);
+      assertEquals(await value(run, `select [(1, 'a')] in {[(1, 'a')], [(2, 'b')]}`), true);
+      assertEquals(await values(run, `select array_unpack([(1, 'a'), (2, 'b')])`), [[1, "a"], [2, "b"]]);
+      assertEquals(await values(run, `select array_unpack(<array<tuple<int64, str>>>$p)`, p), [[2, "b"]]);
+      assertEquals(await value(run, `select len([(1, 'a'), (2, 'b')])`), 2);
+      assertEquals(await value(run, `select len(<array<tuple<int64, str>>>$p)`, p), 1);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b')][0]`), [1, "a"]);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b')][-1]`), [2, "b"]);
+      assertEquals(await value(run, `select (<array<tuple<int64, str>>>$p)[0]`, p), [2, "b"]);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b')][1:]`), [[2, "b"]]);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b'), (3, 'c')][-2:]`), [[2, "b"], [3, "c"]]);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b')][:-1]`), [[1, "a"]]);
+      assertEquals(await value(run, `select [(1, 'a'), (2, 'b')][5:]`), []);
+      assertEquals(await value(run, `select (<array<tuple<int64, str>>>$p)[0:1]`, p), [[2, "b"]]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG array<tuple> properties: len, index, slice, concat and order by (Gel 7.1)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    await withSchema(async (run, sql) => {
+      await run(`insert TupRow { name := "a", ts := [(n := 1, s := "a"), (n := 2, s := "b")] }`);
+      await run(`insert TupRow { name := "b", ts := <array<tuple<n: int64, s: str>>>$ts }`, { ts: [{ n: 3, s: "c" }] });
+      await run(`insert TupRow { name := "c" }`);
+      // Written before array<tuple> parameters were stored canonical: 10 sorts after 3.
+      await sql.raw(`INSERT INTO tup_row (name, ts) VALUES ('d', '[{"n": "10", "s": "a"}]')`);
+
+      const rows = await run(`select TupRow { name, n := len(.ts), f := .ts[0], sl := .ts[1:], x := .ts ++ [(n := 9, s := 'z')] } order by .name`);
+      assertEquals(rows[0], {
+        f: { n: 1, s: "a" },
+        n: 2,
+        name: "a",
+        sl: [{ n: 2, s: "b" }],
+        x: [{ n: 1, s: "a" }, { n: 2, s: "b" }, { n: 9, s: "z" }]
+      });
+      assertEquals(rows[1].x, [{ n: 3, s: "c" }, { n: 9, s: "z" }]);
+      assertEquals((await run(`select TupRow { name } order by .ts`)).map(row => row.name), ["c", "a", "b", "d"]);
+      assertEquals(await names(run, `select TupRow { name } filter .ts[0] = (n := 10, s := 'a')`), ["d"]);
     });
   }
 });

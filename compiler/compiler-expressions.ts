@@ -177,6 +177,9 @@ const OPTIONAL_OPERAND_OPERATORS = new Set(["?=", "?!="]);
 /*** Operators that compare whole values: on tuples they compare the tuples' elements (see `canonicalTuple`). ***/
 const EQUALITY_OPERATORS = new Set(["=", "!=", "?=", "?!=", "IN", "NOT IN"]);
 
+/*** Operators that order whole values: on arrays of tuples they compare the tuples' elements (see `tupleArraySortKey`). ***/
+const ORDERING_OPERATORS = new Set(["<", ">", "<=", ">="]);
+
 /**
  * PostgreSQL types of tuple elements whose JSON text can differ between equal
  * values (`…T00:00:00Z` and `…T00:00:00+00:00`, `1.5` and `"1.5"`): compared,
@@ -254,6 +257,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   private readonly anyElementComparisons = new WeakSet<EdgeQLAST.BinaryOp>();
   /*** The `and`, `or` and `??` of a filter's condition read only for being true (see `markTruthContexts`). ***/
   private readonly truthContexts = new WeakSet<EdgeQLAST.BinaryOp>();
+  /*** `array_agg` calls over tuples being compiled as PostgreSQL arrays, to be made a jsonb array (see `compileFunctionCall`). ***/
+  private readonly tupleArrayAggregates = new WeakSet<EdgeQLAST.FunctionCall>();
   /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
   private detachedFrom = -1;
 
@@ -509,7 +514,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     this.assertNotOverSet(binOp, `'${binOp.op}'`);
-    const tupleComparison = this.compileTupleComparison(binOp);
+    const tupleComparison = this.compileTupleArrayComparison(binOp) ?? this.compileTupleComparison(binOp);
     if (tupleComparison) {
       return tupleComparison;
     }
@@ -751,6 +756,105 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     const parts = rights.map((element, index) => this.renderSqlExpr(operand(element, rightTypes[index])));
     return SQL.createBinaryExpression(sqlOp, left, { kind: "RawSQLExpression", sql: `(${parts.join(", ")})` });
+  }
+
+  /**
+   * Comparisons of whole arrays of tuples, when either operand's element type
+   * is known (`staticTupleArrayType`): `=`, `!=`, `?=`, `?!=`, `in` and
+   * `not in` compare `canonicalTupleArray`s, so arrays written as different
+   * JSON (a parameter's, a row stored as sent) are equal when their tuples
+   * are, whatever the tuples' names; `<`, `>`, `<=` and `>=` compare
+   * `tupleArraySortKey`s, tuple by tuple as Gel does. Null otherwise.
+   */
+  private compileTupleArrayComparison(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression | null {
+    const ordering = ORDERING_OPERATORS.has(binOp.op);
+    if (!ordering && !EQUALITY_OPERATORS.has(binOp.op)) {
+      return null;
+    }
+    const rights = binOp.right.kind === "SetExpr" ? flattenSetElements(binOp.right) : [binOp.right];
+    const leftType = this.staticTupleArrayType(binOp.left);
+    const rightTypes = rights.map(element => this.staticTupleArrayType(element));
+    const typeName = leftType ?? rightTypes.find(type => type !== null);
+    if (!typeName) {
+      return null;
+    }
+    // An operand of unknown type is read as the other's.
+    const operand = (expr: EdgeQLAST.Expression, type: string | null | undefined): SQL.SQLExpression =>
+      ordering ?
+        this.tupleArraySortKey(this.compileExpression(expr), type ?? typeName) :
+        this.canonicalTupleArray(this.compileExpression(expr), type ?? typeName, true);
+    const left = operand(binOp.left, leftType);
+    const sqlOp = binOp.op === "?=" ? "IS NOT DISTINCT FROM" : binOp.op === "?!=" ? "IS DISTINCT FROM" : binOp.op;
+    if (binOp.right.kind !== "SetExpr") {
+      return SQL.createBinaryExpression(sqlOp, left, operand(binOp.right, rightTypes[0]));
+    }
+    if (rights.length === 0) {
+      return SQL.createBinaryExpression(sqlOp, left, this.compileExpression(binOp.right));
+    }
+    const parts = rights.map((element, index) => this.renderSqlExpr(operand(element, rightTypes[index])));
+    return SQL.createBinaryExpression(sqlOp, left, { kind: "RawSQLExpression", sql: `(${parts.join(", ")})` });
+  }
+
+  /**
+   * The jsonb array of tuples `sql` with each tuple a `canonicalTuple` of
+   * `typeName`, in order, so equal arrays are equal jsonb; an empty set
+   * (NULL) stays NULL. The array stays a SQL AST node, in the NULL test, so a
+   * parameter in it is still found by `buildParameterTypeMap`.
+   *
+   *   → CASE WHEN ts IS NULL THEN NULL ELSE (SELECT COALESCE(jsonb_agg(canonical(e.v) ORDER BY e.ord), '[]')
+   *       FROM jsonb_array_elements(ts) WITH ORDINALITY AS e(v, ord)) END
+   */
+  protected canonicalTupleArray(sql: SQL.SQLExpression, typeName: string, positional = false): SQL.SQLExpression {
+    const tuple = this.renderSqlExpr(this.canonicalTuple(SQL.createColumnReference("v", "e"), typeName, positional));
+    return unlessNullTuple(sql, {
+      kind: "RawSQLExpression",
+      sql: `(SELECT COALESCE(jsonb_agg(${tuple} ORDER BY e.ord), '[]'::jsonb) FROM jsonb_array_elements(${
+        this.renderSqlExpr(sql)
+      }) WITH ORDINALITY AS e(v, ord))`
+    });
+  }
+
+  /**
+   * The jsonb array of tuples `sql` as a key to order or compare by: a
+   * PostgreSQL array of each tuple's `tupleSortKey`, in order, which sorts
+   * tuple by tuple (a jsonb array sorts by length first). An empty set (NULL)
+   * stays NULL, for `empty first|last`.
+   */
+  private tupleArraySortKey(sql: SQL.SQLExpression, typeName: string): SQL.SQLExpression {
+    const tuple = this.renderSqlExpr(this.tupleSortKey(SQL.createColumnReference("v", "e"), typeName));
+    return unlessNullTuple(sql, {
+      kind: "RawSQLExpression",
+      sql: `ARRAY(SELECT ${tuple} FROM jsonb_array_elements(${this.renderSqlExpr(sql)}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`
+    });
+  }
+
+  /**
+   * The elements' tuple type of `expr` when it is an array of tuples known
+   * without running the query: a literal's (its first tuple's type), an array
+   * cast's, a property's or a variable's, `array_agg` of tuples, `++` or a
+   * slice of such an array. Null otherwise.
+   */
+  protected staticTupleArrayType(expr: EdgeQLAST.Expression): string | null {
+    if (expr.kind === "ArrayExpr") {
+      return expr.elements.map(element => this.staticTupleType(element)).find(type => type !== null) ?? null;
+    }
+    if (expr.kind === "FunctionCall" && expr.args.length === 1 && Context.lookupFunction(this.ctx.schema, expr.name.parts)?.name === "array_agg") {
+      return this.staticTupleType(expr.args[0].value);
+    }
+    if (expr.kind === "BinaryOp" && expr.op === "++") {
+      return this.staticTupleArrayType(expr.left) ?? this.staticTupleArrayType(expr.right);
+    }
+    if (expr.kind === "SliceExpression") {
+      return this.staticTupleArrayType(expr.expr);
+    }
+    if (expr.kind === "Identifier") {
+      const variable = this.scopeVariable(expr.name);
+      if (variable && !variable.sqlOverride) {
+        return this.staticTupleArrayType(variable.expression);
+      }
+    }
+    const element = this.staticArrayElementType(expr);
+    return element !== null && tupleTypeElements(element) ? element : null;
   }
 
   /**
@@ -1277,7 +1381,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * (`setQuery`), a `with` binding's rows, or a path to several values
    * (`User.name`, `.posts.title`, a multi property).
    */
-  private setArgument(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+  protected setArgument(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
     if (expr.kind === "SetExpr" && flattenSetElements(expr).length === 1) {
       return null;
     }
@@ -1545,7 +1649,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return this.compileExpression(arg);
   }
 
-  /*** An order by key; a tuple's is its elements' (`tupleSortKey`). A set has no one value to order by; Gel rejects it too. ***/
+  /*** An order by key; a tuple's is its elements' (`tupleSortKey`), an array of tuples' its tuples' (`tupleArraySortKey`). A set has no one value to order by; Gel rejects it too. ***/
   protected compileOrderExpression(expr: EdgeQLAST.Expression): SQL.SQLExpression {
     if (expr.kind !== "Path" && this.setArgument(expr)) {
       throw new CompilationError(
@@ -1554,8 +1658,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       );
     }
     const tupleType = this.staticTupleType(expr);
+    const tupleArrayType = tupleType ? null : this.staticTupleArrayType(expr);
     const sql = this.compileExpression(expr);
-    return tupleType ? this.tupleSortKey(sql, tupleType) : sql;
+    return tupleType ? this.tupleSortKey(sql, tupleType) : tupleArrayType ? this.tupleArraySortKey(sql, tupleArrayType) : sql;
   }
 
   /**
@@ -1957,6 +2062,17 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const functionName = parts.join("_");
     const qualifiedName = funcCall.name.parts.join("::");
 
+    // `array_agg` of tuples: an array of tuples is a jsonb array (see
+    // `compileArrayExpr`); the aggregate, however it is compiled, is made one.
+    if (functionName === "array_agg" && this.staticTupleArrayType(funcCall) && !this.tupleArrayAggregates.has(funcCall)) {
+      this.tupleArrayAggregates.add(funcCall);
+      try {
+        return SQL.createFunctionCall("to_jsonb", [this.compileFunctionCall(funcCall)]);
+      } finally {
+        this.tupleArrayAggregates.delete(funcCall);
+      }
+    }
+
     // In a policy's condition, `runtime::has_permission('<spec>')` is the Deno
     // process's permission, decided now (see AccessEvaluator.expressionToSQL).
     if (qualifiedName === "runtime::has_permission" && this.compilingPolicy && this.accessEvaluator) {
@@ -2036,6 +2152,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));
+
+    // An array of tuples is a jsonb array (see `compileArrayExpr`).
+    if (functionName === "array_unpack" && args.length === 1 && this.staticTupleArrayType(funcCall.args[0].value)) {
+      return SQL.createFunctionCall("jsonb_array_elements", args);
+    }
 
     // An aggregate over one value (or none) aggregates that value's set. A
     // group's filter aggregates the group's rows instead (`count(User)` is
@@ -2558,6 +2679,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * it; a user scalar is taken as the built-in it extends):
    *
    *   array<T> → CARDINALITY   (PG `LENGTH` has no array form)
+   *   array<tuple<…>> → jsonb_array_length (see `compileArrayExpr`)
    *   bytes    → OCTET_LENGTH
    *   str      → LENGTH        (characters, as Gel counts them)
    *
@@ -2566,6 +2688,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * cannot see statically still fails there.
    */
   private lengthFunction(expr: EdgeQLAST.Expression): string {
+    if (this.staticTupleArrayType(expr)) {
+      return "jsonb_array_length";
+    }
     const staticType = expr.kind === "ArrayExpr" ?
       "array" :
       expr.kind === "FunctionCall" ?
@@ -3076,6 +3201,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       null;
     if (valueType !== null && tupleNames(valueType) === tupleNames(typeName)) {
       return this.canonicalTuple(sql, typeName);
+    }
+    // So is each tuple of an array of tuples from a parameter, a cast or another array.
+    const elementType = pgType === "jsonb" ? /^array<(.+)>$/.exec(typeName)?.[1] : undefined;
+    const arrayType = elementType && tupleTypeElements(elementType) && this.hasCanonicalElements(elementType) && expr.kind !== "ArrayExpr" ?
+      this.staticTupleArrayType(expr) :
+      null;
+    if (elementType && arrayType !== null && tupleNames(arrayType) === tupleNames(elementType)) {
+      return this.canonicalTupleArray(sql, elementType);
     }
     if (
       (pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr, this.numericBaseType(typeName) === "bigint") ||
@@ -4003,7 +4136,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       );
     }
     const elements = arrayExpr.elements.map(el => this.compileExpression(el));
-    return SQL.createFunctionCall("ARRAY", elements);
+    // An array of tuples is a jsonb array, as its parameter form and its
+    // column are, so all three mix (`++`, `=`, `len`, `[0]`, …).
+    return SQL.createFunctionCall(this.staticTupleArrayType(arrayExpr) ? "jsonb_build_array" : "ARRAY", elements);
   }
 
   private compileTupleExpr(tupleExpr: EdgeQLAST.TupleExpr): SQL.SQLExpression {
@@ -4126,6 +4261,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const base = this.compileExpression(indexExpr.expr);
     const idx = this.compileExpression(indexExpr.index);
 
+    // An array of tuples is a jsonb array (see `compileArrayExpr`), whose `->`
+    // counts a negative index from the end, as Gel does.
+    if (this.staticTupleArrayType(indexExpr.expr)) {
+      return SQL.createJsonbAccess(base, "->", indexExpr.index.kind === "Literal" ? idx : SQL.createCastExpression(idx, "integer"));
+    }
+
     // String key access → jsonb -> 'key'
     if (
       indexExpr.index.kind === "Literal" &&
@@ -4160,6 +4301,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   ): SQL.SQLExpression {
     const base = this.compileExpression(sliceExpr.expr);
     const baseStr = this.renderSqlExpr(base);
+
+    if (this.staticTupleArrayType(sliceExpr.expr)) {
+      return this.tupleArraySlice(base, sliceExpr);
+    }
 
     const hasStart = sliceExpr.start !== undefined;
     const hasEnd = sliceExpr.end !== undefined;
@@ -4202,5 +4347,33 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       kind: "RawSQLExpression" as const,
       sql: `SUBSTRING(${baseStr} FROM 1 FOR ${endStr})`
     };
+  }
+
+  /**
+   * `[start:end]` of the jsonb array of tuples `base`, as Gel slices: the
+   * tuples from index `start` up to (not including) `end`, a negative bound
+   * counting from the end, bounds past either end clamped. An empty set
+   * (NULL) stays NULL; `base` stays a SQL AST node, in the NULL test, so a
+   * parameter in it is still found by `buildParameterTypeMap`.
+   *
+   *   ts[1:] → (SELECT COALESCE(jsonb_agg(e.v ORDER BY e.ord), '[]') FROM jsonb_array_elements(ts)
+   *              WITH ORDINALITY AS e(v, ord) WHERE e.ord > 1 AND e.ord <= jsonb_array_length(ts))
+   */
+  private tupleArraySlice(base: SQL.SQLExpression, sliceExpr: EdgeQLAST.SliceExpression): SQL.SQLExpression {
+    const array = this.renderSqlExpr(base);
+    const length = `jsonb_array_length(${array})`;
+    // A bound as an index from the start.
+    const index = (bound: EdgeQLAST.Expression): string => {
+      const value = this.renderSqlExpr(this.compileExpression(bound));
+      return `(CASE WHEN ${value} < 0 THEN ${length} + ${value} ELSE ${value} END)`;
+    };
+    // `ord` counts from 1: element `i` is kept when start <= i < end.
+    const start = sliceExpr.start ? index(sliceExpr.start) : "0";
+    const end = sliceExpr.end ? index(sliceExpr.end) : length;
+    return unlessNullTuple(base, {
+      kind: "RawSQLExpression",
+      sql: `(SELECT COALESCE(jsonb_agg(e.v ORDER BY e.ord), '[]'::jsonb) FROM jsonb_array_elements(${array}) ` +
+        `WITH ORDINALITY AS e(v, ord) WHERE e.ord > ${start} AND e.ord <= ${end})`
+    });
   }
 }
