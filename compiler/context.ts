@@ -189,6 +189,14 @@ export interface PropertyDef {
   columnName: string;
   /** Original EdgeQL type name (e.g., "str", "int32", "bool") before SQL mapping */
   edgeqlType?: string;
+  /**
+   * For a property of a user scalar (`count: Count`, `scalar type Count
+   * extending bigint`): the built-in type `edgeqlType` is, with each user
+   * scalar in it replaced by the type it ultimately extends (`bigint`,
+   * `array<bigint>`; a sequence scalar is `int64`). Unset otherwise (a
+   * built-in type, an enum). See `propertyBaseType`.
+   */
+  baseType?: string;
   /** Whether this property is readonly (cannot be set after creation) */
   readonly?: boolean;
   /** Whether this property has a default value expression */
@@ -308,6 +316,11 @@ export function getLinkProperty(link: LinkDef, name: string): PropertyDef {
     throw new InvalidReferenceError(`Link '${link.name}' has no link property '${name}'`);
   }
   return property;
+}
+
+/*** The built-in EdgeQL type of `property`'s values: a user scalar's base type (`count: Count` is `bigint`), else its own type. ***/
+export function propertyBaseType(property: PropertyDef): string | undefined {
+  return property.baseType ?? property.edgeqlType;
 }
 
 export function pushScope(ctx: CompilationContext): void {

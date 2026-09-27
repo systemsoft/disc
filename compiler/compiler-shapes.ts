@@ -878,7 +878,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         }
         const pgType = property.multi && !property.computed ?
           this.multiPropertyArrayType(property) :
-          edgeqlTypeToPgType(property.edgeqlType ?? property.type, this.ctx.schema.scalars);
+          edgeqlTypeToPgType(Context.propertyBaseType(property) ?? property.type, this.ctx.schema.scalars);
         cols.set(colName, pgType);
         continue;
       }

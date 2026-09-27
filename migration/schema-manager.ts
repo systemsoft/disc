@@ -274,6 +274,21 @@ function userScalarBaseTypes(modules: Module[]): Map<string, string> {
 }
 
 /**
+ * The built-in type `sdlType`, named in `module`, is when it names a user
+ * scalar (`Count` → `bigint`, `array<Count>` → `array<bigint>`; a sequence
+ * scalar is an `int64`), for `PropertyDef.baseType`; undefined when it names
+ * none. `scalars` is `userScalarBaseTypes`; a bare name is `module`'s scalar
+ * before one elsewhere.
+ */
+function scalarBaseType(sdlType: string, module: string, scalars: Map<string, string>): string | undefined {
+  const resolved = sdlType.replace(/[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*/g, name => {
+    const base = (name.includes("::") ? undefined : scalars.get(`${module}::${name}`)) ?? scalars.get(name);
+    return base === undefined ? name : base === "sequence" ? "int64" : base;
+  });
+  return resolved === sdlType ? undefined : resolved;
+}
+
+/**
  * Build a full SDL type string from a TypeRef, including type parameters.
  * For example: range<int32>, multirange<cal::local_date>
  */
@@ -402,7 +417,8 @@ function extractPropertyConstraints(
  * link's junction table — or undefined when the link declares none.
  */
 function linkPropertyDefs(
-  declarations: PropertyDeclaration[] | undefined
+  declarations: PropertyDeclaration[] | undefined,
+  baseTypeOf: (sdlType: string) => string | undefined
 ): Map<string, PropertyDef> | undefined {
   if (!declarations || declarations.length === 0) {
     return undefined;
@@ -410,13 +426,15 @@ function linkPropertyDefs(
   return new Map(declarations.map(decl => {
     const name = decl.name.value;
     const edgeqlType = typeRefToSdlString(decl.type);
+    const baseType = baseTypeOf(edgeqlType);
     const property: PropertyDef = {
       name,
-      type: sdlTypeToSqlType(edgeqlType),
+      type: sdlTypeToSqlType(baseType ?? edgeqlType),
       required: decl.required ?? false,
       multi: false,
       columnName: propNameToColumnName(name),
       edgeqlType,
+      ...(baseType ? { baseType } : {}),
       readonly: decl.readonly ?? false,
       hasDefault: decl.default !== undefined,
       constraints: extractPropertyConstraints(decl.constraints),
@@ -629,6 +647,7 @@ export class SchemaManager {
     const isSequenceType = (edgeqlType: string): boolean => (scalars.get(edgeqlType) ?? scalars.get(edgeqlType.replace(/^default::/, ""))) === "sequence";
 
     for (const module of modules) {
+      const baseTypeOf = (sdlType: string): string | undefined => scalarBaseType(sdlType, module.name, scalars);
       for (const item of module.items) {
         // Handle alias declarations
         if (item.kind === "AliasDeclaration") {
@@ -810,7 +829,7 @@ export class SchemaManager {
           if (isObjectTarget && !propDecl.computed) {
             const linkAnnotations = extractAnnotationMap(propDecl.annotations);
             const isMultiLink = propDecl.multi ?? false;
-            const linkProperties = linkPropertyDefs(propDecl.properties);
+            const linkProperties = linkPropertyDefs(propDecl.properties, baseTypeOf);
             links.set(propName, {
               name: propName,
               target: sdlTypeName,
@@ -831,7 +850,9 @@ export class SchemaManager {
 
           // A stored multi property is an array column of its element type
           // (`multi scopes: str` → `text[]`); `edgeqlType` keeps the element.
-          const elementSqlType = sdlTypeToSqlType(sdlTypeName);
+          // A user scalar's column is its base type's.
+          const baseType = baseTypeOf(sdlTypeName);
+          const elementSqlType = sdlTypeToSqlType(baseType ?? sdlTypeName);
           const sqlType = propDecl.multi && !propDecl.computed ? `${elementSqlType}[]` : elementSqlType;
 
           const constraints = extractPropertyConstraints(
@@ -865,6 +886,7 @@ export class SchemaManager {
             multi: propDecl.multi ?? false,
             columnName: propNameToColumnName(propName),
             edgeqlType: sdlTypeName,
+            ...(baseType ? { baseType } : {}),
             readonly: propDecl.readonly ?? false,
             hasDefault: propDecl.default !== undefined || (!propDecl.multi && isSequenceType(sdlTypeName)),
             computed: propDecl.computed !== undefined,
@@ -935,7 +957,8 @@ export class SchemaManager {
             // lost and codegen would emit unbindable `<tuple>`/`<array>` casts.
             // Mirrors the PropertyDeclaration branch, which uses the same helper.
             const fullTypeName = typeRefToSdlString(linkDecl.target);
-            const elementSqlType = sdlTypeToSqlType(fullTypeName);
+            const baseType = baseTypeOf(fullTypeName);
+            const elementSqlType = sdlTypeToSqlType(baseType ?? fullTypeName);
             const sqlType = isMulti && !linkDecl.computed ? `${elementSqlType}[]` : elementSqlType;
             const linkConstraints = extractPropertyConstraints(
               linkDecl.constraints
@@ -947,6 +970,7 @@ export class SchemaManager {
               multi: isMulti,
               columnName: propNameToColumnName(linkName),
               edgeqlType: fullTypeName,
+              ...(baseType ? { baseType } : {}),
               readonly: linkDecl.readonly ?? false,
               hasDefault: linkDecl.default !== undefined || (!isMulti && isSequenceType(fullTypeName)),
               computed: linkDecl.computed !== undefined,
@@ -956,7 +980,7 @@ export class SchemaManager {
             continue;
           }
 
-          const linkProperties = linkPropertyDefs(linkDecl.properties);
+          const linkProperties = linkPropertyDefs(linkDecl.properties, baseTypeOf);
           links.set(linkName, {
             ...(linkProperties ? { properties: linkProperties } : {}),
             name: linkName,

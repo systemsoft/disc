@@ -154,6 +154,14 @@ Deno.test({
       assertEquals(await scalars("select <bigint>-2.5n"), [-3]);
       assertEquals(await scalars("select <bigint><float64>'3.5'"), [4]);
       assertEquals(await scalars("select <bigint>(7n / 2n)"), [4]);
+      /*** An array is cast element by element: each decimal or float is rounded (a float half to even, as PostgreSQL's round does). ***/
+      assertEquals(await scalars("select <array<bigint>><array<decimal>>$x", { x: ["1.5", "2.5", "-2.5", "4"] }), [[2, 3, -3, 4]]);
+      assertEquals(await scalars("select <array<bigint>>[1.5n, 2.5n]"), [[2, 3]]);
+      assertEquals(await scalars("select <array<bigint>>[1.25, 2.75]"), [[1, 3]]);
+      assertEquals(await scalars("select <array<bigint>><array<float64>>$f", { f: [0.5, 3.5, -1.25] }), [[0, 4, -1]]);
+      assertEquals(await scalars("select <array<bigint>><array<decimal>>$x", { x: [] }), [[]]);
+      await rejects("select <array<bigint>><array<float64>>$f", "std::bigint", { f: [1, "NaN"] });
+      await rejectsFraction("select <array<bigint>>['1.5']", "1.5");
       assertEquals(await scalars("select count(Reading)"), [0]);
 
       await data("insert Reading { label := 'ok', big := <bigint>$b, dec := <decimal>$d, decs := <array<decimal>>$ds }", {

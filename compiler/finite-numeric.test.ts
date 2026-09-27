@@ -125,3 +125,22 @@ Deno.test("finite numeric - a checked parameter still binds as numeric", () => {
   assertEquals(buildParameterTypeMap(compileStatement("select <decimal>$d")).get(1), "numeric");
   assertEquals(buildParameterTypeMap(compileStatement("insert Reading { label := 'a', dec := $d }")).get(1), "numeric");
 });
+
+Deno.test("finite numeric - a cast of a decimal or float array to array<bigint> rounds each element", () => {
+  for (
+    const query of [
+      "select <array<bigint>><array<decimal>>$x",
+      "select <array<bigint>>[1.5n, 2.5n]",
+      "select <array<bigint>>[1.5, 2]",
+      "select <array<bigint>><array<float64>>$f",
+      "with x := <array<decimal>>$x select <array<bigint>>x"
+    ]
+  ) {
+    assertStringIncludes(compile(query), "ARRAY(SELECT round(e.v) FROM UNNEST(", query);
+    assertStringIncludes(compile(query), "'std::bigint')", query);
+  }
+  for (const query of ["select <array<bigint>>['1.5']", "select <array<bigint>>$b", "select <array<bigint>>[1, 2]", "select <array<decimal>>[1.5n]"]) {
+    assertEquals(compile(query).includes("round("), false, query);
+  }
+  assertEquals(buildParameterTypeMap(compileStatement("select <array<bigint>><array<decimal>>$x")).get(1), "numeric[]");
+});

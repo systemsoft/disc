@@ -499,18 +499,18 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "Literal":
         return NUMERIC_LITERAL_TYPES.get(expr.type) ?? null;
       case "TypeCast":
-        return expr.type.name.parts[expr.type.name.parts.length - 1];
+        return this.scalarBaseType(renderEdgeQLTypeName(expr.type)) ?? expr.type.name.parts[expr.type.name.parts.length - 1];
       case "Path": {
         if (expr.steps.length !== 1 || expr.steps[0].type !== "property") {
           // A path from a type, a binding or a `for` variable (`u.tags`).
           const property = this.pathProperty(expr);
-          return property && !property.multi ? property.edgeqlType ?? null : null;
+          return property && !property.multi ? Context.propertyBaseType(property) ?? null : null;
         }
         const name = expr.steps[0].name;
         for (const ta of this.ctx.currentScope.aliases.values()) {
           const property = Context.resolveTypeName(this.ctx, ta.type)?.properties.get(name);
           if (property) {
-            return property.multi ? null : property.edgeqlType ?? null;
+            return property.multi ? null : Context.propertyBaseType(property) ?? null;
           }
         }
         return null;
@@ -541,26 +541,54 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         }
         return ints[0]!.width >= ints[1]!.width ? operands[0] : operands[1];
       }
-      case "SetExpr": {
+      case "SetExpr":
         // The elements' common type (`{1, 2.5}` is float64).
-        const types = flattenSetElements(expr).map(element => this.staticNumericType(element));
-        if (types.length === 0 || types.some(type => type === null)) {
-          return null;
-        }
-        const decimal = types.find(type => DECIMAL_TYPES.has(type!));
-        if (decimal) {
-          return decimal;
-        }
-        if (types.some(type => FLOAT_TYPES.has(type!))) {
-          return "float64";
-        }
-        // The widest int.
-        const width = (type: string | null): number => INT_SQL_TYPES.get(type!)?.width ?? 0;
-        return types.reduce((widest, type) => width(type) > width(widest) ? type : widest);
-      }
+        return this.commonNumericType(flattenSetElements(expr).map(element => this.staticNumericType(element)));
       default:
         return null;
     }
+  }
+
+  /*** The common type of set or array literal elements of these static types: a decimal, else float64, else the widest int. Null when one is unknown. ***/
+  private commonNumericType(types: (string | null)[]): string | null {
+    if (types.length === 0 || types.some(type => type === null)) {
+      return null;
+    }
+    const decimal = types.find(type => DECIMAL_TYPES.has(type!));
+    if (decimal) {
+      return decimal;
+    }
+    if (types.some(type => FLOAT_TYPES.has(type!))) {
+      return "float64";
+    }
+    // The widest int.
+    const width = (type: string | null): number => INT_SQL_TYPES.get(type!)?.width ?? 0;
+    return types.reduce((widest, type) => width(type) > width(widest) ? type : widest);
+  }
+
+  /**
+   * The EdgeQL type of the elements of an array operand when it is known
+   * without running the query: an array literal's (their common type), an
+   * array cast's or an array property's element type, or that of the array a
+   * variable is bound to. Null when unknown.
+   */
+  private staticArrayElementType(expr: EdgeQLAST.Expression): string | null {
+    if (expr.kind === "ArrayExpr") {
+      return this.commonNumericType(expr.elements.map(element => this.staticNumericType(element)));
+    }
+    let type: string | null = null;
+    if (expr.kind === "Identifier") {
+      const variable = this.scopeVariable(expr.name);
+      if (variable && !variable.sqlOverride) {
+        return this.staticArrayElementType(variable.expression);
+      }
+      type = variable?.staticType ?? null;
+    } else if (expr.kind === "TypeCast") {
+      type = renderEdgeQLTypeName(expr.type);
+    } else if (expr.kind === "Path") {
+      type = this.staticNumericType(expr);
+    }
+    return /^array<(.+)>$/.exec(type ?? "")?.[1] ?? null;
   }
 
   /**
@@ -891,7 +919,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   /*** The EdgeQL type of each element of a set operand, when known: a path's property type, a numeric expression's type. ***/
   private elementType(expr: EdgeQLAST.Expression): string | undefined {
-    return (expr.kind === "Path" ? this.pathProperty(expr)?.edgeqlType : this.staticNumericType(expr)) ?? undefined;
+    if (expr.kind === "Path") {
+      const property = this.pathProperty(expr);
+      return property ? Context.propertyBaseType(property) : undefined;
+    }
+    return this.staticNumericType(expr) ?? undefined;
   }
 
   /**
@@ -2256,14 +2288,39 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     // A decimal or float cast to bigint is rounded, as Gel's
-    // `round($1)::edgedbt.bigint_t` casts do; text and other values are not,
+    // `round($1)::edgedbt.bigint_t` casts do, and so is each element of an
+    // array of them cast to `array<bigint>`; text and other values are not,
     // so a fractional one is rejected (see `finiteNumeric`).
-    const toBigint = pgType === "numeric" && this.numericBaseType(typeName) === "bigint";
-    const source = this.staticNumericType(cast.expr);
+    const array = pgType === "numeric[]";
+    const toBigint = (pgType === "numeric" || array) && this.numericBaseType(typeName) === "bigint";
+    const source = array ? this.staticArrayElementType(cast.expr) : this.staticNumericType(cast.expr);
     const rounded = toBigint && source !== null && ROUNDED_TO_BIGINT.has(this.numericBaseType(source) ?? "");
-    const operand = rounded ? SQL.createFunctionCall("round", [expr]) : expr;
+    const operand = !rounded ? expr : array ? this.roundElements(expr) : SQL.createFunctionCall("round", [expr]);
     const compiled = fromJson ? this.compileCastFromJson(operand, pgType, typeName) : SQL.createCastExpression(operand, pgType);
     return this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+  }
+
+  /**
+   * `round` of each element of the array `sql`, in order (Gel casts an array
+   * element by element); a NULL array (an empty set) stays NULL. The array is
+   * also kept as a SQL AST node, in the NULL test, so a parameter in it is
+   * still found by `buildParameterTypeMap`.
+   */
+  private roundElements(sql: SQL.SQLExpression): SQL.SQLExpression {
+    const rounded = `ARRAY(SELECT round(e.v) FROM UNNEST(${this.renderSqlExpr(sql)}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
+    return SQL.createCaseExpression(
+      [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
+      { kind: "RawSQLExpression", sql: rounded }
+    );
+  }
+
+  /*** The built-in type the user scalar `typeName` names extends (a sequence scalar is an `int64`); undefined when it names none. A bare name is the `with module`'s scalar first. ***/
+  private scalarBaseType(typeName: string): string | undefined {
+    const scalars = this.ctx.schema.scalars;
+    const name = normalizeStdTypeName(typeName);
+    const base = (this.ctx.moduleScope && !name.includes("::") ? scalars?.get(`${this.ctx.moduleScope}::${name}`) : undefined) ??
+      scalars?.get(name) ?? scalars?.get(name.replace(/^default::/, ""));
+    return base === "sequence" ? "int64" : base;
   }
 
   /*** The numeric type `typeName` (or its array element) is, or a scalar it names extends: `bigint`, `decimal`, `float32` or `float64`. ***/
@@ -2305,7 +2362,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   protected finitePropertyValue(property: Context.PropertyDef, expr: EdgeQLAST.Expression, sql: SQL.SQLExpression): SQL.SQLExpression {
     const pgType = property.type;
-    const typeName = property.edgeqlType ?? "decimal";
+    const typeName = Context.propertyBaseType(property) ?? "decimal";
     if (
       (pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr, this.numericBaseType(typeName) === "bigint") ||
       (sql.kind === "FunctionCall" && sql.name === "disc_finite_numeric")

@@ -548,7 +548,7 @@ export function buildResultDescriptors(
     for (const fieldName of fields) {
       const prop = td.properties.get(fieldName);
       if (prop) {
-        const scalarType = prop.edgeqlType ?? prop.type;
+        const scalarType = prop.baseType ?? prop.edgeqlType ?? prop.type;
         const typeId = emitScalar(scalarType);
         const cardinality = prop.required ?
           Cardinality.ONE :

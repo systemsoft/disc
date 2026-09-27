@@ -525,6 +525,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         `Link property '@${linkProperty.name?.name}' on link '${link.name}': link properties are only supported on multi links`
       );
     }
+    if (this.bareTypeSelect(expr)) {
+      throw new CompilationError(
+        `possibly more than one element returned by an expression for a link '${link.name}' declared as 'single'`,
+        locationOf(expr)
+      );
+    }
     const query = expr.kind === "Subquery" ?
       (expr as EdgeQLAST.Subquery).query :
       expr;
@@ -560,9 +566,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private compileTargetIdSelect(
     expr: EdgeQLAST.Expression
   ): SQL.SelectStatement {
-    const query = expr.kind === "Subquery" ?
-      (expr as EdgeQLAST.Subquery).query :
-      expr;
+    const query = this.bareTypeSelect(expr) ??
+      (expr.kind === "Subquery" ? (expr as EdgeQLAST.Subquery).query : expr);
 
     if (query.kind === "SelectQuery") {
       const select = query as EdgeQLAST.SelectQuery;
@@ -587,6 +592,23 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         SQL.createSelectItem(this.compileExpression(expr), "id")
       ])
     });
+  }
+
+  /**
+   * `select T` when `expr` is a bare object type `T`: in a link assignment
+   * (`tags := Tag`), as in Gel, a type is the set of all its objects, read
+   * like any select of them (so its select policies narrow it). A name bound
+   * in scope (an update's subject) is not a type here.
+   */
+  private bareTypeSelect(expr: EdgeQLAST.Expression): EdgeQLAST.SelectQuery | undefined {
+    if (expr.kind !== "TypeName") {
+      return undefined;
+    }
+    const name = expr.name.parts.join("::");
+    if (this.scopeVariable(name) || Context.resolveTypeName(this.ctx, name)?.kind !== "object") {
+      return undefined;
+    }
+    return { expr, kind: "SelectQuery" };
   }
 
   /**

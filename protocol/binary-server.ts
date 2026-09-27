@@ -349,7 +349,7 @@ interface DescribedSchema {
       kind?: string;
       properties: Map<
         string,
-        { edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
+        { baseType?: string; edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
       >;
       links?: Map<string, { required?: boolean; multi?: boolean; target?: string; }>;
     }
@@ -880,7 +880,7 @@ export function inferOutputShape(
         // prefer the EdgeQL type since that's what the wire codec needs.
         const propType = typeDef?.properties.get(fieldName);
         if (propType) {
-          const eqlType = propType.edgeqlType ?? propType.type ?? "uuid";
+          const eqlType = propType.baseType ?? propType.edgeqlType ?? propType.type ?? "uuid";
           fields.push({
             name: fieldName,
             edgeqlType: builtinScalarType(eqlType, scope),
@@ -1168,7 +1168,7 @@ function inferPath(path: AST.Path, scope: WithScope): ReachedPath | null {
           cardinalityFor(property.required ?? false, property.multi ?? false)
         ]),
         object: false,
-        type: builtinScalarType(property.edgeqlType ?? property.type, scope)
+        type: builtinScalarType(property.baseType ?? property.edgeqlType ?? property.type, scope)
       };
     }
     const link = typeDef.links?.get(step.name);
