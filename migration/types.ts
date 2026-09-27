@@ -6,6 +6,7 @@
  */
 
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import type { Module } from "../schema/converter.ts";
 
 export interface Migration {
   id: string;
@@ -578,6 +579,14 @@ export interface MigrationPlan {
   targetSchemaHash: string;
   operationsCount: number;
   estimatedDuration?: number;
+  /**
+   * The schemas `MigrationEngine.planMigration` diffed the plan from and to.
+   * The rollback SQL stored with a migration recreates what it drops from
+   * the definitions in `fromSchema`; without them, a drop's rollback is a
+   * manual step.
+   */
+  fromSchema?: Module[];
+  toSchema?: Module[];
 }
 
 export interface MigrationResult {

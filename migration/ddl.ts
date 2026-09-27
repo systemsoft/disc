@@ -112,6 +112,18 @@ export class DDLGenerator {
    * Populated via {@link setSequenceScalars}.
    */
   private sequenceScalars = new Map<string, string>();
+  /**
+   * During `generateRollbackDDL`: the operations migrating the schema after the
+   * migration back to the schema before it, where the rollback finds the
+   * definitions of what the migration dropped. Empty when the caller has none.
+   */
+  private reverseOperations: Types.MigrationOperation[] = [];
+  /**
+   * During `generateRollbackDDL`: each dropped object its restore statements
+   * recreate (see `restoreOperations`), by `dropKey`, with the operation of
+   * `reverseOperations` recreating it.
+   */
+  private restoredDrops = new Map<string, Types.MigrationOperation | Types.TypeOperation>();
 
   /**
    * Tell the generator which scalar names are enum-typed so column
@@ -159,9 +171,25 @@ export class DDLGenerator {
   /**
    * Generate rollback DDL statements for the given operations
    * These are the operations that would undo the forward migration
+   *
+   * `reverse` migrates the schema after the operations back to the schema
+   * before them (`SchemaDiffer.diff(after, before)`). What the operations drop
+   * — types, properties, links, link properties, indexes, triggers, rewrites,
+   * enums, sequences — is recreated from its definition there by the forward
+   * CREATE path (see `restoreOperations`), with a `-- RESTORED EMPTY:` comment
+   * for each table, column or link whose data doesn't come back. Without
+   * `reverse`, each of those drops is a `-- MANUAL ROLLBACK REQUIRED` step.
    */
-  generateRollbackDDL(operations: Types.MigrationOperation[]): string[] {
-    const statements: string[] = [];
+  generateRollbackDDL(operations: Types.MigrationOperation[], reverse: Types.MigrationOperation[] = []): string[] {
+    /*** Enums and sequences come back first: undoing a change can convert a column back to one.
+         Everything else comes back last, once what replaced it (an index of the same name, a
+         trigger of the same name) is gone. Generated first: `generateDDL` resets the junction
+         claims the undo steps replay below. A rollback with nothing to recreate doesn't call it. ***/
+    this.reverseOperations = reverse;
+    const restore = this.restoreOperations(operations);
+    const restoreScalars = restore.scalars.length > 0 ? this.generateDDL(restore.scalars) : [];
+    const restoreObjects = restore.objects.length > 0 ? this.generateDDL(restore.objects) : [];
+    const statements: string[] = [...restoreScalars];
 
     /*** Replay the forward pass's junction claims, in forward order, so the rollback drops
          exactly the junction tables the forward DDL created (see `junctionCreatedFor`). ***/
@@ -192,7 +220,135 @@ export class DDLGenerator {
       statements.push(...this.generateRollbackOperationDDL(operation));
     }
 
-    return statements;
+    return [...statements, ...restoreObjects];
+  }
+
+  /**
+   * The operations of `reverseOperations` that recreate what `operations`
+   * drop, in their order there (enums, then types with their indexes, then
+   * the members and indexes of surviving types), split into the enums and
+   * sequences (`scalars`) and the rest (`objects`). Each dropped type comes
+   * back with its indexes. Records what they recreate in `restoredDrops`; a
+   * drop they don't recreate stays a manual step.
+   */
+  private restoreOperations(operations: Types.MigrationOperation[]): { objects: Types.MigrationOperation[]; scalars: Types.MigrationOperation[]; } {
+    const dropped = new Set<string>();
+
+    for (const operation of operations) {
+      if (operation.kind === "DropType")
+        dropped.add(this.dropKey(operation));
+
+      if (operation.kind === "DropIndex")
+        dropped.add(this.dropKey(operation));
+
+      if (operation.kind === "DropScalar")
+        dropped.add(this.dropKey(operation));
+
+      if (operation.kind === "AlterType") {
+        const tableName = typeNameToTableName((operation as Types.AlterTypeOperation).typeName);
+
+        for (const typeOp of (operation as Types.AlterTypeOperation).operations) {
+          if (typeOp.kind.startsWith("Drop"))
+            dropped.add(this.dropKey(typeOp, tableName));
+        }
+      }
+    }
+
+    const objects: Types.MigrationOperation[] = [];
+    const scalars: Types.MigrationOperation[] = [];
+    this.restoredDrops = new Map();
+
+    const restores = (key: string, operation: Types.MigrationOperation | Types.TypeOperation): boolean => {
+      if (!dropped.has(key))
+        return false;
+
+      this.restoredDrops.set(key, operation);
+      return true;
+    };
+
+    for (const operation of this.reverseOperations) {
+      switch (operation.kind) {
+        case "CreateScalar":
+          if (restores(this.dropKey(operation), operation))
+            scalars.push(operation);
+          break;
+        case "CreateType":
+          if (restores(this.dropKey(operation), operation))
+            objects.push(operation);
+          break;
+        case "CreateIndex": {
+          const index = (operation as Types.CreateIndexOperation).index;
+
+          if (restores(this.dropKey(operation), operation) || dropped.has(`type:${index.table}`))
+            objects.push(operation);
+          break;
+        }
+        case "AlterType": {
+          const alter = operation as Types.AlterTypeOperation;
+          const tableName = typeNameToTableName(alter.typeName);
+          const members = alter.operations.filter(typeOp => typeOp.kind.startsWith("Add") && restores(this.dropKey(typeOp, tableName), typeOp));
+
+          if (members.length > 0)
+            objects.push({ ...alter, operations: members } as Types.AlterTypeOperation);
+          break;
+        }
+      }
+    }
+
+    return { objects, scalars };
+  }
+
+  /**
+   * What an operation drops or creates, so a drop and the operation of
+   * `reverseOperations` recreating it share a key: `type:<table>`,
+   * `index:<name>`, `scalar:<module>::<name>`, and for the members of the
+   * type whose table is `tableName`, `property:`/`link:`/`trigger:<table>.<name>`
+   * and `rewrite:<table>.<property>:<events>`. Empty for anything else.
+   */
+  private dropKey(operation: Types.MigrationOperation | Types.TypeOperation, tableName = ""): string {
+    const events = (list: string[]): string => [...list].sort().join(",");
+
+    switch (operation.kind) {
+      case "CreateType":
+      case "DropType":
+        return `type:${typeNameToTableName((operation as Types.CreateTypeOperation | Types.DropTypeOperation).typeName)}`;
+      case "CreateIndex":
+        return `index:${(operation as Types.CreateIndexOperation).index.name}`;
+      case "DropIndex":
+        return `index:${(operation as Types.DropIndexOperation).indexName}`;
+      case "CreateScalar":
+      case "DropScalar": {
+        const scalar = operation as Types.CreateScalarOperation | Types.DropScalarOperation;
+        return `scalar:${scalar.module}::${scalar.scalarName}`;
+      }
+      case "AddProperty":
+        return `property:${tableName}.${(operation as Types.AddPropertyOperation).property.name}`;
+      case "DropProperty":
+        return `property:${tableName}.${(operation as Types.DropPropertyOperation).propertyName}`;
+      case "AddLink":
+        return `link:${tableName}.${(operation as Types.AddLinkOperation).link.name}`;
+      case "DropLink":
+        return `link:${tableName}.${(operation as Types.DropLinkOperation).linkName}`;
+      case "AddTrigger":
+        return `trigger:${tableName}.${(operation as Types.AddTriggerOperation).trigger.name}`;
+      case "DropTrigger":
+        return `trigger:${tableName}.${(operation as Types.DropTriggerOperation).triggerName}`;
+      case "AddRewrite": {
+        const rewrite = operation as Types.AddRewriteOperation;
+        return `rewrite:${tableName}.${rewrite.propertyName}:${events(rewrite.rewrite.events)}`;
+      }
+      case "DropRewrite": {
+        const rewrite = operation as Types.DropRewriteOperation;
+        return `rewrite:${tableName}.${rewrite.propertyName}:${events(rewrite.events)}`;
+      }
+      default:
+        return "";
+    }
+  }
+
+  /*** The comment naming a table, column or link a rollback recreates without its data (logged by `MigrationEngine.executeRollback`). ***/
+  private restoredEmpty(what: string): string {
+    return `-- RESTORED EMPTY: ${what}`;
   }
 
   private generateRollbackOperationDDL(
@@ -268,6 +424,11 @@ export class DDLGenerator {
       }
       case "DropScalar": {
         const op = operation as Types.DropScalarOperation;
+        if (this.restoredDrops.has(this.dropKey(op))) {
+          return op.baseType === "sequence" ?
+            [this.restoredEmpty(`sequence of ${op.module}::${op.scalarName} is recreated and restarts at 1`)] :
+            [`-- Rollback: scalar ${op.module}::${op.scalarName} is recreated from the schema before the migration`];
+        }
         if (op.baseType === "sequence") {
           return [
             `-- Rollback: sequence of ${op.module}::${op.scalarName} recreated; its counter restarts at 1`,
@@ -2542,11 +2703,20 @@ END $$;`,
   private generateRollbackDropType(
     operation: Types.DropTypeOperation
   ): string[] {
-    // P1-10: DropType rollback is fundamentally impossible without the
-    // pre-drop schema snapshot (which we don't persist). Emit a SQL-level
-    // DO block so an accidental `disc migrate --rollback` fails loudly
-    // instead of silently "succeeding" with comment-only DDL.
     const tableName = typeNameToTableName(operation.typeName);
+
+    /*** Recreated with its junctions by the restore statements (see `restoreOperations`). ***/
+    if (this.restoredDrops.has(this.dropKey(operation))) {
+      return [
+        this.restoredEmpty(`table '${tableName}' is recreated without the rows the migration deleted`),
+        ...(operation.multiLinks ?? []).map(link => this.restoredEmpty(`link '${tableName}.${link}' is recreated without the links the migration deleted`))
+      ];
+    }
+
+    // P1-10: without the schema before the migration there is no definition
+    // to recreate the table from. Emit a SQL-level DO block so an accidental
+    // `disc migrate --rollback` fails loudly instead of silently "succeeding"
+    // with comment-only DDL.
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate table '${tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
@@ -2613,6 +2783,13 @@ END $$;`
           (operation as Types.AddTriggerOperation).trigger.name
         );
       case "DropTrigger":
+        if (this.restoredDrops.has(this.dropKey(operation, tableName))) {
+          return [
+            `-- Rollback: trigger '${
+              (operation as Types.DropTriggerOperation).triggerName
+            }' on table '${tableName}' is recreated from the schema before the migration`
+          ];
+        }
         // Can't restore trigger body from just the name
         return [
           `-- MANUAL ROLLBACK REQUIRED: Recreate trigger '${(operation as Types.DropTriggerOperation).triggerName}' on table '${tableName}'`,
@@ -2629,8 +2806,13 @@ END $$;`
         );
       }
       case "DropRewrite": {
-        // Can't restore rewrite body from just the property name and events
         const dropRewriteOp = operation as Types.DropRewriteOperation;
+        if (this.restoredDrops.has(this.dropKey(operation, tableName))) {
+          return [
+            `-- Rollback: rewrite rule for property '${dropRewriteOp.propertyName}' on table '${tableName}' is recreated from the schema before the migration`
+          ];
+        }
+        // Can't restore rewrite body from just the property name and events
         return [
           `-- MANUAL ROLLBACK REQUIRED: Recreate rewrite rule for property '${dropRewriteOp.propertyName}' on table '${tableName}'`,
           `-- Events: ${dropRewriteOp.events.join(", ")}`,
@@ -2666,6 +2848,26 @@ END $$;`
     tableName: string,
     operation: Types.DropPropertyOperation
   ): string[] {
+    const column = `'${tableName}.${propNameToColumnName(operation.propertyName)}'`;
+    const restored = this.restoredDrops.get(this.dropKey(operation, tableName)) as Types.AddPropertyOperation | undefined;
+
+    /*** A type's property is recreated by the restore statements (see `restoreOperations`). ***/
+    if (restored) {
+      return restored.property.computed ?
+        [`-- Rollback: computed property '${operation.propertyName}' comes back with the schema; it has no column`] :
+        [this.restoredEmpty(`column ${column} is recreated without the values the migration deleted`)];
+    }
+
+    /*** A link property is a column of the junction, which the rollback doesn't touch otherwise: re-add it here. ***/
+    const linkProperty = this.reverseLinkProperty(tableName, operation.propertyName);
+
+    if (linkProperty) {
+      return [
+        this.restoredEmpty(`link property column ${column} is recreated without the values the migration deleted`),
+        ...this.generateAddProperty(tableName, linkProperty)
+      ];
+    }
+
     // P1-10: DropProperty rollback can't restore data without a backup.
     // The RAISE EXCEPTION ensures a dry-run or automated rollback fails
     // loudly instead of silently no-op'ing.
@@ -2683,8 +2885,12 @@ END $$;`
     tableName: string,
     operation: Types.AlterPropertyOperation
   ): string[] {
-    // A multi property change can't be undone column-by-column (multi → single
-    // loses values), so, as for DropProperty, fail loudly instead.
+    // A change between two multi properties is undone by the change back. A
+    // single → multi one would have to go multi → single, which loses values
+    // (the forward path refuses it), so, as for DropProperty, fail loudly instead.
+    if (operation.oldProperty?.multi && operation.newProperty?.multi) {
+      return this.generateAlterProperty(tableName, this.reversedAlterProperty(operation));
+    }
     if (operation.oldProperty?.multi || operation.newProperty?.multi) {
       return [
         `-- MANUAL ROLLBACK REQUIRED: multi property '${tableName}.${operation.propertyName}' was altered`,
@@ -2741,6 +2947,9 @@ END $$;`
           statements.push(
             `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`
           );
+          if (change.newValue === "exclusive") {
+            statements.push(`DROP INDEX IF EXISTS ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))};`);
+          }
           break;
         }
         case "DropConstraint": {
@@ -2755,12 +2964,67 @@ END $$;`
               `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
             );
           }
+          // Same unique index the forward AddConstraint creates
+          if (change.oldValue === "exclusive") {
+            statements.push(
+              `CREATE UNIQUE INDEX ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))} ON ${tableRef} (${columnName});`
+            );
+          }
           break;
         }
       }
     }
 
     return statements;
+  }
+
+  /*** The AlterProperty undoing `operation`: each change back, in reverse order, from the property after it to the one before. ***/
+  private reversedAlterProperty(operation: Types.AlterPropertyOperation): Types.AlterPropertyOperation {
+    const reversedKind: Partial<Record<Types.PropertyChange["kind"], Types.PropertyChange["kind"]>> = {
+      AddAnnotation: "DropAnnotation",
+      AddConstraint: "DropConstraint",
+      DropAnnotation: "AddAnnotation",
+      DropConstraint: "AddConstraint"
+    };
+
+    return {
+      ...operation,
+      changes: [...operation.changes].reverse().map(change => ({
+        ...change,
+        kind: reversedKind[change.kind] ?? change.kind,
+        newValue: change.oldValue,
+        oldValue: change.newValue
+      })),
+      newProperty: operation.oldProperty,
+      oldProperty: operation.newProperty
+    };
+  }
+
+  /**
+   * The AddProperty of `reverseOperations` re-adding the link property
+   * `propertyName` to the junction `junctionTable` (`<table>_<link>`), if any.
+   */
+  private reverseLinkProperty(junctionTable: string, propertyName: string): Types.AddPropertyOperation | undefined {
+    for (const operation of this.reverseOperations) {
+      if (operation.kind !== "AlterType")
+        continue;
+
+      const alter = operation as Types.AlterTypeOperation;
+
+      for (const typeOp of alter.operations) {
+        if (typeOp.kind !== "AlterLink" || `${typeNameToTableName(alter.typeName)}_${(typeOp as Types.AlterLinkOperation).linkName}` !== junctionTable)
+          continue;
+
+        const added = ((typeOp as Types.AlterLinkOperation).propertyOperations ?? []).find(propertyOp =>
+          propertyOp.kind === "AddProperty" && (propertyOp as Types.AddPropertyOperation).property.name === propertyName
+        );
+
+        if (added)
+          return added as Types.AddPropertyOperation;
+      }
+    }
+
+    return undefined;
   }
 
   private generateRollbackAddLink(
@@ -2798,8 +3062,11 @@ END $$;`
     tableName: string,
     operation: Types.DropLinkOperation
   ): string[] {
-    // To rollback DropLink, we would need to recreate the link
-    // This requires the original link definition which we don't have
+    /*** Recreated, with its FK or junction, by the restore statements (see `restoreOperations`). ***/
+    if (this.restoredDrops.has(this.dropKey(operation, tableName)))
+      return [this.restoredEmpty(`link '${tableName}.${operation.linkName}' is recreated without the links the migration deleted`)];
+
+    // Without the schema before the migration there is no link definition to recreate
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate link '${operation.linkName}' on table '${tableName}'`,
       `-- This may involve creating a junction table or adding a foreign key column.`,
@@ -2820,7 +3087,36 @@ END $$;`
     if (deleteRulesOnly)
       return [`-- ALTER LINK ${operation.linkName} on ${tableName}: delete rules are restored by the repair after the rollback`];
 
-    // Link alteration rollback is complex and requires the original link definition
+    /*** The forward path refuses these (see `generateAlterLink`), so no applied migration holds one. ***/
+    const unsupported = operation.changes.some(change => ["ChangeCardinality", "ChangeMulti", "ChangeTarget"].includes(change.kind));
+
+    if (operation.link && !unsupported) {
+      const link = operation.link;
+      const junctionTable = `${tableName}_${operation.linkName}`;
+      const statements = [...(operation.propertyOperations ?? [])].reverse().flatMap(op => this.generateRollbackTypeOperation(junctionTable, op));
+
+      // Delete rules as above; ChangeExtending needs no DDL.
+      for (const change of [...operation.changes].reverse()) {
+        if (change.kind === "ChangeRequired" && !link.multi) {
+          statements.push(
+            `ALTER TABLE ${this.escapeIdentifier(tableName)} ALTER COLUMN ${this.escapeIdentifier(linkColumnName(operation.linkName))} ${
+              change.oldValue ? "SET" : "DROP"
+            } NOT NULL;`
+          );
+        }
+
+        if (change.kind === "ChangeExclusive") {
+          statements.push(
+            change.oldValue ?
+              this.generateExclusiveLinkIndex(tableName, link) :
+              `DROP INDEX IF EXISTS ${this.escapeIdentifier(this.exclusiveLinkIndexName(tableName, link))};`
+          );
+        }
+      }
+
+      return statements.length > 0 ? statements : [`-- ALTER LINK ${operation.linkName} on ${tableName}: nothing to roll back`];
+    }
+
     return [
       `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.linkName}' on table '${tableName}'`,
       `-- Link alterations may involve changing junction tables or foreign key constraints.`,
@@ -2963,6 +3259,10 @@ END $$;`
   private generateRollbackDropIndex(
     operation: Types.DropIndexOperation
   ): string[] {
+    /*** Recreated under its name by the restore statements (see `restoreOperations`). ***/
+    if (this.restoredDrops.has(this.dropKey(operation)))
+      return [`-- Rollback: index '${operation.indexName}' is recreated from the schema before the migration`];
+
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate index '${operation.indexName}'`,
       `-- The original index definition was lost when it was dropped.`,

@@ -30,8 +30,8 @@ import * as Types from "./types.ts";
 
 /**
  * Prefix of the comment `DDLGenerator.generateRollbackDDL` emits for a step it
- * cannot generate (a dropped index, trigger, link or table has no stored
- * definition to recreate).
+ * cannot generate (a dropped index, trigger, link or table of a migration
+ * recorded without the schema before it has no definition to recreate).
  */
 const MANUAL_ROLLBACK_MARKER = "-- MANUAL ROLLBACK REQUIRED";
 
@@ -45,6 +45,21 @@ function manualRollbackSteps(rollbackSql: string[]): string[] {
     .map(statement => statement.trim())
     .filter(statement => statement.startsWith(MANUAL_ROLLBACK_MARKER))
     .map(statement => statement.slice("-- ".length));
+}
+
+/**
+ * Prefix of the comment `DDLGenerator.generateRollbackDDL` emits for each
+ * dropped table, column or link it recreates: the data the migration deleted
+ * with it does not come back.
+ */
+const RESTORED_EMPTY_MARKER = "-- RESTORED EMPTY: ";
+
+/*** What a stored rollback recreates without its data (see `RESTORED_EMPTY_MARKER`). ***/
+function restoredEmpty(rollbackSql: string[]): string[] {
+  return rollbackSql
+    .map(statement => statement.trim())
+    .filter(statement => statement.startsWith(RESTORED_EMPTY_MARKER))
+    .map(statement => statement.slice(RESTORED_EMPTY_MARKER.length));
 }
 
 /*** Where the database repairs read the catalog from: the pool, or a rollback's transaction, which sees what it has changed so far. ***/
@@ -252,9 +267,11 @@ export class MigrationEngine {
 
       const plan: Types.MigrationPlan = {
         estimatedDuration: this.estimateDuration(operations),
+        fromSchema: oldSchema ?? [],
         migrations: [migration],
         operationsCount: operations.length,
-        targetSchemaHash: migration.schemaHash
+        targetSchemaHash: migration.schemaHash,
+        toSchema: newSchema
       };
 
       return Ok(plan);
@@ -431,7 +448,7 @@ export class MigrationEngine {
       try {
         /*** Stored with the record so `disc migrate --rollback` can undo this migration. Built
              before the forward DDL, which resets the generator's per-batch state. ***/
-        let rollbackSql = this.rollbackSqlFor(migration);
+        let rollbackSql = this.rollbackSqlFor(migration, plan);
 
         const generatedDDL = this.ddlGenerator.generateDDL(migration.operations);
 
@@ -565,14 +582,48 @@ export class MigrationEngine {
   }
 
   /**
-   * Generate rollback SQL for a migration
+   * Generate rollback SQL for a migration. With the schemas of the `plan` it
+   * belongs to, what the migration drops is recreated from its definition in
+   * the schema before it (see `DDLGenerator.generateRollbackDDL`); without
+   * them, those drops are manual steps.
    */
-  generateRollbackSQL(migration: Types.Migration): Result<string[], MigrationError> {
+  generateRollbackSQL(
+    migration: Types.Migration,
+    plan?: Pick<Types.MigrationPlan, "fromSchema" | "toSchema">
+  ): Result<string[], MigrationError> {
     try {
-      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(migration.operations);
-      return Ok(rollbackSQL);
+      if (!plan?.fromSchema || !plan.toSchema)
+        return Ok(this.ddlGenerator.generateRollbackDDL(migration.operations));
+
+      const reverse = this.reverseOperations(migration, plan.fromSchema, plan.toSchema);
+
+      /*** The rollback returns to the schema before: its enums and scalars type the columns it recreates. ***/
+      this.primeScalarTypes(plan.fromSchema);
+
+      try {
+        return Ok(this.ddlGenerator.generateRollbackDDL(migration.operations, reverse));
+      } finally {
+        this.primeScalarTypes(plan.toSchema);
+      }
     } catch (error) {
       return Err(new MigrationError(`Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+
+  /**
+   * The operations migrating `toSchema` back to `fromSchema`, where the
+   * rollback of `migration` finds the definitions of what it drops. Empty
+   * (logged) when that diff fails, and the drops stay manual steps.
+   */
+  private reverseOperations(migration: Types.Migration, fromSchema: Module[], toSchema: Module[]): Types.MigrationOperation[] {
+    try {
+      return this.differ.diff(toSchema, fromSchema);
+    } catch (error) {
+      logger.warn(
+        `Migration ${migration.id}: rolling it back will need manual steps for what it drops — ` +
+          `the schema before it can't be diffed back to (${error instanceof Error ? error.message : String(error)})`
+      );
+      return [];
     }
   }
 
@@ -580,8 +631,8 @@ export class MigrationEngine {
    * The rollback SQL to store with `migration`, or undefined (logged) when it can't be generated —
    * the migration still applies; only a later rollback of it is refused.
    */
-  private rollbackSqlFor(migration: Types.Migration): string[] | undefined {
-    const result = this.generateRollbackSQL(migration);
+  private rollbackSqlFor(migration: Types.Migration, plan: Types.MigrationPlan): string[] | undefined {
+    const result = this.generateRollbackSQL(migration, plan);
 
     if (result.ok)
       return result.value;
@@ -623,7 +674,7 @@ export class MigrationEngine {
 
       try {
         // Generate rollback SQL before executing
-        const rollbackResult = this.generateRollbackSQL(migration);
+        const rollbackResult = this.generateRollbackSQL(migration, plan);
 
         if (rollbackResult.ok)
           rollbackSQL = rollbackResult.value;
@@ -808,6 +859,9 @@ export class MigrationEngine {
       // Update in-memory state: the baseline is now the previous migration's snapshot.
       this.appliedMigrations.delete(migrationId);
       await this.loadLatestApplied();
+
+      for (const restored of restoredEmpty(rollbackSql))
+        logger.warn(`Rolled back migration ${migrationId}: ${restored}`);
 
       logger.info(`Successfully rolled back migration ${migrationId}`);
       return Ok(void 0);
