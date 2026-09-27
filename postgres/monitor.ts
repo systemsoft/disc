@@ -1,7 +1,6 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
-import { join } from "@std/path";
 import { PostgresInstance } from "./instance.ts";
 import { logger } from "./logger.ts";
 
@@ -186,45 +185,25 @@ export class PostgresMonitor {
     if (!status.running)
       return { error: "Instance not running" };
 
-    const pgBinDir = this.instance.getPgBinDir();
-
-    if (!pgBinDir)
-      return { error: "PostgreSQL binaries not available" };
-
-    const psql = join(pgBinDir, "psql");
-    const socketDir = this.instance.getSocketDir();
-    const port = this.instance.getPort();
-    const effectivePort = port === 0 ? 5432 : port;
-
-    const connArgs = port === 0 ?
-      ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] :
-      ["-h", "localhost", "-p", String(port), "-U", "disc"];
-
     try {
-      const query = `
-        SELECT json_build_object(
-          'database_size', pg_size_pretty(pg_database_size(current_database())),
-          'connections_active', (SELECT count(*) FILTER (WHERE state = 'active') FROM pg_stat_activity WHERE datname = current_database()),
-          'connections_idle', (SELECT count(*) FILTER (WHERE state = 'idle') FROM pg_stat_activity WHERE datname = current_database()),
-          'connections_total', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()),
-          'table_count', (SELECT count(*) FROM pg_class WHERE relkind = 'r'),
-          'tables_total_size', pg_size_pretty((SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint FROM pg_class c WHERE c.relkind = 'r'))
-        )::text;
-      `;
-
-      const cmd = new Deno.Command(psql, {
-        args: [...connArgs, "-d", "disc", "-t", "-A", "-c", query]
-      });
-
-      const output = await cmd.output();
-
-      if (!output.success) {
-        const stderr = new TextDecoder().decode(output.stderr).trim();
-        throw new Error(`psql query failed: ${stderr}`);
-      }
-
-      const jsonStr = new TextDecoder().decode(output.stdout).trim();
-      const data = JSON.parse(jsonStr);
+      const [data] = await this.instance.query<{
+        connections_active: number;
+        connections_idle: number;
+        connections_total: number;
+        database_name: string;
+        database_size: string;
+        table_count: number;
+        tables_total_size: string;
+      }>(`
+        SELECT
+          (SELECT count(*) FILTER (WHERE state = 'active') FROM pg_stat_activity WHERE datname = current_database())::int AS connections_active,
+          (SELECT count(*) FILTER (WHERE state = 'idle') FROM pg_stat_activity WHERE datname = current_database())::int AS connections_idle,
+          (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database())::int AS connections_total,
+          current_database() AS database_name,
+          pg_size_pretty(pg_database_size(current_database())) AS database_size,
+          (SELECT count(*) FROM pg_class WHERE relkind = 'r')::int AS table_count,
+          pg_size_pretty((SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint FROM pg_class c WHERE c.relkind = 'r')) AS tables_total_size
+      `);
 
       return {
         connections: {
@@ -233,6 +212,7 @@ export class PostgresMonitor {
           total: data.connections_total
         },
         database: {
+          name: data.database_name,
           size: data.database_size
         },
         tables: {
@@ -246,40 +226,11 @@ export class PostgresMonitor {
   }
 
   async performMaintenance(): Promise<void> {
-    const pgBinDir = this.instance.getPgBinDir();
-
-    if (!pgBinDir)
-      throw new Error("PostgreSQL binaries not available for maintenance");
-
-    const psql = join(pgBinDir, "psql");
-    const socketDir = this.instance.getSocketDir();
-    const port = this.instance.getPort();
-    const effectivePort = port === 0 ? 5432 : port;
-
-    const connArgs = port === 0 ?
-      ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] :
-      ["-h", "localhost", "-p", String(port), "-U", "disc"];
-
     logger.debug("Running PostgreSQL maintenance tasks…");
 
     try {
-      // ANALYZE
-      const analyzeCmd = new Deno.Command(psql, { args: [...connArgs, "-c", "ANALYZE"] });
-      const analyzeOutput = await analyzeCmd.output();
-
-      if (!analyzeOutput.success) {
-        const stderr = new TextDecoder().decode(analyzeOutput.stderr).trim();
-        throw new Error(`ANALYZE failed: ${stderr}`);
-      }
-
-      // VACUUM
-      const vacuumCmd = new Deno.Command(psql, { args: [...connArgs, "-c", "VACUUM"] });
-      const vacuumOutput = await vacuumCmd.output();
-
-      if (!vacuumOutput.success) {
-        const stderr = new TextDecoder().decode(vacuumOutput.stderr).trim();
-        throw new Error(`VACUUM failed: ${stderr}`);
-      }
+      await this.instance.query("ANALYZE");
+      await this.instance.query("VACUUM");
 
       logger.debug("Maintenance tasks completed");
     } catch (error) {

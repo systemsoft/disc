@@ -138,7 +138,8 @@ const HELP_TEXT = dedent`
     deploy ${gray(".".repeat(19))} --format, --output
     db create/list/drop ${gray(".".repeat(6))} --force (drop), --database-url
     db wipe/dump/restore ${gray(".".repeat(5))} --force (wipe), --output (dump), --format (dump),
-                               --input (restore), --clean (restore), --database-url
+                               --input (restore), --clean (restore), --database-url,
+                               --pg-bin-dir, --socket-dir (dump/restore)
     pg log ${gray(".".repeat(19))} --follow, --lines, --level
     pg upgrade ${gray(".".repeat(15))} --target-version, --dry-run
 
@@ -383,6 +384,8 @@ const COMMAND_HELP: Record<string, string> = {
 
       -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)
       --format ${gray("<fmt>")} ${gray(".".repeat(11))} Dump format: ${bgBrightYellow("plain")} (default) or ${bgBrightYellow("custom")}
+      --pg-bin-dir ${gray("<dir>")} ${gray(".".repeat(7))} Use pg_dump from this directory (default: download matching client tools on first use)
+      --socket-dir ${gray("<dir>")} ${gray(".".repeat(7))} PostgreSQL socket directory (default: from disc.toml)
   `,
 
   "db import": dedent`
@@ -418,6 +421,8 @@ const COMMAND_HELP: Record<string, string> = {
 
       --input ${gray("<path>")} ${gray(".".repeat(11))} Input file path (default: stdin). Auto-detects plain vs custom format.
       --clean ${gray(".".repeat(18))} Wipe target db before restoring (drop + recreate)
+      --pg-bin-dir ${gray("<dir>")} ${gray(".".repeat(7))} Use psql/pg_restore from this directory (default: download matching client tools on first use)
+      --socket-dir ${gray("<dir>")} ${gray(".".repeat(7))} PostgreSQL socket directory (default: from disc.toml)
   `,
 
   "db wipe": dedent`
@@ -698,12 +703,14 @@ async function main() {
       "name",
       "on-conflict",
       "output",
+      "pg-bin-dir",
       "platform",
       "port",
       "rollback-to",
       "schema",
       "schema-dir",
       "service-token",
+      "socket-dir",
       "squash-from",
       "squash-to",
       "target",

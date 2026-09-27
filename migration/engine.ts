@@ -954,7 +954,7 @@ export class MigrationEngine {
    *  - `"unsafe"`    — destructive (DropType, DropTable, DropProperty,
    *                    DropLink, RecreateScalar, DropScalar).
    *  - `"ambiguous"` — could be interpreted multiple ways
-   *                    (`ChangeType` without an explicit cast,
+   *                    (`ChangeType`, whose cast may be lossy or fail,
    *                    `ChangeRequired` from optional → required without
    *                    a default, `ChangeMulti`/`ChangeCardinality` link
    *                    flips). The operator should clarify intent
@@ -1072,7 +1072,7 @@ export class MigrationEngine {
                     flagged.push({
                       operation: `AlterType ${alter.typeName} → ChangeType ${altProp.propertyName}`,
                       reason:
-                        `type changed from '${change.oldValue}' to '${change.newValue}' without an explicit cast — PG may refuse the conversion or coerce values lossily`,
+                        `type changed from '${change.oldValue}' to '${change.newValue}' — stored values are cast to the new type, which may round or truncate them, and the migration fails on a value that does not convert`,
                       classification: "ambiguous"
                     });
                     upgradeParent("ambiguous");
@@ -1487,7 +1487,7 @@ export class MigrationEngine {
       return null;
     }
     const result = await this.pool.query(
-      `SELECT column_name, data_type
+      `SELECT column_name, data_type, udt_name
          FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = $1
         ORDER BY ordinal_position`,
@@ -1497,8 +1497,8 @@ export class MigrationEngine {
       return null;
     }
     return result.rows.map(row => {
-      const r = row as { column_name: string; data_type: string; };
-      return { name: r.column_name, dataType: r.data_type };
+      const r = row as { column_name: string; data_type: string; udt_name: string; };
+      return { dataType: r.data_type, name: r.column_name, udtName: r.udt_name };
     });
   }
 

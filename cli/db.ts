@@ -10,14 +10,10 @@
  * with a `disc_` prefix to avoid collisions with system databases.
  */
 
-/*** NATIVE ------------------------------------------- ***/
-
-import { join } from "@std/path";
-
 /*** UTILITY ------------------------------------------ ***/
 
 import { createDatabase, DatabaseConnection, dropDatabase } from "../lib/database.ts";
-import { PostgresBinaryDownloader, PostgresManager } from "../postgres/mod.ts";
+import { pgToolPath, PostgresClientTools, readDataDirVersion } from "../postgres/client-tools.ts";
 import { resolveProjectContext } from "../lib/project-context.ts";
 
 /** Prefix applied to SECONDARY (`disc db create`-managed) PG database names. */
@@ -76,7 +72,7 @@ export interface DbDumpOptions {
   name: string;
   /** Output file path. If omitted (or "-"), dump to stdout. */
   output?: string;
-  /** pg_dump binary directory (resolves automatically if omitted). */
+  /** pg_dump binary directory (downloads matching client tools on demand if omitted). */
   pgBinDir?: string;
   /** PG socket directory (resolves automatically from project context). */
   socketDir?: string;
@@ -147,8 +143,9 @@ export class DbCommand {
   }
 
   /**
-   * Dump a Disc-managed database to stdout (default) or a file using the
-   * bundled pg_dump. Streams output so dumps don’t OOM in memory.
+   * Dump a Disc-managed database to stdout (default) or a file using
+   * pg_dump from the on-demand client tools (`postgres/client-tools.ts`).
+   * Streams output so dumps don’t OOM in memory.
    *
    * Closes gh/geldata#1485, #1002, #720.
    */
@@ -170,7 +167,7 @@ export class DbCommand {
     const args = buildPgDumpArgs(resolved.socketDir, pgDatabaseName, fmt);
 
     /*** stderr → terminal so the user sees pg_dump progress/errors directly. ***/
-    const child = new Deno.Command(join(resolved.pgBinDir, "pg_dump"), {
+    const child = new Deno.Command(pgToolPath(resolved.pgBinDir, "pg_dump"), {
       args,
       stderr: "inherit",
       stdin: "null",
@@ -280,7 +277,7 @@ export class DbCommand {
       buildPgRestoreArgs(resolved.socketDir, pgDatabaseName) :
       buildPsqlArgs(resolved.socketDir, pgDatabaseName);
 
-    const child = new Deno.Command(join(resolved.pgBinDir, binary), {
+    const child = new Deno.Command(pgToolPath(resolved.pgBinDir, binary), {
       args,
       stderr: "piped",
       stdin: "piped",
@@ -391,18 +388,17 @@ export class DbCommand {
     const socketDir = opts.socketDir ?? ctx.socketDir;
     let pgBinDir = opts.pgBinDir;
 
+    /*** The bundled (Zonky) server ships no client utilities, so pg_dump/pg_restore/psql come from
+         a client-tools download matching the server major recorded in the data directory. ***/
     if (!pgBinDir) {
-      const manager = new PostgresManager();
-      await manager.discoverInstances();
-      const instance = manager.getInstance(ctx.instanceName);
+      const serverVersion = await readDataDirVersion(ctx.dataDir);
 
-      if (!instance)
-        throw new Error(`No PostgreSQL instance found for project "${ctx.instanceName}". Run "disc init" first.`);
+      if (!serverVersion)
+        throw new Error(
+          `No PostgreSQL instance found for project "${ctx.instanceName}" (no PG_VERSION in ${ctx.dataDir}). Run "disc init" first, or pass --pg-bin-dir.`
+        );
 
-      const status = await instance.status();
-      const downloader = new PostgresBinaryDownloader();
-      const pgDir = await downloader.ensurePostgres(status.version);
-      pgBinDir = join(pgDir, "bin");
+      pgBinDir = await new PostgresClientTools().ensure(serverVersion);
     }
 
     return { pgBinDir, socketDir };

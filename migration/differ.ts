@@ -935,7 +935,7 @@ export class SchemaDiffer {
             propertyName: propName,
             changes
           };
-          if (oldProp.multi || newProp.multi) {
+          if (oldProp.multi || newProp.multi || oldProp.type !== newProp.type) {
             alter.oldProperty = oldProp;
             alter.newProperty = newProp;
           }
@@ -1280,6 +1280,7 @@ export class SchemaDiffer {
         .map(property => ({
           columnName: propNameToColumnName(property.name),
           ...(property.default !== undefined ? { default: property.default } : {}),
+          ...(property.multi ? { multi: true } : {}),
           pgType: columnType(property),
           propertyType: property.type,
           tableName

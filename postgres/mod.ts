@@ -7,6 +7,9 @@ export type { PostgresConfigOptions } from "./config.ts";
 export { PostgresBinaryDownloader } from "./downloader.ts";
 export type { BinaryManifest } from "./downloader.ts";
 
+export { clientToolsManifest, pgToolPath, PostgresClientTools, readDataDirVersion } from "./client-tools.ts";
+export type { ClientToolsManifest, PostgresClientToolsOptions } from "./client-tools.ts";
+
 export { PostgresInstance } from "./instance.ts";
 export type {
   PostgresInstanceOptions,

@@ -11,6 +11,7 @@ import {
   getInstance,
   listInstances,
   PostgresBinaryDownloader,
+  PostgresClientTools,
   PostgresConfig,
   PostgresInstance,
   PostgresManager,
@@ -31,11 +32,14 @@ import {
       socket/         # Unix domain socket
   postgres/
     18.4/             # Downloaded PostgreSQL version
-      bin/            # pg_ctl, initdb, postgres, etc.
+      bin/            # pg_ctl, initdb, postgres (server only)
       lib/            # Shared libraries
       share/          # Extensions and configs
     17.0/             # Multiple versions side-by-side
       ...
+  postgres-client/
+    18.4.0/           # Client tools, downloaded on first dump/restore/upgrade
+      bin/            # pg_dump, pg_dumpall, pg_restore, psql, …
 ```
 
 ## PostgresManager
@@ -176,6 +180,24 @@ All binaries come from [Zonky](https://github.com/zonkyio/embedded-postgres-bina
 
 Supported versions: `16.4`, `17.0`, `18.4` (default). Downloads are SHA-256 checksummed.
 
+Zonky's builds contain only the server: `bin/` holds `initdb`, `pg_ctl` and `postgres` — no `pg_dump`, `pg_restore`, `psql` or `pg_dumpall`. Those come from `PostgresClientTools` below.
+
+## PostgresClientTools
+
+Downloads the PostgreSQL client utilities (`pg_dump`, `pg_dumpall`, `pg_restore`, `psql`) on first use. `disc db dump`, `disc db restore` and `disc pg upgrade` call it; nothing else does, and the tools are never embedded in compiled Disc binaries.
+
+```typescript
+const tools = new PostgresClientTools();
+// Accepts "16.4" or a bare major such as "16" (the data directory's PG_VERSION)
+const binDir = await tools.ensure("18.4"); // ~/.disc/postgres-client/18.4.0/bin
+```
+
+- **Source**: full PostgreSQL builds from [theseus-rs/postgresql-binaries](https://github.com/theseus-rs/postgresql-binaries) GitHub releases (`postgresql-<release>-<target-triple>.tar.gz`). Linux uses the glibc (`-unknown-linux-gnu`) builds and needs the host's `libz`, `libzstd`, `liblz4` (and, for 18.x, OpenSSL 3's `libcrypto.so.3`); Windows is x64-only (`x86_64-pc-windows-msvc`).
+- **Versions**: one build per server major, at the same PostgreSQL version as the bundled server — `16.4.1` (PG 16.4), `17.0.1` (PG 17.0), `18.4.0` (PG 18.4); the last component is theseus's packaging revision. A server older than 16 uses the 16 client (pg_dump reads older servers); a server newer than 18 is rejected.
+- **Verification**: each archive's SHA-256 is pinned in `client-tools.ts` (taken from the release's `.sha256` files) and checked before extraction; a mismatch discards the download.
+- **Cache**: `<DISC_HOME>/postgres-client/<release>/` (`$DISC_HOME`, else `~/.disc`). Extraction happens in a staging directory that is renamed into place, so an interrupted download never leaves a partial install.
+- **Offline**: with `DISC_OFFLINE=1`, a missing cache is an error naming the path to pre-stage. Alternatively pass `--pg-bin-dir <dir>` to `disc db dump|restore` to use any PostgreSQL bin directory of the same or a newer major version.
+
 ## PostgresConfig
 
 Generates `postgresql.conf` and `pg_hba.conf` content tuned for Disc.
@@ -283,4 +305,6 @@ disc status                # Show instance status (running, port, data dir)
 disc pg log                # View PostgreSQL logs
 disc pg log -f             # Follow log output
 disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL version
+disc db dump my_app > backup.sql       # pg_dump (client tools downloaded on first use)
+disc db restore my_app --input backup.sql  # psql / pg_restore (same client tools)
 ```

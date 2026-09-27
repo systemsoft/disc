@@ -11,8 +11,10 @@
  * 30 s apart, breaking every long-lived connection each time.
  */
 
-import { assertEquals } from "@std/assert";
-import type { PostgresInstance } from "./instance.ts";
+import { assert, assertEquals } from "@std/assert";
+import { join } from "@std/path";
+import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
+import { PostgresInstance } from "./instance.ts";
 import { PostgresMonitor } from "./monitor.ts";
 
 class FakeInstance {
@@ -98,4 +100,41 @@ Deno.test("PostgresMonitor - running instance that stops accepting connections i
     await monitor.checkHealth();
     assertEquals(instance.restarts, 1);
   });
+});
+
+Deno.test({
+  name: "PG: PostgresMonitor metrics and maintenance run on an instance with only the bundled binaries",
+  ignore: !canRunPgTests() || !findPgBinDir(),
+  fn: async () => {
+    /*** The bundled layout: initdb, pg_ctl and postgres only — no psql. ***/
+    const baseDir = await Deno.makeTempDir({ dir: "/tmp", prefix: "disc-mon-" });
+    const binDir = join(baseDir, "bin");
+    await Deno.mkdir(binDir);
+    for (const tool of ["initdb", "pg_ctl", "postgres"])
+      await Deno.symlink(join(findPgBinDir()!, tool), join(binDir, tool));
+
+    const instance = new PostgresInstance({
+      dataDir: join(baseDir, "data"),
+      instanceName: "monitor-probe",
+      pgBinDir: binDir,
+      socketDir: join(baseDir, "socket")
+    });
+
+    try {
+      await instance.init();
+      await instance.start();
+
+      const monitor = new PostgresMonitor(instance);
+      const metrics = await monitor.getMetrics() as { connections: { total: number; }; database: { name: string; size: string; }; };
+
+      assertEquals(metrics.database.name, "monitor-probe");
+      assert(metrics.database.size.length > 0);
+      assert(metrics.connections.total >= 1);
+
+      await monitor.performMaintenance();
+    } finally {
+      await instance.stop();
+      await Deno.remove(baseDir, { recursive: true }).catch(() => {});
+    }
+  }
 });

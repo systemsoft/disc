@@ -44,8 +44,10 @@ import type {
 export interface ExistingColumn {
   /** Column name as stored by PostgreSQL (already lowercased / unquoted). */
   name: string;
-  /** `information_schema.columns.data_type` (e.g. "bigint", "text"). */
+  /** `information_schema.columns.data_type` (e.g. "bigint", "text", "ARRAY"). */
   dataType: string;
+  /** `information_schema.columns.udt_name` (e.g. "int8", "_text" for a `text[]` column). */
+  udtName?: string;
 }
 
 /**
@@ -469,13 +471,18 @@ const RETYPING_CHANGES = new Set(["ChangeComputed", "ChangeMulti", "ChangeType"]
  * snapshot already declared the type — so the differ, comparing two
  * snapshots that agree, diffs to nothing.
  *
+ * The same goes for array columns created as `text[]` — a `multi` property of
+ * such a type (`multi x: bigint`, `multi tags: Priority` before enums were
+ * mapped): those convert element-wise (`fromTextArray`).
+ *
  * Returns one `ConvertTextColumn` per declared column whose type isn't TEXT
- * and which the database has as `text`, skipping columns whose type the
- * pending migration (`planned`) already changes (a property's type, `multi`
- * or computed-ness, or a link's link properties). Tables and columns that
- * don't exist yet are the pending migration's to create, with the right type.
- * Idempotent: once converted, the column's type isn't `text` and it returns
- * nothing.
+ * (or `TEXT[]`) and which the database has as `text` (or `text[]`), skipping
+ * columns whose type the pending migration (`planned`) already changes (a
+ * property's type, `multi` or computed-ness, or a link's link properties).
+ * Tables and columns that don't exist yet are the pending migration's to
+ * create, with the right type.
+ * Idempotent: once converted, the column's type isn't `text` / `text[]` and
+ * it returns nothing.
  */
 export async function reconcileTextColumns(
   declared: DeclaredColumn[],
@@ -517,6 +524,11 @@ export async function reconcileTextColumns(
 
     if (existing?.dataType === "text") {
       operations.push({ ...column, kind: "ConvertTextColumn" });
+    } else if (
+      existing?.dataType === "ARRAY" && existing.udtName === "_text" &&
+      column.pgType.endsWith("[]") && column.pgType.toUpperCase() !== "TEXT[]"
+    ) {
+      operations.push({ ...column, fromTextArray: true, kind: "ConvertTextColumn" });
     }
   }
 

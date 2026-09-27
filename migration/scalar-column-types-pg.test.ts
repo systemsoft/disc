@@ -34,12 +34,24 @@ const SDL = `module default {
   };
 };`;
 
-async function migrate(pool: ConnectionPool): Promise<Types.MigrationResult[]> {
+/*** Stored `multi` and `array<range>` properties, for the legacy `text[]` / TEXT column conversions. ***/
+const ARRAY_SDL = `module default {
+  scalar type SctLevel extending enum<Low, High>;
+  type SctBag {
+    required label: str;
+    multi bigs: bigint;
+    multi levels: SctLevel;
+    multi waits: duration;
+    slots: array<range<int32>>;
+  };
+};`;
+
+async function migrate(pool: ConnectionPool, sdl = SDL): Promise<Types.MigrationResult[]> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
   try {
-    const result = await manager.applySchema(SDL);
+    const result = await manager.applySchema(sdl);
 
     if (!result.ok)
       throw result.error;
@@ -50,10 +62,10 @@ async function migrate(pool: ConnectionPool): Promise<Types.MigrationResult[]> {
   }
 }
 
-async function columnType(pool: ConnectionPool, column: string): Promise<string> {
+async function columnType(pool: ConnectionPool, column: string, table = "sct_item"): Promise<string> {
   const result = await pool.query(
-    `SELECT udt_name FROM information_schema.columns WHERE table_name = 'sct_item' AND column_name = $1`,
-    [column]
+    `SELECT udt_name FROM information_schema.columns WHERE table_name = $2 AND column_name = $1`,
+    [column, table]
   );
   return result.rows[0].udt_name as string;
 }
@@ -206,6 +218,115 @@ Deno.test({
       assertEquals(rows.rows, [{ big: "lots", label: "bad" }, { big: "12", label: "ok" }]);
     } finally {
       await resetTestDatabase(pool);
+      await pool.close();
+    }
+  }
+});
+
+async function resetArrays(pool: ConnectionPool): Promise<void> {
+  await resetTestDatabase(pool);
+  await pool.query(`DROP TYPE IF EXISTS disc_enum_sctlevel CASCADE`);
+}
+
+/** Recreate a multi column as `text[]`, as Disc created it before it mapped the element type. */
+async function makeLegacyTextArrayColumn(pool: ConnectionPool, column: string): Promise<void> {
+  await pool.query(`ALTER TABLE sct_bag DROP COLUMN ${column}`);
+  await pool.query(`ALTER TABLE sct_bag ADD COLUMN ${column} TEXT[] NOT NULL DEFAULT '{}'`);
+}
+
+Deno.test({
+  name: "PG scalar column types: migrate converts legacy text[] multi columns and TEXT array<range> columns; the next migrate is a no-op",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const pool = makePool(await getTestDsn());
+    await pool.initialize();
+
+    try {
+      await resetArrays(pool);
+      await migrate(pool, ARRAY_SDL);
+      assertEquals(await columnType(pool, "bigs", "sct_bag"), "_numeric");
+      assertEquals(await columnType(pool, "levels", "sct_bag"), "_disc_enum_sctlevel");
+      assertEquals(await columnType(pool, "waits", "sct_bag"), "_interval");
+      assertEquals(await columnType(pool, "slots", "sct_bag"), "_int4range");
+
+      await makeLegacyTextArrayColumn(pool, "bigs");
+      await makeLegacyTextArrayColumn(pool, "levels");
+      await makeLegacyTextArrayColumn(pool, "waits");
+      await pool.query(`ALTER TABLE sct_bag DROP COLUMN slots`);
+      await pool.query(`ALTER TABLE sct_bag ADD COLUMN slots TEXT`);
+
+      await pool.query(`INSERT INTO sct_bag (label, bigs, levels, waits, slots) VALUES
+        ('full', '{12345678901234567890,-3}', '{High,Low}', '{"1 day","02:00:00"}', '{"[1,5)","[7,9)"}'),
+        ('empty', '{}', '{}', '{}', NULL)`);
+
+      const applied = await migrate(pool, ARRAY_SDL);
+      assertEquals(applied.length, 1);
+      assertEquals(await columnType(pool, "bigs", "sct_bag"), "_numeric");
+      assertEquals(await columnType(pool, "levels", "sct_bag"), "_disc_enum_sctlevel");
+      assertEquals(await columnType(pool, "waits", "sct_bag"), "_interval");
+      assertEquals(await columnType(pool, "slots", "sct_bag"), "_int4range");
+
+      const rows = await pool.query(
+        `SELECT label, bigs::text[] AS bigs, levels::text[] AS levels, waits::text[] AS waits, slots::text[] AS slots,
+                bigs[1] + 1 = 12345678901234567891 AS exact, levels[1] > levels[2] AS ordered
+           FROM sct_bag ORDER BY label`
+      );
+      assertEquals(rows.rows, [
+        { bigs: [], exact: null, label: "empty", levels: [], ordered: null, slots: null, waits: [] },
+        {
+          bigs: ["12345678901234567890", "-3"],
+          exact: true,
+          label: "full",
+          levels: ["High", "Low"],
+          ordered: true,
+          slots: ["[1,5)", "[7,9)"],
+          waits: ["1 day", "02:00:00"]
+        }
+      ]);
+
+      // The empty-set default survives the conversion.
+      await pool.query(`INSERT INTO sct_bag (label) VALUES ('defaulted')`);
+      const defaulted = await pool.query(`SELECT bigs::text[] AS bigs, levels::text[] AS levels FROM sct_bag WHERE label = 'defaulted'`);
+      assertEquals(defaulted.rows, [{ bigs: [], levels: [] }]);
+
+      assertEquals(await migrate(pool, ARRAY_SDL), []);
+    } finally {
+      await resetArrays(pool);
+      await pool.close();
+    }
+  }
+});
+
+Deno.test({
+  name: "PG scalar column types: a legacy text[] element that does not convert fails the migration, naming the column and the value",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const pool = makePool(await getTestDsn());
+    await pool.initialize();
+
+    try {
+      await resetArrays(pool);
+      await migrate(pool, ARRAY_SDL);
+      await makeLegacyTextArrayColumn(pool, "levels");
+      await pool.query(`INSERT INTO sct_bag (label, levels) VALUES ('ok', '{Low}'), ('bad', '{High,Medium}')`);
+
+      let error: Error | undefined;
+      try {
+        await migrate(pool, ARRAY_SDL);
+      } catch (caught) {
+        error = caught as Error;
+      }
+
+      assert(error, "expected the migration to fail");
+      assertStringIncludes(error.message, "Cannot convert sct_bag.levels from text[] to SctLevel");
+      assertStringIncludes(error.message, "stored value 'Medium' is not a valid SctLevel");
+
+      // Nothing changed: the column is still text[] and both rows are intact.
+      assertEquals(await columnType(pool, "levels", "sct_bag"), "_text");
+      const rows = await pool.query(`SELECT label, levels FROM sct_bag ORDER BY label`);
+      assertEquals(rows.rows, [{ label: "bad", levels: ["High", "Medium"] }, { label: "ok", levels: ["Low"] }]);
+    } finally {
+      await resetArrays(pool);
       await pool.close();
     }
   }

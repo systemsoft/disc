@@ -16,6 +16,7 @@ import { join } from "@std/path";
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { pgToolPath, PostgresClientTools } from "../postgres/client-tools.ts";
 import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { PostgresManager } from "../postgres/mod.ts";
@@ -30,11 +31,13 @@ export interface PgUpgradeOptions {
 }
 
 export class PgUpgradeCommand {
+  private clientTools: PostgresClientTools;
   private downloader: PostgresBinaryDownloader;
   private postgresManager: PostgresManager;
 
   constructor() {
     this.postgresManager = new PostgresManager();
+    this.clientTools = new PostgresClientTools();
     this.downloader = new PostgresBinaryDownloader();
   }
 
@@ -109,9 +112,11 @@ export class PgUpgradeCommand {
       const newPgBinDir = join(newPgDir, "bin");
       console.log("Binary downloaded successfully.");
 
-      /*** Determine current pg binary directory for pg_dumpall ***/
-      const currentPgDir = await this.downloader.ensurePostgres(currentVersion);
-      const currentPgBinDir = join(currentPgDir, "bin");
+      /*** pg_dumpall/psql come from the TARGET version's client tools: the bundled server builds
+           ship no client utilities, and PostgreSQL recommends dumping with the newer version's
+           pg_dumpall when upgrading (it reads older servers). Fetched before anything is touched. ***/
+      console.log(`\nResolving PostgreSQL ${targetVersion} client tools…`);
+      const clientBinDir = await this.clientTools.ensure(targetVersion);
 
       /*** Step b: Backup if enabled ***/
       if (backup) {
@@ -122,7 +127,7 @@ export class PgUpgradeCommand {
 
       /*** Step c: Run pg_dumpall from current instance ***/
       console.log("\nDumping database with pg_dumpall…");
-      const pgDumpAllPath = join(currentPgBinDir, "pg_dumpall");
+      const pgDumpAllPath = pgToolPath(clientBinDir, "pg_dumpall");
 
       const dumpCmd = new Deno.Command(pgDumpAllPath, {
         args: ["-h", socketDir, "-U", "disc"],
@@ -173,7 +178,7 @@ export class PgUpgradeCommand {
 
       /*** Step h: Restore via psql ***/
       console.log("\nRestoring database from dump…");
-      const psqlPath = join(newPgBinDir, "psql");
+      const psqlPath = pgToolPath(clientBinDir, "psql");
 
       const restoreCmd = new Deno.Command(psqlPath, {
         args: ["-h", socketDir, "-U", "disc", "-f", dumpFile],

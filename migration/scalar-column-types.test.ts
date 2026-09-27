@@ -76,6 +76,10 @@ const EXPECTED: [string, string][] = [
   ["array<cal::relative_duration>", "INTERVAL[]"],
   ["array<cal::date_duration>", "INTERVAL[]"],
   ["range<float32>", "NUMRANGE"],
+  ["array<range<int32>>", "INT4RANGE[]"],
+  ["array<range<datetime>>", "TSTZRANGE[]"],
+  ["array<range<cal::local_date>>", "DATERANGE[]"],
+  ["array<multirange<int64>>", "INT8MULTIRANGE[]"],
   ["multirange<float32>", "NUMMULTIRANGE"],
   ["Count", "BIGINT"],
   ["Money", "DECIMAL"],
@@ -123,7 +127,7 @@ Deno.test("SchemaDiffer.declaredColumns - stored properties and link properties 
     columns.sort((a, b) => a.tableName.localeCompare(b.tableName) || a.columnName.localeCompare(b.columnName)),
     [
       { columnName: "big", default: 0, pgType: "pg(bigint)", propertyType: "bigint", tableName: "task" },
-      { columnName: "levels", pgType: "pg(Priority[])", propertyType: "Priority", tableName: "task" },
+      { columnName: "levels", multi: true, pgType: "pg(Priority[])", propertyType: "Priority", tableName: "task" },
       { columnName: "tags", pgType: "pg(array<Priority>)", propertyType: "array<Priority>", tableName: "task" },
       { columnName: "title", pgType: "pg(str)", propertyType: "str", tableName: "task" },
       { columnName: "weight", pgType: "pg(bigint)", propertyType: "bigint", tableName: "task_owners" }
@@ -147,6 +151,35 @@ Deno.test("reconcileTextColumns - converts only existing text columns whose decl
 
   assertEquals(ops, [
     { columnName: "big", kind: "ConvertTextColumn", pgType: "NUMERIC", propertyType: "bigint", tableName: "item" }
+  ]);
+});
+
+Deno.test("reconcileTextColumns - converts text[] columns whose declared array type is not TEXT[]", async () => {
+  const declared: Types.DeclaredColumn[] = [
+    { columnName: "values", multi: true, pgType: "NUMERIC[]", propertyType: "bigint", tableName: "item" },
+    { columnName: "tags", multi: true, pgType: "TEXT[]", propertyType: "str", tableName: "item" },
+    { columnName: "done", multi: true, pgType: "NUMERIC[]", propertyType: "bigint", tableName: "item" },
+    { columnName: "spans", pgType: "INT4RANGE[]", propertyType: "array<range<int32>>", tableName: "item" }
+  ];
+  const existing = [
+    { dataType: "ARRAY", name: "values", udtName: "_text" },
+    { dataType: "ARRAY", name: "tags", udtName: "_text" },
+    { dataType: "ARRAY", name: "done", udtName: "_numeric" },
+    { dataType: "ARRAY", name: "spans", udtName: "_text" }
+  ];
+
+  const ops = await reconcileTextColumns(declared, [], async () => await Promise.resolve(existing));
+
+  assertEquals(ops, [
+    { columnName: "values", fromTextArray: true, kind: "ConvertTextColumn", multi: true, pgType: "NUMERIC[]", propertyType: "bigint", tableName: "item" },
+    {
+      columnName: "spans",
+      fromTextArray: true,
+      kind: "ConvertTextColumn",
+      pgType: "INT4RANGE[]",
+      propertyType: "array<range<int32>>",
+      tableName: "item"
+    }
   ]);
 });
 
@@ -227,6 +260,63 @@ Deno.test("ConvertTextColumn - an array column also rewrites JSON arrays as arra
   assert(statements[0].includes("stored value % is not an array of duration values"), statements[0]);
   assert(statements[1].startsWith("UPDATE item SET spans ="), statements[1]);
   assertEquals(statements[2], "ALTER TABLE item ALTER COLUMN spans TYPE INTERVAL[] USING spans::INTERVAL[];");
+});
+
+Deno.test("ConvertTextColumn - a text[] multi column: checks every stored element, then converts it and keeps the empty-set default", () => {
+  const op: Types.ConvertTextColumnOperation = {
+    columnName: "values",
+    fromTextArray: true,
+    kind: "ConvertTextColumn",
+    multi: true,
+    pgType: "NUMERIC[]",
+    propertyType: "bigint",
+    tableName: "item"
+  };
+  const statements = new DDLGenerator().generateDDL([op]).map(s => s.replace(/\s+/g, " "));
+
+  assertEquals(statements.length, 2, statements.join("\n"));
+  assert(statements[0].includes("SELECT DISTINCT disc_element FROM item, unnest(values) AS disc_element WHERE disc_element IS NOT NULL"), statements[0]);
+  assert(statements[0].includes("PERFORM disc_value::NUMERIC;"), statements[0]);
+  assert(
+    statements[0].includes("RAISE EXCEPTION 'Cannot convert item.values from text[] to bigint: stored value % is not a valid bigint"),
+    statements[0]
+  );
+  assertEquals(
+    statements[1],
+    "ALTER TABLE item ALTER COLUMN values DROP DEFAULT, ALTER COLUMN values TYPE NUMERIC[] USING values::NUMERIC[], ALTER COLUMN values SET DEFAULT '{}';"
+  );
+});
+
+Deno.test("ConvertTextColumn - a text[] array<range> column checks elements against the range type", () => {
+  const op: Types.ConvertTextColumnOperation = {
+    columnName: "spans",
+    fromTextArray: true,
+    kind: "ConvertTextColumn",
+    pgType: "INT4RANGE[]",
+    propertyType: "array<range<int32>>",
+    tableName: "item"
+  };
+  const statements = new DDLGenerator().generateDDL([op]).map(s => s.replace(/\s+/g, " "));
+
+  assert(statements[0].includes("PERFORM disc_value::INT4RANGE;"), statements[0]);
+  assert(statements[0].includes("stored value % is not a valid range<int32>"), statements[0]);
+  assertEquals(statements[1], "ALTER TABLE item ALTER COLUMN spans TYPE INT4RANGE[] USING spans::INT4RANGE[];");
+});
+
+Deno.test("ConvertTextColumn - rollback returns a text[] column to text[]", () => {
+  const op: Types.ConvertTextColumnOperation = {
+    columnName: "values",
+    fromTextArray: true,
+    kind: "ConvertTextColumn",
+    multi: true,
+    pgType: "NUMERIC[]",
+    propertyType: "bigint",
+    tableName: "item"
+  };
+
+  assertEquals(new DDLGenerator().generateRollbackDDL([op]), [
+    "ALTER TABLE item ALTER COLUMN values DROP DEFAULT, ALTER COLUMN values TYPE TEXT[] USING values::text[], ALTER COLUMN values SET DEFAULT '{}';"
+  ]);
 });
 
 Deno.test("ConvertTextColumn - rollback returns the column to text", () => {

@@ -398,7 +398,9 @@ export class CLICommands {
       databaseUrl,
       format: fmtRaw,
       name,
-      output: args.output
+      output: args.output,
+      pgBinDir: args["pg-bin-dir"],
+      socketDir: args["socket-dir"]
     });
   }
 
@@ -542,7 +544,9 @@ export class CLICommands {
       clean: args.clean || false,
       databaseUrl,
       input: args.input,
-      name
+      name,
+      pgBinDir: args["pg-bin-dir"],
+      socketDir: args["socket-dir"]
     });
   }
 

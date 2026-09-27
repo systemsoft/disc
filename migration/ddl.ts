@@ -17,6 +17,15 @@ import * as Types from "./types.ts";
 /** The empty-set value of a multi property's array column (its default). */
 const EMPTY_ARRAY = "'{}'";
 
+/**
+ * Column types PostgreSQL casts between directly (numbers among numbers,
+ * dates and timestamps among themselves). See `DDLGenerator.castExpression`.
+ */
+const CAST_FAMILIES = [
+  new Set(["BIGINT", "DECIMAL", "DOUBLE PRECISION", "INTEGER", "NUMERIC", "REAL", "SMALLINT"]),
+  new Set(["DATE", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMPTZ"])
+];
+
 /** Name of the unique index backing a property-level `constraint exclusive`. */
 function exclusiveIndexName(tableName: string, columnName: string): string {
   return `uk_${tableName}_${columnName}`;
@@ -240,7 +249,9 @@ export class DDLGenerator {
         const op = operation as Types.ConvertTextColumnOperation;
         const column = this.escapeIdentifier(op.columnName);
         return [
-          `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
+          op.fromTextArray ?
+            this.retypeColumn(op.tableName, op.columnName, "TEXT[]", `${column}::text[]`, op.multi === true, op.multi ? EMPTY_ARRAY : undefined) :
+            `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
         ];
       }
       default:
@@ -342,6 +353,10 @@ export class DDLGenerator {
    * literals, which the column type change casts. PostgreSQL can't cast a
    * text default to the new type, so a declared default is dropped for the
    * change and set again.
+   *
+   * A legacy `text[]` column (`fromTextArray`) holds each element's text
+   * form: every stored element is checked against the element type, then the
+   * array is cast, keeping a multi property's empty-set default.
    */
   private generateConvertTextColumn(
     operation: Types.ConvertTextColumnOperation
@@ -352,6 +367,25 @@ export class DDLGenerator {
     const element = pgType.endsWith("[]") ?
       /^array<(.+)>$/.exec(operation.propertyType)?.[1] ?? operation.propertyType :
       undefined;
+    const subject = `Cannot convert ${operation.tableName}.${operation.columnName}`;
+    const declaredDefault = operation.default === undefined ?
+      undefined :
+      this.formatDefaultValue(operation.default, operation.propertyType);
+
+    if (operation.fromTextArray) {
+      return [
+        this.valueCheck(
+          "text",
+          `SELECT DISTINCT disc_element FROM ${table}, unnest(${column}) AS disc_element WHERE disc_element IS NOT NULL`,
+          `disc_value::${pgType.slice(0, -2)}`,
+          `${subject} from text[] to ${operation.propertyType}: stored value % is not a valid ${element}`
+        ),
+        operation.multi ?
+          this.retypeColumn(operation.tableName, operation.columnName, pgType, `${column}::${pgType}`, true, EMPTY_ARRAY) :
+          this.retypeColumn(operation.tableName, operation.columnName, pgType, `${column}::${pgType}`, declaredDefault !== undefined, declaredDefault)
+      ];
+    }
+
     const jsonElements = (value: string): string =>
       `ARRAY(SELECT e.v FROM jsonb_array_elements_text(${value}::jsonb) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
     const isJsonArray = (value: string): string => `${value} ~ '^\\s*\\['`;
@@ -359,30 +393,100 @@ export class DDLGenerator {
       `disc_value::${pgType}` :
       `CASE WHEN ${isJsonArray("disc_value")} THEN ${jsonElements("disc_value")}::${pgType} ELSE disc_value::${pgType} END`;
     const expected = element === undefined ? `a valid ${operation.propertyType}` : `an array of ${element} values`;
-    const message = `Cannot convert ${operation.tableName}.${operation.columnName} from text to ${operation.propertyType}: stored value % is not ${expected}`
-      .replace(/'/g, "''");
-    const alterType = `ALTER COLUMN ${column} TYPE ${pgType} USING ${column}::${pgType}`;
 
     return [
-      `DO $$
+      this.valueCheck(
+        "text",
+        `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL`,
+        check,
+        `${subject} from text to ${operation.propertyType}: stored value % is not ${expected}`
+      ),
+      ...(element === undefined ? [] : [`UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`]),
+      this.retypeColumn(operation.tableName, operation.columnName, pgType, `${column}::${pgType}`, declaredDefault !== undefined, declaredDefault)
+    ];
+  }
+
+  /**
+   * A block that evaluates `convert` — an expression of `disc_value`, of
+   * `valueType` — for every value `values` (a one-column query) returns,
+   * failing on the first one that doesn't convert with `message`, whose `%`
+   * is that value, quoted, followed by PostgreSQL's reason. It runs before a
+   * column changes type, so a bad value is reported by column and value
+   * rather than as a bare cast error, and nothing has changed yet.
+   */
+  private valueCheck(valueType: string, values: string, convert: string, message: string): string {
+    return `DO $$
 DECLARE
-  disc_value text;
+  disc_value ${valueType};
 BEGIN
-  FOR disc_value IN SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL LOOP
+  FOR disc_value IN ${values} LOOP
     BEGIN
-      PERFORM ${check};
+      PERFORM ${convert};
     EXCEPTION WHEN OTHERS THEN
-      RAISE EXCEPTION '${message} (%)', quote_literal(disc_value), SQLERRM;
+      RAISE EXCEPTION '${message.replace(/'/g, "''")} (%)', quote_literal(disc_value), SQLERRM;
     END;
   END LOOP;
-END $$;`,
-      ...(element === undefined ? [] : [`UPDATE ${table} SET ${column} = ${jsonElements(column)}::text WHERE ${isJsonArray(column)};`]),
-      operation.default === undefined ?
-        `ALTER TABLE ${table} ${alterType};` :
-        `ALTER TABLE ${table} ALTER COLUMN ${column} DROP DEFAULT, ${alterType}, ALTER COLUMN ${column} SET DEFAULT ${
-          this.formatDefaultValue(operation.default, operation.propertyType)
-        };`
-    ];
+END $$;`;
+  }
+
+  /**
+   * `ALTER COLUMN … TYPE … USING …`. PostgreSQL converts a column's default to
+   * the new type with an assignment cast, which most conversions lack (text to
+   * a number, `text[]` to an enum array), so when the column may have a
+   * default (`dropDefault`) it is dropped for the change, and `setDefault`
+   * (SQL), when given, is set after it.
+   */
+  private retypeColumn(
+    tableName: string,
+    columnName: string,
+    pgType: string,
+    using: string,
+    dropDefault: boolean,
+    setDefault?: string
+  ): string {
+    const table = this.escapeIdentifier(tableName);
+    const column = this.escapeIdentifier(columnName);
+    const alterType = `ALTER COLUMN ${column} TYPE ${pgType} USING ${using}`;
+
+    if (!dropDefault && setDefault === undefined)
+      return `ALTER TABLE ${table} ${alterType};`;
+
+    return `ALTER TABLE ${table} ALTER COLUMN ${column} DROP DEFAULT, ${alterType}${
+      setDefault === undefined ? "" : `, ALTER COLUMN ${column} SET DEFAULT ${setDefault}`
+    };`;
+  }
+
+  /**
+   * The expression converting `value` from column type `from` to column type
+   * `to` (as `mapEdgeQLTypeToPostgreSQL` gives them), or `undefined` when
+   * PostgreSQL has no conversion. Text converts to and from anything (printing
+   * or parsing the value); an enum only to and from text, so enum ↔ anything
+   * else goes through text; numbers cast among numbers and dates among dates.
+   * Arrays convert when their elements do.
+   */
+  private castExpression(value: string, from: string, to: string): string | undefined {
+    const fromArray = from.endsWith("[]");
+    const toArray = to.endsWith("[]");
+
+    if (fromArray !== toArray)
+      return from === "TEXT" || to === "TEXT" ? `${value}::${to}` : undefined;
+
+    const fromElement = fromArray ? from.slice(0, -2) : from;
+    const toElement = toArray ? to.slice(0, -2) : to;
+
+    if (
+      fromElement === toElement || fromElement === "TEXT" || toElement === "TEXT" ||
+      CAST_FAMILIES.some(family => family.has(fromElement) && family.has(toElement))
+    ) {
+      return `${value}::${to}`;
+    }
+
+    const enumTypes = new Set([...this.enumScalars.values()].map(name => this.escapeIdentifier(name)));
+
+    if (enumTypes.has(fromElement) || enumTypes.has(toElement))
+      return `${value}::text${toArray ? "[]" : ""}::${to}`;
+
+    return undefined;
   }
 
   private generateRenameScalar(
@@ -908,12 +1012,14 @@ END $$;`,
     const colName = propNameToColumnName(operation.propertyName);
     const columnName = this.escapeIdentifier(colName);
     const tableRef = this.escapeIdentifier(tableName);
+    const defaults = this.propertyDefaults(operation);
+    const retyped = operation.changes.some(change => change.kind === "ChangeType");
 
     for (const change of operation.changes) {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.newValue)};`
+            ...this.generateRetypeProperty(tableName, operation.propertyName, change.oldValue, change.newValue, defaults.old, defaults.new)
           );
           break;
         case "ChangeRequired":
@@ -928,6 +1034,10 @@ END $$;`,
           }
           break;
         case "ChangeDefault":
+          // A type change sets the new default itself (see generateRetypeProperty).
+          if (retyped) {
+            break;
+          }
           if (change.newValue !== undefined) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.newValue, "unknown")};`
@@ -1017,7 +1127,12 @@ END $$;`,
       if (oldProperty.constraints.includes("exclusive")) {
         statements.push(`DROP INDEX IF EXISTS ${this.escapeIdentifier(exclusiveIndexName(tableName, colName))};`);
       }
-      const element = oldProperty.type === newProperty.type ? column : `${column}::${elementType}`;
+      let element = column;
+      if (oldProperty.type !== newProperty.type) {
+        const conversion = this.propertyConversion(tableName, operation.propertyName, oldProperty.type, newProperty.type);
+        element = conversion.using;
+        statements.push(...conversion.check);
+      }
       statements.push(
         `ALTER TABLE ${tableRef} ALTER COLUMN ${column} DROP DEFAULT;`,
         `ALTER TABLE ${tableRef} ALTER COLUMN ${column} TYPE ${elementType}[] USING CASE WHEN ${column} IS NULL THEN ${EMPTY_ARRAY} ELSE ARRAY[${element}] END;`,
@@ -1025,11 +1140,106 @@ END $$;`,
         `ALTER TABLE ${tableRef} ALTER COLUMN ${column} SET NOT NULL;`
       );
     } else if (oldProperty.type !== newProperty.type) {
-      statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${column} TYPE ${elementType}[] USING ${column}::${elementType}[];`);
+      const conversion = this.propertyConversion(tableName, operation.propertyName, oldProperty.type, newProperty.type, true);
+      statements.push(
+        ...conversion.check,
+        this.retypeColumn(tableName, colName, `${elementType}[]`, conversion.using, true, EMPTY_ARRAY)
+      );
     }
 
     statements.push(...this.generateCheckConstraints(tableName, [newProperty]));
     return statements;
+  }
+
+  /**
+   * The default a property's column has before and after an AlterProperty:
+   * from its ChangeDefault when it has one, else from the property
+   * definitions the differ attaches on a type change (`undefined` when
+   * neither says).
+   */
+  private propertyDefaults(operation: Types.AlterPropertyOperation): { new: unknown; old: unknown; } {
+    const change = operation.changes.find(c => c.kind === "ChangeDefault");
+
+    return change ?
+      { new: change.newValue, old: change.oldValue } :
+      { new: operation.newProperty?.default, old: operation.oldProperty?.default };
+  }
+
+  /**
+   * How a property's stored values convert from EdgeQL type `from` to `to`:
+   * the `USING` expression (see {@link castExpression}), and a check naming
+   * the first stored value that doesn't convert — none when every value
+   * converts (to `str`, or between types stored alike). With `multi`, the
+   * column is an array of them. Throws when PostgreSQL has no conversion.
+   */
+  private propertyConversion(
+    tableName: string,
+    propertyName: string,
+    from: string,
+    to: string,
+    multi = false
+  ): { check: string[]; using: string; } {
+    const suffix = multi ? "[]" : "";
+    const fromType = `${this.mapEdgeQLTypeToPostgreSQL(from)}${suffix}`;
+    const toType = `${this.mapEdgeQLTypeToPostgreSQL(to)}${suffix}`;
+    const table = this.escapeIdentifier(tableName);
+    const column = this.escapeIdentifier(propNameToColumnName(propertyName));
+    const using = this.castExpression(column, fromType, toType);
+
+    if (using === undefined) {
+      throw new Error(
+        `Cannot change the type of property '${propertyName}' on '${tableName}' from '${from}' to '${to}': ` +
+          `PostgreSQL has no conversion from ${fromType} to ${toType}. ` +
+          "Add a new property, copy the data over with an explicit conversion, then drop the old one."
+      );
+    }
+
+    if (fromType === toType || toType === "TEXT" || toType === "TEXT[]")
+      return { check: [], using };
+
+    const element = /^array<(.+)>$/.exec(to)?.[1];
+    const expected = multi ? `a set of ${to} values` : element ? `an array of ${element} values` : `a valid ${to}`;
+
+    return {
+      check: [
+        this.valueCheck(
+          `${table}.${column}%TYPE`,
+          `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IS NOT NULL`,
+          this.castExpression("disc_value", fromType, toType)!,
+          `Cannot convert ${tableName}.${propNameToColumnName(propertyName)} from ${from} to ${to}: stored value % is not ${expected}`
+        )
+      ],
+      using
+    };
+  }
+
+  /**
+   * Change a single property's column from EdgeQL type `from` to `to`,
+   * converting its stored values (see {@link propertyConversion}). The
+   * column's default is dropped for the change and `newDefault` set after
+   * it, as a ChangeDefault alongside the type change would.
+   */
+  private generateRetypeProperty(
+    tableName: string,
+    propertyName: string,
+    from: string,
+    to: string,
+    oldDefault: unknown,
+    newDefault: unknown
+  ): string[] {
+    const conversion = this.propertyConversion(tableName, propertyName, from, to);
+
+    return [
+      ...conversion.check,
+      this.retypeColumn(
+        tableName,
+        propNameToColumnName(propertyName),
+        this.mapEdgeQLTypeToPostgreSQL(to),
+        conversion.using,
+        oldDefault !== undefined || newDefault !== undefined,
+        newDefault === undefined ? undefined : this.formatDefaultValue(newDefault, to)
+      )
+    ];
   }
 
   /*** `DROP CONSTRAINT IF EXISTS` for every CHECK generateCheckConstraints would create for `property`. ***/
@@ -1779,6 +1989,12 @@ END $$;`,
       return typeMap[edgeqlType];
     }
 
+    // `array<range<int32>>` is an array of the range type (likewise multiranges).
+    const rangeArrayType = typeMap[/^array<((?:multi)?range<.+>)>$/.exec(edgeqlType)?.[1] ?? ""];
+    if (rangeArrayType) {
+      return `${rangeArrayType}[]`;
+    }
+
     // Tuple types map to JSONB (PostgreSQL has no native tuple type).
     // Arrays of tuples (`array<tuple<...>>`) likewise map to JSONB rather
     // than a Postgres array, since their element type has no native column type.
@@ -2290,13 +2506,15 @@ END $$;`
     const colName = propNameToColumnName(operation.propertyName);
     const columnName = this.escapeIdentifier(colName);
     const tableRef = this.escapeIdentifier(tableName);
+    const defaults = this.propertyDefaults(operation);
+    const retyped = operation.changes.some(change => change.kind === "ChangeType");
 
     // Process changes in reverse order
     for (const change of [...operation.changes].reverse()) {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.oldValue)};`
+            ...this.generateRetypeProperty(tableName, operation.propertyName, change.newValue, change.oldValue, defaults.new, defaults.old)
           );
           break;
         case "ChangeRequired":
@@ -2311,6 +2529,10 @@ END $$;`
           }
           break;
         case "ChangeDefault":
+          // The type change back sets the old default itself (see generateRetypeProperty).
+          if (retyped) {
+            break;
+          }
           if (change.oldValue !== undefined) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.oldValue, "unknown")};`

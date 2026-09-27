@@ -336,6 +336,22 @@ export class PostgresInstance {
     }
   }
 
+  /**
+   * Run `sql` on this instance's own database (named after the instance) as
+   * the `disc` superuser, in-process — the bundled PostgreSQL ships no psql.
+   */
+  async query<T>(sql: string): Promise<T[]> {
+    const client = new Client({ ...this.adminClientConfig(), database: this.instanceName });
+
+    await client.connect();
+
+    try {
+      return (await client.queryObject<T>(sql)).rows;
+    } finally {
+      await client.end();
+    }
+  }
+
   private adminClientConfig() {
     // Connect to the always-present `postgres` admin db. Use the unix socket
     // when port=0, TCP otherwise.

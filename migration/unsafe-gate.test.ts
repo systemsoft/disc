@@ -121,7 +121,7 @@ Deno.test("Gel #1840: ChangeType without explicit cast is ambiguous", () => {
     "expected at least one ambiguous flag"
   );
   assertStringIncludes(ambiguous[0].operation, "ChangeType");
-  assertStringIncludes(ambiguous[0].reason, "explicit cast");
+  assertStringIncludes(ambiguous[0].reason, "cast to the new type");
 });
 
 Deno.test("Gel #1840: optional → required flip is ambiguous", () => {

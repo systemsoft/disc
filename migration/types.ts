@@ -96,7 +96,8 @@ export interface AlterPropertyOperation extends TypeOperation {
    * property is `multi` on either side: a multi property is an array column,
    * so its DDL (element-wise checks, `required` as a non-empty check, the
    * single → multi column conversion) depends on the whole definition, not
-   * just the changed field.
+   * just the changed field. It also sets them on a type change, whose DDL
+   * drops the column's default for the conversion and sets it again.
    */
   oldProperty?: PropertyDefinition;
   newProperty?: PropertyDefinition;
@@ -269,6 +270,11 @@ export interface RenameScalarOperation extends MigrationOperation {
  * the change; `reconcileTextColumns` finds them in the database.
  */
 export interface ConvertTextColumnOperation extends MigrationOperation, DeclaredColumn {
+  /**
+   * The column is `text[]` rather than `text`: a `multi` property (or an
+   * array) whose element type Disc stored as text before it mapped the type.
+   */
+  fromTextArray?: boolean;
   kind: "ConvertTextColumn";
 }
 
@@ -477,6 +483,8 @@ export interface DeclaredColumn {
   columnName: string;
   /** The property's declared default, set again on the column after a type conversion. */
   default?: unknown;
+  /** Set when the property is `multi`: its column is an array whose default is the empty set. */
+  multi?: boolean;
   /** The column type as the DDL emits it (e.g. `NUMERIC`, `disc_enum_priority[]`). */
   pgType: string;
   /** The property's type as declared, for error messages (e.g. `bigint`, `array<Priority>`). */

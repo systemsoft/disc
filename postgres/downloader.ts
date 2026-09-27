@@ -51,6 +51,28 @@ const POSTGRES_VERSIONS = {
   }
 };
 
+/**
+ * Disc's platform slug for the running host (`darwin-arm64`, `darwin-x64`,
+ * `linux-arm64`, `linux-x64`, `windows-x64`). Shared by the server-binary
+ * downloader and the on-demand client-tools download (`client-tools.ts`).
+ */
+export function detectPgPlatform(): string {
+  const os = Deno.build.os;
+  const arch = Deno.build.arch;
+
+  if (os === "darwin") {
+    return arch === "aarch64" ? "darwin-arm64" : "darwin-x64";
+  } else if (os === "linux") {
+    return arch === "aarch64" ? "linux-arm64" : "linux-x64";
+  } else if (os === "windows") {
+    // Only an x64 Windows PG is published (Zonky has no windows-arm64
+    // build); Windows-on-ARM runs the x64 binary under emulation.
+    return "windows-x64";
+  }
+
+  throw new Error(`Unsupported platform: ${os}-${arch}`);
+}
+
 export class PostgresBinaryDownloader {
   private baseDir: string;
   private platform: string;
@@ -87,20 +109,7 @@ export class PostgresBinaryDownloader {
   }
 
   private detectPlatform(): string {
-    const os = Deno.build.os;
-    const arch = Deno.build.arch;
-
-    if (os === "darwin") {
-      return arch === "aarch64" ? "darwin-arm64" : "darwin-x64";
-    } else if (os === "linux") {
-      return arch === "aarch64" ? "linux-arm64" : "linux-x64";
-    } else if (os === "windows") {
-      // Only an x64 Windows PG is published (Zonky has no windows-arm64
-      // build); Windows-on-ARM runs the x64 binary under emulation.
-      return "windows-x64";
-    }
-
-    throw new Error(`Unsupported platform: ${os}-${arch}`);
+    return detectPgPlatform();
   }
 
   // The postgres executable is `postgres.exe` on Windows, `postgres`
