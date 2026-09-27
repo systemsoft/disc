@@ -20,10 +20,12 @@ import {
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
   reconcileLinkDeleteRules,
+  reconcileRewrites,
   reconcileTextColumns,
   withoutDropsOf,
   type ExistingColumn,
-  type ExistingDeleteRules
+  type ExistingDeleteRules,
+  type ExistingTriggers
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
@@ -379,7 +381,15 @@ export class MigrationEngine {
       // tables, which links to an abstract type reference (see
       // `reconcileAbstractMirrors`). After the conversions, so the rows are
       // copied with their final column types.
-      ...await reconcileAbstractMirrors(this.differ.declaredAbstractMirrors(schema), () => this.readAbstractMirrors(db))
+      ...await reconcileAbstractMirrors(this.differ.declaredAbstractMirrors(schema), () => this.readAbstractMirrors(db)),
+      // Rewrite triggers added, dropped or changed before Disc migrated them
+      // (see `reconcileRewrites`).
+      ...await reconcileRewrites(
+        this.differ.declaredRewrites(schema),
+        planned,
+        this.ddlGenerator,
+        tableNames => this.readExistingTriggers(db, tableNames)
+      )
     ];
   }
 
@@ -1809,6 +1819,39 @@ export class MigrationEngine {
         const r = row as { table_name: string; timing: string; trigger_name: string; };
         return [`${r.table_name}.${r.trigger_name}`, r.timing];
       }))
+    };
+  }
+
+  /**
+   * The existing tables among `tableNames`, with their triggers: events,
+   * timing, and the function each runs. Feeds the rewrite repair.
+   */
+  private async readExistingTriggers(db: SqlReader, tableNames: string[]): Promise<ExistingTriggers> {
+    const tables = await db.query(
+      `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1::text[])`,
+      [tableNames]
+    );
+    /*** `tgtype` bits (PostgreSQL's TRIGGER_TYPE_*): 1 ROW, 2 BEFORE, 4 INSERT, 8 DELETE, 16 UPDATE, 32 TRUNCATE. ***/
+    const triggers = await db.query(
+      `SELECT t.relname AS table_name, g.tgname AS trigger_name, p.proname AS function_name, p.prosrc AS body,
+              g.tgtype & 3 = 3 AS before_row,
+              array_remove(ARRAY[
+                CASE WHEN g.tgtype & 8 <> 0 THEN 'delete' END,
+                CASE WHEN g.tgtype & 4 <> 0 THEN 'insert' END,
+                CASE WHEN g.tgtype & 32 <> 0 THEN 'truncate' END,
+                CASE WHEN g.tgtype & 16 <> 0 THEN 'update' END
+              ], NULL) AS events
+         FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid JOIN pg_proc p ON p.oid = g.tgfoid
+        WHERE NOT g.tgisinternal AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
+      [tableNames]
+    );
+
+    return {
+      tables: new Set(tables.rows.map(row => (row as { tablename: string; }).tablename)),
+      triggers: triggers.rows.map(row => {
+        const r = row as { before_row: boolean; body: string; events: string[]; function_name: string; table_name: string; trigger_name: string; };
+        return { beforeRow: r.before_row, body: r.body, events: r.events, function: r.function_name, name: r.trigger_name, table: r.table_name };
+      })
     };
   }
 

@@ -964,13 +964,11 @@ export class SchemaDiffer {
 
     operations.push(...this.diffProperties(oldProps, newProps));
 
-    // Rewrites are own-only (not inherited) — keep extractProperties
-    // for the rewrite comparison so we don't double-count rewrites
-    // declared on the parent.
-    const oldOwnProps = this.extractProperties(oldType);
-    const newOwnProps = this.extractProperties(newType);
-    const oldPropsMap = new Map(oldOwnProps.map(p => [p.name, p]));
-    const newPropsMap = new Map(newOwnProps.map(p => [p.name, p]));
+    // Rewrites of the properties both sides have, inherited ones included:
+    // CREATE TYPE creates those on this type's table too. An added property
+    // brings its rewrites (AddProperty); a dropped one drops them (see diffProperties).
+    const oldPropsMap = new Map(oldProps.map(p => [p.name, p]));
+    const newPropsMap = new Map(newProps.map(p => [p.name, p]));
 
     for (const [propName, newProp] of newPropsMap) {
       const oldProp = oldPropsMap.get(propName);
@@ -985,9 +983,6 @@ export class SchemaDiffer {
         );
       }
     }
-
-    // For newly added properties, rewrites are included in the PropertyDefinition
-    // For dropped properties, rewrites are implicitly removed with the property
 
     // Diff links using resolved (inheritance-walked) sets — same
     // reasoning as properties above. (gh/geldata#4215)
@@ -1027,9 +1022,12 @@ export class SchemaDiffer {
       }
     }
 
-    // Removed properties
-    for (const [propName] of oldPropsMap) {
+    // Removed properties, after their rewrites: dropping the column leaves their triggers
+    for (const [propName, propDef] of oldPropsMap) {
       if (!newPropsMap.has(propName)) {
+        for (const rewrite of propDef.rewrites ?? []) {
+          operations.push({ events: [...rewrite.events], kind: "DropRewrite", propertyName: propName } as Types.DropRewriteOperation);
+        }
         operations.push(Types.dropPropertyOperation(propName));
       }
     }
@@ -1417,6 +1415,25 @@ export class SchemaDiffer {
         abstractTables: abstractAncestors(typeDef, new Set()),
         tableName: typeNameToTableName(typeDef.name.value)
       }));
+  }
+
+  /**
+   * Every type of a schema with the rewrites CREATE TYPE creates on its
+   * table: those of its properties, own and inherited. Used by the rewrite
+   * repair (`reconcileRewrites`): before Disc migrated rewrites, adding or
+   * dropping a property with one recorded the schema without creating or
+   * dropping its trigger, so diffing two snapshots never touches it again.
+   */
+  declaredRewrites(schema: Module[]): Types.DeclaredRewrites[] {
+    const types = this.extractTypes(schema);
+
+    return [...types.values()].map(typeDef => ({
+      rewrites: this
+        .extractPropertiesWithInheritance(typeDef, types)
+        .flatMap(property => (property.rewrites ?? []).map(rewrite => ({ propertyName: property.name, rewrite }))),
+      tableName: typeNameToTableName(typeDef.name.value),
+      typeName: typeDef.name.value
+    }));
   }
 
   /**
@@ -1841,15 +1858,6 @@ export class SchemaDiffer {
       newRewrites.map(r => [eventKey(r.events), r])
     );
 
-    // Added rewrites
-    for (const [key, rewriteDef] of newRewritesMap) {
-      if (!oldRewritesMap.has(key)) {
-        operations.push(
-          Types.createAddRewriteOperation(typeName, propertyName, rewriteDef)
-        );
-      }
-    }
-
     // Removed rewrites
     for (const [key, rewriteDef] of oldRewritesMap) {
       if (!newRewritesMap.has(key)) {
@@ -1883,6 +1891,15 @@ export class SchemaDiffer {
             )
           );
         }
+      }
+    }
+
+    // Added rewrites, after the drops: a rewrite over other events can have the name of a dropped one
+    for (const [key, rewriteDef] of newRewritesMap) {
+      if (!oldRewritesMap.has(key)) {
+        operations.push(
+          Types.createAddRewriteOperation(typeName, propertyName, rewriteDef)
+        );
       }
     }
 

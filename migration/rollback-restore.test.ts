@@ -237,6 +237,25 @@ Deno.test("Rollback of a dropped rewrite recreates it", () => {
   assert(statements.some(s => s.startsWith("CREATE TRIGGER rb_item__stamp__rewrite BEFORE INSERT ON rb_item")), statements.join("\n"));
 });
 
+Deno.test("Rollback of a dropped property with a rewrite recreates the rewrite", () => {
+  const from = `module default { type RbItem { name: str; stamp: datetime { rewrite insert using (datetime_of_statement()); }; }; };`;
+  const statements = rollback(from, `module default { type RbItem { name: str; }; };`);
+
+  assertNoManualStep(statements);
+  assertRecreatesAsForward(statements, `module default { type RbItem { name: str; }; };`, from);
+  assert(statements.some(s => s.startsWith("CREATE TRIGGER rb_item__stamp__rewrite BEFORE INSERT ON rb_item")), statements.join("\n"));
+});
+
+Deno.test("Rollback of an added property with a rewrite drops the rewrite", () => {
+  const statements = rollback(
+    `module default { type RbItem { name: str; }; };`,
+    `module default { type RbItem { name: str; stamp: datetime { rewrite update using (datetime_of_statement()); }; }; };`
+  );
+
+  assert(statements.includes("DROP TRIGGER IF EXISTS rb_item__stamp__update_rewrite ON rb_item;"), statements.join("\n"));
+  assert(statements.includes("DROP FUNCTION IF EXISTS rb_item__stamp__update_rewrite_fn();"), statements.join("\n"));
+});
+
 Deno.test("Rollback of a dropped enum recreates it with its values", () => {
   const statements = rollback(
     `module default { scalar type RbMood extending enum<Calm, Loud>; type RbItem { mood: RbMood; }; };`,

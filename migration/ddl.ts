@@ -1235,6 +1235,10 @@ END $$;`,
       ...this.generateCheckConstraints(tableName, [property])
     );
 
+    for (const rewrite of property.rewrites ?? []) {
+      statements.push(...this.generateCreateRewrite(tableName, property.name, rewrite));
+    }
+
     return statements;
   }
 
@@ -2593,6 +2597,35 @@ END $$;`,
   // ========================================
 
   /**
+   * A rewrite rule's trigger, as the DDL creates it: a BEFORE `events` trigger
+   * named `<table>__<column>__rewrite` (`…__update_rewrite` for an update-only
+   * rule, which can sit beside an insert rule of the same property) running
+   * `<name>_fn`, whose source (`pg_proc.prosrc`, trimmed) is `body`. The
+   * rewrite repair (`reconcileRewrites`) compares the database's triggers
+   * against it.
+   */
+  rewriteTrigger(
+    tableName: string,
+    propertyName: string,
+    rewrite: Types.RewriteDefinition
+  ): { body: string; events: ("insert" | "update")[]; function: string; name: string; } {
+    const colName = propNameToColumnName(propertyName);
+    const name = this.rewriteTriggerName(tableName, propertyName, rewrite.events);
+
+    return {
+      body: `BEGIN NEW.${this.escapeIdentifier(colName)} := ${this.compileRewriteExpression(rewrite.body)}; RETURN NEW; END;`,
+      events: [...rewrite.events].sort(),
+      function: `${name}_fn`,
+      name
+    };
+  }
+
+  private rewriteTriggerName(tableName: string, propertyName: string, events: ("insert" | "update")[]): string {
+    const updateOnly = events.length > 0 && events.every(event => event === "update");
+    return `${tableName}__${propNameToColumnName(propertyName)}__${updateOnly ? "update_" : ""}rewrite`;
+  }
+
+  /**
    * Generate a PL/pgSQL trigger function and CREATE TRIGGER for a rewrite rule.
    * Rewrite rules automatically set a column value BEFORE INSERT/UPDATE.
    */
@@ -2601,22 +2634,15 @@ END $$;`,
     propertyName: string,
     rewrite: Types.RewriteDefinition
   ): string[] {
-    const colName = propNameToColumnName(propertyName);
-    const fnName = `${tableName}__${colName}__rewrite_fn`;
-    const triggerName = `${tableName}__${colName}__rewrite`;
-
-    // Compile the rewrite body expression with variable substitutions
-    const compiledExpr = this.compileRewriteExpression(rewrite.body);
+    const trigger = this.rewriteTrigger(tableName, propertyName, rewrite);
 
     // Build event list from rewrite events
     const eventList = rewrite.events.map(e => e.toUpperCase()).join(" OR ");
 
     return [
-      `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(fnName)}() RETURNS TRIGGER AS $$ BEGIN NEW.${
-        this.escapeIdentifier(colName)
-      } := ${compiledExpr}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
-      `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} BEFORE ${eventList} ON ${this.escapeIdentifier(tableName)} FOR EACH ROW EXECUTE FUNCTION ${
-        this.escapeIdentifier(fnName)
+      `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(trigger.function)}() RETURNS TRIGGER AS $$ ${trigger.body} $$ LANGUAGE plpgsql;`,
+      `CREATE TRIGGER ${this.escapeIdentifier(trigger.name)} BEFORE ${eventList} ON ${this.escapeIdentifier(tableName)} FOR EACH ROW EXECUTE FUNCTION ${
+        this.escapeIdentifier(trigger.function)
       }();`
     ];
   }
@@ -2627,15 +2653,13 @@ END $$;`,
   private generateDropRewrite(
     tableName: string,
     propertyName: string,
-    _events: ("insert" | "update")[]
+    events: ("insert" | "update")[]
   ): string[] {
-    const colName = propNameToColumnName(propertyName);
-    const triggerName = `${tableName}__${colName}__rewrite`;
-    const fnName = `${tableName}__${colName}__rewrite_fn`;
+    const triggerName = this.rewriteTriggerName(tableName, propertyName, events);
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${this.escapeIdentifier(tableName)};`,
-      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(`${triggerName}_fn`)}();`
     ];
   }
 
@@ -2807,7 +2831,9 @@ END $$;`
       }
       case "DropRewrite": {
         const dropRewriteOp = operation as Types.DropRewriteOperation;
-        if (this.restoredDrops.has(this.dropKey(operation, tableName))) {
+        /*** A dropped property's rewrites come back with it. ***/
+        const propertyRestored = this.restoredDrops.has(`property:${tableName}.${dropRewriteOp.propertyName}`);
+        if (propertyRestored || this.restoredDrops.has(this.dropKey(operation, tableName))) {
           return [
             `-- Rollback: rewrite rule for property '${dropRewriteOp.propertyName}' on table '${tableName}' is recreated from the schema before the migration`
           ];
@@ -2838,8 +2864,9 @@ END $$;`
       ];
     }
 
-    // To rollback AddProperty, we drop the column
+    // To rollback AddProperty, we drop the column, and its rewrites: they don't depend on it
     return [
+      ...(operation.property.rewrites ?? []).flatMap(rewrite => this.generateDropRewrite(tableName, operation.property.name, rewrite.events)),
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(propNameToColumnName(operation.property.name))};`
     ];
   }

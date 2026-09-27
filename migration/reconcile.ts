@@ -29,6 +29,7 @@ import { deletesTargets } from "./types.ts";
 import type {
   AddLinkOperation,
   AddPropertyOperation,
+  AddRewriteOperation,
   AlterLinkOperation,
   AlterPropertyOperation,
   AlterTypeOperation,
@@ -39,11 +40,16 @@ import type {
   DeclaredColumn,
   DeclaredLink,
   DeclaredLinkProperty,
+  DeclaredRewrites,
+  DropRewriteOperation,
+  DropTypeOperation,
   IndexDefinition,
   LinkChange,
   LinkDefinition,
   MigrationOperation,
-  MirrorAbstractTypeOperation
+  MirrorAbstractTypeOperation,
+  RewriteDefinition,
+  TypeOperation
 } from "./types.ts";
 
 /** A column the database currently reports for an existing table. */
@@ -748,4 +754,146 @@ export async function reconcileAbstractMirrors(
         current.some((table, index) => table !== mirror.abstractTables[index]);
     })
     .map(mirror => ({ ...mirror, kind: "MirrorAbstractType" }));
+}
+
+/** A trigger the database has on a table the rewrite repair asked about. */
+export interface ExistingTrigger {
+  /** Source (`pg_proc.prosrc`) of the function it executes. */
+  body: string;
+  /** Whether it fires BEFORE, FOR EACH ROW — as a rewrite's does. */
+  beforeRow: boolean;
+  /** The events it fires on, sorted (`delete`, `insert`, `truncate`, `update`). */
+  events: string[];
+  /** Name of the function it executes. */
+  function: string;
+  name: string;
+  table: string;
+}
+
+/** The existing tables among those asked about, and their triggers. */
+export interface ExistingTriggers {
+  tables: Set<string>;
+  triggers: ExistingTrigger[];
+}
+
+/**
+ * Reads the triggers of the given tables. Injected by the engine, like
+ * {@link ExistingColumnReader}.
+ */
+export type ExistingTriggerReader = (tableNames: string[]) => Promise<ExistingTriggers>;
+
+/** How the DDL generator names a rewrite's trigger and function, and what the function runs (see `DDLGenerator.rewriteTrigger`). */
+export interface RewriteTriggerNaming {
+  rewriteTrigger(tableName: string, propertyName: string, rewrite: RewriteDefinition): { body: string; events: string[]; function: string; name: string; };
+}
+
+/**
+ * Create, replace or drop the triggers of `rewrite … using (…)` rules to
+ * match the schema. Before Disc migrated rewrites, only CREATE TYPE created
+ * them: a property added with a rewrite to an existing type got none, a
+ * dropped property's trigger stayed behind (running its rule against a
+ * column that no longer exists), and the stored snapshot recorded the
+ * schema all the same — so the diff between two snapshots is empty.
+ *
+ * Compares every declared rewrite (`declared`) with the trigger of its name
+ * on the type's table: a missing one is created; one firing on other events,
+ * or running another function or function body, is dropped and created
+ * again. A rewrite trigger (`<table>__<column>__rewrite`, or
+ * `…__update_rewrite`) on the table that no rewrite declares is dropped.
+ * Returns one `AlterType` of `DropRewrite` / `AddRewrite` per type that
+ * differs.
+ *
+ * Skips the tables of types the pending migration (`planned`) creates or
+ * drops, the properties whose rewrites it already adds or drops, and tables
+ * that don't exist. Idempotent: once the triggers match, it returns nothing.
+ */
+export async function reconcileRewrites(
+  declared: DeclaredRewrites[],
+  planned: MigrationOperation[],
+  naming: RewriteTriggerNaming,
+  readExisting: ExistingTriggerReader
+): Promise<AlterTypeOperation[]> {
+  const plannedTables = new Set<string>();
+  const plannedColumns = new Set<string>();
+  const rewriteMembers = new Set(["AddProperty", "AddRewrite", "DropProperty", "DropRewrite"]);
+
+  for (const op of planned) {
+    if (op.kind === "CreateType" || op.kind === "DropType") {
+      plannedTables.add(typeNameToTableName((op as CreateTypeOperation | DropTypeOperation).typeName));
+    } else if (op.kind === "AlterType") {
+      const tableName = typeNameToTableName((op as AlterTypeOperation).typeName);
+      for (const sub of (op as AlterTypeOperation).operations) {
+        if (rewriteMembers.has(sub.kind)) {
+          const propertyName = sub.kind === "AddProperty" ?
+            (sub as AddPropertyOperation).property.name :
+            (sub as DropRewriteOperation).propertyName;
+          plannedColumns.add(`${tableName}.${propNameToColumnName(propertyName)}`);
+        }
+      }
+    }
+  }
+
+  const candidates = declared.filter(entry => !plannedTables.has(entry.tableName));
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const existing = await readExisting(candidates.map(entry => entry.tableName));
+  const operations: AlterTypeOperation[] = [];
+
+  for (const entry of candidates) {
+    if (!existing.tables.has(entry.tableName)) {
+      continue;
+    }
+
+    const triggers = new Map(existing.triggers.filter(trigger => trigger.table === entry.tableName).map(trigger => [trigger.name, trigger]));
+    const declaredNames = new Set<string>();
+    const changes: TypeOperation[] = [];
+
+    for (const { propertyName, rewrite } of entry.rewrites) {
+      const trigger = naming.rewriteTrigger(entry.tableName, propertyName, rewrite);
+      const name = pgStoredName(trigger.name);
+      declaredNames.add(name);
+
+      if (plannedColumns.has(`${entry.tableName}.${propNameToColumnName(propertyName)}`)) {
+        continue;
+      }
+
+      const actual = triggers.get(name);
+      const matches = actual !== undefined && actual.beforeRow && actual.function === pgStoredName(trigger.function) &&
+        actual.body.trim() === trigger.body && actual.events.join(",") === trigger.events.join(",");
+
+      if (!matches) {
+        if (actual) {
+          changes.push({ events: rewrite.events, kind: "DropRewrite", propertyName } as DropRewriteOperation);
+        }
+        changes.push({ kind: "AddRewrite", propertyName, rewrite } as AddRewriteOperation);
+      }
+    }
+
+    /*** A rewrite trigger no rewrite declares: its property's column is the part of the name between the table and the suffix. ***/
+    const prefix = `${entry.tableName}__`;
+    for (const trigger of triggers.values()) {
+      const suffix = ["__update_rewrite", "__rewrite"].find(end => trigger.name.endsWith(end));
+      if (!suffix || !trigger.name.startsWith(prefix) || declaredNames.has(trigger.name)) {
+        continue;
+      }
+
+      const column = trigger.name.slice(prefix.length, -suffix.length);
+      if (column === "" || plannedColumns.has(`${entry.tableName}.${column}`)) {
+        continue;
+      }
+
+      /*** Events only name the trigger: an update-only rewrite's has the `update_` prefix, any other's none. ***/
+      const events: RewriteDefinition["events"] = suffix === "__update_rewrite" ? ["update"] : ["insert", "update"];
+      changes.push({ events, kind: "DropRewrite", propertyName: column } as DropRewriteOperation);
+    }
+
+    if (changes.length > 0) {
+      operations.push({ kind: "AlterType", operations: changes, typeName: entry.typeName });
+    }
+  }
+
+  return operations;
 }

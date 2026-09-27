@@ -511,6 +511,70 @@ Deno.test("Differ - multiple rewrites on different properties", () => {
   assertEquals(updatedAtProp!.rewrites![0].events, ["insert", "update"]);
 });
 
+Deno.test("Differ - adding a property with a rewrite to an existing type creates its trigger", () => {
+  const ddl = generateDDL(diffSchemas(
+    `module default { type Post { required title: str; } }`,
+    `module default { type Post { required title: str; stamp: datetime { rewrite insert using (datetime_of_statement()); }; } }`
+  ));
+
+  assertEquals(ddl.some(s => s.startsWith("CREATE OR REPLACE FUNCTION post__stamp__rewrite_fn()")), true, ddl.join("\n"));
+  assertEquals(ddl.some(s => s.startsWith("CREATE TRIGGER post__stamp__rewrite BEFORE INSERT ON post")), true, ddl.join("\n"));
+});
+
+Deno.test("Differ - dropping a property with a rewrite drops its trigger and function", () => {
+  const ddl = generateDDL(diffSchemas(
+    `module default { type Post { required title: str; stamp: datetime { rewrite insert using (datetime_of_statement()); }; } }`,
+    `module default { type Post { required title: str; } }`
+  ));
+
+  assertEquals(ddl.includes("DROP TRIGGER IF EXISTS post__stamp__rewrite ON post;"), true, ddl.join("\n"));
+  assertEquals(ddl.includes("DROP FUNCTION IF EXISTS post__stamp__rewrite_fn();"), true, ddl.join("\n"));
+});
+
+Deno.test("Differ - switching a rewrite's events drops the old trigger before creating the new one", () => {
+  const ddl = generateDDL(diffSchemas(
+    `module default { type Post { stamp: datetime { rewrite insert, update using (datetime_of_statement()); }; } }`,
+    `module default { type Post { stamp: datetime { rewrite insert using (datetime_of_statement()); }; } }`
+  ));
+
+  const drop = ddl.indexOf("DROP TRIGGER IF EXISTS post__stamp__rewrite ON post;");
+  const create = ddl.findIndex(s => s.startsWith("CREATE TRIGGER post__stamp__rewrite BEFORE INSERT ON post"));
+  assertEquals(drop >= 0 && create > drop, true, ddl.join("\n"));
+});
+
+Deno.test("Differ - a parent's changed rewrite is changed on its subtype's table too", () => {
+  const ops = diffSchemas(
+    `module default { abstract type Stamped { stamp: datetime { rewrite insert using (datetime_of_statement()); }; } type Post extending Stamped { title: str; } }`,
+    `module default { abstract type Stamped { stamp: datetime { rewrite insert using (datetime_current()); }; } type Post extending Stamped { title: str; } }`
+  );
+
+  const altered = ops
+    .filter((op): op is Types.AlterTypeOperation => op.kind === "AlterType")
+    .filter(op => op.operations.some(sub => sub.kind === "AddRewrite"))
+    .map(op => op.typeName)
+    .sort();
+  assertEquals(altered, ["Post", "Stamped"]);
+});
+
+Deno.test("DDL - separate insert and update rewrites on one property get separate triggers", () => {
+  const ddl = generateDDL(diffFromEmpty(`
+    module default {
+      type Post {
+        stamp: datetime {
+          rewrite insert using (datetime_of_statement());
+          rewrite update using (datetime_current());
+        };
+      }
+    }
+  `));
+
+  const triggers = ddl.filter(s => s.startsWith("CREATE TRIGGER"));
+  assertEquals(triggers.length, 2);
+  assertStringIncludes(triggers[0], "CREATE TRIGGER post__stamp__rewrite BEFORE INSERT ON post");
+  assertStringIncludes(triggers[1], "CREATE TRIGGER post__stamp__update_rewrite BEFORE UPDATE ON post");
+  assertStringIncludes(triggers[1], "EXECUTE FUNCTION post__stamp__update_rewrite_fn()");
+});
+
 // ============================================================
 // DDL Tests
 // ============================================================

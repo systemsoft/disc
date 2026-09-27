@@ -16,11 +16,24 @@ import {
   reconcileAbstractMirrors,
   reconcileCreateTables,
   reconcileLinkDeleteRules,
+  reconcileRewrites,
   withoutDropsOf,
   type ExistingColumn,
-  type ExistingDeleteRules
+  type ExistingDeleteRules,
+  type ExistingTrigger,
+  type ExistingTriggers
 } from "./reconcile.ts";
-import type { DeclaredLink, MigrationOperation, MirrorAbstractTypeOperation } from "./types.ts";
+import type {
+  AddRewriteOperation,
+  AlterTypeOperation,
+  DeclaredLink,
+  DeclaredRewrites,
+  DropRewriteOperation,
+  MigrationOperation,
+  MirrorAbstractTypeOperation,
+  RewriteDefinition,
+  TypeOperation
+} from "./types.ts";
 
 const JUNCTION: ExistingColumn[] = [
   { dataType: "uuid", name: "source_id" },
@@ -313,4 +326,134 @@ Deno.test("DDLGenerator - MirrorAbstractType creates the trigger and copies exis
 
   const dropped = generator.generateDDL([mirror([])]);
   assertEquals(dropped.filter(statement => !statement.startsWith("--")), [`DROP TRIGGER IF EXISTS "disc_abstract_mirror" ON person;`]);
+});
+
+const STAMP: RewriteDefinition = { body: "datetime_of_statement()", events: ["insert"] };
+const DECLARED_STAMP: DeclaredRewrites = { rewrites: [{ propertyName: "stamp", rewrite: STAMP }], tableName: "post", typeName: "Post" };
+
+function addRewrite(propertyName: string, rewrite: RewriteDefinition): TypeOperation {
+  return { kind: "AddRewrite", propertyName, rewrite } as AddRewriteOperation;
+}
+
+function dropRewrite(propertyName: string, events: RewriteDefinition["events"]): TypeOperation {
+  return { events, kind: "DropRewrite", propertyName } as DropRewriteOperation;
+}
+
+/*** A database whose `post` table has `triggers`. ***/
+function rewriteDatabase(...triggers: Partial<ExistingTrigger>[]): () => Promise<ExistingTriggers> {
+  return () =>
+    Promise.resolve({
+      tables: new Set(["post"]),
+      triggers: triggers.map(trigger => ({ beforeRow: true, body: "", events: ["insert"], function: "", name: "", table: "post", ...trigger }))
+    });
+}
+
+/*** The trigger `DDLGenerator` creates for `rewrite`, as the database reports it. ***/
+function createdRewrite(propertyName: string, rewrite: RewriteDefinition): Partial<ExistingTrigger> {
+  const trigger = new DDLGenerator().rewriteTrigger("post", propertyName, rewrite);
+  return { body: ` ${trigger.body} `, events: trigger.events, function: trigger.function, name: trigger.name };
+}
+
+Deno.test("reconcileRewrites leaves a rewrite trigger the DDL created", async () => {
+  assertEquals(await reconcileRewrites([DECLARED_STAMP], [], new DDLGenerator(), rewriteDatabase(createdRewrite("stamp", STAMP))), []);
+});
+
+Deno.test("reconcileRewrites creates a missing rewrite trigger and drops one no rewrite declares", async () => {
+  const operations = await reconcileRewrites(
+    [DECLARED_STAMP],
+    [],
+    new DDLGenerator(),
+    rewriteDatabase({ name: "post__gone__rewrite" }, { name: "post__audit" })
+  );
+
+  assertEquals(operations, [{
+    kind: "AlterType",
+    operations: [
+      addRewrite("stamp", STAMP),
+      dropRewrite("gone", ["insert", "update"])
+    ],
+    typeName: "Post"
+  }]);
+});
+
+Deno.test("reconcileRewrites replaces a rewrite trigger whose body or events differ", async () => {
+  const changedBody = await reconcileRewrites(
+    [DECLARED_STAMP],
+    [],
+    new DDLGenerator(),
+    rewriteDatabase({ ...createdRewrite("stamp", STAMP), body: " BEGIN NEW.stamp := now(); RETURN NEW; END; " })
+  );
+  const changedEvents = await reconcileRewrites(
+    [DECLARED_STAMP],
+    [],
+    new DDLGenerator(),
+    rewriteDatabase({ ...createdRewrite("stamp", STAMP), events: ["insert", "update"] })
+  );
+  const replaced: AlterTypeOperation[] = [{
+    kind: "AlterType",
+    operations: [
+      dropRewrite("stamp", ["insert"]),
+      addRewrite("stamp", STAMP)
+    ],
+    typeName: "Post"
+  }];
+
+  assertEquals(changedBody, replaced);
+  assertEquals(changedEvents, replaced);
+});
+
+Deno.test("reconcileRewrites renames an update-only rewrite's trigger created under the insert rewrite's name", async () => {
+  const touched: RewriteDefinition = { body: "datetime_of_statement()", events: ["update"] };
+  const operations = await reconcileRewrites(
+    [{ ...DECLARED_STAMP, rewrites: [{ propertyName: "touched", rewrite: touched }] }],
+    [],
+    new DDLGenerator(),
+    rewriteDatabase({ ...createdRewrite("touched", touched), function: "post__touched__rewrite_fn", name: "post__touched__rewrite" })
+  );
+
+  assertEquals(operations[0].operations, [
+    addRewrite("touched", touched),
+    dropRewrite("touched", ["insert", "update"])
+  ]);
+});
+
+Deno.test("reconcileRewrites skips what the migration itself changes and tables that don't exist", async () => {
+  const database = rewriteDatabase({ name: "post__gone__rewrite" });
+  const alterPost = (operation: TypeOperation): MigrationOperation => ({ kind: "AlterType", operations: [operation], typeName: "Post" } as MigrationOperation);
+
+  assertEquals(await reconcileRewrites([DECLARED_STAMP], [{ kind: "CreateType", typeName: "Post" } as MigrationOperation], new DDLGenerator(), database), []);
+  assertEquals(
+    await reconcileRewrites(
+      [DECLARED_STAMP],
+      [
+        alterPost({ kind: "AddProperty", property: { name: "stamp", rewrites: [STAMP] } } as TypeOperation),
+        alterPost({ kind: "DropProperty", propertyName: "gone" } as TypeOperation)
+      ],
+      new DDLGenerator(),
+      database
+    ),
+    []
+  );
+  assertEquals(
+    await reconcileRewrites([DECLARED_STAMP], [], new DDLGenerator(), () => Promise.resolve({ tables: new Set<string>(), triggers: [] })),
+    []
+  );
+});
+
+Deno.test("SchemaDiffer.declaredRewrites - every type with its properties' rewrites, inherited ones included", () => {
+  const schema = new SDLConverter().convertToModules(
+    new SDLParser(`module default {
+  abstract type Stamped { stamp: datetime { rewrite insert using (datetime_of_statement()); }; };
+  type Post extending Stamped { title: str; };
+  type Tag { label: str; };
+};`)
+      .parse()
+  );
+  const stamp = { propertyName: "stamp", rewrite: { body: "datetime_of_statement()", events: ["insert"] } };
+
+  assertEquals(new SchemaDiffer().declaredRewrites(schema), [
+    { rewrites: [stamp], tableName: "stamped", typeName: "Stamped" },
+    { rewrites: [stamp], tableName: "post", typeName: "Post" },
+    { rewrites: [], tableName: "tag", typeName: "Tag" }
+  ]);
 });

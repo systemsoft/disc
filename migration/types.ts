@@ -164,6 +164,7 @@ export interface AddRewriteOperation extends TypeOperation {
 export interface DropRewriteOperation extends TypeOperation {
   kind: "DropRewrite";
   propertyName: string;
+  /** The dropped rewrite's events, which name its trigger (see `DDLGenerator.rewriteTrigger`). */
   events: ("insert" | "update")[];
 }
 
@@ -279,6 +280,13 @@ export interface ConvertTextColumnOperation extends MigrationOperation, Declared
    */
   fromTextArray?: boolean;
   kind: "ConvertTextColumn";
+}
+
+/*** A type's table and the rewrites of its properties, own and inherited, as CREATE TYPE creates them (see `reconcileRewrites`). ***/
+export interface DeclaredRewrites {
+  rewrites: { propertyName: string; rewrite: RewriteDefinition; }[];
+  tableName: string;
+  typeName: string;
 }
 
 /*** A concrete type's table and the tables of the abstract types it extends (see `MirrorAbstractTypeOperation`). ***/
