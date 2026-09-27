@@ -10,6 +10,9 @@
  * value written to a decimal or bigint property without a cast. A numeric
  * literal or an integer cannot be one, so it is left as it was.
  *
+ * A bigint has no fractional part either: the same check rejects one, except
+ * that a cast from a decimal or a float rounds, as Gel's casts do.
+ *
  * See server/numeric-nonfinite-pg.test.ts for what PostgreSQL answers.
  */
 
@@ -22,6 +25,7 @@ import type { Schema } from "./context.ts";
 
 const SDL = `
 module default {
+  scalar type Count extending bigint;
   type Reading {
     required label: str;
     big: bigint;
@@ -88,6 +92,28 @@ Deno.test("finite numeric - a value written to a decimal or bigint property with
     compile("insert Reading { label := 'a', sensors := (select Sensor) { @weight := $w } }"),
     "disc_finite_numeric(CAST($1 AS numeric), 'std::decimal')"
   );
+});
+
+Deno.test("finite numeric - a cast from a decimal or a float to bigint rounds, as Gel's casts do", () => {
+  for (const query of ["select <bigint>1.5n", "select <bigint>2.5", "select Reading { x := <bigint>.dec }", "select <bigint><float64>$f"]) {
+    assertStringIncludes(compile(query), "round(", query);
+  }
+  for (const query of ["select <bigint>'1.5'", "select <bigint>$b", "select <bigint>7", "select <decimal>1.5"]) {
+    assertEquals(compile(query).includes("round("), false, query);
+  }
+  assertEquals(compile("select <bigint>1.5n").includes("disc_finite_numeric"), false);
+  assertStringIncludes(compile("select <bigint><float64>$f"), "disc_finite_numeric(");
+});
+
+Deno.test("finite numeric - a decimal or float written to a bigint property is checked, an integer is not", () => {
+  assertStringIncludes(compile("insert Reading { label := 'a', big := 1.5 }"), "'std::bigint')");
+  assertStringIncludes(compile("insert Reading { label := 'a', big := 1.5n }"), "'std::bigint')");
+  assertEquals(compile("insert Reading { label := 'a', big := 7n }").includes("disc_finite_numeric"), false);
+  assertEquals(compile("insert Reading { label := 'a', dec := 1.5n }").includes("disc_finite_numeric"), false);
+});
+
+Deno.test("finite numeric - a cast to a scalar extending bigint is checked as a bigint", () => {
+  assertStringIncludes(compile("select <Count>$c"), "disc_finite_numeric(CAST($1 AS numeric), 'std::bigint')");
 });
 
 Deno.test("finite numeric - a checked value is not checked twice, and other properties are not checked", () => {

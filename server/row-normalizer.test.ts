@@ -66,6 +66,17 @@ Deno.test("normalizeRows - numeric columns (bigint, decimal) are written as exac
   );
 });
 
+Deno.test("normalizeRows - float columns are JSON numbers, with NaN and ±Infinity as PostgreSQL's strings", () => {
+  // deno-postgres decodes float8 as text and float4 as a number.
+  const rows = [{ f4: -Infinity, f4s: [NaN, 0.5], f8: "NaN", f8s: ["Infinity", "1.5"] }];
+  const columnTypes = { f4: 700, f4s: 1021, f8: 701, f8s: 1022 };
+
+  assertEquals(
+    JSON.stringify(normalizeRows(rows, columnTypes)),
+    `[{"f4":"-Infinity","f4s":["NaN",0.5],"f8":"NaN","f8s":["Infinity",1.5]}]`
+  );
+});
+
 Deno.test("normalizeRows - without column types, text stays text", () => {
   assertEquals(normalizeRows([{ big: "12345678901234567890" }]), [{ big: "12345678901234567890" }]);
 });

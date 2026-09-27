@@ -76,6 +76,14 @@ function checkConstraintName(tableName: string, columnName: string, constraint: 
   return `chk_${tableName}_${columnName}_${constraint.replace(/[^a-zA-Z0-9_]/g, "_")}`;
 }
 
+/*** Name of the CHECK keeping NaN and ±Infinity (and a bigint's fractional part) out of a decimal or bigint column. ***/
+function finiteCheckName(tableName: string, columnName: string): string {
+  return `chk_${tableName}_${columnName}_finite`;
+}
+
+/*** What a decimal (or bigint) value is not: PostgreSQL's numeric has them, Gel's types don't. ***/
+const NON_FINITE_NUMERIC = "('NaN', 'Infinity', '-Infinity')";
+
 export class DDLGenerator {
   /** Tracks junction tables already emitted in this DDL batch to avoid duplicates */
   private createdJunctionTables = new Set<string>();
@@ -475,6 +483,12 @@ export class DDLGenerator {
             `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
         ];
       }
+      case "AddFiniteCheck": {
+        const op = operation as Types.AddFiniteCheckOperation;
+        return [
+          `ALTER TABLE ${this.escapeIdentifier(op.tableName)} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(finiteCheckName(op.tableName, op.columnName))};`
+        ];
+      }
       case "MirrorAbstractType": {
         // The trigger goes; the next migration's backfill puts back what the schema needs.
         const op = operation as Types.MirrorAbstractTypeOperation;
@@ -553,6 +567,10 @@ export class DDLGenerator {
         return this.generateMirrorAbstractType(
           operation as Types.MirrorAbstractTypeOperation
         );
+      case "AddFiniteCheck": {
+        const op = operation as Types.AddFiniteCheckOperation;
+        return this.addFiniteCheck(op.tableName, op.columnName, op.propertyType, op.multi === true);
+      }
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -1410,6 +1428,10 @@ END $$;`,
       );
     }
 
+    // Converted values may break the finite CHECK the new type adds; say which.
+    if (oldProperty.type !== newProperty.type) {
+      statements.push(...this.finiteValidation(tableName, colName, newProperty.type, true));
+    }
     statements.push(...this.generateCheckConstraints(tableName, [newProperty]));
     return statements;
   }
@@ -1491,17 +1513,21 @@ END $$;`,
     newDefault: unknown
   ): string[] {
     const conversion = this.propertyConversion(tableName, propertyName, from, to);
+    const columnName = propNameToColumnName(propertyName);
+    const oldCheck = this.finiteCheck(tableName, columnName, from, false);
 
     return [
+      ...(oldCheck ? [`ALTER TABLE ${this.escapeIdentifier(tableName)} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(oldCheck.name)};`] : []),
       ...conversion.check,
       this.retypeColumn(
         tableName,
-        propNameToColumnName(propertyName),
+        columnName,
         this.mapEdgeQLTypeToPostgreSQL(to),
         conversion.using,
         oldDefault !== undefined || newDefault !== undefined,
         newDefault === undefined ? undefined : this.formatDefaultValue(newDefault, to)
-      )
+      ),
+      ...this.addFiniteCheck(tableName, columnName, to, false)
     ];
   }
 
@@ -2060,7 +2086,96 @@ END $$;`,
       });
     }
 
+    const finite = this.finiteCheck(tableName, colName, property.type, property.multi);
+    if (finite) {
+      checks.push(finite);
+    }
+
     return checks;
+  }
+
+  /**
+   * The CHECK of a `decimal` or `bigint` column (`type` may be a scalar
+   * extending one, or an array of either; `multi` stores an array): no NaN
+   * or ±Infinity, which PostgreSQL's numeric holds and Gel's types don't, and
+   * for a bigint no fractional part — Gel's `bigint_t` domain is
+   * `scale(VALUE) = 0 AND VALUE != 'NaN'`. An array's elements are checked:
+   * `&&` finds a non-finite one (numeric compares NaN equal to itself), and
+   * the IMMUTABLE `disc_array_integral` (lib/stdlib-sql.ts) a fractional one,
+   * since a CHECK can't hold a subquery. Undefined for other types.
+   */
+  finiteCheck(tableName: string, columnName: string, type: string, multi: boolean): { expression: string; name: string; } | undefined {
+    const kind = this.finiteNumericKind(type);
+    if (kind === undefined) {
+      return undefined;
+    }
+
+    const column = this.escapeIdentifier(columnName);
+    const expression = multi || type.startsWith("array<") ?
+      `NOT (${column} && '{NaN,Infinity,-Infinity}'::numeric[])${kind === "bigint" ? ` AND disc_array_integral(${column})` : ""}` :
+      this.finitePredicate(column, kind);
+    return { expression, name: finiteCheckName(tableName, columnName) };
+  }
+
+  /*** `bigint` or `decimal` when `type` (or its array element) is one, or a scalar extending one. ***/
+  private finiteNumericKind(type: string): "bigint" | "decimal" | undefined {
+    let name = /^array<(.+)>$/.exec(type)?.[1] ?? type;
+    const seen = new Set<string>();
+    while (this.scalarBaseTypes.has(name) && !seen.has(name)) {
+      seen.add(name);
+      name = this.scalarBaseTypes.get(name)!;
+    }
+    return name === "bigint" || name === "decimal" ? name : undefined;
+  }
+
+  /*** SQL that is true when the `kind` value `value` is finite (and, for a bigint, integral). ***/
+  private finitePredicate(value: string, kind: "bigint" | "decimal"): string {
+    const finite = `${value} NOT IN ${NON_FINITE_NUMERIC}`;
+    return kind === "bigint" ? `scale(${value}) = 0 AND ${finite}` : finite;
+  }
+
+  /*** Add the finite CHECK (see {@link finiteCheck}) to an existing column, validated first (see {@link finiteValidation}). ***/
+  private addFiniteCheck(tableName: string, columnName: string, type: string, multi: boolean): string[] {
+    const check = this.finiteCheck(tableName, columnName, type, multi);
+    return check === undefined ? [] : [
+      ...this.finiteValidation(tableName, columnName, type, multi),
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(check.name)} CHECK (${check.expression});`
+    ];
+  }
+
+  /**
+   * Before the finite CHECK (see {@link finiteCheck}) is added to a column
+   * holding values: a block failing, naming the column and the first stored
+   * value (or array element) the check would reject — so nothing changes,
+   * and the message says what to fix rather than PostgreSQL's bare "violated
+   * by some row". Nothing when the column's type has no such check.
+   */
+  private finiteValidation(tableName: string, columnName: string, type: string, multi: boolean): string[] {
+    const kind = this.finiteNumericKind(type);
+    if (kind === undefined) {
+      return [];
+    }
+
+    const table = this.escapeIdentifier(tableName);
+    const column = this.escapeIdentifier(columnName);
+    const firstBad = multi || type.startsWith("array<") ?
+      `SELECT e.v::text INTO disc_value FROM ${table}, unnest(${column}) AS e(v) WHERE NOT (${this.finitePredicate("e.v", kind)}) LIMIT 1;` :
+      `SELECT ${column}::text INTO disc_value FROM ${table} WHERE NOT (${this.finitePredicate(column, kind)}) LIMIT 1;`;
+    const message = `Cannot add ${finiteCheckName(tableName, columnName)} to ${tableName}.${columnName}: stored value % is not a valid ${kind} ` +
+      `(Gel's ${kind} has no NaN or ±Infinity${kind === "bigint" ? " and no fractional part" : ""}). ` +
+      "Fix or delete the rows holding it, then migrate again.";
+
+    return [
+      `DO $$
+DECLARE
+  disc_value text;
+BEGIN
+  ${firstBad}
+  IF FOUND THEN
+    RAISE EXCEPTION '${message.replace(/'/g, "''")}', quote_literal(disc_value);
+  END IF;
+END $$;`
+    ];
   }
 
   /**

@@ -223,3 +223,42 @@ Deno.test("emitGo: bigint and decimal are json.Number, int64 is int64", async ()
   if (await goAvailable())
     await assertCompiles(preciseSchema());
 });
+
+/** Schema with float fields, bare, optional, multi and in arrays. */
+function floatSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(`module default {
+  type Reading {
+    required label: str;
+    required f64: float64;
+    f32: float32;
+    f64s: array<float64>;
+    multi f32s: float32;
+  };
+};`);
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
+Deno.test("emitGo: float fields keep their types and read and write NaN and ±Infinity as strings", async () => {
+  // JSON has no number for them; the server sends and reads "NaN",
+  // "Infinity" and "-Infinity", which encoding/json can't put in a float64.
+  const models = emitGo(schemaToIR(floatSchema()), goConfig())
+    .find(f => f.path.endsWith("models.go"))!
+    .content;
+  assertStringIncludes(models, "\tF64 float64 `json:\"f64\"`");
+  assertStringIncludes(models, "\tF32 *float32 `json:\"f32,omitempty\"`");
+  assertStringIncludes(models, "\tF64s *[]float64 `json:\"f64s,omitempty\"`");
+  assertStringIncludes(models, "\tF32s []float32 `json:\"f32s,omitempty\"`");
+  assertStringIncludes(models, "func (v *Reading) UnmarshalJSON(data []byte) error {");
+  assertStringIncludes(models, "func (v Reading) MarshalJSON() ([]byte, error) {");
+  assertStringIncludes(models, "func (v ReadingInsert) MarshalJSON() ([]byte, error) {");
+  assertStringIncludes(models, "\t}{alias: (*alias)(v), F64: (*discFloat64)(&v.F64)}\n");
+  assertStringIncludes(models, "\tv.F64s = convertOptionalFloats[float64](aux.F64s)\n");
+  assertStringIncludes(models, "type discFloat64 float64");
+  assert(!emitGo(schemaToIR(preciseSchema()), goConfig()).some(f => f.content.includes("discFloat")), "no float fields, no float JSON");
+
+  if (await goAvailable())
+    await assertCompiles(floatSchema());
+});

@@ -52,11 +52,18 @@ const NUMERIC_OIDS = new Set([1700, 1231]);
 /*** PostgreSQL type OIDs of `float4`, `float8`, `float4[]` and `float8[]`. ***/
 const FLOAT_OIDS = new Set([700, 701, 1021, 1022]);
 
-/*** A float column's text (or array of them) as JSON numbers; NaN and ±Infinity stay strings. ***/
+/**
+ * A float column's text (or array of them) as JSON numbers; NaN and ±Infinity
+ * stay strings. deno-postgres decodes `float4` as a number already, which
+ * JSON.stringify would write as null when it is not finite.
+ */
 function floatValue(value: unknown): unknown {
   if (typeof value === "string") {
     const number = Number(value);
     return Number.isFinite(number) ? number : value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : String(value);
   }
   return Array.isArray(value) ? value.map(floatValue) : value;
 }

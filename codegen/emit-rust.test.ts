@@ -208,3 +208,43 @@ Deno.test("emitRust: bigint and decimal are ExactNumber (serde_json arbitrary_pr
   if (await cargoAvailable())
     await assertCompiles(preciseSchema());
 });
+
+/** Schema with float fields, bare, optional, multi and in arrays. */
+function floatSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(`module default {
+  type Reading {
+    required label: str;
+    required f64: float64;
+    f32: float32;
+    f64s: array<float64>;
+    multi f32s: float32;
+  };
+};`);
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
+Deno.test("emitRust: float fields keep their types and read and write NaN and ±Infinity as strings", async () => {
+  // JSON has no number for them; the server sends and reads "NaN",
+  // "Infinity" and "-Infinity", which serde_json can't put in an f64.
+  const lib = emitRust(schemaToIR(floatSchema()), rustConfig()).find(f => f.path.endsWith("src/lib.rs"))!.content;
+
+  assertStringIncludes(lib, "    #[serde(default, deserialize_with = \"crate::disc_float::deserialize\")]\n    pub f64: f64,");
+  assertStringIncludes(lib, "    #[serde(default, deserialize_with = \"crate::disc_float::deserialize\")]\n    pub f32: Option<f32>,");
+  assertStringIncludes(lib, "    #[serde(default, deserialize_with = \"crate::disc_float::deserialize\")]\n    pub f64s: Option<Vec<f64>>,");
+  assertStringIncludes(lib, "    #[serde(default, deserialize_with = \"crate::disc_float::deserialize\")]\n    pub f32s: Vec<f32>,");
+  assertStringIncludes(
+    lib,
+    "    #[serde(serialize_with = \"crate::disc_float::serialize\", skip_serializing_if = \"Option::is_none\")]\n    pub f64s: Option<Vec<f64>>,"
+  );
+  assertStringIncludes(lib, "pub mod disc_float {");
+  assert(
+    !emitRust(schemaToIR(preciseSchema()), rustConfig()).some(f => f.content.includes("disc_float")),
+    "no float fields, no float helpers"
+  );
+
+  if (await cargoAvailable())
+    await assertCompiles(floatSchema());
+});

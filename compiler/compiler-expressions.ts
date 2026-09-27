@@ -11,6 +11,7 @@ import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError, InvalidReferenceError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
+import { normalizeStdTypeName } from "../lib/std-types.ts";
 import {
   backlinkIntersectionName,
   compileEmptyOrder,
@@ -45,6 +46,12 @@ const NUMERIC_LITERAL_TYPES = new Map<string, string>([
   ["float", "float64"],
   ["integer", "int64"]
 ]);
+
+/*** The literals that are integers: `7`, `7n`. ***/
+const INTEGER_LITERAL_TYPES = new Set(["bigint", "integer"]);
+
+/*** The types a cast to bigint rounds, as Gel's `round($1)::edgedbt.bigint_t` casts do. ***/
+const ROUNDED_TO_BIGINT = new Set(["decimal", "float32", "float64"]);
 
 /**
  * Functions returning a set of rows (`array_unpack` is SQL `UNNEST`), which
@@ -2248,8 +2255,23 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
     }
 
-    const compiled = fromJson ? this.compileCastFromJson(expr, pgType, typeName) : SQL.createCastExpression(expr, pgType);
-    return this.isFiniteNumber(cast.expr) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+    // A decimal or float cast to bigint is rounded, as Gel's
+    // `round($1)::edgedbt.bigint_t` casts do; text and other values are not,
+    // so a fractional one is rejected (see `finiteNumeric`).
+    const toBigint = pgType === "numeric" && this.numericBaseType(typeName) === "bigint";
+    const source = this.staticNumericType(cast.expr);
+    const rounded = toBigint && source !== null && ROUNDED_TO_BIGINT.has(this.numericBaseType(source) ?? "");
+    const operand = rounded ? SQL.createFunctionCall("round", [expr]) : expr;
+    const compiled = fromJson ? this.compileCastFromJson(operand, pgType, typeName) : SQL.createCastExpression(operand, pgType);
+    return this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
+  }
+
+  /*** The numeric type `typeName` (or its array element) is, or a scalar it names extends: `bigint`, `decimal`, `float32` or `float64`. ***/
+  private numericBaseType(typeName: string): string | undefined {
+    const element = normalizeStdTypeName(/^array<(.+)>$/.exec(typeName)?.[1] ?? typeName);
+    const scalars = this.ctx.schema.scalars;
+    const base = normalizeStdTypeName(scalars?.get(element) ?? scalars?.get(element.replace(/^default::/, "")) ?? element);
+    return DECIMAL_TYPES.has(base) || FLOAT_TYPES.has(base) ? base : undefined;
   }
 
   /**
@@ -2260,13 +2282,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * cast that would make one fails as InvalidValueError, as in Gel. With the
    * check on what is written to a decimal or bigint property
    * (`finitePropertyValue`), no NaN is ever stored, so none is answered.
+   * A `bigint` must also have no fractional part (Gel's `bigint_t` domain
+   * checks `scale(VALUE) = 0`). A scalar is checked as the type it extends,
+   * which is the type Gel's error names.
    */
   protected finiteNumeric(sql: SQL.SQLExpression, pgType: string, typeName: string): SQL.SQLExpression {
     if (pgType !== "numeric" && pgType !== "numeric[]") {
       return sql;
     }
-    const element = /^array<(.+)>$/.exec(typeName)?.[1] ?? typeName;
-    const name = DECIMAL_TYPES.has(element) ? `std::${element}` : element;
+    const base = this.numericBaseType(typeName);
+    const name = base !== undefined && DECIMAL_TYPES.has(base) ? `std::${base}` : /^array<(.+)>$/.exec(typeName)?.[1] ?? typeName;
     return SQL.createFunctionCall("disc_finite_numeric", [sql, SQL.createLiteral("string", name)]);
   }
 
@@ -2280,20 +2305,28 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   protected finitePropertyValue(property: Context.PropertyDef, expr: EdgeQLAST.Expression, sql: SQL.SQLExpression): SQL.SQLExpression {
     const pgType = property.type;
-    if ((pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr) || (sql.kind === "FunctionCall" && sql.name === "disc_finite_numeric")) {
+    const typeName = property.edgeqlType ?? "decimal";
+    if (
+      (pgType !== "numeric" && pgType !== "numeric[]") || this.isFiniteNumber(expr, this.numericBaseType(typeName) === "bigint") ||
+      (sql.kind === "FunctionCall" && sql.name === "disc_finite_numeric")
+    ) {
       return sql;
     }
     const typed = sql.kind === "CastExpression" && sql.targetType === pgType ? sql : SQL.createCastExpression(sql, pgType);
-    return this.finiteNumeric(typed, pgType, property.edgeqlType ?? "decimal");
+    return this.finiteNumeric(typed, pgType, typeName);
   }
 
-  /*** Whether `expr` is a number that cannot be NaN or ±Infinity: a numeric literal (possibly negated) or an integer. ***/
-  private isFiniteNumber(expr: EdgeQLAST.Expression): boolean {
+  /**
+   * Whether `expr` is a number that cannot be NaN or ±Infinity: a numeric
+   * literal (possibly negated) or an integer. With `integral`, a `1.5` or
+   * `1.5n` literal is not one: a bigint can't hold it.
+   */
+  private isFiniteNumber(expr: EdgeQLAST.Expression, integral = false): boolean {
     if (expr.kind === "UnaryOp" && (expr.op === "-" || expr.op === "+")) {
-      return this.isFiniteNumber(expr.operand);
+      return this.isFiniteNumber(expr.operand, integral);
     }
     if (expr.kind === "Literal") {
-      return NUMERIC_LITERAL_TYPES.has(expr.type);
+      return integral ? INTEGER_LITERAL_TYPES.has(expr.type) : NUMERIC_LITERAL_TYPES.has(expr.type);
     }
     const type = this.staticNumericType(expr);
     return type !== null && INT_SQL_TYPES.has(type);

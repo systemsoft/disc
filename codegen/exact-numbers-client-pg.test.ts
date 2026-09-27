@@ -3,7 +3,7 @@
 
 /**
  * PG end-to-end: the generated Go and Rust clients keep every digit of
- * `bigint`, `decimal` and `int64`.
+ * `bigint`, `decimal` and `int64`, and read and send NaN and ±Infinity floats.
  *
  * The server sends these as exact JSON numbers and reads variables sent as
  * JSON numbers exactly (`server/numeric-precision-pg.test.ts`). Here a client
@@ -11,6 +11,11 @@
  * run against a live server: it inserts values no double can hold, reads them
  * back with `Select`, filters on one bound as a variable, and prints what it
  * got.
+ *
+ * JSON has no number for a NaN or ±Infinity float; the server writes and reads
+ * them as the strings "NaN", "Infinity" and "-Infinity" (PostgreSQL's and Gel's
+ * JSON form). A client inserts a row holding them in `float64`, `float32` and
+ * `array<float64>` fields and reads it back with `Filter`.
  *
  * Requires PostgreSQL (DISC_PG_AUTO=1 or DISC_PG_TEST_URL) and, per test, `go`
  * or `cargo`; without them the test is skipped.
@@ -33,7 +38,9 @@ const SDL = `module default {
     required big: bigint;
     bigs: array<bigint>;
     dec: decimal;
+    f32: float32;
     f64: float64;
+    f64s: array<float64>;
     i64: int64;
   }
 }`;
@@ -48,13 +55,17 @@ const I64 = "9007199254740993";
  * filter's match count, then whether a NaN decimal variable was rejected by
  * the server as Gel's InvalidValueError (decimal has no NaN, so no client ever
  * decodes one). The float64 is 0.5 in both rows: a JSON number in the insert's
- * row as in the select's shape.
+ * row as in the select's shape. Last, the non-finite row as the insert
+ * returned it and as the filter read it, each float printed as the server's
+ * string would be.
  */
 const EXPECTED = [
   `inserted ${BIG} ${DEC} ${I64} ${BIG},1 0.5`,
   `selected ${BIG} ${DEC} ${I64} ${BIG},1 0.5`,
   "filtered 1",
-  "nan rejected true"
+  "nan rejected true",
+  "nonfinite inserted NaN NaN Infinity,-0.25,-Infinity",
+  "nonfinite selected NaN NaN Infinity,-0.25,-Infinity"
 ]
   .join("\n");
 
@@ -75,7 +86,9 @@ const GO_MAIN = `package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 
 	"discclient"
@@ -87,6 +100,27 @@ func line(label string, item discclient.PreciseItem) string {
 		bigs = append(bigs, n.String())
 	}
 	return fmt.Sprintf("%s %s %s %d %s %g", label, item.Big, *item.Dec, *item.I64, strings.Join(bigs, ","), *item.F64)
+}
+
+// text prints a float as the server writes it.
+func text(x float64) string {
+	switch {
+	case math.IsNaN(x):
+		return "NaN"
+	case math.IsInf(x, 1):
+		return "Infinity"
+	case math.IsInf(x, -1):
+		return "-Infinity"
+	}
+	return strconv.FormatFloat(x, 'g', -1, 64)
+}
+
+func nonfinite(label string, item discclient.PreciseItem) string {
+	f64s := make([]string, 0, len(*item.F64s))
+	for _, x := range *item.F64s {
+		f64s = append(f64s, text(x))
+	}
+	return fmt.Sprintf("nonfinite %s %s %s %s", label, text(*item.F64), text(float64(*item.F32)), strings.Join(f64s, ","))
 }
 
 func main() {
@@ -112,6 +146,19 @@ func main() {
 	fmt.Printf("filtered %d\\n", len(filtered))
 	_, err = builder.Filter(".dec = <decimal>$d", map[string]any{"d": "NaN"})
 	fmt.Printf("nan rejected %t\\n", err != nil && strings.Contains(err.Error(), "invalid value for std::decimal"))
+	nan := math.NaN()
+	nan32 := float32(math.NaN())
+	f64s := []float64{math.Inf(1), -0.25, math.Inf(-1)}
+	special, err := builder.Insert(discclient.PreciseItemInsert{Label: "nonfinite", Big: "1", F32: &nan32, F64: &nan, F64s: &f64s})
+	if err != nil {
+		panic(err)
+	}
+	read, err := builder.Filter(".label = 'nonfinite'", nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(nonfinite("inserted", special))
+	fmt.Println(nonfinite("selected", read[0]))
 }
 `;
 
@@ -127,6 +174,24 @@ fn line(label: &str, item: &PreciseItem) -> String {
     format!("{} {} {} {} {} {}", label, item.big.0, item.dec.as_ref().unwrap().0, item.i64.unwrap(), bigs.join(","), item.f64.unwrap())
 }
 
+/// A float as the server writes it.
+fn text(x: f64) -> String {
+    if x.is_nan() {
+        "NaN".to_string()
+    } else if x == f64::INFINITY {
+        "Infinity".to_string()
+    } else if x == f64::NEG_INFINITY {
+        "-Infinity".to_string()
+    } else {
+        x.to_string()
+    }
+}
+
+fn nonfinite(label: &str, item: &PreciseItem) -> String {
+    let f64s: Vec<String> = item.f64s.as_ref().unwrap().iter().map(|x| text(*x)).collect();
+    format!("nonfinite {} {} {} {}", label, text(item.f64.unwrap()), text(item.f32.unwrap() as f64), f64s.join(","))
+}
+
 fn main() {
     let port: u16 = std::env::args().nth(1).unwrap().parse().unwrap();
     let client = DiscClient::new("127.0.0.1", port);
@@ -139,6 +204,7 @@ fn main() {
             dec: Some(exact("${DEC}")),
             f64: Some(0.5),
             i64: Some(${I64}),
+            ..Default::default()
         })
         .unwrap();
     let selected = builder.select(None).unwrap();
@@ -149,6 +215,19 @@ fn main() {
     println!("filtered {}", filtered.len());
     let nan = builder.filter(Some(".dec = <decimal>$d"), serde_json::json!({ "d": "NaN" }));
     println!("nan rejected {}", nan.is_err_and(|error| format!("{:?}", error).contains("invalid value for std::decimal")));
+    let special = builder
+        .insert(PreciseItemInsert {
+            label: "nonfinite".to_string(),
+            big: exact("1"),
+            f32: Some(f32::NAN),
+            f64: Some(f64::NAN),
+            f64s: Some(vec![f64::INFINITY, -0.25, f64::NEG_INFINITY]),
+            ..Default::default()
+        })
+        .unwrap();
+    let read = builder.filter(Some(".label = 'nonfinite'"), serde_json::json!({})).unwrap();
+    println!("{}", nonfinite("inserted", &special));
+    println!("{}", nonfinite("selected", &read[0]));
 }
 `;
 
@@ -210,7 +289,7 @@ async function withServer(body: (port: number, manager: SchemaManager) => Promis
 }
 
 Deno.test({
-  name: "PG exact numbers: the generated Go client round-trips bigint, decimal and int64",
+  name: "PG exact numbers: the generated Go client round-trips bigint, decimal, int64 and non-finite floats",
   ignore: !canRunPgTests() || !(await toolAvailable("go", ["version"])),
   sanitizeOps: false,
   sanitizeResources: false,
@@ -230,7 +309,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "PG exact numbers: the generated Rust client round-trips bigint, decimal and int64",
+  name: "PG exact numbers: the generated Rust client round-trips bigint, decimal, int64 and non-finite floats",
   ignore: !canRunPgTests() || !(await toolAvailable("cargo", ["--version"])),
   sanitizeOps: false,
   sanitizeResources: false,

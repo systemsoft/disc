@@ -289,6 +289,18 @@ export interface DeclaredRewrites {
   typeName: string;
 }
 
+/**
+ * Add the finite CHECK of a `decimal` or `bigint` column (no NaN or
+ * ±Infinity, and for a bigint no fractional part; see
+ * `DDLGenerator.finiteCheck`) that the database lacks. Columns created before
+ * Disc emitted the check don't have it, and the stored schema snapshot
+ * already declares their type, so the differ never sees the change;
+ * `reconcileFiniteChecks` finds them in the database.
+ */
+export interface AddFiniteCheckOperation extends MigrationOperation, DeclaredColumn {
+  kind: "AddFiniteCheck";
+}
+
 /*** A concrete type's table and the tables of the abstract types it extends (see `MirrorAbstractTypeOperation`). ***/
 export interface DeclaredAbstractMirror {
   /** The abstract ancestors' tables, nearest first; empty when the type extends no abstract type. */

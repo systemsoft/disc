@@ -79,12 +79,17 @@ const STDLIB_SQL = [
   // ±Infinity. PostgreSQL's numeric has them; Gel's decimal and bigint do not
   // (Gel rejects 'NaN' in str_to_decimal and NaN/±Infinity in a float →
   // decimal cast), so they are an InvalidValueError, SQLSTATE 22P02. numeric
-  // compares NaN equal to itself, so `IN` finds it. The array form checks
-  // each element.
+  // compares NaN equal to itself, so `IN` finds it. A `std::bigint` must also
+  // have no fractional part (Gel's `bigint_t` domain checks `scale(VALUE) =
+  // 0`; its `str_to_bigint` rejects '1.5' with this message). The array form
+  // checks each element.
   `CREATE OR REPLACE FUNCTION disc_finite_numeric(value numeric, type_name text) RETURNS numeric AS $$
      BEGIN
        IF value IN ('NaN', 'Infinity', '-Infinity') THEN
          RAISE EXCEPTION USING ERRCODE = 'invalid_text_representation', MESSAGE = format('invalid value for %s: %L', type_name, value::text);
+       END IF;
+       IF type_name = 'std::bigint' AND scale(value) <> 0 THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_text_representation', MESSAGE = format('invalid input syntax for type %s: %L', type_name, value::text);
        END IF;
        RETURN value;
      END;
@@ -113,6 +118,13 @@ const STDLIB_SQL = [
 
   `CREATE OR REPLACE FUNCTION disc_array_all_match(vals text[], pattern text) RETURNS boolean AS $$
      SELECT bool_and(e.v ~ pattern) FROM (SELECT unnest(vals) AS v) AS e;
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  // The finite CHECK of a `multi` bigint or `array<bigint>` column
+  // (migration/ddl.ts `finiteCheck`): every element has no fractional part.
+  // NaN and ±Infinity have no scale; the CHECK's `&&` rejects those.
+  `CREATE OR REPLACE FUNCTION disc_array_integral(vals numeric[]) RETURNS boolean AS $$
+     SELECT bool_and(scale(e.v) = 0) FROM (SELECT unnest(vals) AS v) AS e;
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
 
   // `update … set { multi_prop -= values }`: the elements of `vals` not in

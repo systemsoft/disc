@@ -19,12 +19,14 @@ import {
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
+  reconcileFiniteChecks,
   reconcileLinkDeleteRules,
   reconcileRewrites,
   reconcileTextColumns,
   withoutDropsOf,
   type ExistingColumn,
   type ExistingDeleteRules,
+  type ExistingFiniteChecks,
   type ExistingTriggers
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
@@ -353,6 +355,8 @@ export class MigrationEngine {
     for (const missing of deleteRules.missingForeignKeys)
       logger.warn(`Delete-rule check: ${missing}`);
 
+    const declaredColumns = this.differ.declaredColumns(schema, property => this.ddlGenerator.propertyColumnType(property));
+
     return [
       // Junction columns of link properties declared before Disc stored them
       // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
@@ -373,9 +377,19 @@ export class MigrationEngine {
       // `array<Enum>`, … — see `reconcileTextColumns`). Last, so any enum the
       // plan creates or renames already has its final name.
       ...await reconcileTextColumns(
-        this.differ.declaredColumns(schema, property => this.ddlGenerator.propertyColumnType(property)),
+        declaredColumns,
         planned,
         tableName => this.readExistingColumns(db, tableName)
+      ),
+      // The CHECKs keeping NaN, ±Infinity and fractional bigints out of
+      // decimal and bigint columns created before Disc emitted them (see
+      // `reconcileFiniteChecks`). After the conversions, so a column that
+      // was TEXT is numeric by then.
+      ...await reconcileFiniteChecks(
+        declaredColumns,
+        planned,
+        column => this.ddlGenerator.finiteCheck(column.tableName, column.columnName, column.propertyType, column.multi === true)?.name,
+        tableNames => this.readExistingFiniteChecks(db, tableNames)
       ),
       // The copies of concrete types' rows in their abstract ancestors'
       // tables, which links to an abstract type reference (see
@@ -1747,6 +1761,25 @@ export class MigrationEngine {
     const existing = new Set(result.rows.map(row => (row as { tablename: string; }).tablename));
 
     return indexes.filter(index => existing.has(index.table));
+  }
+
+  /*** The CHECK constraints and columns of the existing tables among `tableNames`. Feeds the finite-check repair. ***/
+  private async readExistingFiniteChecks(db: SqlReader, tableNames: string[]): Promise<ExistingFiniteChecks> {
+    const checks = await db.query(
+      `SELECT t.relname AS table_name, c.conname AS constraint_name
+         FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'c' AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
+      [tableNames]
+    );
+    const columns = await db.query(
+      `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ANY($1::text[])`,
+      [tableNames]
+    );
+
+    return {
+      checks: new Set(checks.rows.map(row => `${(row as { table_name: string; }).table_name}.${(row as { constraint_name: string; }).constraint_name}`)),
+      columns: new Set(columns.rows.map(row => `${(row as { table_name: string; }).table_name}.${(row as { column_name: string; }).column_name}`))
+    };
   }
 
   /*** The tables with a `disc_abstract_mirror` trigger, each with the trigger's arguments: the abstract tables it copies rows to. ***/

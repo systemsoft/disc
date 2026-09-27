@@ -82,6 +82,7 @@ const STD_IMPORTS: ReadonlyArray<{ path: string; selector: string; }> = [
   { path: "bytes", selector: "bytes." },
   { path: "encoding/json", selector: "json." },
   { path: "fmt", selector: "fmt." },
+  { path: "math", selector: "math." },
   { path: "net/http", selector: "http." },
   { path: "sort", selector: "sort." },
   { path: "strings", selector: "strings." }
@@ -90,6 +91,20 @@ const STD_IMPORTS: ReadonlyArray<{ path: string; selector: string; }> = [
 function isMulti(cardinality: string): boolean {
   return cardinality === "Many" || cardinality === "AtLeastOne";
 }
+
+/** A struct field's Go identifier, type and JSON tag. */
+interface GoField {
+  ident: string;
+  tag: string;
+  type: string;
+}
+
+/**
+ * The float field types whose JSON the generated methods convert (see
+ * FLOAT_JSON_GO): a float, a pointer to one, a slice of them, a pointer to a
+ * slice — groups: pointer, slice, bits.
+ */
+const FLOAT_FIELD = /^(\*?)(\[\])?float(32|64)$/;
 
 /**
  * PascalCase a schema identifier into an exported Go identifier, preserving any
@@ -133,6 +148,8 @@ function goTypeName(qn: QualifiedName): string {
 
 class GoEmitter {
   private config: Types.CodegenConfig;
+  /** Whether a struct has float fields, so models.go needs FLOAT_JSON_GO. */
+  private floatJSON = false;
   private ir: CodegenIR;
   /** Qualified keys ("module::name") of every object + enum the package defines. */
   private known: Set<string>;
@@ -277,6 +294,9 @@ class GoEmitter {
       }
     }
 
+    if (this.floatJSON)
+      body += FLOAT_JSON_GO;
+
     return this.fileHeader(body) + body;
   }
 
@@ -292,29 +312,98 @@ class GoEmitter {
   }
 
   private emitStruct(obj: ObjectType, name: string): string {
-    let out = "";
-    out += `type ${name} struct {\n`;
-    for (const field of obj.fields) {
-      const ident = pascalize(field.name);
-      const ty = this.goFieldType(field.type, field.cardinality);
-      const tag = this.fieldOmitEmpty(field) ?
-        `${field.name},omitempty` :
-        field.name;
-      out += `\t${ident} ${ty} \`json:${JSON.stringify(tag)}\`\n`;
-    }
-    out += "}\n";
-    return out;
+    return this.emitFields(
+      name,
+      obj.fields.map(field => ({
+        ident: pascalize(field.name),
+        tag: this.fieldOmitEmpty(field) ? `${field.name},omitempty` : field.name,
+        type: this.goFieldType(field.type, field.cardinality)
+      }))
+    );
   }
 
   private emitShapeStruct(name: string, fields: ShapeField[]): string {
+    return this.emitFields(
+      name,
+      fields.map(sf => ({
+        ident: pascalize(sf.name),
+        tag: sf.optional ? `${sf.name},omitempty` : sf.name,
+        type: this.goShapeFieldType(sf)
+      }))
+    );
+  }
+
+  /** A struct of `fields`, with the JSON methods of its float fields (see {@link emitFloatJSON}). */
+  private emitFields(name: string, fields: GoField[]): string {
     let out = "";
     out += `type ${name} struct {\n`;
-    for (const sf of fields) {
-      const ident = pascalize(sf.name);
-      const ty = this.goShapeFieldType(sf);
-      const tag = sf.optional ? `${sf.name},omitempty` : sf.name;
-      out += `\t${ident} ${ty} \`json:${JSON.stringify(tag)}\`\n`;
+    for (const field of fields)
+      out += `\t${field.ident} ${field.type} \`json:${JSON.stringify(field.tag)}\`\n`;
+    out += "}\n";
+    return out + this.emitFloatJSON(name, fields);
+  }
+
+  /**
+   * `UnmarshalJSON` and `MarshalJSON` for a struct with float fields. JSON has
+   * no number for a NaN or ±Infinity float; Disc (like PostgreSQL and Gel)
+   * writes and reads them as the strings "NaN", "Infinity" and "-Infinity",
+   * which encoding/json can't put in a float64 (nor write one as). The fields
+   * keep their float types: each method shadows them with a same-named field
+   * of FLOAT_JSON_GO's `discFloat64`/`discFloat32` (a field of the outer
+   * struct wins over the embedded alias's), converted from or to the field.
+   */
+  private emitFloatJSON(name: string, fields: GoField[]): string {
+    const floats = fields.flatMap(field => {
+      const match = FLOAT_FIELD.exec(field.type);
+      return match ? [{ ...field, bits: match[3], pointer: match[1] === "*", slice: match[2] === "[]" }] : [];
+    });
+    if (floats.length === 0)
+      return "";
+    this.floatJSON = true;
+
+    const shadows = (decode: boolean): string =>
+      floats
+        .map(field => {
+          const disc = `discFloat${field.bits}`;
+          const type = field.slice ? `${field.pointer ? "*" : ""}[]${disc}` : field.pointer || decode ? `*${disc}` : disc;
+          return `\t\t${field.ident} ${type} \`json:${JSON.stringify(field.tag)}\`\n`;
+        })
+        .join("");
+
+    let out = "\n";
+    out += "// UnmarshalJSON reads the float fields, whose NaN and ±Infinity arrive as the strings \"NaN\", \"Infinity\" and \"-Infinity\".\n";
+    out += `func (v *${name}) UnmarshalJSON(data []byte) error {\n`;
+    out += `\ttype alias ${name}\n`;
+    out += "\taux := struct {\n\t\t*alias\n";
+    out += shadows(true);
+    const direct = floats.filter(field => !field.pointer && !field.slice);
+    out += `\t}{${["alias: (*alias)(v)", ...direct.map(field => `${field.ident}: (*discFloat${field.bits})(&v.${field.ident})`)].join(", ")}}\n`;
+    out += "\tif err := json.Unmarshal(data, &aux); err != nil {\n\t\treturn err\n\t}\n";
+    for (const field of floats) {
+      const float = `float${field.bits}`;
+      if (field.slice)
+        out += `\tv.${field.ident} = ${field.pointer ? "convertOptionalFloats" : "convertFloats"}[${float}](aux.${field.ident})\n`;
+      else if (field.pointer)
+        out += `\tv.${field.ident} = (*${float})(aux.${field.ident})\n`;
     }
+    out += "\treturn nil\n";
+    out += "}\n\n";
+
+    out += "// MarshalJSON writes the float fields' NaN and ±Infinity as the strings \"NaN\", \"Infinity\" and \"-Infinity\", which encoding/json refuses.\n";
+    out += `func (v ${name}) MarshalJSON() ([]byte, error) {\n`;
+    out += `\ttype alias ${name}\n`;
+    out += "\treturn json.Marshal(struct {\n\t\talias\n";
+    out += shadows(false);
+    const values = floats.map(field => {
+      const disc = `discFloat${field.bits}`;
+      const value = field.slice ?
+        `${field.pointer ? "convertOptionalFloats" : "convertFloats"}[${disc}](v.${field.ident})` :
+        field.pointer ?
+        `(*${disc})(v.${field.ident})` :
+        `${disc}(v.${field.ident})`;
+      return `${field.ident}: ${value}`;
+    });
+    out += `\t}{${["alias: alias(v)", ...values].join(", ")}})\n`;
     out += "}\n";
     return out;
   }
@@ -577,6 +666,89 @@ class GoEmitter {
 }
 
 /*** RUNTIME ------------------------------------------ ***/
+
+/**
+ * The float JSON the generated `UnmarshalJSON`/`MarshalJSON` methods use (see
+ * `emitFloatJSON`), appended to models.go when a struct has float fields.
+ */
+const FLOAT_JSON_GO = `// discFloat64 and discFloat32 are floats as Disc's JSON carries them: numbers, with NaN
+// and ±Infinity as the strings "NaN", "Infinity" and "-Infinity" (PostgreSQL's and Gel's
+// JSON form), which encoding/json can't read into a float nor write.
+type discFloat64 float64
+
+type discFloat32 float32
+
+func (f discFloat64) MarshalJSON() ([]byte, error) {
+	return marshalFloat(float64(f), 64)
+}
+
+func (f *discFloat64) UnmarshalJSON(data []byte) error {
+	x, err := unmarshalFloat(data)
+	*f = discFloat64(x)
+	return err
+}
+
+func (f discFloat32) MarshalJSON() ([]byte, error) {
+	return marshalFloat(float64(f), 32)
+}
+
+func (f *discFloat32) UnmarshalJSON(data []byte) error {
+	x, err := unmarshalFloat(data)
+	*f = discFloat32(x)
+	return err
+}
+
+func marshalFloat(x float64, bits int) ([]byte, error) {
+	switch {
+	case math.IsNaN(x):
+		return []byte(\`"NaN"\`), nil
+	case math.IsInf(x, 1):
+		return []byte(\`"Infinity"\`), nil
+	case math.IsInf(x, -1):
+		return []byte(\`"-Infinity"\`), nil
+	case bits == 32:
+		return json.Marshal(float32(x))
+	}
+	return json.Marshal(x)
+}
+
+func unmarshalFloat(data []byte) (float64, error) {
+	switch string(data) {
+	case \`"NaN"\`:
+		return math.NaN(), nil
+	case \`"Infinity"\`:
+		return math.Inf(1), nil
+	case \`"-Infinity"\`:
+		return math.Inf(-1), nil
+	case "null":
+		return 0, nil
+	}
+	var x float64
+	err := json.Unmarshal(data, &x)
+	return x, err
+}
+
+// convertFloats copies floats to another float type; nil stays nil.
+func convertFloats[To, From ~float32 | ~float64](floats []From) []To {
+	if floats == nil {
+		return nil
+	}
+	out := make([]To, len(floats))
+	for i, x := range floats {
+		out[i] = To(x)
+	}
+	return out
+}
+
+// convertOptionalFloats is convertFloats through a pointer; nil stays nil.
+func convertOptionalFloats[To, From ~float32 | ~float64](floats *[]From) *[]To {
+	if floats == nil {
+		return nil
+	}
+	out := convertFloats[To](*floats)
+	return &out
+}
+`;
 
 /**
  * Static, schema-independent runtime: a minimal Disc client over net/http that

@@ -12,6 +12,11 @@
  * raised by the cast that would produce it, so no such value is written and
  * no client ever has to decode one.
  *
+ * `bigint` has no fractional part either (the `bigint_t` domain's
+ * `scale(VALUE) = 0`): Gel's `str_to_bigint` rejects '1.5' with "invalid input
+ * syntax for type std::bigint", and so does a write of one here; a cast from a
+ * decimal or a float rounds, as Gel's `round($1)::edgedbt.bigint_t` does.
+ *
  * `float32`/`float64` do hold NaN and ±Infinity, as in Gel. JSON has no number
  * for them, so the wire form is PostgreSQL's (`to_jsonb`), which Gel's JSON
  * output also is: the strings "NaN", "Infinity", "-Infinity" — bare, in a
@@ -20,7 +25,7 @@
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
 
-import { assert, assertEquals, assertMatch } from "@std/assert";
+import { assert, assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
@@ -88,8 +93,8 @@ Deno.test({
     }
 
     /*** Each answered row's one value. ***/
-    async function scalars(query: string): Promise<unknown[]> {
-      return ((await data(query)) as Record<string, unknown>[]).map(row => Object.values(row)[0]);
+    async function scalars(query: string, variables?: Record<string, unknown>): Promise<unknown[]> {
+      return ((await data(query, variables)) as Record<string, unknown>[]).map(row => Object.values(row)[0]);
     }
 
     /*** `query` fails as Gel's InvalidValueError for `typeName` (SQLSTATE 22P02). ***/
@@ -99,6 +104,15 @@ Deno.test({
       assert(error, `${query} should fail, answered ${JSON.stringify(reply.body)}`);
       assertEquals(error.extensions?.sqlState, "22P02", `${query}: ${error.message}`);
       assertMatch(error.message, new RegExp(`invalid value for ${typeName}`), query);
+    }
+
+    /*** `query` fails as Gel's InvalidValueError for a bigint with a fractional part, `value`. ***/
+    async function rejectsFraction(query: string, value: string, variables?: Record<string, unknown>): Promise<void> {
+      const reply = await post(query, variables);
+      const error = reply.body.errors?.[0];
+      assert(error, `${query} should fail, answered ${JSON.stringify(reply.body)}`);
+      assertEquals(error.extensions?.sqlState, "22P02", `${query}: ${error.message}`);
+      assertStringIncludes(error.message, `invalid input syntax for type std::bigint: '${value}'`, query);
     }
 
     try {
@@ -125,6 +139,21 @@ Deno.test({
       await rejects("insert Reading { label := 'x', decs := $ds }", "std::decimal", { ds: ["1", "NaN"] });
       await rejects("insert Reading { label := 'x', dec := <float64>'Infinity' }", "std::decimal");
       await rejects("insert Reading { label := 'x', dec := 'NaN' }", "std::decimal");
+
+      /*** A bigint has no fractional part: from text or an untyped value it is rejected, as Gel's str_to_bigint does. ***/
+      await rejectsFraction("select <bigint>'1.5'", "1.5");
+      await rejectsFraction("select <bigint>'12.0'", "12.0");
+      await rejectsFraction("select to_bigint('-0.5')", "-0.5");
+      await rejectsFraction("select <bigint>$b", "1.5", { b: "1.5" });
+      await rejectsFraction("select <array<bigint>>['1', '2.5']", "2.5");
+      await rejectsFraction("insert Reading { label := 'x', big := $b }", "2.5", { b: "2.5" });
+      await rejectsFraction("insert Reading { label := 'x', big := 1.5 }", "1.5");
+      await rejectsFraction("insert Reading { label := 'x', big := 1.5n }", "1.5");
+      /*** From a decimal or a float, it is rounded, as Gel's casts do. ***/
+      assertEquals(await scalars("select <bigint>1.5n"), [2]);
+      assertEquals(await scalars("select <bigint>-2.5n"), [-3]);
+      assertEquals(await scalars("select <bigint><float64>'3.5'"), [4]);
+      assertEquals(await scalars("select <bigint>(7n / 2n)"), [4]);
       assertEquals(await scalars("select count(Reading)"), [0]);
 
       await data("insert Reading { label := 'ok', big := <bigint>$b, dec := <decimal>$d, decs := <array<decimal>>$ds }", {
@@ -135,6 +164,7 @@ Deno.test({
       await rejects("update Reading filter .label = 'ok' set { dec := <decimal>$d }", "std::decimal", { d: "NaN" });
       await rejects("update Reading filter .label = 'ok' set { dec := .dec + <decimal><float64>'Infinity' }", "std::decimal");
       await rejects("update Reading filter .label = 'ok' set { big := $b }", "std::bigint", { b: "NaN" });
+      await rejectsFraction("update Reading filter .label = 'ok' set { big := .dec }", "1.5");
       await data("update Reading filter .label = 'ok' set { f64 := <float64>'NaN' }");
       await rejects("update Reading filter .label = 'ok' set { dec := .f64 }", "std::decimal");
 
@@ -153,6 +183,13 @@ Deno.test({
       assertEquals(await scalars("select <float64>'NaN'"), ["NaN"]);
       assertEquals(await scalars("select [<float64>'-Infinity', 0.5]"), [["-Infinity", 0.5]]);
       assertEquals(await scalars("select Reading.f64 filter Reading.label = 'f'"), ["NaN"]);
+
+      /*** A client sends them the same way: as those strings, in a float variable. ***/
+      assertEquals(await scalars("select <float64>$f", { f: "NaN" }), ["NaN"]);
+      assertEquals(await scalars("select <float32>$f", { f: "-Infinity" }), ["-Infinity"]);
+      assertEquals(await scalars("select <array<float64>>$fs", { fs: ["Infinity", 0.5, "NaN"] }), [["Infinity", 0.5, "NaN"]]);
+      await data("insert Reading { label := 'sent', f64 := <float64>$f, f64s := <array<float64>>$fs }", { f: "Infinity", fs: ["NaN", 2] });
+      assertEquals(await data("select Reading { f64, f64s } filter .label = 'sent'"), [{ f64: "Infinity", f64s: ["NaN", 2] }]);
     } finally {
       await listener.shutdown();
       await resetTestDatabase(pool);

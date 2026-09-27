@@ -168,6 +168,8 @@ function rustVariantIdent(member: string): string {
 
 class RustEmitter {
   private config: Types.CodegenConfig;
+  /** Whether a struct has float fields, so lib.rs needs DISC_FLOAT_RS. */
+  private floatFields = false;
   private ir: CodegenIR;
   /** Qualified keys ("module::name") of every object + enum the crate defines. */
   private known: Set<string>;
@@ -298,17 +300,40 @@ class RustEmitter {
       out += "pub mod disc_runtime;\n\n";
     out += EXACT_NUMBER_RS;
 
+    let modules = "";
     for (const mod of this.ir.modules) {
       if (mod.name === "default") {
-        out += this.emitModuleBody(mod);
+        modules += this.emitModuleBody(mod);
       } else {
-        out += `pub mod ${mod.name} {\n`;
-        out += this.indent(this.emitModuleBody(mod), "    ");
-        out += "}\n\n";
+        modules += `pub mod ${mod.name} {\n`;
+        modules += this.indent(this.emitModuleBody(mod), "    ");
+        modules += "}\n\n";
       }
     }
 
-    return out;
+    if (this.floatFields)
+      out += DISC_FLOAT_RS;
+
+    return out + modules;
+  }
+
+  /** Whether `ref` is a float, or an array of them (at any depth). */
+  private isFloat(ref: TypeRef): boolean {
+    if (ref.kind === "array")
+      return this.isFloat(ref.element);
+    return ref.kind === "scalar" && (ref.scalar === "float32" || ref.scalar === "float64");
+  }
+
+  /**
+   * The serde attribute routing a float field (`f64`, `f32`, or an Option or
+   * Vec of them) through DISC_FLOAT_RS, which reads and writes NaN and
+   * ±Infinity as the strings the server uses; empty for other fields.
+   */
+  private floatAttribute(ref: TypeRef, direction: "deserialize" | "serialize"): string[] {
+    if (!this.isFloat(ref))
+      return [];
+    this.floatFields = true;
+    return [`${direction}_with = "crate::disc_float::${direction}"`];
   }
 
   /** Emit one module's enums, structs, shapes and builders (crate-root or inside a `mod`). */
@@ -383,12 +408,12 @@ class RustEmitter {
   private emitStructField(field: Field): string {
     const id = rustFieldIdent(field.name);
     const ty = this.rustFieldType(field.type, field.cardinality);
-    let out = "";
     // Tolerate fields absent from partial results (e.g. `select { * }` omits links).
+    const attrs = ["default", ...this.floatAttribute(field.type, "deserialize")];
     if (id.rename)
-      out += `    #[serde(default, rename = ${JSON.stringify(id.rename)})]\n`;
-    else
-      out += "    #[serde(default)]\n";
+      attrs.push(`rename = ${JSON.stringify(id.rename)}`);
+    let out = "";
+    out += `    #[serde(${attrs.join(", ")})]\n`;
     out += `    pub ${id.ident}: ${ty},\n`;
     return out;
   }
@@ -411,7 +436,7 @@ class RustEmitter {
     for (const sf of fields) {
       const id = rustFieldIdent(sf.name);
       const ty = this.rustShapeFieldType(sf);
-      const attrs: string[] = [];
+      const attrs = this.floatAttribute(sf.type, "serialize");
       if (sf.optional)
         attrs.push("skip_serializing_if = \"Option::is_none\"");
       if (id.rename)
@@ -665,6 +690,135 @@ pub struct ExactNumber(pub serde_json::Number);
 impl Default for ExactNumber {
     fn default() -> Self {
         ExactNumber(serde_json::Number::from(0))
+    }
+}
+
+`;
+
+/**
+ * Float fields' serde helpers (see `floatAttribute`), in lib.rs when a struct
+ * has float fields. JSON has no number for a NaN or ±Infinity float; the
+ * server writes and reads them as the strings "NaN", "Infinity" and
+ * "-Infinity", which serde_json can't read into an f64 (and writes a
+ * non-finite one as null). A trait covers every field type a float can have:
+ * the float, and an Option or Vec of one. Deserializing goes through
+ * serde_json::Value, which reads numbers correctly under `arbitrary_precision`.
+ */
+const DISC_FLOAT_RS = `/// Floats as Disc's JSON carries them: numbers, with NaN and ±Infinity as the strings
+/// "NaN", "Infinity" and "-Infinity" (PostgreSQL's and Gel's JSON form), which serde_json
+/// can't read into an f64 (and writes as null). Float fields use
+/// \`#[serde(deserialize_with = "crate::disc_float::deserialize")]\` (or \`serialize_with\`).
+pub mod disc_float {
+    use serde::ser::SerializeSeq;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    /// A float field: an \`f64\` or \`f32\`, or an \`Option\` or \`Vec\` of one.
+    pub trait FloatField: Sized {
+        fn serialize_float<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>;
+        fn from_json(value: serde_json::Value) -> Result<Self, String>;
+    }
+
+    /// The string a non-finite float is written as.
+    fn non_finite(x: f64) -> Option<&'static str> {
+        if x.is_nan() {
+            Some("NaN")
+        } else if x == f64::INFINITY {
+            Some("Infinity")
+        } else if x == f64::NEG_INFINITY {
+            Some("-Infinity")
+        } else {
+            None
+        }
+    }
+
+    fn parse(value: serde_json::Value) -> Result<f64, String> {
+        match &value {
+            serde_json::Value::Number(n) => n.as_f64().ok_or_else(|| format!("invalid float: {}", n)),
+            serde_json::Value::String(s) => match s.as_str() {
+                "NaN" => Ok(f64::NAN),
+                "Infinity" => Ok(f64::INFINITY),
+                "-Infinity" => Ok(f64::NEG_INFINITY),
+                _ => Err(format!("invalid float: {}", value)),
+            },
+            _ => Err(format!("invalid float: {}", value)),
+        }
+    }
+
+    impl FloatField for f64 {
+        fn serialize_float<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            match non_finite(*self) {
+                Some(text) => serializer.serialize_str(text),
+                None => serializer.serialize_f64(*self),
+            }
+        }
+
+        fn from_json(value: serde_json::Value) -> Result<Self, String> {
+            parse(value)
+        }
+    }
+
+    impl FloatField for f32 {
+        fn serialize_float<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            match non_finite(*self as f64) {
+                Some(text) => serializer.serialize_str(text),
+                None => serializer.serialize_f32(*self),
+            }
+        }
+
+        fn from_json(value: serde_json::Value) -> Result<Self, String> {
+            parse(value).map(|x| x as f32)
+        }
+    }
+
+    impl<T: FloatField> FloatField for Option<T> {
+        fn serialize_float<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            match self {
+                Some(x) => x.serialize_float(serializer),
+                None => serializer.serialize_none(),
+            }
+        }
+
+        fn from_json(value: serde_json::Value) -> Result<Self, String> {
+            if value.is_null() {
+                Ok(None)
+            } else {
+                T::from_json(value).map(Some)
+            }
+        }
+    }
+
+    impl<T: FloatField> FloatField for Vec<T> {
+        fn serialize_float<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut seq = serializer.serialize_seq(Some(self.len()))?;
+            for x in self {
+                seq.serialize_element(&Element(x))?;
+            }
+            seq.end()
+        }
+
+        fn from_json(value: serde_json::Value) -> Result<Self, String> {
+            match value {
+                serde_json::Value::Array(items) => items.into_iter().map(T::from_json).collect(),
+                other => Err(format!("expected an array of floats: {}", other)),
+            }
+        }
+    }
+
+    /// One element of a \`Vec\` field, serialized as a float field.
+    struct Element<'a, T>(&'a T);
+
+    impl<T: FloatField> Serialize for Element<'_, T> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            self.0.serialize_float(serializer)
+        }
+    }
+
+    pub fn serialize<T: FloatField, S: Serializer>(value: &T, serializer: S) -> Result<S::Ok, S::Error> {
+        value.serialize_float(serializer)
+    }
+
+    pub fn deserialize<'de, T: FloatField, D: Deserializer<'de>>(deserializer: D) -> Result<T, D::Error> {
+        T::from_json(serde_json::Value::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
 }
 
