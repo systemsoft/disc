@@ -64,8 +64,10 @@ import {
 } from "../lib/errors.ts";
 import { QueryCache } from "../lib/query-cache.ts";
 import {
+  appendSetDescriptor,
   appendTypeDescriptor,
   decodeWireValue,
+  encodeSetValue,
   encodeWireValue,
   hasWireCodec,
   mapWireTypeScalars,
@@ -214,15 +216,15 @@ function buildEmptyStateDescriptor(): {
 //   CTYPE_INPUT_SHAPE (=8): [u8 t][16 tid][u16 els]
 //                           per el: [u32 flags][u8 cardinality]
 //                                   [u32 nameLen][bytes name][u16 pos]
-//   CTYPE_SHAPE       (=1): [u8 t][16 tid][u8 isCompound=0][u16 ephemeral=0]
-//                           [u16 els]
+//   CTYPE_SHAPE       (=1): [u8 t][16 tid][u8 ephemeralFreeShape]
+//                           [u16 objectTypePos=0][u16 els]
 //                           per el: [u32 flags][u8 cardinality]
 //                                   [u32 nameLen][bytes name][u16 pos]
-//                                   [u16 sourceTypePos]
+//                                   [u16 sourceTypePos=0]
 //
 // Each descriptor in the typedesc block is itself u32-length-prefixed.
-// Base scalars, arrays and tuples are encoded by `appendTypeDescriptor`
-// (`protocol/collection-codecs.ts`).
+// Base scalars, arrays and tuples are encoded by `appendTypeDescriptor`,
+// sets by `appendSetDescriptor` (`protocol/collection-codecs.ts`).
 
 interface ShapeElementV2 {
   name: string;
@@ -233,13 +235,14 @@ interface ShapeElementV2 {
 
 function encodeShapeV2(
   tid: Uint8Array,
-  elements: ShapeElementV2[]
+  elements: ShapeElementV2[],
+  free = false
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt8(1);
   w.writeUUID(tid);
-  w.writeUInt8(0); // is_compound
-  w.writeUInt16(0); // ephemeral_free_objects
+  w.writeUInt8(free ? 1 : 0); // ephemeral_free_shape
+  w.writeUInt16(0); // object type pos
   w.writeUInt16(elements.length);
   for (const el of elements) {
     w.writeUInt32(0); // flags
@@ -281,8 +284,11 @@ interface OutputField {
    * optional+single→AT_MOST_ONE, required+multi→AT_LEAST_ONE,
    * optional+multi→MANY. Drives the per-element cardinality emitted by
    * `buildOutputDescriptor` so the binary type descriptor is honest.
+   * A multi cardinality (MANY, AT_LEAST_ONE) makes the field a set.
    */
   cardinality: number;
+  /** For a field of objects (a link, a `group`'s key and elements), their shape. */
+  shape?: OutputShape;
 }
 
 /**
@@ -314,6 +320,8 @@ interface OutputShape {
    * prefix, no per-field reserved/length wrapper).
    */
   isScalar?: boolean;
+  /** A free object (`group`'s results and their keys): no object type of the schema. */
+  free?: boolean;
   /**
    * The result cardinality, when the query's shape pins it down (a
    * selected scalar expression or set literal). Otherwise the
@@ -330,6 +338,8 @@ interface WithScope {
   aliases: Map<string, BoundAlias>;
   module?: string;
   schema?: DescribedSchema;
+  /** The object type a relative path (`.name`) starts from: a shape's, or a `group`'s. */
+  subject?: string;
 }
 
 /**
@@ -873,53 +883,7 @@ export function inferOutputShape(
     }
 
     const typeName = objectTypeName(expr, exprScope) ?? "Object";
-    const fields: OutputField[] = [];
-    const typeDef = scope.schema?.types?.get(typeName);
-
-    if (sel.shape) {
-      for (const el of sel.shape.elements) {
-        const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
-        if (!fieldName) {
-          continue;
-        }
-        // The schema's TypeDef uses `type` for the SQL type and may carry
-        // the original EdgeQL type via a property-level field. Always
-        // prefer the EdgeQL type since that's what the wire codec needs.
-        const propType = typeDef?.properties.get(fieldName);
-        if (propType) {
-          const eqlType = propType.baseType ?? propType.edgeqlType ?? propType.type ?? "uuid";
-          fields.push({
-            name: fieldName,
-            edgeqlType: builtinScalarType(eqlType, scope),
-            cardinality: cardinalityFor(
-              propType.required ?? false,
-              propType.multi ?? false
-            )
-          });
-          continue;
-        }
-        // Not a stored property — a link resolves to its target id (uuid)
-        // on the wire, but its cardinality reflects required/multi.
-        const linkDef = typeDef?.links?.get(fieldName);
-        if (linkDef) {
-          fields.push({
-            name: fieldName,
-            edgeqlType: "uuid",
-            cardinality: cardinalityFor(
-              linkDef.required ?? false,
-              linkDef.multi ?? false
-            )
-          });
-          continue;
-        }
-        // Unknown field — fall back to an optional single uuid.
-        fields.push({
-          name: fieldName,
-          edgeqlType: "uuid",
-          cardinality: Cardinality.AT_MOST_ONE
-        });
-      }
-    }
+    const fields = sel.shape ? shapeFields(typeName, sel.shape, scope) : [];
 
     if (fields.length === 0) {
       fields.push(idField);
@@ -927,7 +891,131 @@ export function inferOutputShape(
     return { typeName, fields };
   }
 
+  if (q.kind === "GroupQuery") {
+    return inferGroupShape(q as AST.GroupQuery, scope);
+  }
+
   return { typeName: "Object", fields: [idField] };
+}
+
+/**
+ * The fields of a shape on objects of `typeName`: a property as its type, a
+ * link as its objects in their sub-shape (`{id}` without one), a computed
+ * element as what its expression gives. Each has its cardinality, so a
+ * multi link or property, or a computed set, is described as a set.
+ */
+function shapeFields(typeName: string, shape: AST.Shape, scope: WithScope): OutputField[] {
+  const typeDef = scope.schema?.types?.get(typeName);
+  const fields: OutputField[] = [];
+  for (const el of shape.elements) {
+    const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
+    if (!fieldName) {
+      continue;
+    }
+    if (el.computable) {
+      fields.push(computedField(fieldName, el, { ...scope, subject: typeName }));
+      continue;
+    }
+    // The schema's TypeDef uses `type` for the SQL type and may carry
+    // the original EdgeQL type via a property-level field. Always
+    // prefer the EdgeQL type since that's what the wire codec needs.
+    const propType = typeDef?.properties.get(fieldName);
+    if (propType) {
+      const eqlType = propType.baseType ?? propType.edgeqlType ?? propType.type ?? "uuid";
+      fields.push({
+        name: fieldName,
+        edgeqlType: builtinScalarType(eqlType, scope),
+        cardinality: cardinalityFor(
+          propType.required ?? false,
+          propType.multi ?? false
+        )
+      });
+      continue;
+    }
+    const linkDef = typeDef?.links?.get(fieldName);
+    if (linkDef) {
+      const target = linkDef.target?.replace(/^default::/, "") ?? "Object";
+      fields.push({
+        name: fieldName,
+        edgeqlType: target,
+        cardinality: cardinalityFor(
+          linkDef.required ?? false,
+          linkDef.multi ?? false
+        ),
+        shape: objectShape(target, el.shape, scope)
+      });
+      continue;
+    }
+    // Unknown field — fall back to an optional single uuid.
+    fields.push({
+      name: fieldName,
+      edgeqlType: "uuid",
+      cardinality: Cardinality.AT_MOST_ONE
+    });
+  }
+  return fields;
+}
+
+/*** Objects of `typeName` in `shape`: Gel's implicit `{id}` without one. ***/
+function objectShape(typeName: string, shape: AST.Shape | undefined, scope: WithScope): OutputShape {
+  const fields = shape ? shapeFields(typeName, shape, scope) : [];
+  return {
+    fields: fields.length > 0 ? fields : [{ cardinality: Cardinality.ONE, edgeqlType: "uuid", name: "id" }],
+    typeName
+  };
+}
+
+/**
+ * A computed shape element (`n := count(.posts)`, `titles := .posts.title`,
+ * `r := .<author[is Post] { title }`), in the scope of the shape's objects:
+ * objects in their shape, or a scalar, with the expression's cardinality.
+ * An expression not described here is an optional uuid, as before.
+ */
+function computedField(name: string, el: AST.ShapeElement, scope: WithScope): OutputField {
+  const expr = el.expr.kind === "ShapeExpr" ? (el.expr as AST.ShapeExpr).expr : el.expr;
+  const shape = el.expr.kind === "ShapeExpr" ? (el.expr as AST.ShapeExpr).shape : el.shape;
+  const cardinality = expressionCardinality(expr, scope);
+  const objectType = objectTypeName(expr, scope);
+  const objectDef = objectType === null ? undefined : scope.schema?.types?.get(objectType);
+  if (objectType !== null && objectDef && objectDef.kind !== "enum") {
+    return { cardinality, edgeqlType: objectType, name, shape: objectShape(objectType, shape, scope) };
+  }
+  const scalar = inferScalarType(expr, scope);
+  if (scalar !== null) {
+    return { cardinality, edgeqlType: scalar, name };
+  }
+  return { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: "uuid", name };
+}
+
+/**
+ * A `group`'s results, as Gel describes them (edb/edgeql/desugar_group.py):
+ * free objects of `key` (a free object of each key by name), `grouping`
+ * (the key names, a set of str) and `elements` (the group's objects in the
+ * shape given, `{id}` without one). A `using` key has its expression's
+ * type, a `.p` key its property's.
+ */
+function inferGroupShape(group: AST.GroupQuery, scope: WithScope): OutputShape {
+  const subject = group.expr.kind === "ShapeExpr" ? (group.expr as AST.ShapeExpr).expr : group.expr;
+  const shape = group.expr.kind === "ShapeExpr" ? (group.expr as AST.ShapeExpr).shape : undefined;
+  const typeName = objectTypeName(subject, scope) ?? "Object";
+  const subjectScope: WithScope = { ...scope, subject: typeName };
+  const bound = new Map(group.using.map(binding => [binding.name.name, binding.value]));
+  const keys: OutputField[] = group.by.elements.map(by => {
+    const name = by.kind === "Identifier" ? (by as AST.Identifier).name : extractFieldNameFromExpr(by) ?? "expr";
+    // A bare `p` not bound by `using` names the property `.p`.
+    const expr: AST.Expression = bound.get(name) ??
+      (by.kind === "Identifier" ? { kind: "Path", steps: [{ kind: "PathStep", name, type: "property" }] } as AST.Path : by);
+    return { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: inferScalarType(expr, subjectScope) ?? "str", name };
+  });
+  return {
+    fields: [
+      { cardinality: Cardinality.ONE, edgeqlType: "FreeObject", name: "key", shape: { fields: keys, free: true, typeName: "FreeObject" } },
+      { cardinality: Cardinality.MANY, edgeqlType: "str", name: "grouping" },
+      { cardinality: Cardinality.MANY, edgeqlType: typeName, name: "elements", shape: objectShape(typeName, shape, scope) }
+    ],
+    free: true,
+    typeName: "FreeObject"
+  };
 }
 
 /**
@@ -1124,13 +1212,17 @@ interface ReachedPath {
  */
 function inferPath(path: AST.Path, scope: WithScope): ReachedPath | null {
   const types = scope.schema?.types;
-  if (!path.rooted || !types) {
+  if (!types || (!path.rooted && !scope.subject)) {
     return null;
   }
-  const [root, ...steps] = path.steps;
-  const rootIdentifier: AST.Identifier = { kind: "Identifier", name: root.name };
+  // A relative path (`.posts.title`) starts at one object of the subject.
+  const root = path.rooted ? path.steps[0] : undefined;
+  const steps = path.rooted ? path.steps.slice(1) : path.steps;
   let reached: ReachedPath;
-  if (scope.aliases.has(root.name)) {
+  if (!root) {
+    reached = { cardinality: Cardinality.ONE, object: true, type: scope.subject! };
+  } else if (scope.aliases.has(root.name)) {
+    const rootIdentifier: AST.Identifier = { kind: "Identifier", name: root.name };
     const type = objectTypeName(rootIdentifier, scope);
     if (type === null) {
       return null;
@@ -1384,6 +1476,11 @@ function buildInputDescriptor(
   return { id: packed.rootId, data: packed.data };
 }
 
+/*** A prepared statement's cache key: its output format describes it too (JSON as one str). ***/
+function statementKey(commandText: string, outputFormat: number): string {
+  return `${outputFormat}:${commandText}`;
+}
+
 /** Byte-for-byte equality on two 16-byte UUIDs. */
 function uuidsEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
@@ -1520,31 +1617,69 @@ function encodeRowAsObject(
   w.writeUInt32(shape.fields.length);
   for (const field of shape.fields) {
     w.writeUInt32(0); // reserved
-    const value = row?.[field.name];
-    if (value === null || value === undefined) {
+    const bytes = encodeFieldValue(field, row?.[field.name]);
+    if (bytes === null) {
       // -1 as a signed i32 is 0xFFFFFFFF unsigned.
       w.writeUInt32(0xffffffff);
       continue;
     }
-    if (!hasWireCodec(field.edgeqlType)) {
-      // Unknown scalar — surface as null rather than crashing the whole
-      // response. Client sees the field as missing; better than killing
-      // the session over an unimplemented codec.
-      w.writeUInt32(0xffffffff);
-      continue;
-    }
-    const bytes = encodeWireValue(field.edgeqlType, value);
     w.writeUInt32(bytes.length);
     w.writeBytes(bytes);
   }
   return w.toBytes();
 }
 
+/*** Whether a cardinality is multi (MANY, AT_LEAST_ONE): the field is a set. ***/
+function isMulti(cardinality: number): boolean {
+  return cardinality === Cardinality.MANY || cardinality === Cardinality.AT_LEAST_ONE;
+}
+
+/**
+ * A field's value bytes, null for NULL. A set field's value is the set of
+ * its elements (the executor's array; NULL is the empty set, as Gel sends
+ * an empty multi link). A single link with a sub-shape comes as a
+ * one-element array, which is its object.
+ */
+function encodeFieldValue(field: OutputField, value: unknown): Uint8Array | null {
+  if (isMulti(field.cardinality)) {
+    const items = Array.isArray(value) ? value : value === null || value === undefined ? [] : [value];
+    const arrayElements = !field.shape && parseWireType(field.edgeqlType).kind === "array";
+    return encodeSetValue(items.map(item => encodeElementValue(field, item)), arrayElements);
+  }
+  return encodeElementValue(field, field.shape && Array.isArray(value) ? value[0] : value);
+}
+
+/**
+ * One value of a field, null for NULL: an object in the field's shape (a
+ * bare uuid is the object `{id}`), or a scalar, array or tuple. An unknown
+ * scalar is NULL rather than crashing the whole response — the client sees
+ * the field as missing; better than killing the session over an
+ * unimplemented codec.
+ */
+function encodeElementValue(field: OutputField, value: unknown): Uint8Array | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (field.shape) {
+    return encodeRowAsObject(typeof value === "string" ? { id: value } : value as Record<string, unknown>, field.shape);
+  }
+  return hasWireCodec(field.edgeqlType) ? encodeWireValue(field.edgeqlType, value) : null;
+}
+
+/**
+ * The Data elements of a result. In JSON (Gel's `queryJSON`), the whole
+ * result is one JSON array — or, when the client expects at most one
+ * element (`querySingleJSON`), each element on its own, as Gel's
+ * `top_output_as_value` (edb/pgsql/compiler/output.py) aggregates only
+ * when not `expected_cardinality_one`. JSON_ELEMENTS is one JSON value per
+ * element.
+ */
 function encodeRowsAsObjects(
   rows: Record<string, unknown>[],
   shape: OutputShape,
   outputFormat: number,
-  values = false
+  values = false,
+  expectOne = false
 ): Uint8Array[] {
   if (outputFormat === OutputFormat.NONE) {
     return [];
@@ -1558,7 +1693,7 @@ function encodeRowsAsObjects(
     }) :
     rows;
 
-  if (outputFormat === OutputFormat.JSON) {
+  if (outputFormat === OutputFormat.JSON && !expectOne) {
     // JSON format: the whole result set is one JSON-encoded element.
     // Empty rows still emit `[]` so downstream JSON-parser callers see
     // a uniform shape — that's what the Phase 4.3 test asserts.
@@ -1567,7 +1702,7 @@ function encodeRowsAsObjects(
     ];
   }
 
-  if (outputFormat === OutputFormat.JSON_ELEMENTS) {
+  if (outputFormat === OutputFormat.JSON || outputFormat === OutputFormat.JSON_ELEMENTS) {
     // One JSON-encoded element per row.
     const enc = new TextEncoder();
     return elements.map(element => enc.encode(JSON.stringify(element)));
@@ -1600,20 +1735,45 @@ export function buildOutputDescriptor(
     return { id: packed.rootId, data: packed.data };
   }
 
-  const elements: ShapeElementV2[] = shape.fields.map(f => ({
-    name: f.name,
-    pos: appendTypeDescriptor(list, f.edgeqlType),
-    cardinality: f.cardinality
-  }));
-
-  const tid = generateDescriptorIdSync(
-    new TextEncoder().encode(
-      `disc:output:${shape.typeName}:${shape.fields.map(f => f.name + ":" + f.edgeqlType + ":" + f.cardinality).join(",")}`
-    )
-  );
-  descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
-
+  appendShapeDescriptor(list, shape);
   const packed = packTypedescBlock(descriptors);
+  return { id: packed.rootId, data: packed.data };
+}
+
+/*** A shape's identity: its type and each field's name, type (a nested shape's identity) and cardinality. ***/
+function shapeSignature(shape: OutputShape): string {
+  const fields = shape.fields.map(f => `${f.name}:${f.shape ? `{${shapeSignature(f.shape)}}` : f.edgeqlType}:${f.cardinality}`);
+  return `${shape.free ? "free:" : ""}${shape.typeName}:${fields.join(",")}`;
+}
+
+/**
+ * Append a shape's descriptor after those of its fields' types (a set of
+ * the element type for a multi field, a nested shape for objects), once
+ * per shape, and return its position.
+ */
+function appendShapeDescriptor(list: TypeDescriptorList, shape: OutputShape): number {
+  const signature = shapeSignature(shape);
+  const key = `shape:${signature}`;
+  const known = list.positions.get(key);
+  if (known !== undefined) {
+    return known;
+  }
+  const elements: ShapeElementV2[] = shape.fields.map(f => {
+    const pos = f.shape ? appendShapeDescriptor(list, f.shape) : appendTypeDescriptor(list, f.edgeqlType);
+    return { cardinality: f.cardinality, name: f.name, pos: isMulti(f.cardinality) ? appendSetDescriptor(list, pos) : pos };
+  });
+  const tid = generateDescriptorIdSync(new TextEncoder().encode(`disc:output:${signature}`));
+  const position = list.descriptors.length;
+  list.descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements, shape.free) });
+  list.positions.set(key, position);
+  return position;
+}
+
+/*** JSON output (`queryJSON`) is described as one `std::str`, whatever the query, as in Gel. ***/
+function buildJsonOutputDescriptor(): { id: Uint8Array; data: Uint8Array; } {
+  const list: TypeDescriptorList = { descriptors: [], positions: new Map() };
+  appendTypeDescriptor(list, "str");
+  const packed = packTypedescBlock(list.descriptors);
   return { id: packed.rootId, data: packed.data };
 }
 
@@ -2397,7 +2557,7 @@ export class BinaryConnection {
       this.parseStateData(msg.stateTypedescId, msg.stateData);
 
       // Phase 4.2: Check cache first
-      const cached = this.stmtCache.get(msg.commandText);
+      const cached = this.stmtCache.get(statementKey(msg.commandText, msg.outputFormat));
       if (cached) {
         // Cache hit — send cached descriptors
         await this.sendMessage({
@@ -2415,12 +2575,12 @@ export class BinaryConnection {
       }
 
       // Cache miss — compile and build type descriptors
-      const built = this.buildDescriptors(msg.commandText);
+      const built = this.buildDescriptors(msg.commandText, msg.outputFormat);
 
       const commandStatus = this.detectCommandStatus(msg.commandText);
 
       // Store in cache
-      this.stmtCache.set(msg.commandText, {
+      this.stmtCache.set(statementKey(msg.commandText, msg.outputFormat), {
         commandText: msg.commandText,
         inputDescId: built.inputDesc.id,
         outputDescId: built.outputDesc.id,
@@ -2471,7 +2631,7 @@ export class BinaryConnection {
       let params: ParamInfo[];
       let outputShape: OutputShape;
 
-      const cached = this.stmtCache.get(msg.commandText);
+      const cached = this.stmtCache.get(statementKey(msg.commandText, msg.outputFormat));
       if (cached) {
         // Cache hit — reuse descriptors
         inputDesc = { id: cached.inputDescId, data: cached.inputDesc };
@@ -2481,7 +2641,7 @@ export class BinaryConnection {
         outputShape = cached.outputShape;
       } else {
         // Cache miss — build descriptors
-        const descs = this.buildDescriptors(msg.commandText);
+        const descs = this.buildDescriptors(msg.commandText, msg.outputFormat);
         inputDesc = descs.inputDesc;
         outputDesc = descs.outputDesc;
         commandStatus = this.detectCommandStatus(msg.commandText);
@@ -2489,7 +2649,7 @@ export class BinaryConnection {
         outputShape = descs.outputShape;
 
         // Store in cache for future use
-        this.stmtCache.set(msg.commandText, {
+        this.stmtCache.set(statementKey(msg.commandText, msg.outputFormat), {
           commandText: msg.commandText,
           inputDescId: inputDesc.id,
           outputDescId: outputDesc.id,
@@ -2559,7 +2719,8 @@ export class BinaryConnection {
         rows,
         outputShape,
         msg.outputFormat,
-        values
+        values,
+        msg.expectedCardinality === Cardinality.ONE || msg.expectedCardinality === Cardinality.AT_MOST_ONE
       );
 
       // Send one Data message per row — the upstream Gel Python client's
@@ -2681,7 +2842,8 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private buildDescriptors(
-    commandText: string
+    commandText: string,
+    outputFormat: number
   ): {
     inputDesc: { id: Uint8Array; data: Uint8Array; };
     outputDesc: { id: Uint8Array; data: Uint8Array; };
@@ -2699,7 +2861,9 @@ export class BinaryConnection {
       const outputShape = inferOutputShape(query, this._schema);
       return {
         inputDesc: buildInputDescriptor(params),
-        outputDesc: buildOutputDescriptor(outputShape),
+        outputDesc: outputFormat === OutputFormat.JSON || outputFormat === OutputFormat.JSON_ELEMENTS ?
+          buildJsonOutputDescriptor() :
+          buildOutputDescriptor(outputShape),
         params,
         outputShape
       };

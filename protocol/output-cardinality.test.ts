@@ -84,19 +84,20 @@ function splitDescriptors(block: Uint8Array): Uint8Array[] {
 }
 
 /**
- * Decode the CTYPE_SHAPE descriptor (tag 0x01) and return a map of
- * field name → cardinality byte.
+ * Decode the root CTYPE_SHAPE descriptor (tag 0x01, the last one — a
+ * link's nested shape comes before it) and return a map of field name →
+ * cardinality byte.
  */
 function shapeCardinalities(block: Uint8Array): Map<string, number> {
-  const shapeDesc = splitDescriptors(block).find(d => d[0] === 0x01);
-  if (!shapeDesc) {
+  const shapeDesc = splitDescriptors(block).at(-1);
+  if (!shapeDesc || shapeDesc[0] !== 0x01) {
     throw new Error("no CTYPE_SHAPE descriptor in output block");
   }
   const r = new BufferReader(shapeDesc);
   r.readUInt8(); // tag = 1
   r.readUUID(); // tid
-  r.readUInt8(); // is_compound
-  r.readUInt16(); // ephemeral_free_objects
+  r.readUInt8(); // ephemeral_free_shape
+  r.readUInt16(); // object type pos
   const els = r.readUInt16();
   const out = new Map<string, number>();
   for (let i = 0; i < els; i++) {

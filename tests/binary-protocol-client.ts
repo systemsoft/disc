@@ -45,28 +45,72 @@ export interface Answer {
   values: unknown[];
 }
 
+/*** The output format and expected cardinality a query is sent with (binary, MANY by default). ***/
+export interface QueryOptions {
+  expectedCardinality?: number;
+  outputFormat?: OutputFormat;
+}
+
 function uuidString(bytes: Uint8Array): string {
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/*** Decode a v2 typedesc block (descriptors referenced by position). ***/
-function describe(block: Uint8Array): Described {
+/**
+ * A decoded descriptor: a base scalar, an array or tuple (named by `type`),
+ * a set of an element type, or an object shape (`free` for a free object).
+ */
+type DescribedNode =
+  | { kind: "array" | "scalar" | "tuple"; type: string; }
+  | { element: DescribedNode; kind: "set"; }
+  | { fields: { name: string; node: DescribedNode; }[]; free: boolean; kind: "object"; };
+
+/*** A node's type name: `std::str`, `set<std::str>`, `{title: std::str}` (a free object `free{…}`). ***/
+function typeName(node: DescribedNode): string {
+  switch (node.kind) {
+    case "object":
+      return `${node.free ? "free" : ""}{${node.fields.map(f => `${f.name}: ${typeName(f.node)}`).join(", ")}}`;
+    case "set":
+      return `set<${typeName(node.element)}>`;
+    default:
+      return node.type;
+  }
+}
+
+/*** Decode a v2 typedesc block (descriptors referenced by position) to its root descriptor. ***/
+function describeRoot(block: Uint8Array): DescribedNode {
   const descriptors: Uint8Array[] = [];
   const blockReader = new BufferReader(block);
   while (blockReader.remaining > 0) {
     descriptors.push(blockReader.readLenPrefixedBytes());
   }
 
-  /*** The type at `pos`: a base scalar (2), tuple (4), named tuple (5) or array (6). ***/
-  function typeAt(pos: number): string {
+  /*** The descriptor at `pos`: a set (0), shape (1), base scalar (2), tuple (4), named tuple (5) or array (6). ***/
+  function nodeAt(pos: number): DescribedNode {
     const r = new BufferReader(descriptors[pos]);
     const tag = r.readUInt8();
     const id = r.readBytes(16);
+    if (tag === 0) {
+      return { element: nodeAt(r.readUInt16()), kind: "set" };
+    }
+    if (tag === 1) {
+      const free = r.readUInt8() === 1; // ephemeral_free_shape
+      r.readUInt16(); // object type pos
+      const count = r.readUInt16();
+      const fields: { name: string; node: DescribedNode; }[] = [];
+      for (let i = 0; i < count; i++) {
+        r.readUInt32(); // flags
+        r.readUInt8(); // cardinality
+        const name = r.readString();
+        fields.push({ name, node: nodeAt(r.readUInt16()) });
+        r.readUInt16(); // source_type_pos
+      }
+      return { fields, free, kind: "object" };
+    }
     if (tag === 2) {
       const name = UUID_TO_TYPE.get(uuidString(id));
       assert(name, "unknown base scalar id");
-      return name;
+      return { kind: "scalar", type: name };
     }
     assert(tag === 4 || tag === 5 || tag === 6, `unexpected descriptor tag ${tag}`);
     const name = r.readString();
@@ -74,7 +118,7 @@ function describe(block: Uint8Array): Described {
     assertEquals(r.readUInt16(), 0, "ancestor count");
     let type: string;
     if (tag === 6) {
-      const element = typeAt(r.readUInt16());
+      const element = typeName(nodeAt(r.readUInt16()));
       assertEquals([r.readUInt16(), r.readUInt32()], [1, 0xffffffff], "one unbounded dimension");
       type = `array<${element}>`;
     } else {
@@ -82,54 +126,65 @@ function describe(block: Uint8Array): Described {
       const elements: string[] = [];
       for (let i = 0; i < count; i++) {
         const label = tag === 5 ? `${r.readString()}: ` : "";
-        elements.push(label + typeAt(r.readUInt16()));
+        elements.push(label + typeName(nodeAt(r.readUInt16())));
       }
       type = `tuple<${elements.join(", ")}>`;
     }
     assertEquals(name, type, "descriptor type name");
-    return type;
+    return { kind: tag === 6 ? "array" : "tuple", type };
   }
 
-  const rootPos = descriptors.length - 1;
-  const root = new BufferReader(descriptors[rootPos]);
-  const tag = root.readUInt8();
-  if (tag === 2) {
-    return { kind: "scalar", type: typeAt(rootPos) };
-  }
-  if (tag === 4 || tag === 5 || tag === 6) {
-    return { kind: tag === 6 ? "array" : "tuple", type: typeAt(rootPos) };
-  }
-  assertEquals(tag, 1, "expected a CTYPE_SHAPE root");
-  root.readBytes(16); // tid
-  root.readUInt8(); // is_compound
-  root.readUInt16(); // ephemeral_free_objects
-  const count = root.readUInt16();
-  const fields: { name: string; type: string; }[] = [];
-  for (let i = 0; i < count; i++) {
-    root.readUInt32(); // flags
-    root.readUInt8(); // cardinality
-    const name = root.readString();
-    const pos = root.readUInt16();
-    root.readUInt16(); // source_type_pos
-    fields.push({ name, type: typeAt(pos) });
-  }
-  return { fields, kind: "object" };
+  return nodeAt(descriptors.length - 1);
 }
 
-/*** Decode one Data element against its descriptor. ***/
-function decodeElement(described: Described, bytes: Uint8Array): unknown {
-  if (described.kind !== "object") {
-    return decodeWireValue(described.type, bytes);
+/*** The root descriptor as a `Described`: an object's fields named by their type names. ***/
+function describe(root: DescribedNode): Described {
+  if (root.kind === "object") {
+    return { fields: root.fields.map(f => ({ name: f.name, type: typeName(f.node) })), kind: "object" };
+  }
+  assert(root.kind !== "set", "a set is never the root descriptor");
+  return root;
+}
+
+/**
+ * Decode one value against its descriptor: a set in Gel's array format (an
+ * array element in a one-element record envelope), an object as its
+ * elements, anything else by the collection codecs.
+ */
+function decodeNode(node: DescribedNode, bytes: Uint8Array): unknown {
+  if (node.kind !== "object" && node.kind !== "set") {
+    return decodeWireValue(node.type, bytes);
   }
   const r = new BufferReader(bytes);
-  const count = r.readUInt32();
-  const out: Record<string, unknown> = {};
-  for (let i = 0; i < count; i++) {
-    r.readUInt32(); // reserved
+  const element = (inner: DescribedNode): unknown => {
     const lenU = r.readUInt32();
-    const field = described.fields[i];
-    out[field.name] = lenU === 0xffffffff ? null : decodeWireValue(field.type, r.readBytes(lenU));
+    return lenU === 0xffffffff ? null : decodeNode(inner, r.readBytes(lenU));
+  };
+  if (node.kind === "set") {
+    const ndims = r.readUInt32();
+    r.readUInt32(); // flags
+    r.readUInt32(); // reserved
+    if (ndims === 0) {
+      return [];
+    }
+    const length = r.readUInt32();
+    r.readUInt32(); // lower bound
+    return Array.from({ length }, () => {
+      if (node.element.kind === "array") {
+        r.readUInt32(); // envelope length
+        assertEquals(r.readUInt32(), 1, "one-element envelope");
+        r.readUInt32(); // reserved
+      }
+      return element(node.element);
+    });
   }
+  assertEquals(r.readUInt32(), node.fields.length, "object element count");
+  const out: Record<string, unknown> = {};
+  for (const field of node.fields) {
+    r.readUInt32(); // reserved
+    out[field.name] = element(field.node);
+  }
+  assertEquals(r.remaining, 0, "no trailing bytes after the object");
   return out;
 }
 
@@ -242,17 +297,17 @@ export class Client {
     return error?.kind === "ErrorResponse" ? error : undefined;
   }
 
-  private async parse(commandText: string): Promise<ServerMessage[]> {
+  private async parse(commandText: string, options: QueryOptions = {}): Promise<ServerMessage[]> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,
       annotations: [],
       commandText,
       compilationFlags: 0n,
-      expectedCardinality: Cardinality.MANY,
+      expectedCardinality: options.expectedCardinality ?? Cardinality.MANY,
       implicitLimit: 0n,
       inputLanguage: InputLanguage.EDGEQL,
       kind: "Parse",
-      outputFormat: OutputFormat.BINARY,
+      outputFormat: options.outputFormat ?? OutputFormat.BINARY,
       stateData: new Uint8Array(0),
       stateTypedescId: ZERO_UUID
     });
@@ -263,7 +318,8 @@ export class Client {
   private async execute(
     commandText: string,
     cdd: ServerMessage & { kind: "CommandDataDescription"; },
-    args: [string, string | string[]][]
+    args: [string, string | string[]][],
+    options: QueryOptions = {}
   ): Promise<ServerMessage[]> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,
@@ -271,12 +327,12 @@ export class Client {
       arguments: encodeStrArgs(args),
       commandText,
       compilationFlags: 0n,
-      expectedCardinality: Cardinality.MANY,
+      expectedCardinality: options.expectedCardinality ?? Cardinality.MANY,
       implicitLimit: 0n,
       inputLanguage: InputLanguage.EDGEQL,
       inputTypedescId: cdd.inputTypedescId,
       kind: "Execute",
-      outputFormat: OutputFormat.BINARY,
+      outputFormat: options.outputFormat ?? OutputFormat.BINARY,
       outputTypedescId: cdd.outputTypedescId,
       stateData: new Uint8Array(0),
       stateTypedescId: ZERO_UUID
@@ -285,19 +341,19 @@ export class Client {
     return await this.readUntilReady();
   }
 
-  async query(commandText: string, args: [string, string | string[]][] = []): Promise<Answer> {
-    const parsed = await this.parse(commandText);
+  async query(commandText: string, args: [string, string | string[]][] = [], options: QueryOptions = {}): Promise<Answer> {
+    const parsed = await this.parse(commandText, options);
     const cdd = parsed.find(m => m.kind === "CommandDataDescription");
     assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
 
-    const executed = await this.execute(commandText, cdd, args);
+    const executed = await this.execute(commandText, cdd, args, options);
     const error = executed.find(m => m.kind === "ErrorResponse");
     assert(!error, `query failed: ${error?.kind === "ErrorResponse" ? error.message : ""}`);
 
-    const described = describe(cdd.outputTypedesc);
+    const root = describeRoot(cdd.outputTypedesc);
     const values = executed
       .filter(m => m.kind === "Data")
-      .map(m => decodeElement(described, (m as ServerMessage & { kind: "Data"; }).data[0]));
-    return { cardinality: cdd.resultCardinality, described, values };
+      .map(m => decodeNode(root, (m as ServerMessage & { kind: "Data"; }).data[0]));
+    return { cardinality: cdd.resultCardinality, described: describe(root), values };
   }
 }

@@ -13,4 +13,15 @@ module default {
       constraint exclusive;
     };
   };
+
+  type Book {
+    required title: str;
+    multi tags: str;
+  };
+
+  type Author {
+    required name: str;
+    multi books: Book;
+    best: Book;
+  };
 };

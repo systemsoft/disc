@@ -140,6 +140,75 @@ test("tuples and named tuples decode as tuples", async () => {
   assert.deepEqual(pairs.map(pair => [...pair]), [[0, "x"], [1, "y"]]);
 });
 
+test("queryJSON returns the result as a JSON array", async () => {
+  const name = `json-${Date.now()}-${Math.random()}`;
+  await insertItem(name, 7);
+  const text = await client.queryJSON(
+    "SELECT Item { name, count } FILTER .name = <str>$name",
+    { name }
+  );
+  assert.deepEqual(JSON.parse(text), [{ name, count: 7 }]);
+  assert.equal(await client.queryJSON("SELECT Item { name } FILTER .name = 'nobody'"), "[]");
+});
+
+test("querySingleJSON returns one object, or null", async () => {
+  const name = `json1-${Date.now()}-${Math.random()}`;
+  await insertItem(name, 8);
+  const one = "SELECT Item { name, count } FILTER .name = <str>$name LIMIT 1";
+  assert.deepEqual(JSON.parse(await client.querySingleJSON(one, { name })), { name, count: 8 });
+  assert.deepEqual(JSON.parse(await client.queryRequiredSingleJSON(one, { name })), { name, count: 8 });
+  assert.equal(await client.querySingleJSON(one, { name: "nobody" }), "null");
+});
+
+test("group returns key, grouping and elements", async () => {
+  const count = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+  const names = [`grp-${Date.now()}-a`, `grp-${Date.now()}-b`];
+  for (const name of names) {
+    await insertItem(name, count);
+  }
+  const groups = await client.query("GROUP Item { name } BY .count");
+  const [group] = groups.filter(g => g.key.count === count);
+  assert.deepEqual(group.grouping, ["count"]);
+  assert.deepEqual(group.elements.map(e => e.name).sort(), names);
+});
+
+test("nested shapes follow multi and single links", async () => {
+  const [a, b] = [`book-${Date.now()}-a`, `book-${Date.now()}-b`];
+  await client.query("INSERT Book { title := <str>$t, tags := {'x', 'y'} }", { t: a });
+  await client.query("INSERT Book { title := <str>$t }", { t: b });
+  const name = `author-${Date.now()}-${Math.random()}`;
+  await client.query(
+    `INSERT Author {
+      name := <str>$name,
+      books := (SELECT Book FILTER .title = <str>$a OR .title = <str>$b),
+      best := (SELECT Book FILTER .title = <str>$a LIMIT 1)
+    }`,
+    { name, a, b }
+  );
+  const author = await client.querySingle(
+    "SELECT Author { name, books: { title, tags }, best: { title } } FILTER .name = <str>$name",
+    { name }
+  );
+  const books = [...author.books].sort((x, y) => x.title.localeCompare(y.title));
+  assert.deepEqual(books.map(book => [book.title, [...book.tags].sort()]), [[a, ["x", "y"]], [b, []]]);
+  assert.equal(author.best.title, a);
+
+  // A link without a sub-shape is its objects' ids.
+  const bare = await client.querySingle("SELECT Author { books, best } FILTER .name = <str>$name", { name });
+  const best = await client.querySingle("SELECT Book { id } FILTER .title = <str>$a", { a });
+  assert.equal(bare.best.id, best.id);
+  assert.equal(bare.books.length, 2);
+  assert.ok(bare.books.some(book => book.id === best.id));
+
+  const nested = JSON.parse(
+    await client.queryJSON(
+      "SELECT Author { name, books: { title } } FILTER .name = <str>$name",
+      { name }
+    )
+  );
+  assert.deepEqual(nested[0].books.map(book => book.title).sort(), [a, b]);
+});
+
 test("an exclusive violation raises ConstraintViolationError", async () => {
   const code = `label-${Date.now()}-${Math.random()}`;
   await client.query("INSERT Label { code := <str>$code }", { code });

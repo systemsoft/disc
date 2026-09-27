@@ -36,6 +36,12 @@ For each language:
 7. `querySingle` on empty result returns null/None (Cardinality.AT_MOST_ONE)
 8. Scalar codec roundtrips for `str`, `int32`, `int64`, `bool`, `float64`,
    `uuid`, `datetime` via `SELECT <T>$x`.
+9. `queryJSON` / `query_json` (one JSON array) and `querySingleJSON` /
+   `query_single_json` / `query_required_single_json` (one object, or
+   `"null"`) — JSON output is described as one `std::str`.
+10. `GROUP Item { name } BY .count` — free objects `{key, grouping, elements}`.
+11. Nested shapes over `Author.books` (multi link), `Author.best` (single
+    link) and `Book.tags` (multi property), with and without sub-shapes.
 
 ## What's deliberately out of scope
 

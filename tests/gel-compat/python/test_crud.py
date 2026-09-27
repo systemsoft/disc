@@ -11,7 +11,9 @@ DISC_HOST / DISC_BINARY_PORT (defaults: 127.0.0.1:5656). The runner script
 at tests/gel-compat/run.sh handles that.
 """
 
+import json
 import os
+import random
 import uuid
 
 import gel
@@ -163,3 +165,95 @@ def test_exclusive_violation_raises_constraint_violation_error(client):
     client.query("INSERT Label { code := <str>$code }", code=code)
     with pytest.raises(gel.ConstraintViolationError):
         client.query("INSERT Label { code := <str>$code }", code=code)
+
+
+def test_query_json_returns_the_result_as_a_json_array(client):
+    name = f"json-{uuid.uuid4()}"
+    client.query(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=7,
+    )
+    text = client.query_json(
+        "SELECT Item { name, count } FILTER .name = <str>$name", name=name
+    )
+    assert json.loads(text) == [{"name": name, "count": 7}]
+    assert client.query_json("SELECT Item { name } FILTER .name = 'nobody'") == "[]"
+
+
+def test_query_single_json_returns_one_object_or_null(client):
+    name = f"json1-{uuid.uuid4()}"
+    client.query(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=8,
+    )
+    one = "SELECT Item { name, count } FILTER .name = <str>$name LIMIT 1"
+    expected = {"name": name, "count": 8}
+    assert json.loads(client.query_single_json(one, name=name)) == expected
+    assert json.loads(client.query_required_single_json(one, name=name)) == expected
+    assert client.query_single_json(one, name="nobody") == "null"
+
+
+def test_group_returns_key_grouping_and_elements(client):
+    count = random.randint(1_000_000, 2_000_000_000)
+    names = sorted(f"grp-{uuid.uuid4()}" for _ in range(2))
+    for name in names:
+        client.query(
+            "INSERT Item { name := <str>$name, count := <int32>$count }",
+            name=name,
+            count=count,
+        )
+    groups = client.query("GROUP Item { name } BY .count")
+    [group] = [g for g in groups if g.key.count == count]
+    assert list(group.grouping) == ["count"]
+    assert sorted(e.name for e in group.elements) == names
+
+
+def test_nested_multi_link_shapes(client):
+    a, b = sorted(f"book-{uuid.uuid4()}" for _ in range(2))
+    client.query("INSERT Book { title := <str>$t, tags := {'x', 'y'} }", t=a)
+    client.query("INSERT Book { title := <str>$t }", t=b)
+    name = f"author-{uuid.uuid4()}"
+    client.query(
+        """
+        INSERT Author {
+          name := <str>$name,
+          books := (SELECT Book FILTER .title = <str>$a OR .title = <str>$b),
+          best := (SELECT Book FILTER .title = <str>$a LIMIT 1)
+        }
+        """,
+        name=name,
+        a=a,
+        b=b,
+    )
+    author = client.query_single(
+        """
+        SELECT Author { name, books: { title, tags }, best: { title } }
+        FILTER .name = <str>$name
+        """,
+        name=name,
+    )
+    books = sorted(author.books, key=lambda book: book.title)
+    assert [(book.title, sorted(book.tags)) for book in books] == [
+        (a, ["x", "y"]),
+        (b, []),
+    ]
+    assert author.best.title == a
+
+    # A link without a sub-shape is its objects' ids.
+    bare = client.query_single(
+        "SELECT Author { books, best } FILTER .name = <str>$name", name=name
+    )
+    best_id = client.query_single("SELECT Book { id } FILTER .title = <str>$a", a=a).id
+    assert bare.best.id == best_id
+    assert best_id in [book.id for book in bare.books]
+    assert len(bare.books) == 2
+
+    nested = json.loads(
+        client.query_json(
+            "SELECT Author { name, books: { title } } FILTER .name = <str>$name",
+            name=name,
+        )
+    )
+    assert sorted(book["title"] for book in nested[0]["books"]) == [a, b]

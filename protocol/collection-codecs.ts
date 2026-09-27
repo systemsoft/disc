@@ -11,6 +11,7 @@
  * Descriptors (each u32-length-prefixed in the typedesc block, inner types
  * referenced by their position in it):
  *
+ *   SET         (=0): [u8 t][16 tid][u16 element pos]
  *   BASE_SCALAR (=2): [u8 t][16 tid]
  *   TUPLE       (=4): [u8 t][16 tid][str name][u8 schema_defined=0]
  *                     [u16 ancestors=0][u16 count][u16 pos]*count
@@ -24,6 +25,7 @@
  *
  *   array: [i32 ndims=1][i32 flags=0][i32 reserved=0][i32 len][i32 lower=1]
  *          then [i32 len][bytes] per element; empty: [i32 0][i32 0][i32 0]
+ *   set:   as an array (see `encodeSetValue` for a set of arrays)
  *   tuple: [i32 count] then [i32 reserved=0][i32 len][bytes] per element
  */
 
@@ -162,6 +164,61 @@ function appendType(list: TypeDescriptorList, type: WireType): number {
   list.descriptors.push({ bytes: w.toBytes(), id });
   list.positions.set(key, position);
   return position;
+}
+
+/**
+ * Append a SET descriptor of the type at `elementPos` (once per element
+ * type) and return its position: how a multi link, multi property or other
+ * set in an object shape is described (Gel's `_describe_set`).
+ */
+export function appendSetDescriptor(list: TypeDescriptorList, elementPos: number): number {
+  const key = `set:${elementPos}`;
+  const known = list.positions.get(key);
+  if (known !== undefined) {
+    return known;
+  }
+  const elementId = Array.from(list.descriptors[elementPos].id, b => b.toString(16).padStart(2, "0")).join("");
+  const id = generateDescriptorIdSync(new TextEncoder().encode(`disc:set:${elementId}`));
+  const w = new BufferWriter();
+  w.writeUInt8(0);
+  w.writeUUID(id);
+  w.writeUInt16(elementPos);
+  const position = list.descriptors.length;
+  list.descriptors.push({ bytes: w.toBytes(), id });
+  list.positions.set(key, position);
+  return position;
+}
+
+/**
+ * A set's value from its encoded elements (null for NULL), in Gel's array
+ * format. An element that is itself an array goes in a one-element record
+ * envelope, `[i32 count=1][i32 reserved=0][i32 len][bytes]`, as the clients'
+ * set codecs read it.
+ */
+export function encodeSetValue(elements: (Uint8Array | null)[], arrayElements: boolean): Uint8Array {
+  const w = new BufferWriter();
+  w.writeUInt32(elements.length === 0 ? 0 : 1); // ndims
+  w.writeUInt32(0); // flags
+  w.writeUInt32(0); // reserved
+  if (elements.length === 0) {
+    return w.toBytes();
+  }
+  w.writeUInt32(elements.length);
+  w.writeUInt32(1); // lower bound
+  for (const element of elements) {
+    if (element === null) {
+      w.writeUInt32(NULL_LENGTH);
+    } else if (arrayElements) {
+      const envelope = new BufferWriter();
+      envelope.writeUInt32(1); // count
+      envelope.writeUInt32(0); // reserved
+      envelope.writeLenPrefixedBytes(element);
+      w.writeLenPrefixedBytes(envelope.toBytes());
+    } else {
+      w.writeLenPrefixedBytes(element);
+    }
+  }
+  return w.toBytes();
 }
 
 /** Write `value` as `[i32 len][bytes]`, or `[i32 -1]` for NULL. */
