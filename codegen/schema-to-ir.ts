@@ -60,11 +60,11 @@ const SCALAR_KINDS: ReadonlySet<string> = new Set<ScalarKind>([
 ]);
 
 /**
- * Resolves a (possibly bare) type name to its definition, if known, and a
- * user scalar (`scalar type Count extending int64`) to the built-in it extends.
+ * Resolves a (possibly bare) type name to its definition, if known. A user
+ * scalar (`scalar type Count extending int64`) is resolved by the schema, per
+ * property and in its own module, as `PropertyDef.baseType`.
  */
 interface NameResolver {
-  scalarBase(name: string): string | undefined;
   type(name: string): TypeDef | undefined;
 }
 
@@ -155,7 +155,7 @@ function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
   const constraints = (prop.constraints ?? []).map(c => ({ name: c.name, args: c.args ?? [] }));
   return {
     name: prop.name,
-    type: typeRefOf(prop.edgeqlType ?? prop.type, resolve),
+    type: propertyTypeRef(prop, resolve),
     cardinality: cardinalityOf(prop.required, prop.multi),
     isLink: false,
     isComputed: prop.computed ?? false,
@@ -164,6 +164,7 @@ function fieldOfProperty(prop: PropertyDef, resolve: NameResolver): Field {
     hasDefault: prop.hasDefault ?? false,
     readonly: prop.readonly ?? false,
     sourceType: prop.edgeqlType ?? prop.type,
+    ...(prop.baseType ? { baseType: prop.baseType } : {}),
     computedExpr: prop.computedExpr,
     description: prop.annotations?.["description"]
   };
@@ -187,11 +188,12 @@ function fieldOfLink(link: LinkDef, resolve: NameResolver): Field {
   if (link.properties && link.properties.size > 0) {
     field.linkProperties = [...link.properties.values()].map(prop => ({
       name: prop.name,
-      type: typeRefOf(prop.edgeqlType ?? prop.type, resolve),
+      type: propertyTypeRef(prop, resolve),
       cardinality: cardinalityOf(prop.required, false),
       constraints: (prop.constraints ?? []).map(c => ({ name: c.name, args: c.args ?? [] })),
       hasDefault: prop.hasDefault ?? false,
-      sourceType: prop.edgeqlType ?? prop.type
+      sourceType: prop.edgeqlType ?? prop.type,
+      ...(prop.baseType ? { baseType: prop.baseType } : {})
     }));
   }
   return field;
@@ -213,7 +215,7 @@ function insertShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
       continue;
     fields.push({
       name: p.name,
-      type: typeRefOf(p.edgeqlType ?? p.type, resolve),
+      type: propertyTypeRef(p, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
       isLink: false,
       optional: (p.hasDefault ?? false) || !p.required
@@ -240,7 +242,7 @@ function updateShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
       continue;
     fields.push({
       name: p.name,
-      type: typeRefOf(p.edgeqlType ?? p.type, resolve),
+      type: propertyTypeRef(p, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
       isLink: false,
       optional: true
@@ -278,7 +280,7 @@ function filterShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
       continue;
     fields.push({
       name: p.name,
-      operand: typeRefOf(p.edgeqlType ?? p.type, resolve),
+      operand: propertyTypeRef(p, resolve),
       cardinality: cardinalityOf(p.required, p.multi),
       isLink: false
     });
@@ -298,7 +300,7 @@ function filterShape(props: PropertyDef[], links: LinkDef[], resolve: NameResolv
 function filterVarsShape(props: PropertyDef[], resolve: NameResolver): FilterVarsShape {
   const fields: FilterVarField[] = props.map(p => ({
     name: p.name,
-    type: typeRefOf(p.edgeqlType ?? p.type, resolve)
+    type: propertyTypeRef(p, resolve)
   }));
   return { fields };
 }
@@ -378,6 +380,11 @@ function cardinalityOf(required: boolean, multi: boolean): Cardinality {
   return required ? "One" : "AtMostOne";
 }
 
+/** A property's value type: the built-in its user scalars extend (`PropertyDef.baseType`), else its type as written. */
+function propertyTypeRef(prop: PropertyDef, resolve: NameResolver): TypeRef {
+  return typeRefOf(prop.baseType ?? prop.edgeqlType ?? prop.type, resolve);
+}
+
 /** Parse an EdgeQL type string into a TypeRef (scalars, enums, objects, collections). */
 function typeRefOf(raw: string, resolve: NameResolver): TypeRef {
   const s = raw.trim();
@@ -389,11 +396,6 @@ function typeRefOf(raw: string, resolve: NameResolver): TypeRef {
   const scalar = scalarKindOf(s);
   if (scalar)
     return { kind: "scalar", scalar };
-
-  // A sequence scalar's values are int64s.
-  const base = resolve.scalarBase(s);
-  if (base)
-    return typeRefOf(base === "sequence" ? "int64" : base, resolve);
 
   const def = resolve.type(s);
   if (def?.kind === "enum") {
@@ -486,7 +488,6 @@ function makeResolver(schema: Schema): NameResolver {
       byBare.set(def.name, def);
   }
   return {
-    scalarBase: (name: string) => schema.scalars?.get(name) ?? schema.scalars?.get(name.replace(/^default::/, "")),
     type: (name: string) => {
       if (schema.types.has(name))
         return schema.types.get(name);

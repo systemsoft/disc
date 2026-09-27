@@ -13,6 +13,9 @@
  * - An enum used from another module was emitted bare inside the using module's
  *   namespace (TS2304) instead of qualified like a cross-module link target,
  *   including inside tuples, named tuples, and arrays of tuples.
+ * - A property of a user scalar was typed by the scalar's name, which no
+ *   generated type declares (TS2304); it is its base type, resolved in the
+ *   property's own module when two modules declare the name.
  *
  * Also pins that `writeGeneratedFiles` formats its output when the project's
  * `deno.json` excludes the output directory from `deno fmt`.
@@ -37,9 +40,12 @@ import { schemaToIR } from "./schema-to-ir.ts";
 const SDL = `
 module default {
   scalar type Priority extending enum<Low, High>;
+  scalar type Money extending decimal;
 
   type Note {
     required body: str;
+    amount: Money;
+    fees: array<ops::Money>;
     priority: Priority;
     required status: agents::AgentStatus;
     multi capabilities: agents::AgentCapability;
@@ -73,8 +79,13 @@ module agents {
 }
 
 module ops {
+  scalar type Money extending int64;
+
   type Run {
     required priority: default::Priority;
+    cost: Money;
+    multi costs: Money;
+    budget: tuple<spent: Money, cap: default::Money>;
     status: agents::AgentStatus;
     multi capabilities: agents::AgentCapability;
     multi priorities: default::Priority;
@@ -85,6 +96,7 @@ module ops {
     nested: tuple<str, tuple<level: default::Priority, status: agents::AgentStatus>>;
     multi agents: agents::Agent {
       priority: default::Priority;
+      fee: Money;
     };
   }
 }

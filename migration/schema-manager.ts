@@ -289,6 +289,15 @@ function scalarBaseType(sdlType: string, module: string, scalars: Map<string, st
 }
 
 /**
+ * The PostgreSQL type of the enum `sdlType` names in `module`, from
+ * `enumPgTypeNames`; a bare name is `module`'s enum before the default
+ * module's. Undefined when it names no enum.
+ */
+function enumPgType(sdlType: string, module: string, enums: Map<string, string>): string | undefined {
+  return sdlType.includes("::") ? enums.get(sdlType) : enums.get(`${module}::${sdlType}`) ?? enums.get(`default::${sdlType}`);
+}
+
+/**
  * Build a full SDL type string from a TypeRef, including type parameters.
  * For example: range<int32>, multirange<cal::local_date>
  */
@@ -642,12 +651,14 @@ export class SchemaManager {
     }
 
     const scalars = userScalarBaseTypes(modules);
-    // A property of a sequence scalar gets its value from the scalar's
-    // sequence when an insert leaves it out (see `migration/ddl.ts`).
-    const isSequenceType = (edgeqlType: string): boolean => (scalars.get(edgeqlType) ?? scalars.get(edgeqlType.replace(/^default::/, ""))) === "sequence";
 
     for (const module of modules) {
       const baseTypeOf = (sdlType: string): string | undefined => scalarBaseType(sdlType, module.name, scalars);
+      // A property of a sequence scalar gets its value from the scalar's
+      // sequence when an insert leaves it out (see `migration/ddl.ts`). A bare
+      // name is this module's scalar before one elsewhere.
+      const isSequenceType = (edgeqlType: string): boolean =>
+        ((edgeqlType.includes("::") ? undefined : scalars.get(`${module.name}::${edgeqlType}`)) ?? scalars.get(edgeqlType)) === "sequence";
       for (const item of module.items) {
         // Handle alias declarations
         if (item.kind === "AliasDeclaration") {
@@ -701,7 +712,9 @@ export class SchemaManager {
           const moduleName = module.name;
           const qualifiedName = `${moduleName}::${globalName}`;
           const edgeqlType = typeRefToSdlString(globalDecl.type);
-          const pgType = sdlTypeToSqlType(edgeqlType);
+          // A global of an enum has the enum's type, and one of a user scalar
+          // its base type's, so its value compares and casts as one.
+          const pgType = enumPgType(edgeqlType, moduleName, enumSqlTypes) ?? sdlTypeToSqlType(baseTypeOf(edgeqlType) ?? edgeqlType);
 
           const globalDef: GlobalDef = {
             name: globalName,

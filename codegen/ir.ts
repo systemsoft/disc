@@ -246,6 +246,12 @@ export interface Field {
    */
   sourceType: string;
   /**
+   * `sourceType` with each user scalar in it replaced by the built-in type it
+   * extends, resolved in the declaring module (`PropertyDef.baseType`): what
+   * its values are mapped and cast as. Absent when it names no user scalar.
+   */
+  baseType?: string;
+  /**
    * For a computed property, the EdgeQL expression source. Lets an emitter
    * recover named-tuple field shapes (via inferComputedTupleFields) for typed
    * computed filters and runtime type info. Absent on non-computed fields.
@@ -271,6 +277,8 @@ export interface LinkPropertyField {
   hasDefault: boolean;
   /** The EdgeQL type as written (see `Field.sourceType`). */
   sourceType: string;
+  /** Its built-in type when it names a user scalar (see `Field.baseType`). */
+  baseType?: string;
 }
 
 export interface FieldConstraint {

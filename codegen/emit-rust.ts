@@ -512,7 +512,7 @@ class RustEmitter {
           arms.push(`            ${JSON.stringify(field.name)} => "<uuid>",`);
         continue;
       }
-      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.baseType ?? field.sourceType);
       const cast = isMulti(field.cardinality) ? `<array${elementCast}>` : elementCast;
       arms.push(`            ${JSON.stringify(field.name)} => ${JSON.stringify(cast)},`);
     }

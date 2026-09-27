@@ -102,6 +102,11 @@ function qualifiedToTarget(qn: QualifiedName): string {
   return qn.module === "default" ? qn.name : `${qn.module}::${qn.name}`;
 }
 
+/** The EdgeQL type a field's values are mapped and cast as: its user scalars' base type, else its type as written. */
+function valueType(field: { baseType?: string; sourceType: string; }): string {
+  return field.baseType ?? field.sourceType;
+}
+
 /** required iff cardinality is a required arm. */
 function isRequired(cardinality: string): boolean {
   return cardinality === "One" || cardinality === "AtLeastOne";
@@ -367,8 +372,8 @@ class TypeScriptEmitter {
   private generatePropertyDefinition(field: Field, indent: string = "", currentModule?: string): string {
     let content = "";
 
-    const typeForMapping = field.sourceType;
-    const docType = typeForMapping === "auto" ? "(computed)" : typeForMapping;
+    const typeForMapping = valueType(field);
+    const docType = field.sourceType === "auto" ? "(computed)" : field.sourceType;
     const required = isRequired(field.cardinality);
     const multi = isMulti(field.cardinality);
 
@@ -430,7 +435,7 @@ class TypeScriptEmitter {
     // only when the query selects them.
     if (field.linkProperties && field.linkProperties.length > 0) {
       const keys = field.linkProperties.map(p =>
-        `"@${p.name}"?: ${this.propertyTsType(p.type, p.sourceType, isRequired(p.cardinality), false, currentModule)};`
+        `"@${p.name}"?: ${this.propertyTsType(p.type, valueType(p), isRequired(p.cardinality), false, currentModule)};`
       );
       targetType = `(${targetType} & { ${keys.join(" ")} })`;
     }
@@ -462,7 +467,7 @@ class TypeScriptEmitter {
       }
 
       const base = this.fieldByName(obj, sf.name);
-      const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
+      const src = base ? valueType(base) : typeRefToEdgeQL(sf.type);
       const tsType = this.propertyTsType(base ? base.type : sf.type, src, true, isMulti(sf.cardinality), currentModule);
       const optional = sf.optional ? "?" : "";
       content += `${indent}  ${sf.name}${optional}: ${tsType};\n`;
@@ -500,7 +505,7 @@ class TypeScriptEmitter {
       }
 
       const base = this.fieldByName(obj, sf.name);
-      const src = base ? base.sourceType : typeRefToEdgeQL(sf.type);
+      const src = base ? valueType(base) : typeRefToEdgeQL(sf.type);
       const tsType = this.propertyTsType(base ? base.type : sf.type, src, true, isMulti(sf.cardinality), currentModule);
       content += `${indent}  ${sf.name}?: ${tsType};\n`;
     }
@@ -534,7 +539,7 @@ class TypeScriptEmitter {
     for (const fv of obj.shapes.filterVars.fields) {
       const base = this.fieldByName(obj, fv.name);
       const multi = base ? isMulti(base.cardinality) : false;
-      const src = base ? base.sourceType : typeRefToEdgeQL(fv.type);
+      const src = base ? valueType(base) : typeRefToEdgeQL(fv.type);
       const tsType = this.propertyTsType(base ? base.type : fv.type, src, true, multi, currentModule);
       content += `${indent}  ${fv.name}?: ${tsType};\n`;
     }
@@ -578,7 +583,7 @@ class TypeScriptEmitter {
 
       // A multi property is filtered by element (`.scopes = x` holds when any
       // element equals x), so its operand is the element type.
-      const edgeqlType = field.sourceType;
+      const edgeqlType = valueType(field);
       const tsType = this.propertyTsType(field.type, edgeqlType, true, false, currentModule);
       const opHelper = this.getOperatorHelperFor(edgeqlType, tsType);
       content += `${indent}  ${field.name}?: ${tsType} | ${opHelper};\n`;
@@ -788,7 +793,7 @@ class TypeScriptEmitter {
     for (const field of obj.fields) {
       if (field.isLink || field.isComputed || field.name === "id")
         continue;
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(valueType(field));
       if (isMulti(field.cardinality)) {
         multiPropertyNames.push(field.name);
         typeCastEntries.push(`    ${field.name}: "<array${cast}>"`);
@@ -831,7 +836,7 @@ class TypeScriptEmitter {
         }
         continue;
       }
-      const cast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(valueType(field));
       typeInfoCastEntries.push(`      ${field.name}: "${cast}"`);
     }
 

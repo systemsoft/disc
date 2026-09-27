@@ -107,6 +107,36 @@ function preciseSchema(): Schema {
   return manager.modulesToSchema(parsed.value);
 }
 
+/** Two modules declaring a scalar of the same name, each used bare in its own module and qualified from the other. */
+function sharedScalarSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    `module default {
+  scalar type Money extending decimal;
+  type Account {
+    balance: Money;
+    history: array<Money>;
+    other: ledger::Money;
+  };
+};
+module ledger {
+  scalar type Money extending int64;
+  type Entry {
+    amount: Money;
+    history: array<Money>;
+    pair: tuple<Money, default::Money>;
+    multi accounts: default::Account {
+      fee: Money;
+    };
+  };
+};`,
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
 // --- tests -----------------------------------------------------------------
 
 Deno.test("emitGo: multi-module fixture compiles", async () => {
@@ -299,4 +329,19 @@ Deno.test("emitGo: slices of float slices read and write NaN and ±Infinity as s
 
   if (await goAvailable())
     await assertCompiles(floatGridSchema());
+});
+
+Deno.test("emitGo: a scalar name two modules declare is typed by the property's own module", async () => {
+  const files = emitGo(schemaToIR(sharedScalarSchema()), goConfig());
+  const all = files.map(f => f.content).join("\n");
+  assertStringIncludes(all, "\tBalance *json.Number `json:\"balance,omitempty\"`");
+  assertStringIncludes(all, "\tOther *int64 `json:\"other,omitempty\"`");
+  assertStringIncludes(all, "\tAmount *int64 `json:\"amount,omitempty\"`");
+  assertStringIncludes(all, "\tHistory *[]int64 `json:\"history,omitempty\"`");
+  assertStringIncludes(all, "\tHistory *[]json.Number `json:\"history,omitempty\"`");
+  assertStringIncludes(all, "return \"<int64>\"");
+  assertStringIncludes(all, "return \"<array<decimal>>\"");
+
+  if (await goAvailable())
+    await assertCompiles(sharedScalarSchema());
 });

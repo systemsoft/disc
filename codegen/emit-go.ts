@@ -516,7 +516,7 @@ class GoEmitter {
           arms.push(`\tcase ${JSON.stringify(field.name)}:\n\t\treturn "<uuid>"`);
         continue;
       }
-      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.sourceType);
+      const elementCast = Types.mapEdgeQLTypeToEdgeQLCast(field.baseType ?? field.sourceType);
       const cast = isMulti(field.cardinality) ? `<array${elementCast}>` : elementCast;
       arms.push(`\tcase ${JSON.stringify(field.name)}:\n\t\treturn ${JSON.stringify(cast)}`);
     }

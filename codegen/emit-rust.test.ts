@@ -105,6 +105,36 @@ function preciseSchema(): Schema {
   return manager.modulesToSchema(parsed.value);
 }
 
+/** Two modules declaring a scalar of the same name, each used bare in its own module and qualified from the other. */
+function sharedScalarSchema(): Schema {
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL(
+    `module default {
+  scalar type Money extending decimal;
+  type Account {
+    balance: Money;
+    history: array<Money>;
+    other: ledger::Money;
+  };
+};
+module ledger {
+  scalar type Money extending int64;
+  type Entry {
+    amount: Money;
+    history: array<Money>;
+    pair: tuple<Money, default::Money>;
+    multi accounts: default::Account {
+      fee: Money;
+    };
+  };
+};`,
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  return manager.modulesToSchema(parsed.value);
+}
+
 // --- tests -----------------------------------------------------------------
 
 Deno.test("emitRust: multi-module fixture compiles offline", async () => {
@@ -264,4 +294,19 @@ Deno.test("emitRust: a Vec of float Vecs goes through disc_float too", async () 
 
   if (await cargoAvailable())
     await assertCompiles(schema);
+});
+
+Deno.test("emitRust: a scalar name two modules declare is typed by the property's own module", async () => {
+  const files = emitRust(schemaToIR(sharedScalarSchema()), rustConfig());
+  const all = files.map(f => f.content).join("\n");
+  assertStringIncludes(all, "pub balance: Option<crate::ExactNumber>,");
+  assertStringIncludes(all, "pub other: Option<i64>,");
+  assertStringIncludes(all, "pub amount: Option<i64>,");
+  assertStringIncludes(all, "pub history: Option<Vec<i64>>,");
+  assertStringIncludes(all, "pub history: Option<Vec<crate::ExactNumber>>,");
+  assertStringIncludes(all, "\"amount\" => \"<int64>\",");
+  assertStringIncludes(all, "\"history\" => \"<array<decimal>>\",");
+
+  if (await cargoAvailable())
+    await assertCompiles(sharedScalarSchema());
 });
