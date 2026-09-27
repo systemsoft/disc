@@ -122,6 +122,11 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     return resolved !== null && resolved.multi;
   }
 
+  /*** The property `path` ends in, when it resolves to a path over objects ending in one. ***/
+  protected pathProperty(path: EdgeQLAST.Path): Context.PropertyDef | undefined {
+    return this.resolvePath(path)?.property;
+  }
+
   /**
    * The rows a select of `resolved` reads, registered in the current scope
    * under the reached type so the select's shape, filter and order by resolve

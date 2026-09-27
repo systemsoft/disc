@@ -16,6 +16,7 @@ import {
   CompilerBase,
   edgeqlTypeToPgType,
   flattenSetElements,
+  locationOf,
   renderEdgeQLTypeName
 } from "./compiler-base.ts";
 import * as Context from "./context.ts";
@@ -50,6 +51,31 @@ const NUMERIC_LITERAL_TYPES = new Map<string, string>([
  */
 const SET_RETURNING_FUNCTIONS = new Set(["array_unpack", "enumerate", "json_array_unpack", "json_object_unpack", "range_unpack", "re_match_all"]);
 
+/**
+ * Built-in functions taking a set as a whole (Gel's `set of` parameters):
+ * aggregates and set tests. Every other built-in applies to each element of a
+ * set argument (`str_upper({'a', 'b'})` is `{'A', 'B'}`).
+ */
+const SET_ARGUMENT_FUNCTIONS = new Set([
+  "all",
+  "any",
+  "array_agg",
+  "assert_exists",
+  "assert_single",
+  "avg",
+  "count",
+  "distinct",
+  "enumerate",
+  "exists",
+  "math_mean",
+  "max",
+  "min",
+  "stddev",
+  "stddev_pop",
+  "stddev_samp",
+  "sum"
+]);
+
 /*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
 function widestIntSqlType(types: (string | null)[]): string {
   const widths = types.map(type => (type !== null && INT_SQL_TYPES.get(type)?.width) || 64);
@@ -63,6 +89,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     path: EdgeQLAST.Path
   ): SQL.SQLExpression;
   protected abstract isSetPath(expr: EdgeQLAST.Expression): boolean;
+  protected abstract pathProperty(path: EdgeQLAST.Path): Context.PropertyDef | undefined;
   protected abstract compileGlobalRef(
     expr: EdgeQLAST.GlobalRef
   ): SQL.SQLExpression;
@@ -399,7 +426,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return expr.type.name.parts[expr.type.name.parts.length - 1];
       case "Path": {
         if (expr.steps.length !== 1 || expr.steps[0].type !== "property") {
-          return null;
+          // A path from a type, a binding or a `for` variable (`u.tags`).
+          const property = this.pathProperty(expr);
+          return property && !property.multi ? property.edgeqlType ?? null : null;
         }
         const name = expr.steps[0].name;
         for (const ta of this.ctx.currentScope.aliases.values()) {
@@ -412,7 +441,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
       case "Identifier": {
         const variable = this.scopeVariable(expr.name);
-        return variable && !variable.sqlOverride ? this.staticNumericType(variable.expression) : null;
+        if (variable?.sqlOverride) {
+          return variable.staticType ?? null;
+        }
+        return variable ? this.staticNumericType(variable.expression) : null;
       }
       case "UnaryOp":
         return expr.op === "-" || expr.op === "+" ? this.staticNumericType(expr.operand) : null;
@@ -473,10 +505,95 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected setQuery(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
     const variable = expr.kind === "Identifier" ? this.scopeVariable(expr.name) : undefined;
     const value = variable && !variable.sqlOverride && !variable.row ? variable.expression : expr;
+    // An element-wise call over a set (`str_upper({'a', 'b'})`) is a set too.
     const isSet = value.kind === "SetExpr" ?
       value.elements.length > 0 :
-      value.kind === "FunctionCall" && SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "");
+      value.kind === "FunctionCall" &&
+      (SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "") || this.elementWiseSets(value) !== null);
     return isSet ? { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: expr.span } } : null;
+  }
+
+  /**
+   * The select of the set an argument stands for, or null for a value: a set
+   * literal, a set-returning or element-wise call over a set (`setQuery`), a
+   * `with` binding's rows, or a path to several values (`User.name`,
+   * `.posts.title`, a multi property).
+   */
+  private setArgument(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+    if (expr.kind === "SetExpr" && flattenSetElements(expr).length === 1) {
+      return null;
+    }
+    return this.bindingSetQuery(expr) ?? this.setQuery(expr) ??
+      (this.isSetPath(expr) ? { kind: "Subquery", query: { distinct: false, expr, kind: "SelectQuery", span: expr.span } } : null);
+  }
+
+  /**
+   * For a call to a built-in function that applies to each element of its
+   * arguments (not an aggregate or set test, see SET_ARGUMENT_FUNCTIONS) with
+   * at least one set argument: the set each argument stands for, null for a
+   * value. Else null.
+   */
+  protected elementWiseSets(call: EdgeQLAST.FunctionCall): (EdgeQLAST.Subquery | null)[] | null {
+    const funcDef = Context.lookupFunction(this.ctx.schema, call.name.parts);
+    if (!funcDef || !Context.isBuiltinFunction(funcDef) || funcDef.introspection || funcDef.windowOnly || SET_ARGUMENT_FUNCTIONS.has(funcDef.name)) {
+      return null;
+    }
+    const sets = call.args.map(arg => this.setArgument(arg.value));
+    return sets.some(set => set !== null) ? sets : null;
+  }
+
+  /**
+   * `f(<set>, …)` for an element-wise function, as the rows of a select: each
+   * set argument is a FROM item `(select <set>) AS __arg_N(value)` — several
+   * are crossed, as Gel crosses an element-wise call's argument sets — and the
+   * call reads each one's `value`:
+   *
+   *   select str_upper(User.name)
+   *   → SELECT UPPER(__arg_1.value) FROM (SELECT user_2.name FROM "user" AS user_2) AS __arg_1(value)
+   *
+   * The values are scope variables of the current scope, which the caller
+   * (a select) has pushed.
+   */
+  protected compileElementWiseCall(
+    call: EdgeQLAST.FunctionCall,
+    sets: (EdgeQLAST.Subquery | null)[]
+  ): { from: SQL.TableReference[]; value: SQL.SQLExpression; } {
+    const from: SQL.TableReference[] = [];
+    const args = call.args.map((arg, index) => {
+      const set = sets[index];
+      if (!set) {
+        return arg;
+      }
+      const alias = Context.generateAlias(this.ctx, "__arg");
+      from.push({ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery: this.compileQuery(set.query) });
+      this.ctx.currentScope.variables.set(alias, {
+        expression: arg.value,
+        name: alias,
+        sqlOverride: SQL.createColumnReference("value", alias),
+        staticType: this.elementType(arg.value),
+        type: this.isJsonExpression(arg.value) ? "json" : "any"
+      });
+      return { ...arg, value: EdgeQLAST.createIdentifier(alias) };
+    });
+    return { from, value: this.compileFunctionCall({ ...call, args }) };
+  }
+
+  /**
+   * True for a set argument with no one-value SQL form: a set literal, or a
+   * path of several steps not from a `with` binding (`User.name`,
+   * `.posts.title`). A set-returning call, a binding and a multi property keep
+   * their expression form.
+   */
+  private isSetWithoutValue(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind === "SetExpr") {
+      return true;
+    }
+    return expr.kind === "Path" && expr.steps.length > 1 && !Context.getCTEAlias(this.ctx, expr.steps[0].name);
+  }
+
+  /*** The EdgeQL type of each element of a set argument, when it is a path ending in a property. ***/
+  private elementType(expr: EdgeQLAST.Expression): string | undefined {
+    return expr.kind === "Path" ? this.pathProperty(expr)?.edgeqlType : undefined;
   }
 
   /**
@@ -916,6 +1033,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (pathSet) {
         return pathSet;
       }
+    }
+
+    // An element-wise function over a set is a set of rows, compiled where a
+    // select reads them (compileElementWiseCall). As one value inside another
+    // expression, a set literal would be a record and a path from a type or
+    // over a multi link has no column.
+    const sets = this.elementWiseSets(funcCall);
+    if (sets?.some((set, index) => set && this.isSetWithoutValue(funcCall.args[index].value))) {
+      throw new CompilationError(
+        `${qualifiedName}() of a set argument is a set, one element per argument element: it is supported selected ` +
+          `(\`select ${qualifiedName}(…)\`), as a shape element, as a for body or as an aggregate's argument ` +
+          `(\`count(${qualifiedName}(…))\`), not as one value inside another expression`,
+        locationOf(funcCall)
+      );
     }
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));

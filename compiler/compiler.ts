@@ -1122,11 +1122,18 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         Context.resolveTypeName(this.ctx, underlyingTypeName) :
         undefined;
 
+      // A select of values (`a := (select array_unpack(…))`) is one column, like
+      // an inlined binding: named `value`, so a select of the binding reads the
+      // current row's value in its filter and order by.
+      const values = value.kind !== "Subquery" ||
+        (!underlyingTypeName && !binding.recursive && value.query.kind === "SelectQuery" && !value.query.shape);
+
       const cteAlias: Context.CTEAlias = {
         cteName,
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         typeName: underlyingTypeName,
-        typeDef
+        typeDef,
+        values
       };
       Context.addCTEAlias(this.ctx, cteName, cteAlias);
       registeredAliases.push(cteName);
@@ -1141,9 +1148,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         kind: "CTE",
         name: cteName,
         recursive: binding.recursive || false,
-        // An inlined binding's one column is `value`, so a select of it can
+        // A binding of values has one column, `value`, so a select of it can
         // read the row (see compileSelectExpression).
-        columns: value.kind === "Subquery" ? [] : ["value"],
+        columns: values ? ["value"] : [],
         query: bindingQuery
       });
     }
@@ -1171,14 +1178,17 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * of another CTE binding (`with u := User`, `v := u`) is a select of it, as
    * if written `u := (select User)`: a CTE of the objects' rows that the body
    * can project a shape over. Compiled as an expression instead, a type name
-   * is `*` with no FROM ("SELECT * with no tables specified").
+   * is `*` with no FROM ("SELECT * with no tables specified"). So is a path
+   * from a type (`n := User.name`, `p := User.posts`), which has no one value.
    */
   private bindingSetValue(value: EdgeQLAST.Expression): EdgeQLAST.Expression {
+    const select: EdgeQLAST.Subquery = { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: value.span } };
     if (value.kind === "TypeName") {
       const typeDef = Context.resolveTypeName(this.ctx, value.name.parts.join("::"));
-      return typeDef?.kind === "object" ?
-        { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: value.span } } :
-        value;
+      return typeDef?.kind === "object" ? select : value;
+    }
+    if (value.kind === "Path" && this.resolvePath(value)?.start.kind === "type") {
+      return select;
     }
     return this.bindingSetQuery(value) ?? value;
   }
@@ -1289,14 +1299,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         return Context.getCTEAlias(this.ctx, query.expr.name)?.typeName;
       }
       if (query.expr?.kind === "Path") {
-        const firstStep = query.expr.steps[0];
-        if (firstStep?.type === "property") {
-          // Check if this is a known type
-          const typeDef = Context.resolveTypeName(this.ctx, firstStep.name);
-          if (typeDef) {
-            return firstStep.name;
-          }
-        }
+        // The objects the path reaches (`User.posts` is posts); a path ending
+        // in a property (`User.name`) is values, not objects.
+        const resolved = this.resolvePath(query.expr);
+        return resolved && !resolved.property ? resolved.typeDef.name : undefined;
       }
     }
     // A mutation binding returns rows of the mutated type (`RETURNING *`), so
@@ -1520,11 +1526,24 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           iteratorTable,
           { alias: "for_sub", kind: "TableReference", lateral: true, name: "", subquery: this.compileQuery(body) }
         ]),
-        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*", "for_sub"))])
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*", "for_sub"))]),
+        // A scalar expression of an empty value (`u.visits + 1` for a user
+        // without visits) is NULL in SQL and no element in EdgeQL.
+        where: this.isScalarExpressionSelect(body) ? SQL.createWhereClause(SQL.isNotNull(SQL.createColumnReference("for_sub"))) : undefined
       });
     } finally {
       Context.popScope(this.ctx);
     }
+  }
+
+  /*** True when `query` selects one operator, function or cast result without a shape (`u.visits + 1`, `str_upper(u.name)`). ***/
+  private isScalarExpressionSelect(query: EdgeQLAST.Query): boolean {
+    if (query.kind !== "SelectQuery" || query.shape) {
+      return false;
+    }
+    const { expr } = query;
+    return (expr.kind === "BinaryOp" && !this.isSetOperator(expr.op)) || expr.kind === "UnaryOp" || expr.kind === "FunctionCall" ||
+      expr.kind === "TypeCast";
   }
 
   /*** Compile the update or delete body of a `for` over objects (see `mutationRowCondition`). ***/

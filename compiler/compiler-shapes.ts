@@ -275,12 +275,30 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           SQL.createTableReference(cteAlias.cteName, tableAlias)
         ]);
 
-        // An inlined binding (`with a := array_unpack(…) select a filter a > 1`)
-        // stands for the current row in this select's filter and order, not for
-        // its expression again: `UNNEST(…) > 1` in a WHERE is rejected.
+        // A binding of values (`with a := array_unpack(…) select a filter a > 1`,
+        // `a := (select …)`) stands for the current row's value in this
+        // select's filter and order, not for its expression or all its rows
+        // again: `UNNEST(…) > 1` in a WHERE is rejected, and `(SELECT * FROM a)`
+        // is more than one row. A binding of objects stands for the current
+        // object (`select u { name } filter u.name = …`), like a `for` variable.
         const variable = this.scopeVariable(expr.name);
         if (variable && !variable.sqlOverride && !variable.row) {
           this.ctx.currentScope.variables.set(expr.name, { ...variable, sqlOverride: SQL.createColumnReference("value", tableAlias) });
+        } else if (!variable && cteAlias.values) {
+          this.ctx.currentScope.variables.set(expr.name, {
+            expression: expr,
+            name: expr.name,
+            sqlOverride: SQL.createColumnReference("value", tableAlias),
+            type: "any"
+          });
+        } else if (!variable && cteAlias.typeDef?.kind === "object") {
+          this.ctx.currentScope.variables.set(expr.name, {
+            expression: expr,
+            name: expr.name,
+            row: { alias: tableAlias, table: cteAlias.cteName, type: cteAlias.typeDef.name },
+            sqlOverride: SQL.createColumnReference("id", tableAlias),
+            type: cteAlias.typeDef.name
+          });
         }
 
         let selectItems: SQL.SelectItem[];
@@ -350,6 +368,14 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
 
     if (expr.kind === "FunctionCall") {
+      // An element-wise function over a set (`str_upper(User.name)`) is
+      // applied to each element: the set is this select's FROM.
+      const sets = this.elementWiseSets(expr);
+      if (sets) {
+        const { from, value } = this.compileElementWiseCall(expr, sets);
+        return { fromClause: SQL.createFromClause(from), selectItems: [SQL.createSelectItem(value)] };
+      }
+
       // Check if function has a TypeName argument (e.g., count(User))
       // This means we need a FROM clause for that type
       let fromClause = SQL.createFromClause([]);
@@ -1153,6 +1179,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    */
   private shapePathSelect(element: EdgeQLAST.ShapeElement): EdgeQLAST.SelectQuery | null {
     const { expr } = element;
+    // A call that is a set (`up := str_upper(.posts.title)`, `n := array_unpack(…)`)
+    // is its rows as an array too: as one value it would repeat the object's
+    // row once per element.
+    if (expr.kind === "FunctionCall" && this.setQuery(expr)) {
+      return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy };
+    }
     if (expr.kind === "ShapeExpr" && expr.expr.kind === "Path") {
       const resolved = this.resolvePath(expr.expr);
       return resolved && !resolved.property ?
@@ -1609,7 +1641,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
             propStep.name
           ) :
           undefined;
-        if (typeDef && property) {
+        // A multi property is a set of values, one row each: the general path below.
+        if (typeDef && property && !property.multi) {
           const tableAlias = Context.addTableAlias(
             this.ctx,
             typeName.toLowerCase(),
@@ -1622,7 +1655,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           const column = SQL.createColumnReference(property.columnName, tableAlias);
           const selectItems = [SQL.createSelectItem(column)];
           // An object without the property adds no element (a set has no NULLs).
-          const where = property.required || property.multi ? undefined : SQL.isNotNull(column);
+          const where = property.required ? undefined : SQL.isNotNull(column);
           return { selectItems, fromClause, where };
         }
       }

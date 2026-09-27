@@ -125,3 +125,17 @@ test("a path select returns the property's values", async () => {
   assert.ok(names.every(n => typeof n === "string"));
   assert.ok(names.includes(name));
 });
+
+test("arrays decode as arrays", async () => {
+  assert.deepEqual(await client.querySingle("SELECT [1, 2]"), [1, 2]);
+  assert.deepEqual(await client.querySingle("SELECT <array<str>>$tags", { tags: ["a", "b"] }), ["a", "b"]);
+  assert.deepEqual(await client.querySingle("SELECT array_agg({1, 2})"), [1, 2]);
+});
+
+test("tuples and named tuples decode as tuples", async () => {
+  assert.deepEqual([...(await client.querySingle("SELECT (1, 'a')"))], [1, "a"]);
+  const named = await client.querySingle("SELECT (a := 1, b := 'x')");
+  assert.deepEqual([named.a, named.b], [1, "x"]);
+  const pairs = await client.query("SELECT enumerate({'x', 'y'})");
+  assert.deepEqual(pairs.map(pair => [...pair]), [[0, "x"], [1, "y"]]);
+});

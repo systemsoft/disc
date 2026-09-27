@@ -21,9 +21,11 @@ import { schemaToIR } from "./schema-to-ir.ts";
 const SDL = `module default {
   scalar type Count extending int64;
   scalar type TicketNo extending sequence;
+  scalar type SubTicketNo extending TicketNo;
   type Ticket {
     required title: std::str;
     required number: TicketNo;
+    required sub: SubTicketNo;
     count: Count;
     tags: array<Count>;
   };
@@ -51,9 +53,12 @@ Deno.test("codegen scalars - a user scalar has the type of the built-in it exten
   assertEquals(fields.get("count"), { kind: "scalar", scalar: "int64" });
   assertEquals(fields.get("tags"), { element: { kind: "scalar", scalar: "int64" }, kind: "array" });
   assertEquals(fields.get("number"), { kind: "scalar", scalar: "int64" });
+  assertEquals(fields.get("sub"), { kind: "scalar", scalar: "int64" });
 });
 
 Deno.test("codegen scalars - a required sequence property is optional on insert", () => {
   assertEquals(insertField("number").optional, true);
+  // A scalar extending a sequence scalar is a sequence too.
+  assertEquals(insertField("sub").optional, true);
   assertEquals(insertField("title").optional, false);
 });

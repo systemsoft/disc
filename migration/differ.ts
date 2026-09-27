@@ -172,7 +172,7 @@ export class SchemaDiffer {
           scalarName: scalarDef.decl.name.value,
           module: scalarDef.module,
           ...pgTypeName(newEnumTypes, scalarName),
-          baseType: this.scalarBaseType(scalarDef.decl),
+          baseType: this.isSequenceScalar(scalarName, newScalars) ? "sequence" : this.scalarBaseType(scalarDef.decl),
           enumValues: this.scalarEnumValues(scalarDef.decl)
         };
         operations.push(op);
@@ -187,7 +187,7 @@ export class SchemaDiffer {
           scalarName: scalarDef.decl.name.value,
           module: scalarDef.module,
           ...pgTypeName(oldEnumTypes, scalarName),
-          baseType: this.scalarBaseType(scalarDef.decl)
+          baseType: this.isSequenceScalar(scalarName, oldScalars) ? "sequence" : this.scalarBaseType(scalarDef.decl)
         };
         operations.push(op);
       }
@@ -480,14 +480,16 @@ export class SchemaDiffer {
 
   /**
    * Every sequence scalar declared in `schema` (`scalar type TicketNo
-   * extending sequence`), mapped to its PostgreSQL sequence. Used to prime
+   * extending sequence`, or extending another sequence scalar), mapped to
+   * its PostgreSQL sequence. Used to prime
    * `DDLGenerator.setSequenceScalars(...)` so a property of such a scalar
    * defaults to the sequence's next value. Keyed like `enumScalarNames`.
    */
   sequenceScalarNames(schema: Module[]): Map<string, string> {
     const sequences = new Map<string, string>();
-    for (const [qualifiedName, { decl, module }] of this.extractScalars(schema)) {
-      if (this.scalarBaseType(decl) !== "sequence") {
+    const scalars = this.extractScalars(schema);
+    for (const [qualifiedName, { decl, module }] of scalars) {
+      if (!this.isSequenceScalar(qualifiedName, scalars)) {
         continue;
       }
       const bareName = decl.name.value;
@@ -1980,6 +1982,31 @@ export class SchemaDiffer {
       return [];
     }
     return enumExt.params.map(p => p.name.parts.join("::"));
+  }
+
+  /**
+   * Whether the scalar `qualifiedName` extends `sequence`, directly or
+   * through other scalars (`scalar type Sub extending Base`, `Base` a
+   * sequence scalar). As in Gel, each such scalar is a sequence with a
+   * counter of its own (edb/pgsql/delta.py creates a sequence for every
+   * subtype of `std::sequence`). A bare base names a scalar of the same
+   * module before one of `default`.
+   */
+  private isSequenceScalar(
+    qualifiedName: string,
+    scalars: Map<string, { decl: AST.ScalarTypeDeclaration; module: string; }>,
+    seen = new Set<string>()
+  ): boolean {
+    const scalar = scalars.get(qualifiedName);
+    const base = scalar?.decl.extending?.[0]?.name.parts.join("::");
+    if (!scalar || !base || seen.has(qualifiedName)) {
+      return false;
+    }
+    if (base === "sequence") {
+      return true;
+    }
+    const next = base.includes("::") ? base : [`${scalar.module}::${base}`, `default::${base}`].find(key => scalars.has(key));
+    return next !== undefined && this.isSequenceScalar(next, scalars, seen.add(qualifiedName));
   }
 
   /**

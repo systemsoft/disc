@@ -296,7 +296,13 @@ export class EdgeQLParser {
       });
     } while (this.match(TokenType.COMMA));
 
+    // A named select body (`with a := … select b := …`) adds its name to these
+    // bindings: one CTE list.
+    const named = this.check(TokenType.SELECT);
     const body = this.parseQuery();
+    if (named && body.kind === "WithBlock") {
+      return { bindings: [...bindings, ...body.bindings], body: body.body, kind: "WithBlock", module };
+    }
 
     return { kind: "WithBlock", module, bindings, body };
   }
@@ -335,11 +341,29 @@ export class EdgeQLParser {
       { distinct: false, expr, kind: "SelectQuery", span: expr.span };
   }
 
-  private parseSelectQuery(): AST.SelectQuery {
+  /**
+   * `select …`, or Gel's named select `select x := expr …` as the with-block
+   * it means, `with x := expr select x …`: the filter, order by and shape
+   * read `x` as the element being selected.
+   */
+  private parseSelectQuery(): AST.SelectQuery | AST.WithBlock {
     this.consume(TokenType.SELECT, "Expected 'SELECT'");
 
     const distinct = this.match(TokenType.DISTINCT);
 
+    if (this.check(TokenType.IDENT) && this.tokens[this.current + 1]?.type === TokenType.ASSIGN) {
+      const name = this.parseIdentifier();
+      this.advance(); // consume :=
+      const select = this.parseSelectRest(distinct);
+      const binding: AST.WithBinding = { kind: "WithBinding", name, value: select.expr };
+      return { bindings: [binding], body: { ...select, expr: AST.createIdentifier(name.name) }, kind: "WithBlock" };
+    }
+
+    return this.parseSelectRest(distinct);
+  }
+
+  /*** A select after `select [distinct]`: its subject, shape and clauses. ***/
+  private parseSelectRest(distinct: boolean): AST.SelectQuery {
     // Save state to prevent shape consumption. The flag is restored on the way
     // out (see the return below): a select nested in the operand of an
     // enclosing select must not switch the enclosing select's flag off, or
@@ -1389,6 +1413,8 @@ export class EdgeQLParser {
         expr.steps.push({ kind: "PathStep", type: "link_property", name: propName });
       } // Function call
       else if (this.match(TokenType.LPAREN)) {
+        // Where the call starts: its name (the token before `(` when the name has no span).
+        const callSpan = expr.span ?? this.spanOf(this.tokens[this.current - 2]);
         const args = this.parseFunctionArguments();
         this.consume(TokenType.RPAREN, "Expected ')'");
 
@@ -1410,7 +1436,7 @@ export class EdgeQLParser {
         if (this.check(TokenType.OVER)) {
           expr = this.parseWindowFunctionCall(funcName, args);
         } else {
-          expr = AST.createFunctionCall(funcName, args);
+          expr = { ...AST.createFunctionCall(funcName, args), span: callSpan };
         }
       } // Type intersection [IS Type] or array/set indexing
       else if (this.match(TokenType.LBRACKET)) {

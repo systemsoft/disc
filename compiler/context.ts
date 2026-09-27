@@ -69,6 +69,12 @@ export interface CTEAlias {
    * emitted when something selects from it (`select x`).
    */
   referenced?: boolean;
+  /**
+   * The CTE is a set of values (not objects, not a mutation) in one column,
+   * `value`: an inlined binding, or a select of values
+   * (`a := (select array_unpack(…))`).
+   */
+  values?: boolean;
 }
 
 export interface AbstractAnnotationDef {
@@ -263,6 +269,8 @@ export interface VariableDef {
    * and `x.posts` read the object.
    */
   row?: TableAlias;
+  /*** The EdgeQL type of the value `sqlOverride` stands for, when known (`len()` picks its SQL function by it). ***/
+  staticType?: string;
 }
 
 export function createContext(schema: Schema): CompilationContext {
@@ -521,6 +529,12 @@ export function lookupFunction(schema: Schema, parts: string[]): FunctionDef | u
     }
   }
   return undefined;
+}
+
+/*** True when `def` (from `lookupFunction`) is a built-in function, not one an extension, a custom function or the SDL declares. ***/
+export function isBuiltinFunction(def: FunctionDef): boolean {
+  builtinFunctions ??= getBuiltinFunctions();
+  return builtinFunctions.get(def.name)?.name === def.name;
 }
 
 export function getProperty(

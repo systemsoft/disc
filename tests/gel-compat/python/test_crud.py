@@ -142,3 +142,17 @@ def test_path_select_returns_the_property_values(client):
     names = list(client.query("SELECT Item.name"))
     assert all(isinstance(n, str) for n in names)
     assert name in names
+
+
+def test_arrays_decode_as_lists(client):
+    assert client.query_single("SELECT [1, 2]") == [1, 2]
+    assert client.query_single("SELECT <array<str>>$tags", tags=["a", "b"]) == ["a", "b"]
+    assert client.query_single("SELECT array_agg({1, 2})") == [1, 2]
+
+
+def test_tuples_and_named_tuples_decode_as_tuples(client):
+    assert tuple(client.query_single("SELECT (1, 'a')")) == (1, "a")
+    named = client.query_single("SELECT (a := 1, b := 'x')")
+    assert (named.a, named.b) == (1, "x")
+    pairs = client.query("SELECT enumerate({'x', 'y'})")
+    assert [tuple(pair) for pair in pairs] == [(0, "x"), (1, "y")]

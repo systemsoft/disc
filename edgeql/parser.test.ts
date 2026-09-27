@@ -1445,3 +1445,36 @@ Deno.test("EdgeQL Parser - a shaped computed path takes a filter and an order by
     assertEquals(element.orderBy?.map(item => item.direction), ["DESC"]);
   }
 });
+
+Deno.test("EdgeQL Parser - a named select expression is a with binding the select reads", () => {
+  const ast = new EdgeQLParser("select u := User { name } filter u.name = 'a' order by u.name").parse();
+  assertEquals(ast.kind, "WithBlock");
+  if (ast.kind === "WithBlock") {
+    assertEquals(ast.bindings.map(binding => binding.name.name), ["u"]);
+    assertEquals(ast.bindings[0].value.kind !== "ShapeExpr", true);
+    assertEquals(ast.body.kind, "SelectQuery");
+    if (ast.body.kind === "SelectQuery") {
+      assertEquals(ast.body.expr.kind === "Identifier" && ast.body.expr.name, "u");
+      assertEquals(ast.body.shape?.elements.length, 1);
+      assertEquals(ast.body.filter?.kind, "BinaryOp");
+      assertEquals(ast.body.orderBy?.length, 1);
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - a named select expression: scalars, distinct, subqueries and an enclosing with", () => {
+  const scalar = new EdgeQLParser("select n := 1 + 1").parse();
+  assertEquals(scalar.kind === "WithBlock" && scalar.bindings[0].value.kind, "BinaryOp");
+  assertEquals(scalar.kind === "WithBlock" && scalar.body.kind === "SelectQuery" && scalar.body.expr.kind, "Identifier");
+
+  const distinct = new EdgeQLParser("select distinct x := {1, 1, 2}").parse();
+  assertEquals(distinct.kind === "WithBlock" && distinct.body.kind === "SelectQuery" && distinct.body.distinct, true);
+
+  // The enclosing with's bindings and the select's name are one binding list.
+  const enclosed = new EdgeQLParser("with a := 1 select b := a + 1").parse();
+  assertEquals(enclosed.kind === "WithBlock" && enclosed.bindings.map(binding => binding.name.name), ["a", "b"]);
+  assertEquals(enclosed.kind === "WithBlock" && enclosed.body.kind, "SelectQuery");
+
+  const nested = new EdgeQLParser("select (select n := 1 + 1)").parse();
+  assertEquals(nested.kind === "SelectQuery" && nested.expr.kind === "Subquery" && nested.expr.query.kind, "WithBlock");
+});

@@ -42,7 +42,7 @@ import {
   verifyClientFinalMessage,
   type ScramServerState
 } from "./scram.ts";
-import { generateDescriptorIdSync, resolveWellKnownType } from "./typedesc.ts";
+import { generateDescriptorIdSync } from "./typedesc.ts";
 import { uuidToBytes } from "./types.ts";
 
 import {
@@ -57,7 +57,15 @@ import {
   ValidationError
 } from "../lib/errors.ts";
 import { QueryCache } from "../lib/query-cache.ts";
-import { decodeScalar, encodeScalar, hasScalarCodec } from "./scalar-codecs.ts";
+import {
+  appendTypeDescriptor,
+  decodeWireValue,
+  encodeWireValue,
+  hasWireCodec,
+  mapWireTypeScalars,
+  parseWireType,
+  type TypeDescriptorList
+} from "./collection-codecs.ts";
 
 /**
  * Maximum size (in bytes) of a single wire-protocol message payload.
@@ -207,19 +215,14 @@ function buildEmptyStateDescriptor(): {
 //                                   [u16 sourceTypePos]
 //
 // Each descriptor in the typedesc block is itself u32-length-prefixed.
+// Base scalars, arrays and tuples are encoded by `appendTypeDescriptor`
+// (`protocol/collection-codecs.ts`).
 
 interface ShapeElementV2 {
   name: string;
   /** index into the descriptor list of this field's type codec */
   pos: number;
   cardinality: number;
-}
-
-function encodeBaseScalarV2(tid: Uint8Array): Uint8Array {
-  const w = new BufferWriter();
-  w.writeUInt8(2);
-  w.writeUUID(tid);
-  return w.toBytes();
 }
 
 function encodeShapeV2(
@@ -382,9 +385,12 @@ function qualifyTypeName(name: string, scope: WithScope): string {
 /**
  * The built-in type a scalar type is sent as: a user scalar
  * (`scalar type Count extending int64`) as the type it extends, a sequence
- * as int64, an enum as str.
+ * as int64, an enum as str. In an array or tuple, each scalar in it.
  */
 function builtinScalarType(name: string, scope: WithScope): string {
+  if (name.includes("<")) {
+    return mapWireTypeScalars(name, scalar => builtinScalarType(scalar, scope));
+  }
   const bare = name.replace(/^default::/, "");
   const base = scope.schema?.scalars?.get(bare) ?? scope.schema?.scalars?.get(name) ?? bare;
   if (base === "sequence") {
@@ -424,8 +430,21 @@ function inferScalarType(
   const bound = resolveAlias(expr, scope);
   const e = bound.expr;
   switch (e.kind) {
+    case "ArrayExpr": {
+      // `[a, b]`: an array of the elements' common type (`[]` alone has none).
+      const elements = (e as AST.ArrayExpr).elements.map(el => inferScalarType(el, bound.scope));
+      return elements.length > 0 && elements.every(t => t !== null) ? `array<${unifyScalarTypes(elements as string[])}>` : null;
+    }
     case "BinaryOp":
       return binaryOpType(e as AST.BinaryOp, bound.scope);
+    case "NamedTuple": {
+      const elements = (e as AST.NamedTuple).elements.map(el => [el.name, inferScalarType(el.value, bound.scope)]);
+      return elements.every(([, t]) => t !== null) ? `tuple<${elements.map(([name, t]) => `${name}: ${t}`).join(", ")}>` : null;
+    }
+    case "TupleExpr": {
+      const elements = (e as AST.TupleExpr).elements.map(el => inferScalarType(el, bound.scope));
+      return elements.every(t => t !== null) ? `tuple<${elements.join(", ")}>` : null;
+    }
     case "FunctionCall":
       return functionType(e as AST.FunctionCall, bound.scope);
     case "Identifier": {
@@ -475,8 +494,8 @@ function inferScalarType(
       return shape.isScalar ? shape.fields[0].edgeqlType : null;
     }
     case "TypeCast": {
-      const parts = (e as AST.TypeCast).type?.name?.parts;
-      return parts && parts.length > 0 ? builtinScalarType(parts[parts.length - 1], bound.scope) : null;
+      const type = (e as AST.TypeCast).type;
+      return type?.name?.parts?.length ? builtinScalarType(typeNameString(type), bound.scope) : null;
     }
     case "UnaryOp": {
       const unary = e as AST.UnaryOp;
@@ -572,6 +591,7 @@ const ROUNDED: FunctionResultType = ([arg]) => arg === null || !NUMERIC_TYPES.in
 const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
   ["all", "bool"],
   ["any", "bool"],
+  ["array_agg", ([arg]) => arg === null ? null : `array<${arg}>`],
   ["array_join", "str"],
   ["assert_distinct", SAME_AS_ARGUMENT],
   ["assert_exists", SAME_AS_ARGUMENT],
@@ -583,6 +603,8 @@ const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
   ["datetime_of_statement", "datetime"],
   ["datetime_of_transaction", "datetime"],
   ["datetime_truncate", "datetime"],
+  // One `(index, element)` tuple per element.
+  ["enumerate", ([arg]) => arg === null ? null : `tuple<int64, ${arg}>`],
   ["find", "int64"],
   ["json_typeof", "str"],
   ["len", "int64"],
@@ -624,6 +646,17 @@ const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
   ["uuid_generate_v4", "uuid"]
 ]);
 
+/**
+ * A cast's type as a type name: `<str>` → `str`, `<array<str>>` →
+ * `array<str>`, `<tuple<a: int64>>` → `tuple<a: int64>`. A scalar is named
+ * by the last part of its name.
+ */
+function typeNameString(type: AST.TypeName): string {
+  const name = type.name.parts[type.name.parts.length - 1];
+  const rendered = type.subtypes?.length ? `${name}<${type.subtypes.map(typeNameString).join(", ")}>` : name;
+  return type.fieldName ? `${type.fieldName}: ${rendered}` : rendered;
+}
+
 /*** A function's name without the `std::` module: `std::count` → `count`, `math::abs` stays. ***/
 function functionName(call: AST.FunctionCall): string {
   const parts = call.name.parts;
@@ -647,7 +680,7 @@ function functionType(call: AST.FunctionCall, scope: WithScope): string | null {
  */
 function functionCardinality(call: AST.FunctionCall, scope: WithScope): number {
   const name = functionName(call);
-  if (["all", "any", "count", "math::mean", "sum"].includes(name)) {
+  if (["all", "any", "array_agg", "count", "math::mean", "sum"].includes(name)) {
     return Cardinality.ONE;
   }
   if (name === "max" || name === "min") {
@@ -694,7 +727,7 @@ function collectParameters(node: unknown): ParamInfo[] {
         seen.add(bare);
         out.push({
           name: bare,
-          edgeqlType: tn.name.parts[tn.name.parts.length - 1]
+          edgeqlType: typeNameString(tn)
         });
       }
     }
@@ -1013,6 +1046,12 @@ function expressionCardinality(
         boundsCardinality(Math.min(then[0], otherwise[0]), Math.max(then[1], otherwise[1]))
       ]);
     }
+    case "ArrayExpr":
+    case "TupleExpr":
+      // One array or tuple per combination of its elements.
+      return productCardinality((e as AST.ArrayExpr | AST.TupleExpr).elements.map(el => expressionCardinality(el, bound.scope)));
+    case "NamedTuple":
+      return productCardinality((e as AST.NamedTuple).elements.map(el => expressionCardinality(el.value, bound.scope)));
     case "Literal":
       return Cardinality.ONE;
     case "Parameter":
@@ -1312,25 +1351,12 @@ function extractFieldNameFromExpr(expr: unknown): string | undefined {
 function buildInputDescriptor(
   params: ParamInfo[]
 ): { id: Uint8Array; data: Uint8Array; } {
-  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }> = [];
-  const scalarPos = new Map<string, number>();
-
-  function ensureScalar(eqlType: string): number {
-    let pos = scalarPos.get(eqlType);
-    if (pos !== undefined) {
-      return pos;
-    }
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
-    pos = descriptors.length;
-    descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
-    scalarPos.set(eqlType, pos);
-    return pos;
-  }
+  const list: TypeDescriptorList = { descriptors: [], positions: new Map() };
+  const descriptors = list.descriptors;
 
   const elements: ShapeElementV2[] = params.map(p => ({
     name: p.name,
-    pos: ensureScalar(p.edgeqlType),
+    pos: appendTypeDescriptor(list, p.edgeqlType),
     cardinality: 0x41 // ONE
   }));
 
@@ -1411,7 +1437,7 @@ function decodeArgs(
       out[p.name] = null;
     } else {
       const bytes = r.readBytes(len);
-      out[p.name] = decodeScalar(p.edgeqlType, bytes);
+      out[p.name] = decodeWireValue(p.edgeqlType, bytes);
     }
   }
   return out;
@@ -1448,6 +1474,11 @@ function encodeRowAsScalar(
     if (values.length > 0) {
       value = values[0];
     }
+    // A selected named tuple (`select (a := 1, b := 'x')`) is built as a
+    // JSON object, which comes back as the row itself.
+    if (isRowNamedTuple(row, eqlType)) {
+      value = row;
+    }
   }
   if (value === null || value === undefined) {
     // Empty result set is handled by the caller (no Data frames sent).
@@ -1456,10 +1487,20 @@ function encodeRowAsScalar(
     // the client sees a "missing" element rather than a crash.
     return new Uint8Array(0);
   }
-  if (!hasScalarCodec(eqlType)) {
+  if (!hasWireCodec(eqlType)) {
     return new Uint8Array(0);
   }
-  return encodeScalar(eqlType, value);
+  return encodeWireValue(eqlType, value);
+}
+
+/*** Whether `row` is itself a value of the named tuple type `eqlType`: its columns are the tuple's names. ***/
+function isRowNamedTuple(row: Record<string, unknown>, eqlType: string): boolean {
+  const type = parseWireType(eqlType);
+  if (type.kind !== "tuple" || type.elements.some(el => el.name === undefined)) {
+    return false;
+  }
+  const columns = Object.keys(row);
+  return columns.length === type.elements.length && type.elements.every(el => columns.includes(el.name!));
 }
 
 function encodeRowAsObject(
@@ -1476,14 +1517,14 @@ function encodeRowAsObject(
       w.writeUInt32(0xffffffff);
       continue;
     }
-    if (!hasScalarCodec(field.edgeqlType)) {
+    if (!hasWireCodec(field.edgeqlType)) {
       // Unknown scalar — surface as null rather than crashing the whole
       // response. Client sees the field as missing; better than killing
       // the session over an unimplemented codec.
       w.writeUInt32(0xffffffff);
       continue;
     }
-    const bytes = encodeScalar(field.edgeqlType, value);
+    const bytes = encodeWireValue(field.edgeqlType, value);
     w.writeUInt32(bytes.length);
     w.writeBytes(bytes);
   }
@@ -1531,34 +1572,19 @@ export function buildOutputDescriptor(
   // clients special-case scalar codecs by descriptor type, and wrapping
   // the scalar in an Object surfaces as `Object{id := None}` regardless
   // of what bytes we put in the Data payload.
+  const list: TypeDescriptorList = { descriptors: [], positions: new Map() };
+  const descriptors = list.descriptors;
+  // An array or tuple is described like a scalar: its descriptor (after
+  // those of its element types) is the root.
   if (shape.isScalar) {
-    const eqlType = shape.fields[0].edgeqlType;
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
-    const descriptor = { id: tid, bytes: encodeBaseScalarV2(tid) };
-    const packed = packTypedescBlock([descriptor]);
+    appendTypeDescriptor(list, shape.fields[0].edgeqlType);
+    const packed = packTypedescBlock(descriptors);
     return { id: packed.rootId, data: packed.data };
-  }
-
-  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }> = [];
-  const scalarPos = new Map<string, number>();
-
-  function ensureScalar(eqlType: string): number {
-    let pos = scalarPos.get(eqlType);
-    if (pos !== undefined) {
-      return pos;
-    }
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
-    pos = descriptors.length;
-    descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
-    scalarPos.set(eqlType, pos);
-    return pos;
   }
 
   const elements: ShapeElementV2[] = shape.fields.map(f => ({
     name: f.name,
-    pos: ensureScalar(f.edgeqlType),
+    pos: appendTypeDescriptor(list, f.edgeqlType),
     cardinality: f.cardinality
   }));
 

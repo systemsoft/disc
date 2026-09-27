@@ -30,6 +30,7 @@ const SDL = `
 module default {
   scalar type Count extending int64;
   scalar type TicketNo extending sequence;
+  scalar type SubTicketNo extending TicketNo;
   type Doc {
     required title: str;
     data: bytes;
@@ -41,6 +42,7 @@ module default {
 
 module billing {
   scalar type Invoice extending sequence;
+  scalar type SubInvoice extending Invoice;
 }
 `;
 
@@ -158,6 +160,11 @@ Deno.test("sequence_next(introspect T) is NEXTVAL on the scalar's sequence", () 
   assertEquals(compile("select sequence_next(introspect billing::Invoice)"), "SELECT NEXTVAL('disc_seq_billing__invoice')");
   assertEquals(compile("select sequence_next(introspect Invoice)"), "SELECT NEXTVAL('disc_seq_billing__invoice')");
   assertEquals(compile("with module billing select sequence_next(introspect Invoice)"), "SELECT NEXTVAL('disc_seq_billing__invoice')");
+});
+
+Deno.test("sequence functions: a scalar extending a sequence scalar uses its own sequence", () => {
+  assertEquals(compile("select sequence_next(introspect SubTicketNo)"), "SELECT NEXTVAL('disc_seq_subticketno')");
+  assertEquals(compile("select sequence_reset(introspect billing::SubInvoice, 5)"), "SELECT SETVAL('disc_seq_billing__subinvoice', 5)");
 });
 
 Deno.test("sequence_reset(introspect T, v) sets the value; without v it restarts the sequence", () => {

@@ -131,6 +131,59 @@ Deno.test("sequence scalar - rolling back its creation drops the sequence; rolli
   assert(dropped.rollback.includes("CREATE SEQUENCE IF NOT EXISTS disc_seq_ticketno;"), dropped.rollback.join("\n"));
 });
 
+// A scalar extending a sequence scalar is a sequence too, with a counter of
+// its own: Gel creates a sequence for every scalar that is a subtype of
+// `std::sequence` (edb/pgsql/delta.py `CreateScalarType`, `is_sequence` =
+// `issubclass(std::sequence)`), and a property defaults to the next value of
+// its own scalar's sequence (`get_pointer_default`).
+const CHAIN = `module default {
+  scalar type Base extending sequence;
+  scalar type Sub extending Base;
+  scalar type Leaf extending Sub;
+  type Counter {
+    base: Base;
+    sub: Sub;
+    leaf: Leaf;
+  };
+};
+module billing {
+  scalar type Batch extending default::Base;
+  type Run {
+    batch: Batch;
+  };
+};`;
+
+Deno.test("sequence scalar - a scalar extending a sequence scalar gets its own sequence and default", () => {
+  const { forward } = migrate(null, CHAIN);
+  const table = (name: string): string => forward.find(s => s.startsWith(`CREATE TABLE ${name} `)) ?? "";
+  const counter = forward.findIndex(s => s.startsWith("CREATE TABLE counter "));
+  for (const sequence of ["disc_seq_base", "disc_seq_sub", "disc_seq_leaf", "disc_seq_billing__batch"]) {
+    const created = forward.indexOf(`CREATE SEQUENCE ${sequence};`);
+    assert(created >= 0 && created < counter, `${sequence}:\n${forward.join("\n")}`);
+  }
+
+  assert(table("counter").includes("base BIGINT DEFAULT nextval('disc_seq_base')"), table("counter"));
+  assert(table("counter").includes("sub BIGINT DEFAULT nextval('disc_seq_sub')"), table("counter"));
+  assert(table("counter").includes("leaf BIGINT DEFAULT nextval('disc_seq_leaf')"), table("counter"));
+  assert(table("run").includes("batch BIGINT DEFAULT nextval('disc_seq_billing__batch')"), table("run"));
+});
+
+Deno.test("sequence scalar - a derived sequence scalar's sequence is dropped with it and restored on rollback", () => {
+  const created = migrate(null, CHAIN);
+  for (const sequence of ["disc_seq_sub", "disc_seq_leaf", "disc_seq_billing__batch"])
+    assert(created.rollback.includes(`DROP SEQUENCE IF EXISTS ${sequence};`), created.rollback.join("\n"));
+
+  const dropped = migrate(
+    `module default { scalar type Base extending sequence; scalar type Sub extending Base; type T { sub: Sub; }; };`,
+    `module default { scalar type Base extending sequence; type T { }; };`
+  );
+  const dropColumn = dropped.forward.findIndex(s => s.includes("DROP COLUMN") && s.includes("sub"));
+  const dropSeq = dropped.forward.indexOf("DROP SEQUENCE IF EXISTS disc_seq_sub;");
+  assert(dropColumn >= 0 && dropSeq > dropColumn, dropped.forward.join("\n"));
+  assert(!dropped.forward.some(s => s.includes("disc_seq_base")), dropped.forward.join("\n"));
+  assert(dropped.rollback.includes("CREATE SEQUENCE IF NOT EXISTS disc_seq_sub;"), dropped.rollback.join("\n"));
+});
+
 Deno.test("std:: names - the same schema spelled with std:: names needs no migration", () => {
   const bare = `module default {
   scalar type Count extending int64;

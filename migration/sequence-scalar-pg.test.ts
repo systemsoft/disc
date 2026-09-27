@@ -202,6 +202,86 @@ Deno.test({
   }
 });
 
+// A scalar extending a sequence scalar has a counter of its own, as in Gel
+// (see `migration/sequence-scalar.test.ts`).
+const CHAIN_SDL = `module default {
+  scalar type SqBase extending sequence;
+  scalar type SqSub extending SqBase;
+  type SqCounter {
+    required label: str;
+    base: SqBase;
+    sub: SqSub;
+  };
+};`;
+
+const CHAIN_BASE_ONLY = `module default {
+  scalar type SqBase extending sequence;
+  type SqCounter {
+    required label: str;
+    base: SqBase;
+  };
+};`;
+
+async function sequenceNames(pool: ConnectionPool): Promise<string[]> {
+  const result = await pool.query(`SELECT relname FROM pg_class WHERE relkind = 'S' AND relname LIKE 'disc_seq_sq%' ORDER BY relname`);
+  return result.rows.map(row => (row as { relname: string; }).relname);
+}
+
+Deno.test({
+  name: "PG sequence scalar: a scalar extending a sequence scalar draws from a counter of its own",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+    const dropChainSequences = async (): Promise<void> => {
+      await pool.query(`DROP SEQUENCE IF EXISTS disc_seq_sqbase`);
+      await pool.query(`DROP SEQUENCE IF EXISTS disc_seq_sqsub`);
+    };
+
+    try {
+      await reset(pool);
+      await dropChainSequences();
+      await migrate(pool, CHAIN_SDL);
+      assertEquals(await sequenceNames(pool), ["disc_seq_sqbase", "disc_seq_sqsub"]);
+
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+      await manager.applySchema(CHAIN_SDL);
+      const handler = new EdgeQLProtocolHandler({ databaseUrl: dsn, schema: manager.getSchema()! });
+      await manager.close();
+      const run = async (query: string): Promise<unknown[]> => {
+        const response = await handler.handleRequest({ query }, makeContext());
+        assertEquals(response.errors, undefined, `${query}: ${JSON.stringify(response.errors)}`);
+        return response.data as unknown[];
+      };
+      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers(Object.values((await run(query))[0] as Record<string, unknown>)[0]));
+
+      await run(`insert SqCounter { label := "a" }`);
+      await run(`insert SqCounter { label := "b" }`);
+      assertEquals(await value(`select sequence_next(introspect SqSub)`), 3);
+      await run(`insert SqCounter { label := "c" }`);
+      assertEquals(await value(`select sequence_reset(introspect SqSub, 10)`), 10);
+      await run(`insert SqCounter { label := "d" }`);
+
+      const rows = await run(`select SqCounter { label, base, sub } order by .label`);
+      assertEquals(
+        rows.map(row => row as Record<string, unknown>).map(row => [row.label, Number(unwrapExactNumbers(row.base)), Number(unwrapExactNumbers(row.sub))]),
+        [["a", 1, 1], ["b", 2, 2], ["c", 3, 4], ["d", 4, 11]]
+      );
+      assertEquals(await value(`select sequence_next(introspect SqBase)`), 5);
+
+      assertEquals(await migrate(pool, CHAIN_SDL), []);
+      await migrate(pool, CHAIN_BASE_ONLY);
+      assertEquals(await sequenceNames(pool), ["disc_seq_sqbase"]);
+    } finally {
+      await reset(pool);
+      await dropChainSequences();
+      await pool.close();
+    }
+  }
+});
+
 Deno.test({
   name: "PG casts: std:: names, arrays of durations, float32 ranges and user scalars round-trip",
   ignore: !canRunPgTests(),

@@ -1134,12 +1134,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         compileResult.error
       );
     }
-    const sql = this.generateSQLString(compileResult.value);
+    const sqlStatement = compileResult.value;
+    const sql = this.generateSQLString(sqlStatement);
 
-    const positionalValues: unknown[] = new Array(parameterIndex.size);
-    for (const [name, idx] of parameterIndex) {
-      positionalValues[idx - 1] = args[name];
-    }
+    // Same binding as HTTP variables: jsonb (tuples, json) as JSON text,
+    // bytes decoded, exact numbers as digits, missing arguments reported.
+    const positionalValues = this.prepareParameters(
+      args,
+      Compiler.parameterBindOrder(ast, parameterIndex),
+      Compiler.optionalParameterNames(ast),
+      sqlStatement
+    );
 
     const status = this.detectStatusFromAst(ast);
 

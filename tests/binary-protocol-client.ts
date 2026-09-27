@@ -4,7 +4,9 @@
 /**
  * A minimal Gel binary-protocol client for PG end-to-end tests: sends
  * Parse + Execute for one query and decodes the CommandDataDescription's
- * output descriptor and the Data rows against it.
+ * output descriptor and the Data rows against it. Arrays and tuples are
+ * named by their structure (`array<std::str>`), read from the positions
+ * their descriptors reference, and checked against the name they carry.
  */
 
 import { assert, assertEquals } from "@std/assert";
@@ -16,13 +18,17 @@ import {
   type ClientMessage,
   type ServerMessage
 } from "../protocol/messages.ts";
-import { decodeScalar, encodeScalar } from "../protocol/scalar-codecs.ts";
+import { decodeWireValue, encodeWireValue } from "../protocol/collection-codecs.ts";
 import { UUID_TO_TYPE } from "../protocol/typedesc.ts";
 
 const ZERO_UUID = new Uint8Array(16);
 
-/** A decoded output descriptor: a base scalar, or an object shape. */
+/**
+ * A decoded output descriptor: a base scalar, an array or tuple (`type`
+ * names it, e.g. `tuple<a: std::int64, b: std::str>`), or an object shape.
+ */
 export type Described =
+  | { kind: "array" | "tuple"; type: string; }
   | { kind: "scalar"; type: string; }
   | { fields: { name: string; type: string; }[]; kind: "object"; };
 
@@ -45,19 +51,46 @@ function describe(block: Uint8Array): Described {
     descriptors.push(blockReader.readLenPrefixedBytes());
   }
 
-  function scalarAt(pos: number): string {
+  /*** The type at `pos`: a base scalar (2), tuple (4), named tuple (5) or array (6). ***/
+  function typeAt(pos: number): string {
     const r = new BufferReader(descriptors[pos]);
-    assertEquals(r.readUInt8(), 2, "expected a CTYPE_BASE_SCALAR");
-    const name = UUID_TO_TYPE.get(uuidString(r.readBytes(16)));
-    assert(name, "unknown base scalar id");
-    return name;
+    const tag = r.readUInt8();
+    const id = r.readBytes(16);
+    if (tag === 2) {
+      const name = UUID_TO_TYPE.get(uuidString(id));
+      assert(name, "unknown base scalar id");
+      return name;
+    }
+    assert(tag === 4 || tag === 5 || tag === 6, `unexpected descriptor tag ${tag}`);
+    const name = r.readString();
+    assertEquals(r.readUInt8(), 0, "schema_defined");
+    assertEquals(r.readUInt16(), 0, "ancestor count");
+    let type: string;
+    if (tag === 6) {
+      const element = typeAt(r.readUInt16());
+      assertEquals([r.readUInt16(), r.readUInt32()], [1, 0xffffffff], "one unbounded dimension");
+      type = `array<${element}>`;
+    } else {
+      const count = r.readUInt16();
+      const elements: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const label = tag === 5 ? `${r.readString()}: ` : "";
+        elements.push(label + typeAt(r.readUInt16()));
+      }
+      type = `tuple<${elements.join(", ")}>`;
+    }
+    assertEquals(name, type, "descriptor type name");
+    return type;
   }
 
   const rootPos = descriptors.length - 1;
   const root = new BufferReader(descriptors[rootPos]);
   const tag = root.readUInt8();
   if (tag === 2) {
-    return { kind: "scalar", type: scalarAt(rootPos) };
+    return { kind: "scalar", type: typeAt(rootPos) };
+  }
+  if (tag === 4 || tag === 5 || tag === 6) {
+    return { kind: tag === 6 ? "array" : "tuple", type: typeAt(rootPos) };
   }
   assertEquals(tag, 1, "expected a CTYPE_SHAPE root");
   root.readBytes(16); // tid
@@ -71,15 +104,15 @@ function describe(block: Uint8Array): Described {
     const name = root.readString();
     const pos = root.readUInt16();
     root.readUInt16(); // source_type_pos
-    fields.push({ name, type: scalarAt(pos) });
+    fields.push({ name, type: typeAt(pos) });
   }
   return { fields, kind: "object" };
 }
 
 /*** Decode one Data element against its descriptor. ***/
 function decodeElement(described: Described, bytes: Uint8Array): unknown {
-  if (described.kind === "scalar") {
-    return decodeScalar(described.type, bytes);
+  if (described.kind !== "object") {
+    return decodeWireValue(described.type, bytes);
   }
   const r = new BufferReader(bytes);
   const count = r.readUInt32();
@@ -88,20 +121,20 @@ function decodeElement(described: Described, bytes: Uint8Array): unknown {
     r.readUInt32(); // reserved
     const lenU = r.readUInt32();
     const field = described.fields[i];
-    out[field.name] = lenU === 0xffffffff ? null : decodeScalar(field.type, r.readBytes(lenU));
+    out[field.name] = lenU === 0xffffffff ? null : decodeWireValue(field.type, r.readBytes(lenU));
   }
   return out;
 }
 
-/*** Encode `<str>$name` kwargs in their typedesc order. ***/
-function encodeStrArgs(args: [string, string][]): Uint8Array {
+/*** Encode `<str>$name` (or `<array<str>>$name`) kwargs in their typedesc order. ***/
+function encodeStrArgs(args: [string, string | string[]][]): Uint8Array {
   if (args.length === 0) {
     return new Uint8Array(0);
   }
   const w = new BufferWriter();
   w.writeUInt32(args.length);
   for (const [, value] of args) {
-    const bytes = encodeScalar("str", value);
+    const bytes = encodeWireValue(Array.isArray(value) ? "array<str>" : "str", value);
     w.writeUInt32(0); // reserved
     w.writeUInt32(bytes.length);
     w.writeBytes(bytes);
@@ -155,7 +188,7 @@ export class Client {
     }
   }
 
-  async query(commandText: string, args: [string, string][] = []): Promise<Answer> {
+  async query(commandText: string, args: [string, string | string[]][] = []): Promise<Answer> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,
       annotations: [],
