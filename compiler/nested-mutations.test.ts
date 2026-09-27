@@ -102,3 +102,22 @@ Deno.test("nested mutations - a mutation inside an expression is a compile error
   const nestedUpsert = await compile("insert Cart { label := 'o', item := (insert Item { name := 'x' } unless conflict) }");
   assertStringIncludes(nestedUpsert.error ?? "", "cannot have `unless conflict`");
 });
+
+Deno.test("nested mutations - a shape over a mutation reads its links through the statement's CTEs; other SQL is unchanged", async () => {
+  // A shape over the insert: the junction as the statement leaves it, and the
+  // target table with the object the nested insert adds.
+  const { sql = "" } = await compile(
+    "select (insert Cart { label := 'o', items := (select Item), item := (insert Item { name := 'x' }) }) { items: { name }, item: { name } }"
+  );
+  assertStringIncludes(sql, "ON CONFLICT DO NOTHING RETURNING * )");
+  assertStringIncludes(sql, `("source_id", "target_id") NOT IN (SELECT "source_id", "target_id" FROM "link_0") UNION ALL SELECT * FROM link_0`);
+  assertStringIncludes(sql, `("id") NOT IN (SELECT "id" FROM "nested") UNION ALL SELECT * FROM nested`);
+
+  // The same insert without a shape, and a shape over the tables alone.
+  const bare = await compile("insert Cart { label := 'o', items := (select Item), item := (insert Item { name := 'x' }) }");
+  const select = await compile("select Cart { items: { name }, item: { name } }");
+  for (const plain of [bare.sql ?? "", select.sql ?? ""]) {
+    assert(!plain.includes("NOT IN") && !plain.includes("UNION ALL") && !plain.includes("RETURNING * ) nested"), plain);
+  }
+  assertStringIncludes(bare.sql ?? "", "ON CONFLICT DO NOTHING ), nested");
+});

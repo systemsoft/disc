@@ -2786,6 +2786,15 @@ END $$;`
     tableName: string,
     operation: Types.AlterLinkOperation
   ): string[] {
+    /*** Only the delete rules changed (a user's edit, or the delete-rule repair `migrate` adds):
+         the rollback's own repair (`reconcileLinkDeleteRules`, which `MigrationEngine` runs against
+         the rolled-back-to snapshot) puts back the FK action and trigger that snapshot declares. ***/
+    const deleteRulesOnly = !operation.propertyOperations?.length &&
+      operation.changes.every(change => change.kind === "ChangeOnDelete" || change.kind === "ChangeOnSourceDelete");
+
+    if (deleteRulesOnly)
+      return [`-- ALTER LINK ${operation.linkName} on ${tableName}: delete rules are restored by the repair after the rollback`];
+
     // Link alteration rollback is complex and requires the original link definition
     return [
       `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.linkName}' on table '${tableName}'`,

@@ -16,12 +16,19 @@
  *   reads each argument's set as a FROM item. Aggregates read the call's rows.
  * - `select x := expr …` names the selected set: it is `with x := expr
  *   select x …`, where `x` in the filter and order by is the current element.
+ * - Operators (`+`, `++`, `=`, `and`, `not`, …) and casts over a set apply to
+ *   each element like element-wise functions, set operands crossed (`in`
+ *   only over its left operand). A set-valued computed shape element is an
+ *   array. A filter over a set is true when any element is (Gel's
+ *   `EXISTS (SELECT FROM <set> WHERE <value>)`); an order by over a set is an
+ *   error, as in Gel.
  *
  * Real-PG coverage: `compiler/pg-set-semantics.test.ts`.
  */
 
 import { assertEquals, assertMatch, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { CompilationError } from "../lib/errors.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
@@ -128,7 +135,7 @@ Deno.test("element-wise function over a set literal: one element each, multiple 
 });
 
 Deno.test("element-wise function over a set elsewhere in an expression is a compile error, not a record or a scalar subquery", () => {
-  const error = assertThrows(() => compile("select str_upper({'a', 'b'}) ++ '!'"));
+  const error = assertThrows(() => compile("select [str_upper({'a', 'b'})]"));
   assertStringIncludes((error as Error).message, "str_upper()");
   assertStringIncludes((error as Error).message, "set");
 });
@@ -141,4 +148,114 @@ Deno.test("named select: the name in the filter and order by is the current elem
 
   assertStringIncludes(compile("select n := 1 + 1"), "WITH n (value) AS (SELECT 1 + 1)");
   assertStringIncludes(compile("select a := array_unpack(<array<int64>>$x) filter a > 1"), "WHERE a_1.value > 1");
+});
+
+// ── element-wise operators over sets ─────────────────────────────────────
+
+Deno.test("operator over a set literal: applied to each element, the set is the select's FROM", () => {
+  assertMatch(
+    compile("select {1, 2} + 1"),
+    /^SELECT __arg_\d+\.value \+ 1 FROM \(SELECT set_\d+\.\* FROM \(SELECT 1 UNION ALL SELECT 2\) AS set_\d+\) AS __arg_\d+\(value\)$/
+  );
+  assertMatch(compile("select 'a' ++ {'x', 'y'}"), /^SELECT 'a' \|\| __arg_\d+\.value FROM \(.*\) AS __arg_\d+\(value\)$/);
+  assertMatch(compile("select {1, 2} = 1"), /^SELECT __arg_\d+\.value = 1 FROM /);
+  assertMatch(compile("select not {true, false}"), /^SELECT NOT __arg_\d+\.value FROM /);
+  assertMatch(compile("select -{1, 2}"), /^SELECT -__arg_\d+\.value FROM /);
+  assertMatch(compile("select <str>{1, 2}"), /^SELECT CAST\(__arg_\d+\.value AS text\) FROM /);
+  // `in` applies to each element of its left operand; its right operand is a whole set.
+  assertMatch(compile("select {1, 2} in {1}"), /^SELECT __arg_\d+\.value IN \(1\) FROM \(.*\) AS __arg_\d+\(value\)$/);
+});
+
+Deno.test("operator over two sets: the operands' sets are crossed, left outermost", () => {
+  assertMatch(
+    compile("select {1, 2} + {10, 20}"),
+    /^SELECT (__arg_\d+)\.value \+ (__arg_\d+)\.value FROM \(.*\) AS \1\(value\), \(.*\) AS \2\(value\)$/
+  );
+});
+
+Deno.test("operator over a path from a type: applied to each of the path's values", () => {
+  assertMatch(
+    compile("select User.name ++ '!'"),
+    /^SELECT __arg_\d+\.value \|\| '!' FROM \(SELECT user_\d+\.name FROM "user" AS user_\d+\) AS __arg_\d+\(value\)$/
+  );
+});
+
+Deno.test("operator over a set with an operand that may be empty: an empty operand adds no element", () => {
+  assertMatch(compile("select User { v := .visits + {1, 2} }"), /WHERE user_\d+\.visits IS NOT NULL/);
+  // A literal is never empty; `?=` compares empty operands.
+  assertEquals(compile("select {1, 2} + 1").includes("IS NOT NULL"), false);
+  assertEquals(compile("select User { v := .visits ?= {1, 2} }").includes("IS NOT NULL"), false);
+});
+
+Deno.test("nested operators and functions over sets: each set-valued operand is the outer expression's set", () => {
+  assertMatch(compile("select ({1, 2} + 1) * 2"), /^SELECT __arg_\d+\.value \* 2 FROM \(SELECT __arg_\d+\.value \+ 1 FROM /);
+  assertMatch(compile("select str_upper({'a', 'b'} ++ '!')"), /^SELECT UPPER\(__arg_\d+\.value\) FROM \(SELECT __arg_\d+\.value \|\| '!' FROM /);
+  assertMatch(compile("select str_upper({'a', 'b'}) ++ '!'"), /^SELECT __arg_\d+\.value \|\| '!' FROM \(SELECT UPPER\(__arg_\d+\.value\) FROM /);
+  assertStringIncludes(compile("select count({1, 2} + {10, 20})"), "SELECT COUNT(*) FROM (SELECT");
+});
+
+Deno.test("for body over a set operator: one element per crossed pair", () => {
+  assertMatch(compile("for x in {1, 2} union x + {10, 20}"), /__arg_\d+\.value/);
+});
+
+Deno.test("set-valued computed shape element: its elements as an array", () => {
+  assertStringIncludes(compile("select User { x := {1, 2} }"), "'x', (SELECT COALESCE(jsonb_agg(__agg.v), '[]'::jsonb) FROM (SELECT set_");
+  assertMatch(
+    compile("select User { y := {.name, 'z'} }"),
+    /'y', \(SELECT COALESCE\(jsonb_agg\(__agg\.v\), '\[\]'::jsonb\) FROM \(SELECT set_\d+\.\* FROM \(SELECT user_\d+\.name UNION ALL SELECT 'z'\)/
+  );
+  assertMatch(
+    compile("select User { z := .name ++ {'a', 'b'} }"),
+    /'z', \(SELECT COALESCE\(jsonb_agg\(__agg\.v\), '\[\]'::jsonb\) FROM \(SELECT user_\d+\.name \|\| __arg_\d+\.value FROM /
+  );
+  assertMatch(
+    compile("select User { n := .nicks ++ '!' }"),
+    /'n', \(SELECT COALESCE\(jsonb_agg\(__agg\.v\), '\[\]'::jsonb\) FROM \(SELECT __arg_\d+\.value \|\| '!' FROM /
+  );
+  // A one-element set is one value.
+  assertStringIncludes(compile("select User { x := {1} }"), "'x', (1)");
+});
+
+Deno.test("filter over a set: true when any element is true (Gel: EXISTS over the set's true elements)", () => {
+  assertMatch(
+    compile("select User { name } filter {1, 2} = .visits"),
+    /WHERE EXISTS \(SELECT 1 FROM \(.*\) AS (__arg_\d+)\(value\) WHERE \(user_\d+\.visits IS NOT NULL\) AND \(\1\.value = user_\d+\.visits\)\)$/
+  );
+  assertMatch(compile("select User { name } filter .name ++ {'x', 'y'} = 'annx'"), /WHERE EXISTS \(SELECT 1 FROM \(SELECT user_\d+\.name \|\| /);
+  // Other conditions join the set's elements in the same EXISTS.
+  assertMatch(
+    compile("select User { name } filter .name = 'ann' and {1, 2} = .visits"),
+    /WHERE EXISTS \(SELECT 1 FROM .* WHERE .*\(\(user_\d+\.name = 'ann'\) AND \(__arg_\d+\.value\)\)\)$/
+  );
+  // A comparison with a multi path already tests any element: unchanged.
+  assertMatch(compile("select User { name } filter .nicks = 'a'"), /WHERE 'a' = ANY\(user_\d+\.nicks\)$/);
+  assertMatch(compile("select User { name } filter .name in {'a', 'b'}"), /WHERE user_\d+\.name IN \('a', 'b'\)$/);
+});
+
+/*** The line and column of the compile error `edgeql` fails with. ***/
+function errorLocation(edgeql: string): [number | undefined, number | undefined] {
+  const error = assertThrows(() => compile(edgeql), CompilationError);
+  return [error.context?.location?.line, error.context?.location?.column];
+}
+
+Deno.test("order by a set is a compile error with its location, as in Gel", () => {
+  const error = assertThrows(() => compile("select User { name } order by {1, 2}"));
+  assertStringIncludes((error as Error).message, "order by");
+  assertStringIncludes((error as Error).message, "more than one element");
+  assertEquals(errorLocation("select User { name } order by {1, 2}"), [1, 31]);
+  assertThrows(() => compile("select User { name } order by .name ++ {'a', 'b'}"), CompilationError, "order by");
+});
+
+Deno.test("a set as one value inside another expression is a compile error with its location, not a record", () => {
+  assertThrows(() => compile("select [{1, 2} + 1]"), CompilationError, "'+' of a set is a set");
+  assertEquals(errorLocation("select [{1, 2} + 1]"), [1, 9]);
+  assertThrows(() => compile("select ({1, 2} + 1) ?? 3"), CompilationError, "of a set is a set");
+  assertThrows(() => compile("select {1, 2} ?? 3"), CompilationError, "'??' of a set operand");
+  assertThrows(() => compile("select User { name } filter .name = ({'a', 'b'} ?? 'c')"), CompilationError);
+  // A set literal anywhere but as `in`'s right operand.
+  assertEquals(errorLocation("select (1, {2, 3})"), [1, 12]);
+  assertThrows(() => compile("select [{1, 2}]"), CompilationError, "set of several elements");
+  assertThrows(() => compile("update User filter .name = 'x' set { name := {'a', 'b'} }"), CompilationError, "set of several elements");
+  // A set test over a set literal still reads its rows.
+  assertStringIncludes(compile("select enumerate({'a', 'b'})"), "ROW_NUMBER() OVER ()");
 });

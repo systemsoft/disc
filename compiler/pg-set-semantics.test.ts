@@ -9,6 +9,8 @@
  * - `for u in T union <optional value>`: no element for an empty value
  * - element-wise functions over set arguments, and aggregates over them
  * - `select x := expr filter … order by …`
+ * - operators and casts over sets (`{1, 2} + {10, 20}`, `User.name ++ '!'`),
+ *   selected, as shape elements, as for bodies and in filters
  *
  * Seed: users ann (visits 3, nicks {a1, a2}, tags [x, y], best Hello, posts
  * {Hello, World}) and bob (nothing optional set).
@@ -182,6 +184,79 @@ Deno.test({
       assertEquals(await values("select n := 1 + 1"), [2]);
       assertEquals(await values("select a := array_unpack(<array<int64>>$x) filter a > 1", { x: [3, 1, 2] }), [2, 3]);
       assertEquals(await values("with k := 1 select n := k + 1"), [2]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG operators over sets: applied to each element, set operands crossed",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async (run, values) => {
+      assertEquals(await values("select {1, 2} + 1"), [2, 3]);
+      // Gel's order: the left operand outermost.
+      assertEquals((await run("select {1, 2} + {10, 20}")).map(row => Object.values(row as object)[0]), [11, 21, 12, 22]);
+      assertEquals(await values("select 'a' ++ {'x', 'y'}"), ["ax", "ay"]);
+      assertEquals(await values("select SetUser.name ++ '!'"), ["ann!", "bob!"]);
+      assertEquals(await values("select {1, 2} = 1"), [false, true]);
+      assertEquals(await values("select not {true, false}"), [false, true]);
+      assertEquals(await values("select -{1, 2}"), [-1, -2]);
+      assertEquals(await values("select <str>{1, 2}"), ["1", "2"]);
+      assertEquals(await values("select {1, 2} in {1}"), [false, true]);
+      assertEquals(await values("select {1, 2} + <int64>{}"), []);
+      assertEquals(await values("select ({1, 2} + 1) * {1, 10}"), [2, 20, 3, 30]);
+      assertEquals(await values("select str_upper({'a', 'b'} ++ '!')"), ["A!", "B!"]);
+      assertEquals(await values("select str_upper({'a', 'b'}) ++ '!'"), ["A!", "B!"]);
+      assertEquals(await values("select count({1, 2} + {10, 20})"), [4]);
+      // `/` of ints is float64 division, per element (float64 answers as text here, as `select 7 / 2` does).
+      assertEquals((await values("select {7, 8} / 2")).map(Number), [3.5, 4]);
+      assertEquals(await values("for x in {1, 2} union x + {10, 20}"), [11, 12, 21, 22]);
+      assertEquals(await values("for u in SetUser union u.name ++ {'1', '2'}"), ["ann1", "ann2", "bob1", "bob2"]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG set-valued computed shape elements are arrays",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async run => {
+      assertEquals(
+        await run("select SetUser { name, x := {1, 2}, y := {.name, 'z'}, z := .name ++ {'a', 'b'} } order by .name"),
+        [
+          { name: "ann", x: [1, 2], y: ["ann", "z"], z: ["anna", "annb"] },
+          { name: "bob", x: [1, 2], y: ["bob", "z"], z: ["boba", "bobb"] }
+        ]
+      );
+      assertEquals(
+        await run("select SetUser { name, n := .nicks ++ '!', v := .visits + {1, 2}, w := .visits ?= {3, 4} } order by .name"),
+        [{ n: ["a1!", "a2!"], name: "ann", v: [4, 5], w: [true, false] }, { n: [], name: "bob", v: [], w: [false, false] }]
+      );
+      assertEquals(await run("select SetUser { name, c := count(.nicks ++ '!') } order by .name"), [{ c: 2, name: "ann" }, { c: 0, name: "bob" }]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG filter over a set keeps an object when any element is true",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async run => {
+      const names = async (filter: string): Promise<unknown[]> =>
+        ((await run(`select SetUser { name } filter ${filter} order by .name`)) as { name: string; }[]).map(user => user.name);
+      assertEquals(await names("{3, 4} = .visits"), ["ann"]);
+      // 4 != 3: some element is true.
+      assertEquals(await names("{3, 4} != .visits"), ["ann"]);
+      assertEquals(await names(".visits = {5, 6}"), []);
+      assertEquals(await names(".name ++ {'x', 'y'} = 'bobx'"), ["bob"]);
+      assertEquals(await names("not {true, false}"), ["ann", "bob"]);
+      assertEquals(await names(".name = 'bob' and {3, 4} = .visits"), []);
+      assertEquals(await names(".name = 'ann' and {3, 4} = .visits"), ["ann"]);
+      // An empty operand has no elements, so none is true (SQL's `NULL or true` is true).
+      assertEquals(await names(".visits = 1 or {true, false}"), ["ann"]);
+      // A mutation's filter too.
+      await run("update SetUser filter .name ++ {'x', 'y'} = 'boby' set { visits := 7 }");
+      assertEquals(await names(".visits = 7"), ["bob"]);
     });
   }
 });

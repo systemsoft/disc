@@ -16,7 +16,7 @@ import {
   AccessSQLInjector
 } from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import type { ErrorContext } from "../lib/errors.ts";
+import { CompilationError, type ErrorContext } from "../lib/errors.ts";
 import { normalizeStdTypeName } from "../lib/std-types.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import * as Context from "./context.ts";
@@ -457,6 +457,12 @@ export abstract class CompilerBase {
   private exemptTables = new WeakSet<SQL.TableReference>();
   /** The CTE names this compilation has taken (see `claimCteName`). */
   protected cteNames = new Set<string>();
+  /**
+   * Set while a select of a mutation's result compiles: the mutation's
+   * data-modifying CTEs, whose tables it reads as they are after the
+   * statement (see `mutationOverlay`).
+   */
+  protected mutationWrites: Context.MutationWrite[] | undefined;
 
   constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
@@ -657,7 +663,11 @@ export abstract class CompilerBase {
    * pass that narrows object reads leaves this table as it is.
    */
   protected tableRowsWhere(typeDef: Context.TypeDef, filter: SQL.SQLExpression): SQL.SelectStatement {
-    const table = SQL.createTableReference(typeDef.tableName, POLICY_ROWS);
+    // While a select of a mutation's result compiles, the rows as the statement leaves them.
+    const overlay = this.mutationOverlay(typeDef.tableName);
+    const table: SQL.TableReference = overlay ?
+      { alias: POLICY_ROWS, kind: "TableReference", name: "", subquery: overlay } :
+      SQL.createTableReference(typeDef.tableName, POLICY_ROWS);
     this.exemptTables.add(table);
     return SQL.createSelectStatement({
       from: SQL.createFromClause([table]),
@@ -669,12 +679,17 @@ export abstract class CompilerBase {
   /**
    * `typeDef`'s table as SQL text, for the SQL the compiler writes as text:
    * `"<table>"`, or `(SELECT * FROM "<table>" WHERE <filter>)` when a select
-   * policy narrows it.
+   * policy narrows it — or the table as a mutation leaves it, for a select of
+   * its result (see `mutationOverlay`).
    */
   protected readableTableSql(typeDef: Context.TypeDef): string {
     const filter = this.selectPolicyFilter(typeDef);
     if (filter) {
       return `(${this.renderSqlStatement(this.tableRowsWhere(typeDef, filter))})`;
+    }
+    const overlay = this.mutationOverlay(typeDef.tableName);
+    if (overlay) {
+      return `(${this.renderSqlStatement(overlay)})`;
     }
     // An abstract type's table stands for its subtypes' rows (see abstractTableRows).
     const abstractRows = this.abstractTableRows(typeDef.tableName);
@@ -687,11 +702,13 @@ export abstract class CompilerBase {
    * multi link declared on an abstract type holds no rows of its own: it is
    * the union of its subtypes' junctions (see abstractTableRows), aliased by
    * `alias` or else by the junction's name, so `"<junction>".col` still resolves.
+   * So is a junction a mutation writes, for a select of its result (see
+   * `mutationOverlay`).
    */
   protected junctionTableSql(junctionTable: string, alias?: string): string {
-    const abstractRows = this.abstractTableRows(junctionTable);
-    if (abstractRows) {
-      return `(${this.renderSqlStatement(abstractRows)}) "${alias ?? junctionTable}"`;
+    const rows = this.abstractTableRows(junctionTable) ?? this.mutationOverlay(junctionTable);
+    if (rows) {
+      return `(${this.renderSqlStatement(rows)}) "${alias ?? junctionTable}"`;
     }
     return alias ? `"${junctionTable}" "${alias}"` : `"${junctionTable}"`;
   }
@@ -774,6 +791,10 @@ export abstract class CompilerBase {
    * subtype's table is then narrowed by its own select policy, as Gel
    * applies each object's own type's policies.
    *
+   * While a select of a mutation's result compiles, it is also where a read
+   * of a table the mutation writes becomes a read of the table as the
+   * statement leaves it (see `mutationOverlay`).
+   *
    * `shadowed` holds the CTE names in scope: a reference to one reads the
    * CTE, not a table of the same name. A non-recursive CTE sees only the
    * CTEs before it; a recursive WITH sees all of its own.
@@ -813,9 +834,11 @@ export abstract class CompilerBase {
       const table = node as SQL.TableReference;
       if (!table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
         const abstractRows = this.abstractTableRows(table.name);
-        const typeDef = abstractRows || !restrict || this.exemptTables.has(table) ? undefined : this.objectTypeOfTable(table.name);
+        const exempt = this.exemptTables.has(table);
+        const typeDef = abstractRows || !restrict || exempt ? undefined : this.objectTypeOfTable(table.name);
         const filter = typeDef ? this.selectPolicyFilter(typeDef) : undefined;
-        const rows = abstractRows ?? (typeDef && filter ? this.tableRowsWhere(typeDef, filter) : undefined);
+        const rows = abstractRows ??
+          (typeDef && filter ? this.tableRowsWhere(typeDef, filter) : exempt ? undefined : this.mutationOverlay(table.name));
         if (rows) {
           table.subquery = rows;
           table.alias = table.alias ?? table.name;
@@ -903,6 +926,85 @@ export abstract class CompilerBase {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Compile a select of a mutation's result with `writes`, the mutation's
+   * data-modifying CTEs, as the tables they write (see `mutationOverlay`).
+   * Its reads of those tables are replaced as it compiles — SQL text — and
+   * once it has compiled — the rest.
+   */
+  protected readingMutation(writes: Context.MutationWrite[], compile: () => SQL.SQLStatement): SQL.SQLStatement {
+    const outer = this.mutationWrites;
+    this.mutationWrites = writes;
+    try {
+      const statement = compile();
+      this.restrictObjectReads(statement, new Set(this.ctx.cteAliases.keys()));
+      return statement;
+    } finally {
+      this.mutationWrites = outer;
+    }
+  }
+
+  /**
+   * `table` as the mutation whose result is being selected leaves it (see
+   * `readingMutation`), or undefined when the mutation does not write it.
+   * PostgreSQL runs every part of a statement on one snapshot, so the table
+   * itself still has its rows from before the statement; as in Gel, a select
+   * of the result sees the objects and links it wrote. They are the rows the
+   * statement did not touch, followed by those its INSERTs and UPDATEs
+   * returned:
+   *
+   *   SELECT * FROM "<table>" WHERE ("id") NOT IN (SELECT "id" FROM "ins" UNION ALL …)
+   *   UNION ALL SELECT * FROM "ins" UNION ALL …
+   *
+   * A junction's rows are keyed by source and target, and its DELETEs (a
+   * `:=` or `-=` of the link) remove rows without adding any. Each CTE is
+   * made to return its rows (`RETURNING *`).
+   */
+  protected mutationOverlay(table: string): SQL.SQLStatement | undefined {
+    const writes = this.mutationWrites?.filter(write => write.statement.table === table) ?? [];
+    if (writes.length === 0) {
+      return undefined;
+    }
+    for (const { statement } of writes) {
+      const returning = statement.returning ?? [];
+      if (returning.length === 0) {
+        statement.returning = [SQL.createSelectItem(SQL.createColumnReference("*"))];
+      } else if (!returning.every(item => item.expression.kind === "ColumnReference" && item.expression.column === "*")) {
+        throw new CompilationError(`Cannot read the objects this statement writes to '${table}': it does not return their rows.`);
+      }
+    }
+
+    const readAll = (name: string): SQL.SelectStatement => {
+      const from = SQL.createTableReference(name);
+      this.exemptTables.add(from);
+      return SQL.createSelectStatement({
+        from: SQL.createFromClause([from]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("*"))])
+      });
+    };
+    const key = this.overlayKey(table).map(column => `"${column}"`).join(", ");
+    const touched = writes.map(write => `SELECT ${key} FROM "${write.cte}"`).join(" UNION ALL ");
+    const untouched = readAll(table);
+    untouched.where = SQL.createWhereClause({ kind: "RawSQLExpression", sql: `(${key}) NOT IN (${touched})` });
+    const written = writes.filter(write => write.statement.kind !== "DeleteStatement").map(write => readAll(write.cte));
+    return written.length > 0 ? SQL.unionAll([untouched, ...written]) : untouched;
+  }
+
+  /*** The columns identifying a row of `table`: an object's `id`, or a junction row's source and target. ***/
+  private overlayKey(table: string): string[] {
+    if (this.objectTypeOfTable(table)) {
+      return ["id"];
+    }
+    for (const typeDef of this.ctx.schema.types.values()) {
+      for (const link of typeDef.links.values()) {
+        if (link.junctionTable === table) {
+          return [link.junctionSourceColumn ?? "source_id", link.junctionTargetColumn ?? "target_id"];
+        }
+      }
+    }
+    throw new CompilationError(`Cannot read the rows this statement writes to '${table}': it is not an object type's or a link's table.`);
   }
 
   /*** `SELECT <columns> FROM "<t1>" UNION ALL SELECT <columns> FROM "<t2>" …`. ***/

@@ -42,8 +42,8 @@ function createMockPool(
       executedStatements.push(sql);
       return Promise.resolve();
     },
-    transaction: async (fn: (conn: any) => Promise<void>) => {
-      await fn({
+    transaction: async (fn: (conn: any) => Promise<unknown>) => {
+      return await fn({
         execute: (sql: string) => {
           executedStatements.push(sql);
           return Promise.resolve();

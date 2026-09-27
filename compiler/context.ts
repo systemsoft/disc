@@ -75,6 +75,18 @@ export interface CTEAlias {
    * (`a := (select array_unpack(…))`).
    */
   values?: boolean;
+  /**
+   * For a mutation (or a select of one): the data-modifying CTEs of its
+   * statement, which a select of the binding reads its objects' links
+   * through (see `CompilerBase.mutationOverlay`).
+   */
+  writes?: MutationWrite[];
+}
+
+/*** A data-modifying CTE of a mutation's statement: the INSERT, UPDATE or DELETE of one table, named `cte`. ***/
+export interface MutationWrite {
+  cte: string;
+  statement: SQL.InsertStatement | SQL.UpdateStatement | SQL.DeleteStatement;
 }
 
 export interface AbstractAnnotationDef {

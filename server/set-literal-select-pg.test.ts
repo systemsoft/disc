@@ -8,7 +8,8 @@
  * `/query` answered a single value for `select {<uuid>$a, <uuid>$b}`. Scalar
  * elements come back as single-column rows like `select <expr>`; elements
  * that are shaped queries come back as their objects, unwrapped like any
- * shaped select.
+ * shaped select. An operator over a set answers one row per element too, and
+ * a set-valued computed shape element an array.
  *
  * Every case runs twice with the same query text, so the second run is a
  * compiled-query cache hit.
@@ -94,6 +95,14 @@ Deno.test({
         assertEquals(await answer("select {<uuid>$a, <uuid>$b}", { a: UUID_A, b: UUID_B }), [UUID_A, UUID_B], round);
         assertEquals(await answer("select {<str>$a, <str>$b}", { a: "x", b: "y" }), ["x", "y"], round);
         assertEquals(await answer("select count({1, 2, 3})"), [3], round);
+        // Operators apply to each element; set operands are crossed.
+        assertEquals((await answer("select {1, 2} + {10, 20}")).sort(), [11, 12, 21, 22], round);
+        assertEquals((await answer("select SetLiteralNote.label ++ '!'")).sort(), ["a!", "b!"], round);
+        assertEquals(
+          await answer("select SetLiteralNote { label, x := {1, 2}, y := .label ++ {'1', '2'} } order by .label"),
+          [{ label: "a", x: [1, 2], y: ["a1", "a2"] }, { label: "b", x: [1, 2], y: ["b1", "b2"] }],
+          round
+        );
 
         const reply = await post(
           "select {(select SetLiteralNote { label } filter .label = 'b'), (select SetLiteralNote { label } order by .label)}"

@@ -729,6 +729,11 @@ export class EdgeQLParser {
 
     const elements: AST.ShapeElement[] = [];
 
+    // An element's value is an expression of its own, whose shapes are its
+    // own (`items += (select Item …) { @rank := 1 }`), even in the subject of
+    // a select that keeps its shape for itself (`select (update … set { … }) { … }`).
+    const enclosingSkipShape = this.skipShapeInPostfix;
+    this.skipShapeInPostfix = false;
     while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
       const element = this.parseShapeElement();
       elements.push(element);
@@ -742,6 +747,7 @@ export class EdgeQLParser {
         break;
       }
     }
+    this.skipShapeInPostfix = enclosingSkipShape;
 
     this.consume(TokenType.RBRACE, "Expected '}'");
 
@@ -1664,6 +1670,8 @@ export class EdgeQLParser {
 
     // Set literal
     if (this.match(TokenType.LBRACE)) {
+      // Where the literal starts: its `{`.
+      const span = this.spanOf(this.previous());
       const elements: AST.Expression[] = [];
 
       while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
@@ -1675,7 +1683,7 @@ export class EdgeQLParser {
       }
 
       this.consume(TokenType.RBRACE, "Expected '}'");
-      return { kind: "SetExpr", elements };
+      return { elements, kind: "SetExpr", span };
     }
 
     // Array literal

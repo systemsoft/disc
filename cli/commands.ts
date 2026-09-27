@@ -634,8 +634,8 @@ export class CLICommands {
     try {
       if (dryRun && args.squash) {
         /*** Squash dry-runs stay offline. A rollback dry-run connects so it can show the stored
-             rollback SQL; the engine’s dry-run mode keeps it from running that SQL or touching the
-             history rows. ***/
+             rollback SQL and the repairs after it; the engine’s dry-run mode runs them only in a
+             transaction it rolls back, and never touches the history rows. ***/
         manager = new SchemaManager({ dryRun: true });
       } else {
         pool = new ConnectionPool({
@@ -1388,8 +1388,8 @@ export class CLICommands {
   }
 
   private async handleRollback(manager: SchemaManager, args: CLIArgs): Promise<void> {
-    /*** A dry run only shows the stored rollback SQL (the manager is in dry-run mode), so it needs
-         no confirmation. ***/
+    /*** A dry run only shows the stored rollback SQL and its repairs (the manager is in dry-run
+         mode), so it needs no confirmation. ***/
     const dryRun = args["dry-run"] === true;
 
     if (!args.force && !dryRun) {

@@ -80,6 +80,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       });
     }
 
+    // A select of a mutation's result (`select m { … }`, `m.items`,
+    // `count(m.items)`) reads the tables the mutation writes as it leaves them.
+    const writes = this.writesReadBy(query.expr).filter(write => !this.mutationWrites?.includes(write));
+    if (writes.length > 0) {
+      return this.readingMutation([...this.mutationWrites ?? [], ...writes], () => this.compileSelectQuery(query));
+    }
+
     Context.pushScope(this.ctx);
 
     try {
@@ -93,7 +100,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // and the filter.
       let whereClause: SQL.WhereClause | undefined;
       if (query.filter) {
-        const condition = this.compileExpression(query.filter);
+        const condition = this.compileFilter(query.filter);
         whereClause = SQL.createWhereClause(where ? SQL.createBinaryExpression("AND", where, condition) : condition);
       } else if (where) {
         whereClause = SQL.createWhereClause(where);
@@ -104,7 +111,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       if (query.orderBy && query.orderBy.length > 0) {
         const items = query.orderBy.map(item => ({
           kind: "OrderByItem" as const,
-          expression: this.compileExpression(item.expr),
+          expression: this.compileOrderExpression(item.expr),
           direction: item.direction || "ASC" as "ASC" | "DESC",
           ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
         }));
@@ -141,6 +148,38 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     } finally {
       Context.popScope(this.ctx);
     }
+  }
+
+  /**
+   * The data-modifying CTEs of the mutation bindings `expr` reads by name
+   * (`m`, `m.items`, `count(m.items)`); none when it reads none. A name a
+   * scope variable takes (a `for` variable) is not the binding.
+   */
+  private writesReadBy(expr: EdgeQLAST.Expression): Context.MutationWrite[] {
+    const writes = new Set<Context.MutationWrite>();
+    const visit = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        node.forEach(visit);
+        return;
+      }
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      const candidate = node as Partial<EdgeQLAST.Identifier> & Partial<EdgeQLAST.Path>;
+      const name = candidate.kind === "Identifier" ?
+        candidate.name :
+        candidate.kind === "Path" && candidate.rooted ?
+        candidate.steps?.[0]?.name :
+        undefined;
+      const cte = name === undefined ? undefined : Context.getCTEAlias(this.ctx, name);
+      const variable = name === undefined ? undefined : this.scopeVariable(name);
+      if (cte?.writes && (!variable || variable.row?.table === cte.cteName)) {
+        cte.writes.forEach(write => writes.add(write));
+      }
+      Object.values(node).forEach(visit);
+    };
+    visit(expr);
+    return [...writes];
   }
 
   private compileSelectExpression(
@@ -369,15 +408,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       return { selectItems, fromClause };
     }
 
-    if (expr.kind === "FunctionCall") {
-      // An element-wise function over a set (`str_upper(User.name)`) is
-      // applied to each element: the set is this select's FROM.
-      const sets = this.elementWiseSets(expr);
-      if (sets) {
-        const { from, value } = this.compileElementWiseCall(expr, sets);
-        return { fromClause: SQL.createFromClause(from), selectItems: [SQL.createSelectItem(value)] };
-      }
+    // An element-wise operator, cast or function over a set (`{1, 2} + 1`,
+    // `User.name ++ '!'`, `str_upper(User.name)`) is applied to each element:
+    // the sets are this select's FROM.
+    const sets = this.elementWiseSets(expr);
+    if (sets) {
+      const { from, value, where } = this.compileElementWise(expr, sets);
+      return { fromClause: SQL.createFromClause(from), selectItems: [SQL.createSelectItem(value)], where };
+    }
 
+    if (expr.kind === "FunctionCall") {
       // Check if function has a TypeName argument (e.g., count(User))
       // This means we need a FROM clause for that type
       let fromClause = SQL.createFromClause([]);
@@ -1169,10 +1209,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    */
   private shapePathSelect(element: EdgeQLAST.ShapeElement): EdgeQLAST.SelectQuery | null {
     const { expr } = element;
-    // A call that is a set (`up := str_upper(.posts.title)`, `n := array_unpack(…)`)
-    // is its rows as an array too: as one value it would repeat the object's
-    // row once per element.
-    if (expr.kind === "FunctionCall" && this.setQuery(expr)) {
+    // An expression that is a set (`x := {1, 2}`, `z := .name ++ {'a', 'b'}`,
+    // `up := str_upper(.posts.title)`, `n := array_unpack(…)`) is its rows as
+    // an array too: as one value it would be a record, or repeat the object's
+    // row once per element. A one-element set literal is one value.
+    const singleton = expr.kind === "SetExpr" && flattenSetElements(expr).length === 1;
+    if (!singleton && this.setQuery(expr)) {
       return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy };
     }
     if (expr.kind === "ShapeExpr" && expr.expr.kind === "Path") {
@@ -1470,12 +1512,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         }
       }
       if (filter) {
-        filterCondition = this.compileExpression(filter);
+        filterCondition = this.compileFilter(filter);
       }
       if (orderBy && orderBy.length > 0) {
         aggOrderBy = orderBy.map(item => ({
           kind: "OrderByItem" as const,
-          expression: this.compileExpression(item.expr),
+          expression: this.compileOrderExpression(item.expr),
           direction: item.direction || "ASC" as "ASC" | "DESC",
           ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
         }));
@@ -1735,6 +1777,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
             const target = Context.resolveTypeName(this.ctx, link.target);
             return target ? this.readableId(target, column) : column;
           }
+        }
+        // A select of values (`(select .visits + 1)`, `x := .name ++ {'a', 'b'}`)
+        // pushes a scope with no table: the path is the enclosing row's.
+        const subject = this.ctx.currentScope.aliases.size === 0 ? this.implicitSubject(step) : undefined;
+        const property = subject ? Context.resolveTypeName(this.ctx, subject.type)?.properties.get(step.name) : undefined;
+        if (subject && property?.columnName && !property.computed) {
+          return SQL.createColumnReference(property.columnName, subject.alias);
         }
         // Fallback: emit the step name verbatim. Pre-existing behavior
         // for paths whose owning type isn't in the alias scope yet.

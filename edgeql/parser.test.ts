@@ -1147,6 +1147,27 @@ Deno.test("EdgeQL Parser - shape after a mutation operand stays on the select wh
   }
 });
 
+// The link properties a mutation operand sets on a target
+// (`(select …) { @rank := 1 }`) are the target's shape, not dropped (`+=`)
+// or a syntax error (a set of targets) because the select keeps its shape.
+Deno.test("EdgeQL Parser - a mutation operand keeps the shapes of its assignments' values", () => {
+  for (
+    const edgeql of [
+      "select (update Cart set { items += (select Item filter .name = 'a') { @rank := 1 } }) { id }",
+      "select (update Cart set { items := {(select Item filter .name = 'a') { @rank := 1 }, (select Item filter .name = 'b')} }) { id }"
+    ]
+  ) {
+    const ast = new EdgeQLParser(edgeql).parse();
+    if (ast.kind !== "SelectQuery" || ast.expr.kind !== "Subquery" || ast.expr.query.kind !== "UpdateQuery") {
+      throw new Error(`unexpected AST: ${JSON.stringify(ast)}`);
+    }
+    const value = ast.expr.query.shape.elements[0].expr;
+    const target = value?.kind === "SetExpr" ? value.elements[0] : value;
+    assertEquals(target?.kind, "ShapeExpr", edgeql);
+    assertEquals(ast.shape?.elements.length, 1, edgeql);
+  }
+});
+
 Deno.test("EdgeQL Parser - a nested select still parses its own shape and trailing clauses", () => {
   const ast = new EdgeQLParser("select (select User { name } filter .name = 'a') { name } limit 1").parse();
 

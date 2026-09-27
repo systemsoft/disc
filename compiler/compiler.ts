@@ -965,7 +965,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // A filter here reads the conflicting row (e.g. `filter not exists .x`
     // updates only while `.x` is still empty).
     if (updateQuery.filter) {
-      action.where = this.compileExpression(updateQuery.filter);
+      action.where = this.compileFilter(updateQuery.filter);
     }
     return action;
   }
@@ -1352,7 +1352,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Compile WHERE clause
     let whereClause: SQL.WhereClause | undefined;
     if (query.filter) {
-      const condition = this.compileExpression(query.filter);
+      const condition = this.compileFilter(query.filter);
       whereClause = SQL.createWhereClause(condition);
     }
 
@@ -1554,7 +1554,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     let whereClause: SQL.WhereClause | undefined;
     if (query.filter) {
       const filter = query.filter;
-      const condition = this.withMutationScope(typeName, typeDef, () => this.compileExpression(filter));
+      const condition = this.withMutationScope(typeName, typeDef, () => this.compileFilter(filter));
       whereClause = SQL.createWhereClause(condition);
     }
 
@@ -1697,12 +1697,27 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       // A data-modifying WITH must be at the top level: a mutation compiled to
       // a WITH of its own (an update or delete of an abstract type, an update
       // of a multi link) has its CTEs join this one, ahead of the binding.
+      let lifted: SQL.CTE[] = [];
       if (bindingQuery.kind === "CTEStatement" && value.kind === "Subquery" && isMutationQuery(value.query)) {
-        ctes.push(...bindingQuery.ctes);
+        lifted = bindingQuery.ctes;
+        ctes.push(...lifted);
         bindingQuery = bindingQuery.query;
       }
 
       const cteName = binding.name.name;
+
+      // A select of an insert's or update's result reads the objects and
+      // links it wrote through its data-modifying CTEs (see
+      // `mutationOverlay`); so does a select of a select of it. A delete's
+      // result is the objects as they were.
+      let writes: Context.MutationWrite[] | undefined;
+      if (value.kind === "Subquery" && (value.query.kind === "InsertQuery" || value.query.kind === "UpdateQuery")) {
+        writes = [...lifted, { name: cteName, query: bindingQuery }].flatMap(cte =>
+          isDataModifying(cte.query) ? [{ cte: cte.name, statement: cte.query }] : []
+        );
+      } else if (value.kind === "Subquery" && value.query.kind === "SelectQuery" && value.query.expr.kind === "Identifier") {
+        writes = Context.getCTEAlias(this.ctx, value.query.expr.name)?.writes;
+      }
 
       // Register this CTE alias so the body query can resolve it
       const typeDef = underlyingTypeName ?
@@ -1720,7 +1735,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         typeName: underlyingTypeName,
         typeDef,
-        values
+        values,
+        writes
       };
       Context.addCTEAlias(this.ctx, cteName, cteAlias);
       registeredAliases.push(cteName);
@@ -1839,7 +1855,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       // Compile WHERE clause
       let whereClause: SQL.WhereClause | undefined;
       if (query.filter) {
-        const condition = this.compileExpression(query.filter);
+        const condition = this.compileFilter(query.filter);
         whereClause = SQL.createWhereClause(sourceCondition ? SQL.createBinaryExpression("AND", sourceCondition, condition) : condition);
       } else if (sourceCondition) {
         whereClause = SQL.createWhereClause(sourceCondition);
@@ -1859,7 +1875,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
             kind: "OrderByClause",
             items: query.orderBy.map(item => ({
               direction: item.direction || "ASC",
-              expression: this.compileExpression(item.expr),
+              expression: this.compileOrderExpression(item.expr),
               kind: "OrderByItem" as const,
               ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
             }))

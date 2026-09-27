@@ -9,7 +9,7 @@
 
 import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { CompilationError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
 import {
   backlinkIntersectionName,
@@ -77,6 +77,12 @@ const SET_ARGUMENT_FUNCTIONS = new Set([
   "sum"
 ]);
 
+/*** Unary operators applied to each element of a set operand (`-{1, 2}` is `{-1, -2}`); `exists` and `distinct` take the set as a whole. ***/
+const ELEMENT_WISE_UNARY_OPERATORS = new Set(["+", "-", "NOT", "~"]);
+
+/*** Operators that compare empty operands (`{} ?= 1` is false) rather than giving no element. ***/
+const OPTIONAL_OPERAND_OPERATORS = new Set(["?=", "?!="]);
+
 /*** The SQL type of int operands' floor division: the widest of them; an operand of unknown type counts as int64. ***/
 function widestIntSqlType(types: (string | null)[]): string {
   const widths = types.map(type => (type !== null && INT_SQL_TYPES.get(type)?.width) || 64);
@@ -84,6 +90,9 @@ function widestIntSqlType(types: (string | null)[]): string {
 }
 
 export abstract class ExpressionCompilerLayer extends CompilerBase {
+  /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
+  private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
+
   // Implemented by higher layers of the compiler inheritance chain.
   protected abstract compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement;
   protected abstract compilePathInExpression(
@@ -230,6 +239,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   private compileBinaryOp(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression {
+    // `x in {a, b}`: the set literal is the tuple `IN (a, b)` (compileSetExpr).
+    if ((binOp.op === "IN" || binOp.op === "NOT IN") && binOp.right.kind === "SetExpr") {
+      this.membershipSets.add(binOp.right);
+    }
+
     // Handle IS / IS NOT for polymorphic type checking
     if (binOp.op === "IS" || binOp.op === "IS NOT") {
       return this.compileIsTypeCheck(binOp);
@@ -303,6 +317,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (arrayMembership) {
         return arrayMembership;
       }
+    }
+
+    this.assertNotOverSet(binOp, `'${binOp.op}'`);
+    // Coalescing a set: `{1, 2} ?? 3` is {1, 2}, not one COALESCE.
+    if (binOp.op === "??" && [binOp.left, binOp.right].some(operand => this.setArgument(operand) && this.isSetWithoutValue(operand))) {
+      throw new CompilationError(
+        "'??' of a set operand is not supported yet; its operands must be single values",
+        this.expressionLocation(binOp.left) ?? this.expressionLocation(binOp.right)
+      );
     }
 
     const left = this.compileExpression(binOp.left);
@@ -475,6 +498,23 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         }
         return ints[0]!.width >= ints[1]!.width ? operands[0] : operands[1];
       }
+      case "SetExpr": {
+        // The elements' common type (`{1, 2.5}` is float64).
+        const types = flattenSetElements(expr).map(element => this.staticNumericType(element));
+        if (types.length === 0 || types.some(type => type === null)) {
+          return null;
+        }
+        const decimal = types.find(type => DECIMAL_TYPES.has(type!));
+        if (decimal) {
+          return decimal;
+        }
+        if (types.some(type => FLOAT_TYPES.has(type!))) {
+          return "float64";
+        }
+        // The widest int.
+        const width = (type: string | null): number => INT_SQL_TYPES.get(type!)?.width ?? 0;
+        return types.reduce((widest, type) => width(type) > width(widest) ? type : widest);
+      }
       default:
         return null;
     }
@@ -515,19 +555,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected setQuery(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
     const variable = expr.kind === "Identifier" ? this.scopeVariable(expr.name) : undefined;
     const value = variable && !variable.sqlOverride && !variable.row ? variable.expression : expr;
-    // An element-wise call over a set (`str_upper({'a', 'b'})`) is a set too.
+    // An element-wise operator, cast or call over a set (`{1, 2} + 1`,
+    // `str_upper({'a', 'b'})`) is a set too.
     const isSet = value.kind === "SetExpr" ?
       value.elements.length > 0 :
-      value.kind === "FunctionCall" &&
-      (SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "") || this.elementWiseSets(value) !== null);
+      (value.kind === "FunctionCall" && SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "")) ||
+      this.elementWiseSets(value) !== null;
     return isSet ? { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: expr.span } } : null;
   }
 
   /**
    * The select of the set an argument stands for, or null for a value: a set
-   * literal, a set-returning or element-wise call over a set (`setQuery`), a
-   * `with` binding's rows, or a path to several values (`User.name`,
-   * `.posts.title`, a multi property).
+   * literal, a set-returning or element-wise expression over a set
+   * (`setQuery`), a `with` binding's rows, or a path to several values
+   * (`User.name`, `.posts.title`, a multi property).
    */
   private setArgument(expr: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
     if (expr.kind === "SetExpr" && flattenSetElements(expr).length === 1) {
@@ -538,72 +579,227 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
-   * For a call to a built-in function that applies to each element of its
-   * arguments (not an aggregate or set test, see SET_ARGUMENT_FUNCTIONS) with
-   * at least one set argument: the set each argument stands for, null for a
-   * value. Else null.
+   * The operands of an expression Gel applies to each element of its
+   * operands, or null: an operator (`+`, `++`, `=`, `and`, `not`, …), a cast
+   * to a scalar type, or a built-in function that is not an aggregate or set
+   * test (SET_ARGUMENT_FUNCTIONS). `in` applies to each element of its left
+   * operand only; its right operand is a set as a whole. Set operators, `??`,
+   * `is`, `exists` and `distinct` have rules of their own.
    */
-  protected elementWiseSets(call: EdgeQLAST.FunctionCall): (EdgeQLAST.Subquery | null)[] | null {
-    const funcDef = Context.lookupFunction(this.ctx.schema, call.name.parts);
-    if (!funcDef || !Context.isBuiltinFunction(funcDef) || funcDef.introspection || funcDef.windowOnly || SET_ARGUMENT_FUNCTIONS.has(funcDef.name)) {
-      return null;
+  private elementWiseOperands(expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] | null {
+    switch (expr.kind) {
+      case "BinaryOp":
+        if (this.isSetOperator(expr.op) || expr.op === "??" || expr.op === "IS" || expr.op === "IS NOT") {
+          return null;
+        }
+        return expr.op === "IN" || expr.op === "NOT IN" ? [expr.left] : [expr.left, expr.right];
+      case "UnaryOp":
+        return ELEMENT_WISE_UNARY_OPERATORS.has(expr.op) ? [expr.operand] : null;
+      case "TypeCast":
+        return Context.resolveTypeName(this.ctx, renderEdgeQLTypeName(expr.type))?.kind === "object" ? null : [expr.expr];
+      case "FunctionCall": {
+        const funcDef = Context.lookupFunction(this.ctx.schema, expr.name.parts);
+        if (!funcDef || !Context.isBuiltinFunction(funcDef) || funcDef.introspection || funcDef.windowOnly || SET_ARGUMENT_FUNCTIONS.has(funcDef.name)) {
+          return null;
+        }
+        return expr.args.map(arg => arg.value);
+      }
+      default:
+        return null;
     }
-    const sets = call.args.map(arg => this.setArgument(arg.value));
-    return sets.some(set => set !== null) ? sets : null;
+  }
+
+  /*** `expr` with its element-wise operands (`elementWiseOperands`) replaced by `operands`. ***/
+  private withOperands(expr: EdgeQLAST.Expression, operands: EdgeQLAST.Expression[]): EdgeQLAST.Expression {
+    switch (expr.kind) {
+      case "BinaryOp":
+        return { ...expr, left: operands[0], right: operands[1] ?? expr.right };
+      case "UnaryOp":
+        return { ...expr, operand: operands[0] };
+      case "TypeCast":
+        return { ...expr, expr: operands[0] };
+      case "FunctionCall":
+        return { ...expr, args: expr.args.map((arg, index) => ({ ...arg, value: operands[index] })) };
+      default:
+        return expr;
+    }
   }
 
   /**
-   * `f(<set>, …)` for an element-wise function, as the rows of a select: each
-   * set argument is a FROM item `(select <set>) AS __arg_N(value)` — several
-   * are crossed, as Gel crosses an element-wise call's argument sets — and the
-   * call reads each one's `value`:
+   * For an element-wise expression (`elementWiseOperands`) with at least one
+   * set operand: the set each operand stands for, null for a value. Else
+   * null. A comparison of a multi path of the current object with one value
+   * (`.nicks = 'a'`, `.posts.title = x`) is not one: it keeps its compilation
+   * as a test of whether any element matches (`isAnyElementComparison`). Nor
+   * is an operator over a `with` binding of objects (`.program = prog`),
+   * which compiles to the binding's ids.
+   */
+  protected elementWiseSets(expr: EdgeQLAST.Expression): (EdgeQLAST.Subquery | null)[] | null {
+    const operands = this.elementWiseOperands(expr);
+    if (!operands || (expr.kind === "BinaryOp" && this.isAnyElementComparison(expr))) {
+      return null;
+    }
+    const sets = operands.map(operand => expr.kind !== "FunctionCall" && this.isObjectBinding(operand) ? null : this.setArgument(operand));
+    return sets.some(set => set !== null) ? sets : null;
+  }
+
+  /*** True when `expr` names a `with` binding compiled to a CTE of objects or of a mutation's rows, not of values. ***/
+  private isObjectBinding(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind !== "Identifier" || this.scopeVariable(expr.name)) {
+      return false;
+    }
+    const cte = Context.getCTEAlias(this.ctx, expr.name);
+    return cte !== undefined && !cte.values;
+  }
+
+  /**
+   * True for a comparison compileBinaryOp answers as "any element matches"
+   * (compileMultiPropertyComparison, compileMultiLinkComparison,
+   * compileMultiHopComparison): a multi property or multi link path of the
+   * current object compared with one value.
+   */
+  private isAnyElementComparison(binOp: EdgeQLAST.BinaryOp): boolean {
+    if (!this.isComparisonOp(binOp.op)) {
+      return false;
+    }
+    const membership = binOp.op === "IN" || binOp.op === "NOT IN";
+    if (this.multiPropertyColumn(binOp.left) || this.isMultiLinkPath(binOp.left) || this.isMultiHopLinkPath(binOp.left)) {
+      return membership || this.setArgument(binOp.right) === null;
+    }
+    return this.multiPropertyColumn(binOp.right) !== null && this.setArgument(binOp.left) === null;
+  }
+
+  /**
+   * An element-wise expression over sets (`elementWiseSets`) as the rows of a
+   * select: each set operand is a FROM item `(select <set>) AS __arg_N(value)`
+   * — several are crossed, the left one outermost, as Gel crosses an
+   * element-wise expression's operand sets — and the expression reads each
+   * one's `value`:
    *
    *   select str_upper(User.name)
    *   → SELECT UPPER(__arg_1.value) FROM (SELECT user_2.name FROM "user" AS user_2) AS __arg_1(value)
+   *   select User { v := .visits + {1, 2} }
+   *   → … (SELECT user_1.visits + __arg_2.value FROM (…) AS __arg_2(value) WHERE user_1.visits IS NOT NULL) …
    *
-   * The values are scope variables of the current scope, which the caller
-   * (a select) has pushed.
+   * An operator's value operand that may be empty adds to `where`: with an
+   * empty operand the expression has no elements, where SQL has NULLs. The
+   * values are scope variables of the current scope, which the caller (a
+   * select, a filter) owns.
    */
-  protected compileElementWiseCall(
-    call: EdgeQLAST.FunctionCall,
+  protected compileElementWise(
+    expr: EdgeQLAST.Expression,
     sets: (EdgeQLAST.Subquery | null)[]
-  ): { from: SQL.TableReference[]; value: SQL.SQLExpression; } {
+  ): { from: SQL.TableReference[]; value: SQL.SQLExpression; where?: SQL.SQLExpression; } {
     const from: SQL.TableReference[] = [];
-    const args = call.args.map((arg, index) => {
+    const operands = this.elementWiseOperands(expr)!;
+    const elements = operands.map((operand, index) => {
       const set = sets[index];
       if (!set) {
-        return arg;
+        return operand;
       }
       const alias = Context.generateAlias(this.ctx, "__arg");
       from.push({ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery: this.compileQuery(set.query) });
       this.ctx.currentScope.variables.set(alias, {
-        expression: arg.value,
+        expression: operand,
         name: alias,
         sqlOverride: SQL.createColumnReference("value", alias),
-        staticType: this.elementType(arg.value),
-        type: this.isJsonExpression(arg.value) ? "json" : "any"
+        staticType: this.elementType(operand),
+        type: this.isJsonExpression(operand) ? "json" : "any"
       });
-      return { ...arg, value: EdgeQLAST.createIdentifier(alias) };
+      return EdgeQLAST.createIdentifier(alias);
     });
-    return { from, value: this.compileFunctionCall({ ...call, args }) };
+    const value = this.compileExpression(this.withOperands(expr, elements));
+
+    // A function's arguments may be optional; `?=` compares empty operands.
+    const optional = expr.kind === "FunctionCall" || (expr.kind === "BinaryOp" && OPTIONAL_OPERAND_OPERATORS.has(expr.op));
+    const conditions = optional ?
+      [] :
+      operands
+        .filter((operand, index) => !sets[index] && operand.kind !== "Literal" && !this.isNeverEmpty(operand))
+        .map(operand => SQL.isNotNull(this.compileExpression(operand)));
+    const where = conditions.reduce<SQL.SQLExpression | undefined>(
+      (all, condition) => all ? SQL.createBinaryExpression("AND", all, condition) : condition,
+      undefined
+    );
+    return { from, value, where };
   }
 
   /**
-   * True for a set argument with no one-value SQL form: a set literal, or a
-   * path of several steps not from a `with` binding (`User.name`,
-   * `.posts.title`). A set-returning call, a binding and a multi property keep
-   * their expression form.
+   * True for a set operand with no one-value SQL form: a set literal, a path
+   * of several steps not from a `with` binding (`User.name`, `.posts.title`),
+   * or a multi property (one array column). A set-returning call and a
+   * binding keep their expression form.
    */
   private isSetWithoutValue(expr: EdgeQLAST.Expression): boolean {
     if (expr.kind === "SetExpr") {
       return true;
     }
-    return expr.kind === "Path" && expr.steps.length > 1 && !Context.getCTEAlias(this.ctx, expr.steps[0].name);
+    return (expr.kind === "Path" && expr.steps.length > 1 && !Context.getCTEAlias(this.ctx, expr.steps[0].name)) ||
+      this.multiPropertyColumn(expr) !== null;
   }
 
-  /*** The EdgeQL type of each element of a set argument, when it is a path ending in a property. ***/
+  /**
+   * An element-wise expression over a set is a set of rows, compiled where a
+   * select, a shape element, a `for` body, a filter or a function reads them
+   * (compileElementWise). As one value inside another expression, a set
+   * literal would be a record, a path from a type or over a multi link has no
+   * column, and a multi property is one array: a compile error instead.
+   */
+  private assertNotOverSet(expr: EdgeQLAST.Expression, description: string): void {
+    const sets = this.elementWiseSets(expr);
+    const operands = this.elementWiseOperands(expr);
+    if (sets?.some((set, index) => set && this.isSetWithoutValue(operands![index]))) {
+      throw new CompilationError(
+        `${description} of a set is a set, one element per element of its operands: it is supported selected ` +
+          "(`select …`), as a shape element, as a for body, in a filter, or as a function's or aggregate's argument " +
+          "(`count(…)`), not as one value inside another expression",
+        this.expressionLocation(expr)
+      );
+    }
+  }
+
+  /*** Where `expr` is in the source: its own span, or its first operand's (an operator, a cast and a set literal's elements carry none). ***/
+  private expressionLocation(expr: EdgeQLAST.Expression): ErrorContext | undefined {
+    return locationOf(expr) ?? this.elementWiseOperands(expr)?.map(operand => this.expressionLocation(operand)).find(Boolean);
+  }
+
+  /*** The EdgeQL type of each element of a set operand, when known: a path's property type, a numeric expression's type. ***/
   private elementType(expr: EdgeQLAST.Expression): string | undefined {
-    return expr.kind === "Path" ? this.pathProperty(expr)?.edgeqlType : undefined;
+    return (expr.kind === "Path" ? this.pathProperty(expr)?.edgeqlType : this.staticNumericType(expr)) ?? undefined;
+  }
+
+  /**
+   * A filter: true when any element of its value is true. A filter over a
+   * set (`filter {1, 2} = .n`, `filter .name ++ {'a', 'b'} = x`) compiles, as
+   * in Gel (edb/pgsql/compiler/clauses.py, compile_filter_clause), to
+   * `EXISTS (SELECT FROM <set> WHERE <value>)`.
+   */
+  protected compileFilter(filter: EdgeQLAST.Expression): SQL.SQLExpression {
+    const sets = this.elementWiseSets(filter);
+    if (!sets) {
+      return this.compileExpression(filter);
+    }
+    const { from, value, where } = this.compileElementWise(filter, sets);
+    return {
+      kind: "UnaryExpression",
+      operand: SQL.createSubqueryExpression(SQL.createSelectStatement({
+        from: SQL.createFromClause(from),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("number", 1))]),
+        where: SQL.createWhereClause(where ? SQL.createBinaryExpression("AND", where, value) : value)
+      })),
+      operator: "EXISTS"
+    };
+  }
+
+  /*** An order by key. A set has no one value to order by; Gel rejects it too. ***/
+  protected compileOrderExpression(expr: EdgeQLAST.Expression): SQL.SQLExpression {
+    if (expr.kind !== "Path" && this.setArgument(expr)) {
+      throw new CompilationError(
+        "possibly more than one element returned by an expression in an order by clause, where only one is allowed",
+        this.expressionLocation(expr)
+      );
+    }
+    return this.compileExpression(expr);
   }
 
   /**
@@ -778,6 +974,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return { kind: "UnaryExpression", operator: "NOT", operand: test };
     }
 
+    this.assertNotOverSet(unaryOp, `'${unaryOp.op.toLowerCase()}'`);
     return {
       kind: "UnaryExpression",
       operator: unaryOp.op,
@@ -1058,18 +1255,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
     }
 
-    // An element-wise function over a set is a set of rows, compiled where a
-    // select reads them (compileElementWiseCall). As one value inside another
-    // expression, a set literal would be a record and a path from a type or
-    // over a multi link has no column.
-    const sets = this.elementWiseSets(funcCall);
-    if (sets?.some((set, index) => set && this.isSetWithoutValue(funcCall.args[index].value))) {
-      throw new CompilationError(
-        `${qualifiedName}() of a set argument is a set, one element per argument element: it is supported selected ` +
-          `(\`select ${qualifiedName}(…)\`), as a shape element, as a for body or as an aggregate's argument ` +
-          `(\`count(${qualifiedName}(…))\`), not as one value inside another expression`,
-        locationOf(funcCall)
-      );
+    this.assertNotOverSet(funcCall, `${qualifiedName}()`);
+
+    // `enumerate(<set>)` numbers the set's rows; the set has no one-value form
+    // to compile as an argument.
+    const enumerated = functionName === "enumerate" && funcCall.args.length === 1 ? this.setQuery(funcCall.args[0].value) : null;
+    if (enumerated) {
+      return this.compileEnumerateSet(enumerated);
     }
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));
@@ -1394,10 +1586,6 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           throw new CompilationError(
             "enumerate() requires exactly 1 argument"
           );
-        }
-        const set = this.setQuery(funcCall.args[0].value);
-        if (set) {
-          return this.compileEnumerateSet(set);
         }
         return {
           kind: "RawSQLExpression" as const,
@@ -1888,6 +2076,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
+    this.assertNotOverSet(cast, `<${renderEdgeQLTypeName(cast.type)}>`);
     const expr = this.compileExpression(cast.expr);
     const typeName = renderEdgeQLTypeName(cast.type);
     const fromJson = this.isJsonExpression(cast.expr);
@@ -2599,6 +2788,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const flat = flattenSetElements(setExpr);
     if (flat.length === 0)
       return { kind: "RawSQLExpression" as const, sql: "NULL" };
+
+    // Anywhere but as the right operand of `in` the tuple would be a record.
+    if (flat.length > 1 && !this.membershipSets.has(setExpr)) {
+      throw new CompilationError(
+        "A set of several elements is not supported here: select it (`select {…}`), use it as a shape element, a for " +
+          "iterator, the right operand of `in`, or an operand of an operator or function where those are selected or filtered",
+        locationOf(setExpr)
+      );
+    }
 
     const elements = flat.map(elem => this.compileExpression(elem));
 

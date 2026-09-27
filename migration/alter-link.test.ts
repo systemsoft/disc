@@ -230,6 +230,20 @@ Deno.test("rollback - creating a type with a delete target if orphan multi link 
   assertStringIncludes(rollback, "DROP FUNCTION IF EXISTS disc_source_delete_bug_programs();");
 });
 
+Deno.test("rollback - changing only a link's delete rules needs no manual step: the post-rollback repair restores them", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL(new SchemaDiffer().diff(modules(bug(DELETE_TARGET)), modules(bug(IF_ORPHAN))));
+
+  assertEquals(rollback, ["-- ALTER LINK program on bug: delete rules are restored by the repair after the rollback"]);
+});
+
+Deno.test("rollback - changing a link beyond its delete rules still needs a manual step", () => {
+  const rollback = new DDLGenerator().generateRollbackDDL(
+    new SchemaDiffer().diff(modules(bug(IF_ORPHAN)), modules(bug("required link program: Program { on source delete delete target if orphan; };")))
+  );
+
+  assertStringIncludes(rollback[0], "-- MANUAL ROLLBACK REQUIRED: Revert changes to link 'program' on table 'bug'");
+});
+
 function items(link: string): string {
   return `module default {
     type Tag { required name: str; };

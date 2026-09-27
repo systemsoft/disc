@@ -287,7 +287,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
    * relative path pushes an empty scope, so its path starts from the
    * enclosing shape's or statement's row.
    */
-  private implicitSubject(step: EdgeQLAST.PathStep): Context.TableAlias | undefined {
+  protected implicitSubject(step: EdgeQLAST.PathStep): Context.TableAlias | undefined {
     for (const scope of [this.ctx.currentScope, ...[...this.ctx.scopes].reverse()]) {
       const aliases = [...scope.aliases.values()];
       if (aliases.length === 0) {

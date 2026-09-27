@@ -10,7 +10,7 @@ import { DatabaseConnection } from "../lib/database.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { logger } from "../postgres/logger.ts";
-import { Module } from "../schema/converter.ts";
+import { Module, normalizeModules } from "../schema/converter.ts";
 import { DataMigrationRunner } from "./data-migration.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
@@ -46,6 +46,12 @@ function manualRollbackSteps(rollbackSql: string[]): string[] {
     .filter(statement => statement.startsWith(MANUAL_ROLLBACK_MARKER))
     .map(statement => statement.slice("-- ".length));
 }
+
+/*** Where the database repairs read the catalog from: the pool, or a rollback's transaction, which sees what it has changed so far. ***/
+type SqlReader = Pick<DatabaseConnection, "query">;
+
+/*** Thrown to end a dry-run rollback's transaction, so nothing it ran is kept. ***/
+const DRY_RUN_ABORT = new Error("dry-run rollback ends here");
 
 function manualRollbackError(migrationId: string, steps: string[]): MigrationError {
   return new MigrationError(
@@ -278,48 +284,7 @@ export class MigrationEngine {
     if (!this.pool || plan.migrations.length === 0)
       return plan;
 
-    const planned = plan.migrations.flatMap(m => m.operations);
-    this.primeScalarTypes(newSchema);
-    const deleteRules = await reconcileLinkDeleteRules(
-      this.differ.declaredLinks(newSchema),
-      planned,
-      this.ddlGenerator,
-      tableNames => this.readExistingDeleteRules(tableNames)
-    );
-
-    for (const missing of deleteRules.missingForeignKeys)
-      logger.warn(`Delete-rule check: ${missing}`);
-
-    const backfill: Types.MigrationOperation[] = [
-      // Junction columns of link properties declared before Disc stored them
-      // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
-      ...await reconcileDeclaredLinkProperties(
-        this.differ.declaredLinkProperties(newSchema),
-        planned,
-        tableName => this.readExistingColumns(tableName)
-      ),
-      // FK actions and delete-target triggers the snapshot declares but the
-      // database lacks (see `reconcileLinkDeleteRules`).
-      ...deleteRules.operations,
-      ...await reconcileDeclaredIndexes(
-        await this.onExistingTables(this.differ.declaredIndexes(newSchema)),
-        planned,
-        names => this.readExistingIndexNames(names)
-      ),
-      // Columns created as TEXT before Disc mapped their type (`bigint`,
-      // `array<Enum>`, … — see `reconcileTextColumns`). Last, so any enum the
-      // plan creates or renames already has its final name.
-      ...await reconcileTextColumns(
-        this.differ.declaredColumns(newSchema, property => this.ddlGenerator.propertyColumnType(property)),
-        planned,
-        tableName => this.readExistingColumns(tableName)
-      ),
-      // The copies of concrete types' rows in their abstract ancestors'
-      // tables, which links to an abstract type reference (see
-      // `reconcileAbstractMirrors`). After the conversions, so the rows are
-      // copied with their final column types.
-      ...await reconcileAbstractMirrors(this.differ.declaredAbstractMirrors(newSchema), () => this.readAbstractMirrors())
-    ];
+    const backfill = await this.repairOperations(newSchema, plan.migrations.flatMap(m => m.operations), this.pool);
 
     if (backfill.length === 0)
       return plan;
@@ -345,6 +310,60 @@ export class MigrationEngine {
       migrations,
       operationsCount: allOperations.length
     };
+  }
+
+  /**
+   * The operations that bring the database `db` reads in line with `schema`
+   * beyond what the `planned` operations do: the backfill `withIndexBackfill`
+   * adds to a plan, and the repair a rollback runs against the rolled-back-to
+   * snapshot (see `rollBackOn`).
+   */
+  private async repairOperations(
+    schema: Module[],
+    planned: Types.MigrationOperation[],
+    db: SqlReader
+  ): Promise<Types.MigrationOperation[]> {
+    this.primeScalarTypes(schema);
+    const deleteRules = await reconcileLinkDeleteRules(
+      this.differ.declaredLinks(schema),
+      planned,
+      this.ddlGenerator,
+      tableNames => this.readExistingDeleteRules(db, tableNames)
+    );
+
+    for (const missing of deleteRules.missingForeignKeys)
+      logger.warn(`Delete-rule check: ${missing}`);
+
+    return [
+      // Junction columns of link properties declared before Disc stored them
+      // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
+      ...await reconcileDeclaredLinkProperties(
+        this.differ.declaredLinkProperties(schema),
+        planned,
+        tableName => this.readExistingColumns(db, tableName)
+      ),
+      // FK actions and delete-target triggers the snapshot declares but the
+      // database lacks (see `reconcileLinkDeleteRules`).
+      ...deleteRules.operations,
+      ...await reconcileDeclaredIndexes(
+        await this.onExistingTables(db, this.differ.declaredIndexes(schema)),
+        planned,
+        names => this.readExistingIndexNames(db, names)
+      ),
+      // Columns created as TEXT before Disc mapped their type (`bigint`,
+      // `array<Enum>`, … — see `reconcileTextColumns`). Last, so any enum the
+      // plan creates or renames already has its final name.
+      ...await reconcileTextColumns(
+        this.differ.declaredColumns(schema, property => this.ddlGenerator.propertyColumnType(property)),
+        planned,
+        tableName => this.readExistingColumns(db, tableName)
+      ),
+      // The copies of concrete types' rows in their abstract ancestors'
+      // tables, which links to an abstract type reference (see
+      // `reconcileAbstractMirrors`). After the conversions, so the rows are
+      // copied with their final column types.
+      ...await reconcileAbstractMirrors(this.differ.declaredAbstractMirrors(schema), () => this.readAbstractMirrors(db))
+    ];
   }
 
   /**
@@ -425,7 +444,7 @@ export class MigrationEngine {
         const reconciled = this.pool ?
           await reconcileCreateTables(
             generatedDDL,
-            tableName => this.readExistingColumns(tableName)
+            tableName => this.readExistingColumns(this.pool!, tableName)
           ) :
           { skippedTables: new Set<string>(), statements: generatedDDL };
         const ddlStatements = reconciled.statements;
@@ -739,48 +758,46 @@ export class MigrationEngine {
   /**
    * Rollback a specific migration using stored rollback SQL from the tracker.
    * Executes rollback SQL in a transaction, then removes the migration record.
+   * The same transaction repairs the database for the rolled-back-to snapshot
+   * (see `rollBackOn`), so a failed repair undoes the whole rollback.
    */
   async executeRollback(migrationId: string): Promise<Result<void, MigrationError>> {
     if (!this.tracker)
       return Err(new MigrationError("Cannot execute rollback without a database connection (tracker not initialized)"));
 
-    // Load rollback SQL from tracker
-    const rollbackSqlResult = await this.tracker.getRollbackSQL(migrationId);
+    if (this.config.dryRun)
+      return this.previewRollbacks([migrationId]);
+
+    const rollbackSqlResult = await this.storedRollbackSql(migrationId);
 
     if (!rollbackSqlResult.ok)
-      return Err(rollbackSqlResult.error);
+      return rollbackSqlResult;
 
     const rollbackSql = rollbackSqlResult.value;
-
-    if (rollbackSql.length === 0) {
-      return Err(
-        new MigrationError(`No rollback SQL available for migration ${migrationId}. The migration was recorded without rollback instructions.`)
-      );
-    }
-
     const manualSteps = manualRollbackSteps(rollbackSql);
-
-    /*** A dry run shows the whole rollback, comments and manual steps included, and neither runs
-         it nor removes the migration record. ***/
-    if (this.config.dryRun) {
-      logger.info(`DRY RUN - Rollback of migration ${migrationId} would execute:`);
-      rollbackSql.filter(s => s.trim()).forEach(stmt => logger.info(`  ${stmt}`));
-
-      if (manualSteps.length > 0)
-        logger.warn(`Migration ${migrationId} needs manual rollback steps; a real rollback will be refused.`);
-
-      return Ok(void 0);
-    }
 
     /*** Running the rest and deleting the record would leave the schema out of step with the
          recorded history. ***/
     if (manualSteps.length > 0)
       return Err(manualRollbackError(migrationId, manualSteps));
 
+    const snapshot = await this.tracker.getSchemaModulesBefore(migrationId);
+
+    if (!snapshot.ok)
+      return snapshot;
+
     try {
-      // Execute rollback SQL statements in a transaction
       logger.info(`Rolling back migration ${migrationId}…`);
-      await this.executeStatements(rollbackSql);
+
+      const repairs = await this.pool!.transaction(async conn => {
+        for (const stmt of this.transactionPragmas())
+          await conn.execute(stmt);
+
+        return await this.rollBackOn(conn, migrationId, rollbackSql, snapshot.value);
+      });
+
+      if (repairs.length > 0)
+        logger.info(`Repaired the database for the rolled-back-to schema (${repairs.length} statement(s))`);
 
       // Remove the migration record from the tracker
       const removeResult = await this.tracker.removeMigration(migrationId);
@@ -799,6 +816,125 @@ export class MigrationEngine {
         new MigrationError(`Failed to execute rollback for migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`)
       );
     }
+  }
+
+  /*** The stored rollback SQL of `migrationId`, or an error when it was recorded without any. ***/
+  private async storedRollbackSql(migrationId: string): Promise<Result<string[], MigrationError>> {
+    const rollbackSqlResult = await this.tracker!.getRollbackSQL(migrationId);
+
+    if (!rollbackSqlResult.ok)
+      return rollbackSqlResult;
+
+    if (rollbackSqlResult.value.length === 0) {
+      return Err(
+        new MigrationError(`No rollback SQL available for migration ${migrationId}. The migration was recorded without rollback instructions.`)
+      );
+    }
+
+    return rollbackSqlResult;
+  }
+
+  /**
+   * Run a migration's rollback SQL on `conn`, then repair the database for the
+   * rolled-back-to snapshot (`snapshot`, the post-state of the migration
+   * before it) — the backfill a forward `disc migrate` adds (see
+   * `repairOperations`): delete rules (a subtype's `if orphan` trigger still
+   * reading the table of a subtype the rollback dropped), indexes,
+   * link-property columns, TEXT-column conversions and abstract mirrors. Reads
+   * the catalog through `conn`, so it sees what the rollback changed. There is
+   * nothing to repair against when no earlier migration recorded its
+   * snapshot. Returns the repair statements.
+   */
+  private async rollBackOn(
+    conn: DatabaseConnection,
+    migrationId: string,
+    rollbackSql: string[],
+    snapshot: Module[] | null
+  ): Promise<string[]> {
+    for (const stmt of rollbackSql.filter(s => s.trim() && !s.trim().startsWith("--")))
+      await conn.execute(stmt);
+
+    if (snapshot === null)
+      return [];
+
+    const repairs = this
+      .ddlGenerator
+      .generateDDL(await this.repairOperations(normalizeModules(snapshot), [], conn))
+      .filter(s => s.trim() && !s.trim().startsWith("--"));
+
+    for (const stmt of repairs) {
+      try {
+        await conn.execute(stmt);
+      } catch (error) {
+        throw new MigrationError(
+          `rolling back migration ${migrationId} succeeded, but repairing the database for the rolled-back-to schema failed ` +
+            `(${error instanceof Error ? error.message : String(error)}) on: ${stmt} — nothing was changed`
+        );
+      }
+    }
+
+    return repairs;
+  }
+
+  /**
+   * Dry run of rolling back `migrationIds`, most recent first: shows each one's
+   * stored rollback SQL, then runs them with their repairs (see `rollBackOn`)
+   * in a transaction it always rolls back, to show the repair statements a
+   * real rollback would run. Keeps no change and removes no record. A
+   * rollback needing manual steps is refused for real, so it has no repairs
+   * to show.
+   */
+  private async previewRollbacks(migrationIds: string[]): Promise<Result<void, MigrationError>> {
+    const steps: { id: string; rollbackSql: string[]; snapshot: Module[] | null; }[] = [];
+    let refused = false;
+
+    for (const id of migrationIds) {
+      const rollbackSql = await this.storedRollbackSql(id);
+
+      if (!rollbackSql.ok)
+        return rollbackSql;
+
+      logger.info(`DRY RUN - Rollback of migration ${id} would execute:`);
+      rollbackSql.value.filter(s => s.trim()).forEach(stmt => logger.info(`  ${stmt}`));
+
+      if (manualRollbackSteps(rollbackSql.value).length > 0) {
+        logger.warn(`Migration ${id} needs manual rollback steps; a real rollback will be refused.`);
+        refused = true;
+      }
+
+      const snapshot = await this.tracker!.getSchemaModulesBefore(id);
+
+      if (!snapshot.ok)
+        return snapshot;
+
+      steps.push({ id, rollbackSql: rollbackSql.value, snapshot: snapshot.value });
+    }
+
+    if (refused)
+      return Ok(void 0);
+
+    try {
+      await this.pool!.transaction(async conn => {
+        for (const stmt of this.transactionPragmas())
+          await conn.execute(stmt);
+
+        for (const step of steps) {
+          const repairs = await this.rollBackOn(conn, step.id, step.rollbackSql, step.snapshot);
+
+          if (repairs.length > 0) {
+            logger.info(`DRY RUN - After rolling back migration ${step.id}, repairing the database for the rolled-back-to schema would execute:`);
+            repairs.forEach(stmt => logger.info(`  ${stmt}`));
+          }
+        }
+
+        throw DRY_RUN_ABORT;
+      });
+    } catch (error) {
+      if (error !== DRY_RUN_ABORT)
+        return Err(new MigrationError(`Dry run: the rollback would fail: ${error instanceof Error ? error.message : String(error)}`));
+    }
+
+    return Ok(void 0);
   }
 
   /**
@@ -822,21 +958,22 @@ export class MigrationEngine {
       return Ok(void 0);
     }
 
+    /*** A dry run previews them together: each rollback runs on top of the ones before it. ***/
+    if (this.config.dryRun)
+      return this.previewRollbacks(migrationsToRollback.map(migration => migration.id));
+
     /*** Refuse before running anything when any migration in range needs manual steps — stopping
-         partway would leave some of them rolled back and the rest not. A dry run shows them
-         instead. ***/
-    if (!this.config.dryRun) {
-      for (const migration of migrationsToRollback) {
-        const rollbackSqlResult = await this.tracker.getRollbackSQL(migration.id);
+         partway would leave some of them rolled back and the rest not. ***/
+    for (const migration of migrationsToRollback) {
+      const rollbackSqlResult = await this.tracker.getRollbackSQL(migration.id);
 
-        if (!rollbackSqlResult.ok)
-          return Err(rollbackSqlResult.error);
+      if (!rollbackSqlResult.ok)
+        return Err(rollbackSqlResult.error);
 
-        const manualSteps = manualRollbackSteps(rollbackSqlResult.value);
+      const manualSteps = manualRollbackSteps(rollbackSqlResult.value);
 
-        if (manualSteps.length > 0)
-          return Err(manualRollbackError(migration.id, manualSteps));
-      }
+      if (manualSteps.length > 0)
+        return Err(manualRollbackError(migration.id, manualSteps));
     }
 
     // Migrations are already in DESC order (most recent first) from getMigrationsAfter
@@ -1503,16 +1640,13 @@ export class MigrationEngine {
 
   /**
    * Read the columns of an existing public-schema table for drift
-   * reconciliation. Returns `null` when the table does not exist. Uses the
-   * connection pool (the only path where reconciliation runs).
+   * reconciliation, through `db`. Returns `null` when the table does not exist.
    */
   private async readExistingColumns(
+    db: SqlReader,
     tableName: string
   ): Promise<ExistingColumn[] | null> {
-    if (!this.pool) {
-      return null;
-    }
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT column_name, data_type, udt_name
          FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = $1
@@ -1537,12 +1671,12 @@ export class MigrationEngine {
    * type, or a junction for a new multi link — gets its indexes from CREATE,
    * and backfilling them would run before that (deferred) table exists.
    */
-  private async onExistingTables(indexes: Types.IndexDefinition[]): Promise<Types.IndexDefinition[]> {
+  private async onExistingTables(db: SqlReader, indexes: Types.IndexDefinition[]): Promise<Types.IndexDefinition[]> {
     if (indexes.length === 0) {
       return indexes;
     }
 
-    const result = await this.pool!.query(
+    const result = await db.query(
       `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1::text[])`,
       [[...new Set(indexes.map(index => index.table))]]
     );
@@ -1552,8 +1686,8 @@ export class MigrationEngine {
   }
 
   /*** The tables with a `disc_abstract_mirror` trigger, each with the trigger's arguments: the abstract tables it copies rows to. ***/
-  private async readAbstractMirrors(): Promise<Map<string, string[]>> {
-    const result = await this.pool!.query(
+  private async readAbstractMirrors(db: SqlReader): Promise<Map<string, string[]>> {
+    const result = await db.query(
       `SELECT c.relname AS table_name, encode(t.tgargs, 'escape') AS args
        FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
@@ -1568,8 +1702,8 @@ export class MigrationEngine {
     }));
   }
 
-  private async readExistingIndexNames(indexNames: string[]): Promise<Set<string>> {
-    const result = await this.pool!.query(
+  private async readExistingIndexNames(db: SqlReader, indexNames: string[]): Promise<Set<string>> {
+    const result = await db.query(
       `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ANY($1::text[])`,
       [indexNames]
     );
@@ -1581,20 +1715,20 @@ export class MigrationEngine {
    * The existing tables among `tableNames`, with their foreign keys' ON
    * DELETE actions and their triggers. Feeds the delete-rule repair.
    */
-  private async readExistingDeleteRules(tableNames: string[]): Promise<ExistingDeleteRules> {
+  private async readExistingDeleteRules(db: SqlReader, tableNames: string[]): Promise<ExistingDeleteRules> {
     const onDeleteActions: Record<string, string> = { a: "NO ACTION", c: "CASCADE", d: "SET DEFAULT", n: "SET NULL", r: "RESTRICT" };
-    const tables = await this.pool!.query(
+    const tables = await db.query(
       `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1::text[])`,
       [tableNames]
     );
-    const foreignKeys = await this.pool!.query(
+    const foreignKeys = await db.query(
       `SELECT t.relname AS table_name, c.conname AS constraint_name, c.confdeltype AS on_delete
          FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
         WHERE c.contype = 'f' AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
       [tableNames]
     );
     /*** `tgtype` bit 1 marks a BEFORE trigger, bit 6 an INSTEAD OF one (PostgreSQL's TRIGGER_TYPE_BEFORE / TRIGGER_TYPE_INSTEAD). ***/
-    const triggers = await this.pool!.query(
+    const triggers = await db.query(
       `SELECT t.relname AS table_name, g.tgname AS trigger_name, p.prosrc AS body,
               CASE WHEN g.tgtype & 2 <> 0 THEN 'BEFORE' WHEN g.tgtype & 64 <> 0 THEN 'INSTEAD OF' ELSE 'AFTER' END AS timing
          FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid JOIN pg_proc p ON p.oid = g.tgfoid
@@ -1654,16 +1788,8 @@ export class MigrationEngine {
     );
   }
 
-  private async executeStatements(statements: string[], operations: Types.MigrationOperation[] = []): Promise<void> {
-    // Filter out comment-only lines and empty lines
-    const executableStatements = statements.filter(s => s.trim() && !s.trim().startsWith("--"));
-
-    if (this.config.dryRun) {
-      logger.info("DRY RUN - Would execute:");
-      executableStatements.forEach(stmt => logger.info(`  ${stmt}`));
-      return;
-    }
-
+  /*** The statements every migration transaction starts with. ***/
+  private transactionPragmas(): string[] {
     // gh/geldata#6304: prefix the migration transaction with safety
     // pragmas so a long-running concurrent query can't deadlock the
     // schema apply.
@@ -1691,6 +1817,21 @@ export class MigrationEngine {
         `SELECT pg_advisory_xact_lock(${Types.MIGRATION_ADVISORY_LOCK_KEY}::bigint);`
       );
     }
+
+    return pragmaPrefix;
+  }
+
+  private async executeStatements(statements: string[], operations: Types.MigrationOperation[] = []): Promise<void> {
+    // Filter out comment-only lines and empty lines
+    const executableStatements = statements.filter(s => s.trim() && !s.trim().startsWith("--"));
+
+    if (this.config.dryRun) {
+      logger.info("DRY RUN - Would execute:");
+      executableStatements.forEach(stmt => logger.info(`  ${stmt}`));
+      return;
+    }
+
+    const pragmaPrefix = this.transactionPragmas();
 
     // Pool-based execution path (preferred)
     if (this.pool) {

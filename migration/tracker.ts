@@ -241,6 +241,53 @@ export class MigrationTracker {
   }
 
   /**
+   * Load the stored schema modules of the migration applied just before
+   * `migrationId`: the schema rolling `migrationId` back returns to. Returns
+   * Ok(null) when no migration precedes it or that row's `schema_modules` was
+   * left NULL (pre-baseline-reconstruction rows).
+   */
+  async getSchemaModulesBefore(
+    migrationId: string
+  ): Promise<Result<Module[] | null, MigrationError>> {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      const result = await this.pool.query(
+        `
+        SELECT schema_modules
+        FROM disc_migrations
+        WHERE applied_order < (SELECT applied_order FROM disc_migrations WHERE id = $1)
+        ORDER BY applied_order DESC
+        LIMIT 1
+      `,
+        [migrationId]
+      );
+
+      if (result.rows.length === 0) {
+        return Ok(null);
+      }
+
+      const raw = (result.rows[0] as { schema_modules: unknown; }).schema_modules;
+      if (raw === null || raw === undefined) {
+        return Ok(null);
+      }
+
+      const modules = typeof raw === "string" ?
+        JSON.parse(raw) as Module[] :
+        raw as Module[];
+      return Ok(modules);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get the schema modules before ${migrationId}: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
    * Load the stored schema modules for the migration whose post-state
    * hashes to `hash`. Used by drift detection to recover the schema a
    * client was generated against (its epoch). Returns Ok(null) when no
