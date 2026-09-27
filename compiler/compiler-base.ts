@@ -455,6 +455,8 @@ export abstract class CompilerBase {
    * a table (see `mutationTargetTable`).
    */
   private exemptTables = new WeakSet<SQL.TableReference>();
+  /** The CTE names this compilation has taken (see `claimCteName`). */
+  protected cteNames = new Set<string>();
 
   constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
@@ -527,6 +529,18 @@ export abstract class CompilerBase {
    */
   setAccessContext(context: AccessContext): void {
     this.accessContext = context;
+  }
+
+  /**
+   * A CTE name no other CTE of this compilation has: `base`, or `base_<n>`
+   * once `base` is taken. The data-modifying CTEs of every mutation in a
+   * query end up in one top-level WITH (see `hoistMutations`), so their
+   * names must differ.
+   */
+  protected claimCteName(base: string): string {
+    const name = this.cteNames.has(base) ? Context.generateAlias(this.ctx, base) : base;
+    this.cteNames.add(name);
+    return name;
   }
 
   /** Check if an EdgeQL binary operator is a set operation. */

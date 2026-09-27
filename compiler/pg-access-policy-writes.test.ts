@@ -102,9 +102,16 @@ const SDL = `module default {
       allow select, update read;
     };
   }
+  type AcwHolder {
+    required name: str;
+    doc: AcwDoc;
+    multi docs: AcwDoc;
+  }
 }`;
 
 const TABLES = [
+  "acw_holder_docs",
+  "acw_holder",
   "acw_doc_tags",
   "acw_note_tags",
   "acw_doc",
@@ -426,5 +433,40 @@ Deno.test({
 
       await run(pool, schema, "update AcwOwned set { title := 's2' }");
       assertEquals(await column(pool, "SELECT title FROM acw_sheet"), ["s2"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy writes: an insert nested in a link assignment is checked, and the statement links only visible objects",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      const doc = (title: string, owner: string): string => `(insert AcwDoc { title := '${title}', owner := <uuid>'${owner}' })`;
+      const holderDoc = "SELECT h.name || ':' || d.title FROM acw_holder h JOIN acw_doc d ON d.id = h.doc_id ORDER BY 1";
+      const holderDocs =
+        "SELECT h.name || ':' || d.title FROM acw_holder_docs j JOIN acw_holder h ON h.id = j.source_id JOIN acw_doc d ON d.id = j.target_id ORDER BY 1";
+
+      // A nested object that fails the insert policy fails the whole statement.
+      await assertViolation(pool, schema, DOC_INSERT, `insert AcwHolder { name := 'h', doc := ${doc("n1", BOB)} }`);
+      await assertViolation(pool, schema, DOC_INSERT, `insert AcwHolder { name := 'h', docs := {${doc("n2", ANN)}, ${doc("n3", BOB)}} }`);
+      assertEquals(await column(pool, "SELECT count(*)::int FROM acw_holder"), [0]);
+      assertEquals(await column(pool, "SELECT title FROM acw_doc ORDER BY title"), ["ann-doc", "bob-doc"]);
+
+      // Selected targets are the ones the select policy shows: bob-doc is not linked.
+      await run(
+        pool,
+        schema,
+        `insert AcwHolder { name := 'h', doc := ${doc("mine", ANN)}, docs := {${doc("mine2", ANN)}, (select AcwDoc filter .title in {'ann-doc', 'bob-doc'})} }`
+      );
+      assertEquals(await column(pool, holderDoc), ["h:mine"]);
+      assertEquals(await column(pool, holderDocs), ["h:ann-doc", "h:mine2"]);
+
+      // An update's nested inserts are checked the same way.
+      await assertViolation(pool, schema, DOC_INSERT, `update AcwHolder set { doc := ${doc("n4", BOB)} }`);
+      await assertViolation(pool, schema, DOC_INSERT, `update AcwHolder set { docs += ${doc("n5", BOB)} }`);
+      await run(pool, schema, `update AcwHolder set { doc := ${doc("mine3", ANN)}, docs += ${doc("mine4", ANN)} }`);
+      assertEquals(await column(pool, holderDoc), ["h:mine3"]);
+      assertEquals(await column(pool, holderDocs), ["h:ann-doc", "h:mine2", "h:mine4"]);
+      assertEquals(await column(pool, "SELECT title FROM acw_doc ORDER BY title"), ["ann-doc", "bob-doc", "mine", "mine2", "mine3", "mine4"]);
     })
 });

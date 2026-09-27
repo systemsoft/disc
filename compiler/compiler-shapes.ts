@@ -66,15 +66,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // spellings get the same data-modifying CTE, the same shape projection over
     // it, and the mutation is compiled by the mutation compilers (policy
     // included) either way.
+    // The binding is `m` unless another CTE of the query already has that name.
     if (query.expr.kind === "Subquery" && isMutationQuery(query.expr.query)) {
+      const name = this.claimCteName(MUTATION_CTE_NAME);
       return this.compileQuery({
         kind: "WithBlock",
         bindings: [{
           kind: "WithBinding",
-          name: { kind: "Identifier", name: MUTATION_CTE_NAME },
+          name: { kind: "Identifier", name },
           value: query.expr
         }],
-        body: { ...query, expr: { kind: "Identifier", name: MUTATION_CTE_NAME } }
+        body: { ...query, expr: { kind: "Identifier", name } }
       });
     }
 

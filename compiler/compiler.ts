@@ -27,10 +27,78 @@ export type { CompilerOptions, ResultInfo } from "./compiler-base.ts";
 
 /*** One target assigned to a junction-backed multi link, with the link properties set for it. ***/
 interface LinkTarget {
+  /**
+   * For the object of an insert nested in the assignment: its id's column of
+   * the nested rows (see `NestedInsertRows`). It is not linked yet, and with
+   * one row per written object it is read from the source object's row.
+   */
+  fresh?: string;
   /** SELECT yielding the target rows' `id`. */
   idSelect: SQL.SelectStatement;
   /** Junction columns written for this target: `@role := "admin"` → `{ column: "role", value }`. */
   linkProperties: { column: string; value: SQL.SQLExpression; }[];
+  /** The SELECT reads the source row (LATERAL). */
+  lateral?: boolean;
+}
+
+/**
+ * The ids of the objects inserted by inserts nested in link assignments
+ * (`item := (insert Item { … })`), chosen before any of them is written: a
+ * CTE of rows with a `disc_uuidv7()` column per nested insert. The outer
+ * statement stores the id in its link and the nested insert inserts its
+ * object under it, one per row, so each written object gets its own.
+ *
+ *   - An insert: a single row (`SELECT disc_uuidv7() AS "__nested_0", …`).
+ *   - A bulk insert (`for x in … union (insert …)`): the iterator's rows,
+ *     each with its ids, which the outer insert then reads instead.
+ *   - An update: the updated rows (`upd`), whose single links it sets to a
+ *     new `disc_uuidv7()` of its own; the rows add the ids of multi-link
+ *     targets.
+ */
+interface NestedInsertRows {
+  /** The name the statements read `cte` by. */
+  alias: string;
+  /** The `disc_uuidv7()` columns, one per nested insert that needs one. */
+  columns: string[];
+  cte: string;
+  /** One row per written object (an update, a bulk insert), rather than a single row. */
+  perRow: boolean;
+}
+
+/*** An insert in a link assignment: one object per row of the nested rows that the outer write links. ***/
+interface NestedInsert {
+  /** The column of the nested rows that holds the new object's id. */
+  idColumn: string;
+  /** For a single link: its column, where the outer write stores the id. */
+  linkColumn?: string;
+  query: EdgeQLAST.InsertQuery;
+}
+
+/*** An insert's parts, before they become one statement (see `compileInsertStatement`, `compileBulkInsert`, `compileNestedInserts`). ***/
+interface CompiledInsert {
+  /** The INSERT with one VALUES row. */
+  insert: SQL.InsertStatement;
+  /** Junction rows to write, one per target of a multi link. */
+  multiLinks: { link: Context.LinkDef; target: LinkTarget; }[];
+  /** The inserts nested in its link assignments. */
+  nested: NestedInsert[];
+}
+
+/*** An INSERT, UPDATE or DELETE: a statement PostgreSQL runs only at the top level of a query. ***/
+function isDataModifying(node: unknown): node is SQL.InsertStatement | SQL.UpdateStatement | SQL.DeleteStatement {
+  const kind = (node as { kind?: string; } | null)?.kind;
+  return kind === "InsertStatement" || kind === "UpdateStatement" || kind === "DeleteStatement";
+}
+
+/*** True when an INSERT, UPDATE or DELETE is anywhere under `node`, `node` included. ***/
+function containsDataModifying(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some(containsDataModifying);
+  }
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  return isDataModifying(node) || Object.values(node).some(containsDataModifying);
 }
 
 /*** An update `set { link op targets }` on a junction-backed multi link. ***/
@@ -55,6 +123,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private mutationReadsIterator = false;
   /** Prefixes the names of a multi-link update's CTEs while it is one of several in a statement (see compileAbstractMutation). */
   private mutationCtePrefix = "";
+  /** The rows giving ids to the inserts nested in the statement being compiled (see `NestedInsertRows`). */
+  private nestedRows: NestedInsertRows | undefined;
 
   compile(
     query: EdgeQLAST.Query,
@@ -68,8 +138,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       // walk the AST in first-seen order to derive one.
       this.parameterIndex = options?.parameterMap ??
         buildParameterIndex(query);
+      this.cteNames.clear();
 
-      const statement = this.compileQuery(query);
+      const statement = this.hoistMutations(this.compileQuery(query));
 
       // Select policies: every read of an object type's table — the top-level
       // select's, and those in a with binding, a for iterator, a path, a
@@ -89,6 +160,88 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           `Compilation failed: ${error instanceof Error ? error.message : String(error)}`
         )
       );
+    }
+  }
+
+  /**
+   * PostgreSQL runs an INSERT, UPDATE or DELETE only at the top level of a
+   * query: as the statement itself or as a CTE of its top-level WITH. A
+   * mutation compiled under another statement — a select over a mutation in
+   * a `with` binding, a nested `with`, the body of a `for` over a set literal
+   * (a UNION ALL member), several multi-link writes in one query — has its
+   * CTEs moved into the top-level WITH, ahead of the CTE that held them; a
+   * mutation that is a UNION ALL member becomes a CTE of its own, which the
+   * member selects from. Anything still nested (a mutation inside an
+   * expression) fails with a compile error instead of as invalid SQL.
+   */
+  private hoistMutations(statement: SQL.SQLStatement): SQL.SQLStatement {
+    const ctes: SQL.CTE[] = [];
+    const query = this.hoistFrom(statement, ctes);
+    const hoisted = ctes.length > 0 ? SQL.withCTEs(ctes, query) : query;
+
+    const topLevel = new Set<unknown>([hoisted]);
+    const names = new Set<string>();
+    if (hoisted.kind === "CTEStatement") {
+      topLevel.add(hoisted.query);
+      for (const cte of hoisted.ctes) {
+        if (names.has(cte.name)) {
+          throw new CompilationError(
+            `This query writes data under two bindings named '${cte.name}', which it cannot run as one statement: rename one of them.`
+          );
+        }
+        names.add(cte.name);
+        topLevel.add(cte.query);
+      }
+    }
+    this.assertNoNestedMutation(hoisted, topLevel);
+    return hoisted;
+  }
+
+  /*** `statement` with the CTEs of the mutations under it moved to `ctes` (see `hoistMutations`). ***/
+  private hoistFrom(statement: SQL.SQLStatement, ctes: SQL.CTE[]): SQL.SQLStatement {
+    if (!containsDataModifying(statement)) {
+      return statement;
+    }
+    if (statement.kind === "CTEStatement") {
+      for (const cte of statement.ctes) {
+        const query = this.hoistFrom(cte.query, ctes);
+        ctes.push({ ...cte, query });
+      }
+      return this.hoistFrom(statement.query, ctes);
+    }
+    if (statement.kind === "UnionAllStatement") {
+      const queries = statement.queries.map(member => {
+        const query = this.hoistFrom(member, ctes);
+        if (!isDataModifying(query)) {
+          return query;
+        }
+        const name = this.claimCteName("dml");
+        ctes.push({ columns: [], kind: "CTE", name, query, recursive: false });
+        return this.selectAllFrom(name);
+      });
+      return { ...statement, queries };
+    }
+    return statement;
+  }
+
+  /*** Throw for an INSERT, UPDATE or DELETE under `node` that is not one of `topLevel`. ***/
+  private assertNoNestedMutation(node: unknown, topLevel: ReadonlySet<unknown>): void {
+    if (Array.isArray(node)) {
+      node.forEach(item => this.assertNoNestedMutation(item, topLevel));
+      return;
+    }
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (isDataModifying(node) && !topLevel.has(node)) {
+      const operation = { DeleteStatement: "a delete", InsertStatement: "an insert", UpdateStatement: "an update" }[node.kind];
+      throw new CompilationError(
+        `Cannot run ${operation} of '${node.table}' inside an expression: a mutation can be the statement, a \`with\` binding, ` +
+          "the body of a `for`, or an insert assigned to a link."
+      );
+    }
+    for (const value of Object.values(node)) {
+      this.assertNoNestedMutation(value, topLevel);
     }
   }
 
@@ -247,7 +400,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       case "SelectQuery":
         return this.compileSelectQuery(query);
       case "InsertQuery":
-        return this.compileInsertQuery(query);
+        return this.compileInsertStatement(query);
       case "UpdateQuery":
         return this.compileUpdateQuery(query);
       case "DeleteQuery":
@@ -363,19 +516,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * with the link properties its shape sets:
    * `(select User filter …) { @role := "admin" }`. Link properties are
    * compiled in the statement's scope, so they may reference parameters and
-   * `with` bindings but not the target.
+   * `with` bindings but not the target. A target that is an insert
+   * (`(insert Item { … })`) is added to `nested`.
    */
   private compileLinkTargets(
     link: Context.LinkDef,
-    expr: EdgeQLAST.Expression
+    expr: EdgeQLAST.Expression,
+    nested: NestedInsert[]
   ): LinkTarget[] {
     if (expr.kind === "SetExpr") {
-      return expr.elements.flatMap(element => this.compileLinkTargets(link, element));
+      return expr.elements.flatMap(element => this.compileLinkTargets(link, element, nested));
     }
     if (expr.kind !== "ShapeExpr") {
-      return [{ idSelect: this.compileTargetIdSelect(expr), linkProperties: [] }];
+      return [this.linkTarget(expr, [], nested)];
     }
-    const idSelect = this.compileTargetIdSelect(expr.expr);
     const linkProperties = expr
       .shape
       .elements
@@ -390,12 +544,215 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           value: this.compileExpression(element.expr)
         };
       });
-    return [{ idSelect, linkProperties }];
+    return [this.linkTarget(expr.expr, linkProperties, nested)];
   }
 
-  private compileInsertQuery(
+  /*** One multi-link target: the objects `expr` selects, or the object of the insert it is (added to `nested`). ***/
+  private linkTarget(expr: EdgeQLAST.Expression, linkProperties: LinkTarget["linkProperties"], nested: NestedInsert[]): LinkTarget {
+    const query = this.nestedInsertOf(expr);
+    if (!query) {
+      return { idSelect: this.compileTargetIdSelect(expr), linkProperties };
+    }
+    const fresh = this.freshIdColumn();
+    nested.push({ idColumn: fresh, query });
+    const rows = this.nestedRows!;
+    const idSelect = SQL.createSelectStatement({
+      from: SQL.createFromClause([SQL.createTableReference(rows.cte, rows.alias)]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference(fresh, rows.alias), "id")])
+    });
+    return { fresh, idSelect, linkProperties };
+  }
+
+  /*** The insert an assignment's value is (`(insert Item { … })`), if it is one. ***/
+  private nestedInsertOf(expr: EdgeQLAST.Expression): EdgeQLAST.InsertQuery | undefined {
+    const query = expr.kind === "Subquery" ? expr.query : expr;
+    return query.kind === "InsertQuery" ? query : undefined;
+  }
+
+  /**
+   * A new `disc_uuidv7()` column of the nested rows, for one nested insert:
+   * of a single row of their own unless the statement has rows (see
+   * `NestedInsertRows`).
+   */
+  private freshIdColumn(): string {
+    if (!this.nestedRows) {
+      const cte = this.claimCteName("nested_ids");
+      this.nestedRows = { alias: cte, columns: [], cte, perRow: false };
+    }
+    const column = `__nested_${this.nestedRows.columns.length}`;
+    this.nestedRows.columns.push(column);
+    return column;
+  }
+
+  /**
+   * The id a single link stores for the insert nested in its assignment: a
+   * new column of the nested rows, read from the written object's row — or,
+   * from a single row, by a subquery, which an upsert's DO UPDATE can read too.
+   */
+  private freshLinkValue(link: Context.LinkDef, query: EdgeQLAST.InsertQuery, nested: NestedInsert[]): SQL.SQLExpression {
+    const idColumn = this.freshIdColumn();
+    nested.push({ idColumn, linkColumn: link.columnName, query });
+    const rows = this.nestedRows!;
+    if (rows.perRow) {
+      return SQL.createColumnReference(idColumn, rows.alias);
+    }
+    return SQL.createSubqueryExpression(this.selectColumnFrom(rows.cte, idColumn));
+  }
+
+  /**
+   * An insert: the INSERT itself, or — with multi links or inserts nested in
+   * its link assignments — a WITH of the INSERT (`ins`), its junction writes
+   * and nested inserts, and the nested rows giving the ids of the latter,
+   * returning the inserted row.
+   */
+  private compileInsertStatement(
     query: EdgeQLAST.InsertQuery
   ): SQL.InsertStatement | SQL.CTEStatement {
+    // Nested inserts get their ids from a single row, made on first use (see `freshIdColumn`).
+    return this.withNestedRows(undefined, () => {
+      const { insert, multiLinks, nested } = this.compileInsertQuery(query);
+      if (multiLinks.length === 0 && nested.length === 0) {
+        return insert;
+      }
+
+      // The source row is a CTE so each junction INSERT can cross-join its id
+      // against its target-id set. The final statement re-selects the inserted
+      // row so callers still get `RETURNING *` semantics (raw columns, mapped
+      // to the schema shape by the server).
+      const ins = this.claimCteName("ins");
+      const ctes: SQL.CTE[] = [{ columns: [], kind: "CTE", name: ins, query: insert, recursive: false }];
+      ctes.push(...this.junctionInserts(multiLinks, ins, undefined));
+      const rows = this.nestedRows;
+      if (rows) {
+        ctes.push(...this.compileNestedInserts(nested, ins, rows, undefined));
+        ctes.unshift(this.nestedRowsCte(rows, undefined));
+      }
+      return SQL.withCTEs(ctes, this.selectAllFrom(ins));
+    });
+  }
+
+  /**
+   * The junction INSERTs of `multiLinks`, whose source is each row of the
+   * CTE `source`. With one nested row per source row, `key` is the rows'
+   * column holding the source's id, which picks the source's fresh targets.
+   */
+  private junctionInserts(
+    multiLinks: { link: Context.LinkDef; target: LinkTarget; }[],
+    source: string,
+    key: string | undefined
+  ): SQL.CTE[] {
+    return multiLinks.map(({ link, target }, index) =>
+      this.buildJunctionInsertCTE(
+        this.claimCteName(`${this.mutationCtePrefix}link_${index}`),
+        link,
+        SQL.createColumnReference("id", source),
+        this.sourceTarget(target, source, key),
+        source
+      )
+    );
+  }
+
+  /**
+   * `target` as read for each row of the CTE `source`: a fresh target of
+   * rows with one row per source row (`key`) is the id in the source's row.
+   */
+  private sourceTarget(target: LinkTarget, source: string, key: string | undefined): LinkTarget {
+    const rows = this.nestedRows;
+    if (!target.fresh || key === undefined || !rows) {
+      return target;
+    }
+    const idSelect: SQL.SelectStatement = {
+      ...target.idSelect,
+      where: SQL.createWhereClause(
+        SQL.createBinaryExpression("=", SQL.createColumnReference(key, rows.alias), SQL.createColumnReference("id", source))
+      )
+    };
+    return { ...target, idSelect, lateral: true };
+  }
+
+  /**
+   * The CTE of the nested rows: `SELECT <from>.*, disc_uuidv7() AS
+   * "__nested_0", … FROM <from>` — or, without `from`, the single row of ids.
+   */
+  private nestedRowsCte(rows: NestedInsertRows, from: SQL.TableReference | undefined): SQL.CTE {
+    const ids = rows.columns.map(column => SQL.createSelectItem(SQL.createFunctionCall("disc_uuidv7", []), column));
+    const all = from ? [SQL.createSelectItem(SQL.createColumnReference("*", from.alias ?? from.name)), ...ids] : ids;
+    const query = SQL.createSelectStatement({
+      from: from ? SQL.createFromClause([from]) : undefined,
+      select: SQL.createSelectClause(all)
+    });
+    return { columns: [], kind: "CTE", name: rows.cte, query, recursive: false };
+  }
+
+  /**
+   * The inserts nested in the link assignments of the statement written by
+   * the CTE `parent`, each a CTE — followed by its own junction writes and
+   * nested inserts — of `INSERT INTO t (id, …) SELECT <rows>.<id column>, …
+   * FROM <rows>` over the rows whose object the parent links: those whose
+   * id it stored in its single link (not an upsert's other branch, not a
+   * row that conflicted), or, for a multi link, those it wrote (`key`, the
+   * rows' column holding the parent's id; any, with a single row).
+   */
+  private compileNestedInserts(
+    nested: NestedInsert[],
+    parent: string,
+    rows: NestedInsertRows,
+    key: string | undefined
+  ): SQL.CTE[] {
+    const ctes: SQL.CTE[] = [];
+    for (const { idColumn, linkColumn, query } of nested) {
+      const compiled = this.compileInsertQuery(query);
+      if (compiled.insert.onConflict) {
+        throw new CompilationError(
+          "An insert assigned to a link cannot have `unless conflict`: on a conflict there is no object to link. " +
+            "Insert or select the object in a `with` binding first.",
+          locationOf(query)
+        );
+      }
+
+      const rowId = SQL.createColumnReference(idColumn, rows.alias);
+      const parentIds = (column: string): SQL.SubqueryExpression => SQL.createSubqueryExpression(this.selectColumnFrom(parent, column));
+      let linked: SQL.SQLExpression;
+      if (linkColumn) {
+        linked = SQL.createBinaryExpression("IN", rowId, parentIds(linkColumn));
+      } else if (key === undefined) {
+        linked = { kind: "UnaryExpression", operand: parentIds("id"), operator: "EXISTS" };
+      } else {
+        linked = SQL.createBinaryExpression("IN", SQL.createColumnReference(key, rows.alias), parentIds("id"));
+      }
+
+      const name = this.claimCteName("nested");
+      const insert: SQL.InsertStatement = {
+        ...compiled.insert,
+        columns: ["id", ...compiled.insert.columns],
+        insertSelect: SQL.createSelectStatement({
+          from: SQL.createFromClause([SQL.createTableReference(rows.cte, rows.alias)]),
+          select: SQL.createSelectClause([rowId, ...compiled.insert.values[0]].map(value => SQL.createSelectItem(value))),
+          where: SQL.createWhereClause(linked)
+        }),
+        values: []
+      };
+      ctes.push({ columns: [], kind: "CTE", name, query: insert, recursive: false });
+      ctes.push(...this.junctionInserts(compiled.multiLinks, name, idColumn));
+      ctes.push(...this.compileNestedInserts(compiled.nested, name, rows, idColumn));
+    }
+    return ctes;
+  }
+
+  /*** `SELECT <column> FROM <cte>`. ***/
+  private selectColumnFrom(cte: string, column: string): SQL.SelectStatement {
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([SQL.createTableReference(cte)]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference(column))])
+    });
+  }
+
+  /**
+   * An insert's parts: the INSERT of one VALUES row, access policy and write
+   * check included; the targets of its multi links; and the inserts nested
+   * in its link assignments, whose ids come from the current nested rows.
+   */
+  private compileInsertQuery(query: EdgeQLAST.InsertQuery): CompiledInsert {
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -419,6 +776,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Multi-links (junction-backed, no FK column) are written as separate
     // junction INSERTs in a CTE — collect them here, one per assigned target.
     const multiLinks: { link: Context.LinkDef; target: LinkTarget; }[] = [];
+    const nested: NestedInsert[] = [];
 
     // Process shape elements to extract column assignments
     for (const element of query.shape.elements) {
@@ -433,11 +791,16 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       let singleLink: Context.LinkDef | undefined;
       if (!property) {
         const link = Context.getLink(this.ctx, typeName, propName);
-        if (link && link.columnName) {
+        const nestedInsert = this.nestedInsertOf(element.expr);
+        if (link && link.columnName && nestedInsert) {
+          columns.push(link.columnName);
+          values.push(this.freshLinkValue(link, nestedInsert, nested));
+          continue;
+        } else if (link && link.columnName) {
           columns.push(link.columnName);
           singleLink = link;
         } else if (link && link.junctionTable) {
-          for (const target of this.compileLinkTargets(link, element.expr)) {
+          for (const target of this.compileLinkTargets(link, element.expr, nested)) {
             multiLinks.push({ link, target });
           }
           continue;
@@ -499,7 +862,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         const updateAction = this.withMutationScope(
           typeName,
           typeDef,
-          () => this.compileUpsertUpdateAction(typeName, updateQuery)
+          () => this.compileUpsertUpdateAction(typeName, updateQuery, nested)
         );
         if (updatable) {
           updateAction.where = updateAction.where ? SQL.createBinaryExpression("AND", updatable, updateAction.where) : updatable;
@@ -541,35 +904,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       sourceInsert.writeCheck = this.writtenRowCheck(typeDef, check);
     }
 
-    if (multiLinks.length === 0) {
-      return sourceInsert;
-    }
-
-    // Multi-link INSERT: wrap the source row in a CTE so each junction INSERT
-    // can cross-join the new row's id against its target-id set. The final
-    // statement re-selects the inserted row so callers still get `RETURNING *`
-    // semantics (raw columns, mapped to the schema shape by the server).
-    const ctes: SQL.CTE[] = [{
-      kind: "CTE",
-      name: "ins",
-      recursive: false,
-      columns: [],
-      query: sourceInsert
-    }];
-
-    multiLinks.forEach(({ link, target }, index) => {
-      ctes.push(
-        this.buildJunctionInsertCTE(
-          `link_${index}`,
-          link,
-          SQL.createColumnReference("id", "ins"),
-          target,
-          "ins"
-        )
-      );
-    });
-
-    return SQL.withCTEs(ctes, this.selectAllFrom("ins"));
+    return { insert: sourceInsert, multiLinks, nested };
   }
 
   // The DO UPDATE action of `unless conflict … else (update … filter … set
@@ -577,7 +912,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   // conflicting row, nothing is updated and the statement returns no row.
   private compileUpsertUpdateAction(
     typeName: string,
-    updateQuery: EdgeQLAST.UpdateQuery
+    updateQuery: EdgeQLAST.UpdateQuery,
+    nested: NestedInsert[]
   ): SQL.UpdateAction {
     const setClauses: SQL.SetClause[] = [];
     for (const element of updateQuery.shape.elements) {
@@ -591,11 +927,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       const property = Context.getProperty(this.ctx, typeName, propName);
       if (!property) {
         const link = Context.getLink(this.ctx, typeName, propName);
+        const nestedInsert = this.nestedInsertOf(element.expr);
+        if (nestedInsert && this.nestedRows?.perRow) {
+          throw new CompilationError(
+            "An insert assigned to a link in the else branch of a bulk upsert (`for … union (insert … unless conflict … else …)`) is not supported yet.",
+            locationOf(nestedInsert)
+          );
+        }
         if (link && link.columnName) {
           setClauses.push({
             kind: "SetClause",
             column: link.columnName,
-            value: this.compileLinkAssignmentExpression(link, element.expr)
+            value: nestedInsert ?
+              this.freshLinkValue(link, nestedInsert, nested) :
+              this.compileLinkAssignmentExpression(link, element.expr)
           });
         } else {
           throw new CompilationError(
@@ -687,7 +1032,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     target: LinkTarget,
     crossJoinSourceCteName?: string
   ): SQL.CTE {
-    const { idSelect, linkProperties } = target;
+    const { idSelect, lateral, linkProperties } = target;
     const srcCol = link.junctionSourceColumn ?? "source_id";
     const tgtCol = link.junctionTargetColumn ?? "target_id";
 
@@ -700,6 +1045,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       kind: "TableReference",
       name: "(subquery)",
       alias: subAlias,
+      lateral,
       subquery: idSelect
     });
 
@@ -868,7 +1214,33 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return this.compileAbstractMutation(typeDef, "upd", subtype => this.compileUpdateQuery({ ...query, type: subtypeName(subtype) }));
     }
 
-    return this.withMutationScope(typeName, typeDef, () => this.compileUpdateInScope(query, typeName, typeDef));
+    // Inserts nested in its link assignments get their ids from the updated rows.
+    const rows: NestedInsertRows | undefined = this.assignsInsert(query.shape.elements) ?
+      { alias: typeDef.tableName, columns: [], cte: this.claimCteName(`${this.mutationCtePrefix}nested_rows`), perRow: true } :
+      undefined;
+    return this.withMutationScope(typeName, typeDef, () => this.withNestedRows(rows, () => this.compileUpdateInScope(query, typeName, typeDef)));
+  }
+
+  /*** True when a shape assigns an insert to a link: `item := (insert …)`, or in a set of targets. ***/
+  private assignsInsert(elements: EdgeQLAST.ShapeElement[]): boolean {
+    const isInsert = (expr: EdgeQLAST.Expression): boolean =>
+      expr.kind === "SetExpr" ?
+        expr.elements.some(isInsert) :
+        expr.kind === "ShapeExpr" ?
+        isInsert(expr.expr) :
+        this.nestedInsertOf(expr) !== undefined;
+    return elements.some(element => element.expr !== undefined && isInsert(element.expr));
+  }
+
+  /*** Run `compile` with `rows` as the nested rows (see `NestedInsertRows`). ***/
+  private withNestedRows<T>(rows: NestedInsertRows | undefined, compile: () => T): T {
+    const outer = this.nestedRows;
+    this.nestedRows = rows;
+    try {
+      return compile();
+    } finally {
+      this.nestedRows = outer;
+    }
   }
 
   /**
@@ -929,6 +1301,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     // Multi-link ops carry their assignment operator so the CTE knows whether
     // to replace (`:=`), add (`+=`), or remove (`-=`) junction rows.
     const multiLinkOps: MultiLinkOp[] = [];
+    const nested: NestedInsert[] = [];
 
     // Process shape elements to extract SET clauses
     for (const element of query.shape.elements) {
@@ -942,7 +1315,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       const property = Context.getProperty(this.ctx, typeName, propName);
       if (!property) {
         const link = Context.getLink(this.ctx, typeName, propName);
-        if (link && link.columnName) {
+        const nestedInsert = this.nestedInsertOf(element.expr);
+        if (link && link.columnName && nestedInsert) {
+          // A new id per updated object, which the nested insert reads back
+          // from the updated row.
+          nested.push({ idColumn: link.columnName, linkColumn: link.columnName, query: nestedInsert });
+          setClauses.push({ column: link.columnName, kind: "SetClause", value: SQL.createFunctionCall("disc_uuidv7", []) });
+        } else if (link && link.columnName) {
           setClauses.push({
             kind: "SetClause",
             column: link.columnName,
@@ -952,7 +1331,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           multiLinkOps.push({
             link,
             operator: element.operator ?? ":=",
-            targets: this.compileLinkTargets(link, element.expr)
+            targets: this.compileLinkTargets(link, element.expr, nested)
           });
         } else {
           throw new CompilationError(
@@ -989,7 +1368,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const writeCheck = check ? this.writtenRowCheck(typeDef, check) : undefined;
 
     if (multiLinkOps.length === 0) {
-      return {
+      const update: SQL.UpdateStatement = {
         kind: "UpdateStatement",
         table: typeDef.tableName,
         set: setClauses,
@@ -1002,6 +1381,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         ],
         writeCheck
       };
+      if (nested.length === 0) {
+        return update;
+      }
+      const upd = this.claimCteName(`${this.mutationCtePrefix}upd`);
+      const { children, rows } = this.updateNestedInserts(nested, upd);
+      return SQL.withCTEs([{ columns: [], kind: "CTE", name: upd, query: update, recursive: false }, rows, ...children], this.selectAllFrom(upd));
     }
 
     return this.compileMultiLinkUpdate(
@@ -1009,8 +1394,20 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       setClauses,
       whereClause,
       multiLinkOps,
-      writeCheck
+      writeCheck,
+      nested
     );
+  }
+
+  /**
+   * The inserts nested in an update's link assignments, one object per row
+   * of the CTE `upd` (the updated objects), and the nested rows they read —
+   * the updated rows with their new ids — which must come first.
+   */
+  private updateNestedInserts(nested: NestedInsert[], upd: string): { children: SQL.CTE[]; rows: SQL.CTE; } {
+    const rows = this.nestedRows!;
+    const children = this.compileNestedInserts(nested, upd, rows, "id");
+    return { children, rows: this.nestedRowsCte(rows, SQL.createTableReference(upd, rows.alias)) };
   }
 
   // Build an UPDATE that touches one or more junction-backed multi-links,
@@ -1029,9 +1426,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     setClauses: SQL.SetClause[],
     whereClause: SQL.WhereClause | undefined,
     multiLinkOps: MultiLinkOp[],
-    writeCheck: SQL.RawSQLExpression | undefined
+    writeCheck: SQL.RawSQLExpression | undefined,
+    nested: NestedInsert[]
   ): SQL.CTEStatement {
-    const sourceCte = `${this.mutationCtePrefix}upd`;
+    const sourceCte = this.claimCteName(`${this.mutationCtePrefix}upd`);
     const sourceId = SQL.createColumnReference("id", sourceCte);
 
     let sourceQuery: SQL.SQLStatement;
@@ -1069,17 +1467,31 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       columns: [],
       query: sourceQuery
     }];
+    // Nested inserts: their rows follow the source; they come last.
+    const nestedInserts = nested.length > 0 ? this.updateNestedInserts(nested, sourceCte) : undefined;
+    if (nestedInserts) {
+      ctes.push(nestedInserts.rows);
+    }
 
     // Junction inserts are numbered across all ops (`link_<n>`), one per target.
     let insertCount = 0;
     const insertTargets = (link: Context.LinkDef, targets: LinkTarget[]) => {
       for (const target of targets) {
-        ctes.push(this.buildJunctionInsertCTE(`${this.mutationCtePrefix}link_${insertCount++}`, link, sourceId, target, sourceCte));
+        ctes.push(
+          this.buildJunctionInsertCTE(
+            this.claimCteName(`${this.mutationCtePrefix}link_${insertCount++}`),
+            link,
+            sourceId,
+            this.sourceTarget(target, sourceCte, "id"),
+            sourceCte
+          )
+        );
       }
     };
 
     multiLinkOps.forEach(({ link, operator, targets }, index) => {
-      const idSelects = targets.map(target => target.idSelect);
+      // An object inserted by this statement is not linked yet: there is nothing to delete.
+      const idSelects = targets.filter(target => !target.fresh).map(target => target.idSelect);
       switch (operator) {
         case ":=": {
           // Replace: delete existing junction rows whose target is NOT in the
@@ -1090,7 +1502,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           // just-deleted row and trip the unique constraint.
           ctes.push(
             this.buildJunctionDeleteCTE(
-              `${this.mutationCtePrefix}del_${index}`,
+              this.claimCteName(`${this.mutationCtePrefix}del_${index}`),
               link,
               sourceCte,
               idSelects,
@@ -1109,7 +1521,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           if (idSelects.length > 0) {
             ctes.push(
               this.buildJunctionDeleteCTE(
-                `${this.mutationCtePrefix}del_${index}`,
+                this.claimCteName(`${this.mutationCtePrefix}del_${index}`),
                 link,
                 sourceCte,
                 idSelects
@@ -1120,6 +1532,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
       }
     });
+    ctes.push(...nestedInserts?.children ?? []);
 
     return SQL.withCTEs(ctes, this.selectAllFrom(sourceCte));
   }
@@ -1229,6 +1642,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const ctes: SQL.CTE[] = [];
     const variables = this.ctx.currentScope.variables;
     const inlinedAliases = new Map<string, Context.CTEAlias>();
+    // The CTEs mutations compile to must not take a binding's name.
+    for (const binding of query.bindings) {
+      this.cteNames.add(binding.name.name);
+    }
 
     for (const binding of query.bindings) {
       // Validate recursive CTEs: must contain a UNION (which maps to SQL
@@ -1722,7 +2139,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       return { ...statement, ctes: statement.ctes.map(cte => ({ ...cte, query: apply(cte.query as S) })) };
     }
     throw new CompilationError(
-      "An update in a `for` over objects cannot assign a multi link yet. Update the link without the loop: `update T filter … set { link += … }`.",
+      "An update in a `for` over objects cannot assign a multi link yet, nor an insert to a link. " +
+        "Update the link without the loop: `update T filter … set { link += … }`.",
       locationOf(query)
     );
   }
@@ -1792,24 +2210,47 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * Only `id` comes back: a bulk insert's rows can be large (`content`), and
    * the ids are enough to tell which rows were new when there is a conflict
    * clause.
+   *
+   * With inserts nested in its link assignments, the iterator's rows are a
+   * CTE that adds their ids (see `NestedInsertRows`), read by the insert and
+   * the nested inserts alike under the iterator's alias.
    */
-  private compileBulkInsert(body: EdgeQLAST.InsertQuery, iteratorTable: SQL.TableReference): SQL.InsertStatement {
-    const insert = this.compileInsertQuery(body);
-    if (insert.kind !== "InsertStatement") {
-      throw new CompilationError(
-        "A bulk insert (for … union (insert …)) cannot assign a multi link. Insert the objects first, then add the links with an update."
-      );
-    }
+  private compileBulkInsert(body: EdgeQLAST.InsertQuery, iteratorTable: SQL.TableReference): SQL.InsertStatement | SQL.CTEStatement {
+    const alias = iteratorTable.alias ?? iteratorTable.name;
+    const rows: NestedInsertRows = { alias, columns: [], cte: this.claimCteName("for_rows"), perRow: true };
+    return this.withNestedRows(rows, () => {
+      const { insert, multiLinks, nested } = this.compileInsertQuery(body);
+      if (multiLinks.length > 0) {
+        throw new CompilationError(
+          "A bulk insert (for … union (insert …)) cannot assign a multi link. Insert the objects first, then add the links with an update."
+        );
+      }
 
-    return {
-      ...insert,
-      values: [],
-      insertSelect: SQL.createSelectStatement({
-        select: SQL.createSelectClause(insert.values[0].map(value => SQL.createSelectItem(value))),
-        from: SQL.createFromClause([iteratorTable])
-      }),
-      returning: [SQL.createSelectItem(SQL.createColumnReference("id"))]
-    };
+      const bulk: SQL.InsertStatement = {
+        ...insert,
+        values: [],
+        insertSelect: SQL.createSelectStatement({
+          select: SQL.createSelectClause(insert.values[0].map(value => SQL.createSelectItem(value))),
+          from: SQL.createFromClause([nested.length > 0 ? SQL.createTableReference(rows.cte, alias) : iteratorTable])
+        }),
+        returning: [SQL.createSelectItem(SQL.createColumnReference("id"))]
+      };
+      if (nested.length === 0) {
+        return bulk;
+      }
+
+      // The nested inserts read the inserted rows' link columns.
+      const ins = this.claimCteName("ins");
+      const children = this.compileNestedInserts(nested, ins, rows, undefined);
+      return SQL.withCTEs(
+        [
+          this.nestedRowsCte(rows, iteratorTable),
+          { columns: [], kind: "CTE", name: ins, query: { ...bulk, returning: [SQL.createSelectItem(SQL.createColumnReference("*"))] }, recursive: false },
+          ...children
+        ],
+        this.selectColumnFrom(ins, "id")
+      );
+    });
   }
 
   private compileGroupQuery(query: EdgeQLAST.GroupQuery): SQL.SelectStatement {
@@ -2066,7 +2507,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private compileExplainQuery(
     query: EdgeQLAST.ExplainQuery
   ): SQL.RawSQLStatement {
-    const innerStatement = this.compileQuery(query.query);
+    const innerStatement = this.hoistMutations(this.compileQuery(query.query));
     const innerSql = this.renderSqlStatement(innerStatement);
 
     const options: string[] = ["FORMAT JSON"];
