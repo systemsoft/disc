@@ -519,21 +519,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
         // Same rule as the full handler: the response shape is decided from
         // the query, not from the SQL text. A select answers with its row set;
-        // a bare mutation with its documented shape.
-        if (resultInfo.kind === "rows") {
+        // an insert, update or delete with the rows it wrote (`[]` when none).
+        if (resultInfo.kind === "rows" || resultInfo.mutation) {
           return { data: rows };
         }
-
-        switch (resultInfo.mutation) {
-          case "insert":
-            return { data: rows[0] ?? [] };
-          case "update":
-            return { data: rows[0] || { updated: result.rowCount } };
-          case "delete":
-            return { data: { deleted: result.rowCount } };
-          default:
-            return { data: { rowCount: result.rowCount, success: true } };
-        }
+        return { data: { rowCount: result.rowCount, success: true } };
       } catch (error) {
         const dbError = error instanceof Error ?
           error :

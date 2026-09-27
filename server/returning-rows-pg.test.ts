@@ -85,7 +85,7 @@ Deno.test({
         const reply = await post(INSERT_OBJECT, { oid, p: PROGRAM_ID, size });
         assertEquals(reply.status, 200, `${round}: ${JSON.stringify(reply.body)}`);
         assertEquals(reply.body.extensions?.cacheHit, round === "cache hit", round);
-        assertEquals((reply.body.data as Record<string, unknown>).size, size, round);
+        assertEquals((reply.body.data as Record<string, unknown>[])[0].size, size, round);
       }
 
       // Each insert ran exactly once.
@@ -101,14 +101,14 @@ Deno.test({
       for (const round of ["cache miss", "cache hit"]) {
         const reply = await post("update GitObject filter .object_id = <str>$oid set { size := <int64>$size }", { oid: "a".repeat(40), size: 5 });
         assertEquals(reply.status, 200, `${round}: ${JSON.stringify(reply.body)}`);
-        assertEquals((reply.body.data as Record<string, unknown>).size, 5, round);
+        assertEquals((reply.body.data as Record<string, unknown>[])[0].size, 5, round);
       }
 
       // An unshaped aggregate.
       for (const round of ["cache miss", "cache hit"]) {
         const reply = await post("select count(GitObject)");
         assertEquals(reply.status, 200, `${round}: ${JSON.stringify(reply.body)}`);
-        assertEquals(Object.values((reply.body.data as Record<string, unknown>[])[0]), [3], round);
+        assertEquals(reply.body.data, [3], round);
       }
     } finally {
       await listener.shutdown();

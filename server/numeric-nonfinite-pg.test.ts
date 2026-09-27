@@ -92,9 +92,9 @@ Deno.test({
       return reply.body.data;
     }
 
-    /*** Each answered row's one value. ***/
+    /*** The answered values (a select of values answers them bare). ***/
     async function scalars(query: string, variables?: Record<string, unknown>): Promise<unknown[]> {
-      return ((await data(query, variables)) as Record<string, unknown>[]).map(row => Object.values(row)[0]);
+      return (await data(query, variables)) as unknown[];
     }
 
     /*** `query` fails as Gel's InvalidValueError for `typeName` (SQLSTATE 22P02). ***/

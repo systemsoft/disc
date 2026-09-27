@@ -438,8 +438,8 @@ class RustEmitter {
    * What `insert` and `update` return: the stored row, not a shape -- `id`,
    * every stored property and each single link as its target's id (`None` when
    * an optional one is unset); no multi links or computed fields. Every field
-   * defaults, as in the base struct, so the `{ "updated": 0 }` an update of a
-   * missing id answers decodes to an empty row (`id` "").
+   * defaults, as in the base struct. The server answers a mutation with the
+   * set of rows it wrote; `update` of a missing id is `None`.
    */
   private emitMutationResult(obj: ObjectType): string {
     let out = "";
@@ -650,7 +650,7 @@ class RustEmitter {
 
   private emitUpdateFn(name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `    pub fn update(&self, id: &str, data: ${name}Update) -> Result<${name}MutationResult, DiscError> {\n`;
+    out += `    pub fn update(&self, id: &str, data: ${name}Update) -> Result<Option<${name}MutationResult>, DiscError> {\n`;
     out += "        let value = serde_json::to_value(&data)?;\n";
     out += "        let empty = serde_json::Map::new();\n";
     out += "        let obj = value.as_object().unwrap_or(&empty);\n";
@@ -670,7 +670,8 @@ class RustEmitter {
     out += "            }\n";
     out += "        }\n";
     out += `        let query = format!("update ${etype} filter .id = <uuid>$id set {{ {} }}", assignments.join(", "));\n`;
-    out += "        self.client.query_one(&query, serde_json::Value::Object(variables))\n";
+    out += `        let rows: Vec<${name}MutationResult> = self.client.query_many(&query, serde_json::Value::Object(variables))?;\n`;
+    out += "        Ok(rows.into_iter().next())\n";
     out += "    }\n\n";
     return out;
   }
@@ -680,7 +681,8 @@ class RustEmitter {
     out += `    pub fn delete(&self, id: &str) -> Result<crate::DeleteResult, DiscError> {\n`;
     out += `        let query = ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}.to_string();\n`;
     out += "        let vars = serde_json::json!({ \"id\": id });\n";
-    out += "        self.client.query_one(&query, vars)\n";
+    out += "        let rows: Vec<serde_json::Value> = self.client.query_many(&query, vars)?;\n";
+    out += "        Ok(crate::DeleteResult { deleted: rows.len() as i64 })\n";
     out += "    }\n\n";
     return out;
   }
@@ -731,7 +733,7 @@ impl Default for ExactNumber {
 
 `;
 
-/*** What a builder's `delete` returns: the server answers a delete with its row count, never the row. ***/
+/*** What a builder's `delete` returns: how many objects it deleted (the server answers with the deleted rows; they are counted). ***/
 const DELETE_RESULT_RS = `/// What \`delete\` returns: how many objects it deleted (0 or 1 by id).
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct DeleteResult {
@@ -974,14 +976,15 @@ impl DiscClient {
         Ok(serde_json::from_value(data)?)
     }
 
+    /// The one element of a query's result set (an error when it is empty).
     pub fn query_one<T: DeserializeOwned>(&self, query: &str, variables: serde_json::Value) -> Result<T, DiscError> {
-        let data = self.data(query, variables)?;
-        Ok(serde_json::from_value(data)?)
+        let items: Vec<T> = self.query_many(query, variables)?;
+        items.into_iter().next().ok_or_else(|| DiscError::Server("the query returned no result".to_string()))
     }
 
+    /// The one int64 a query such as \`select count(…)\` answers.
     pub fn query_scalar(&self, query: &str, variables: serde_json::Value) -> Result<i64, DiscError> {
-        let data = self.data(query, variables)?;
-        Ok(serde_json::from_value(data)?)
+        self.query_one(query, variables)
     }
 }
 `;

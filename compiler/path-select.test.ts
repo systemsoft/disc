@@ -173,7 +173,7 @@ Deno.test("computed path - a path through single links stays one value", async (
 Deno.test("computed path - a bare path to objects answers their ids, as a stored multi link does", async () => {
   assertMatch(
     await sqlOf("select User { ps := .posts }"),
-    /'ps', \(SELECT jsonb_agg\(__agg\.v -> 'id'\) FROM \(SELECT jsonb_build_object\('id', post_\d+\.id\)/
+    /'ps', \(SELECT COALESCE\(jsonb_agg\(__agg\.v -> 'id'\), '\[\]'::jsonb\) FROM \(SELECT jsonb_build_object\('id', post_\d+\.id\)/
   );
 });
 
@@ -187,7 +187,7 @@ Deno.test("backlink sub-shape - a shaped backlink is an array of shaped objects,
 Deno.test("backlink sub-shape - a lone unshaped backlink answers the ids, as any path to several objects", async () => {
   assertMatch(
     await sqlOf("select Person { r := .<manager[is Person] }"),
-    /'r', \(SELECT jsonb_agg\(__agg\.v -> 'id'\) FROM \(SELECT jsonb_build_object\('id', person_(\d+)\.id\) FROM person AS person_\1 WHERE person_\1\.id IN \(SELECT (__b_manager_\d+)\.id FROM person AS \2 WHERE \2\.manager_id = person_1\.id\)\) AS __agg\(v\)\)/
+    /'r', \(SELECT COALESCE\(jsonb_agg\(__agg\.v -> 'id'\), '\[\]'::jsonb\) FROM \(SELECT jsonb_build_object\('id', person_(\d+)\.id\) FROM person AS person_\1 WHERE person_\1\.id IN \(SELECT (__b_manager_\d+)\.id FROM person AS \2 WHERE \2\.manager_id = person_1\.id\)\) AS __agg\(v\)\)/
   );
 });
 

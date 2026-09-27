@@ -173,7 +173,8 @@ Deno.test({
         ]);
         assertEquals(await shaped(".tags"), [{ a: [tags.a], title: "p1" }, { a: [tags.a, tags.b], title: "p2" }]);
         assertEquals(await shaped(".tags { name }"), [{ a: [{ name: "a" }], title: "p1" }, { a: [{ name: "a" }, { name: "b" }], title: "p2" }]);
-        assertEquals(await shaped(".author.friends"), [{ a: null, title: "p1" }, { a: [users.ann], title: "p2" }]);
+        // Several objects without a shape: their ids, `[]` when none (as Gel answers an empty set).
+        assertEquals(await shaped(".author.friends"), [{ a: [], title: "p1" }, { a: [users.ann], title: "p2" }]);
         assertEquals(await shaped(".author.friends { name }"), [{ a: [], title: "p1" }, { a: [{ name: "ann" }], title: "p2" }]);
         const everyone = await shaped("(select detached User order by .name) { name }") as { a: unknown; }[];
         assertEquals(everyone[0].a, [{ name: "ann" }, { name: "bob" }]);
@@ -200,13 +201,14 @@ Deno.test({
         assertEquals(await data("select Counter { name, last } order by .name"), [{ last: 1, name: "c1" }, { last: 5, name: "c2" }]);
 
         const selected = await data(`with n := (select Counter filter .name = 'c2') insert Post { title := 'x3', ${author}, number := n.last }`);
-        assertEquals((selected as { number: number; }).number, 5);
+        // A bare insert answers the set of objects it wrote, as Gel does.
+        assertEquals((selected as { number: number; }[])[0].number, 5);
         const updated = await data(
           `with n := (update Counter filter .name = 'c1' set { last := .last + 1 }) insert Post { title := 'x7', ${author}, number := n.last }`
         );
-        assertEquals((updated as { number: number; }).number, 2);
+        assertEquals((updated as { number: number; }[])[0].number, 2);
         const most = await data(`with n := (select Counter) insert Post { title := 'x8', ${author}, number := max(n.last) }`);
-        assertEquals((most as { number: number; }).number, 5);
+        assertEquals((most as { number: number; }[])[0].number, 5);
         assertEquals(await data("with n := (select Counter filter .name = 'c1') select Post { k := n.last } filter .title = 'p1'"), [{ k: 2 }]);
       });
 

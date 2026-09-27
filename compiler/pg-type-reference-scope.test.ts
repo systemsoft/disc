@@ -92,9 +92,10 @@ async function withHandler(fn: (handler: Handler) => Promise<void>): Promise<voi
       assertEquals(response.errors !== undefined, true, `${query} should fail`);
       return response.errors!.map(error => error.message).join("; ");
     };
+    // Each answered value: a select of values answers them bare (as Gel does); a shaped row gives its one field.
     const values = async (query: string, variables?: Record<string, unknown>): Promise<unknown[]> =>
-      ((await run(query, variables)) as Record<string, unknown>[])
-        .map(row => JSON.stringify(Object.values(row)[0]))
+      ((await run(query, variables)) as unknown[])
+        .map(value => JSON.stringify(value !== null && typeof value === "object" && !Array.isArray(value) ? Object.values(value)[0] : value))
         .sort()
         .map(value => JSON.parse(value));
 
@@ -161,7 +162,7 @@ Deno.test({
       assertEquals(await values("select (select ScopeItem.name filter ScopeItem.id in {<uuid>$a, <uuid>$c})", ids), ["a", "c"]);
       assertEquals(await values("select ScopeItem.name filter ScopeItem.price > 1"), ["b", "c"]);
       assertEquals(await values("select ScopeItem { name } filter ScopeItem.name != 'a'"), ["b", "c"]);
-      assertEquals(await run("select ScopeItem.name order by ScopeItem.price desc"), ["c", "b", "a"].map(name => ({ name })));
+      assertEquals(await run("select ScopeItem.name order by ScopeItem.price desc"), ["c", "b", "a"]);
       // In the shape: `count(ScopeItem)` is the current item, `detached` all of them.
       assertEquals(await run("select ScopeItem { name, n := count(ScopeItem), m := count(detached ScopeItem) } filter .name = 'a'"), [{
         m: 3,

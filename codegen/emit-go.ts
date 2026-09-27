@@ -329,9 +329,9 @@ class GoEmitter {
   /**
    * What `Insert` and `Update` return: the stored row, not a shape -- `ID`,
    * every stored property and each single link as its target's id (nil when
-   * an optional one is unset); no multi links or computed fields. The
-   * `{"updated": 0}` an update of a missing id answers decodes to the zero
-   * value (`ID` "").
+   * an optional one is unset); no multi links or computed fields. The server
+   * answers a mutation with the set of rows it wrote; `Update` of a missing id
+   * is nil.
    */
   private emitMutationResult(obj: ObjectType, name: string): string {
     return this.emitFields(
@@ -467,7 +467,7 @@ class GoEmitter {
       }
     }
 
-    // The server answers a delete with its row count, never the row.
+    // Delete answers how many objects it deleted (the server answers with the deleted rows; they are counted).
     if (this.config.includeMutations) {
       body += "// DeleteResult is what Delete returns: how many objects it deleted (0 or 1 by id).\n";
       body += "type DeleteResult struct {\n\tDeleted int64 `json:\"deleted\"`\n}\n";
@@ -633,12 +633,11 @@ class GoEmitter {
 
   private emitUpdateFn(builder: string, name: string, etype: string, hasMultiProperties: boolean): string {
     let out = "";
-    out += `func (b *${builder}) Update(id string, data ${name}Update) (${name}MutationResult, error) {\n`;
-    out += `\tvar zero ${name}MutationResult\n`;
+    out += `func (b *${builder}) Update(id string, data ${name}Update) (*${name}MutationResult, error) {\n`;
     out += "\traw, err := json.Marshal(data)\n";
-    out += "\tif err != nil {\n\t\treturn zero, err\n\t}\n";
+    out += "\tif err != nil {\n\t\treturn nil, err\n\t}\n";
     out += "\tvar obj map[string]json.RawMessage\n";
-    out += "\tif err := json.Unmarshal(raw, &obj); err != nil {\n\t\treturn zero, err\n\t}\n";
+    out += "\tif err := json.Unmarshal(raw, &obj); err != nil {\n\t\treturn nil, err\n\t}\n";
     out += "\tassignments := make([]string, 0, len(obj))\n";
     out += "\tvariables := map[string]any{\"id\": id}\n";
     // Iterate keys in sorted order: the server binds params positionally, and
@@ -661,7 +660,7 @@ class GoEmitter {
     out += "\t\t}\n";
     out += "\t}\n";
     out += `\tquery := fmt.Sprintf("update ${etype} filter .id = <uuid>$id set { %s }", strings.Join(assignments, ", "))\n`;
-    out += `\treturn queryOne[${name}MutationResult](b.client, query, variables)\n`;
+    out += `\treturn queryMaybe[${name}MutationResult](b.client, query, variables)\n`;
     out += "}\n\n";
     return out;
   }
@@ -669,7 +668,8 @@ class GoEmitter {
   private emitDeleteFn(builder: string, etype: string): string {
     let out = "";
     out += `func (b *${builder}) Delete(id string) (DeleteResult, error) {\n`;
-    out += `\treturn queryOne[DeleteResult](b.client, ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}, map[string]any{"id": id})\n`;
+    out += `\trows, err := queryMany[json.RawMessage](b.client, ${JSON.stringify(`delete ${etype} filter .id = <uuid>$id`)}, map[string]any{"id": id})\n`;
+    out += "\treturn DeleteResult{Deleted: int64(len(rows))}, err\n";
     out += "}\n\n";
     return out;
   }
@@ -890,16 +890,17 @@ func queryMany[T any](c *DiscClient, query string, variables map[string]any) ([]
 	return out, nil
 }
 
+// queryOne is the one element of a query's result set (an error when it is empty).
 func queryOne[T any](c *DiscClient, query string, variables map[string]any) (T, error) {
 	var out T
-	data, err := c.execute(query, variables)
+	items, err := queryMany[T](c, query, variables)
 	if err != nil {
 		return out, err
 	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return out, err
+	if len(items) == 0 {
+		return out, fmt.Errorf("disc: the query returned no result")
 	}
-	return out, nil
+	return items[0], nil
 }
 
 func queryMaybe[T any](c *DiscClient, query string, variables map[string]any) (*T, error) {
@@ -913,15 +914,8 @@ func queryMaybe[T any](c *DiscClient, query string, variables map[string]any) (*
 	return &items[0], nil
 }
 
+// queryScalar is the one int64 a query such as select count(...) answers.
 func queryScalar(c *DiscClient, query string, variables map[string]any) (int64, error) {
-	data, err := c.execute(query, variables)
-	if err != nil {
-		return 0, err
-	}
-	var n int64
-	if err := json.Unmarshal(data, &n); err != nil {
-		return 0, err
-	}
-	return n, nil
+	return queryOne[int64](c, query, variables)
 }
 `;

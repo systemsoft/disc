@@ -10,11 +10,9 @@
  *   - delete … with the same filter                                  (CAS delete)
  *   - insert … unless conflict on ((.program, .name))                (create-if-absent)
  *
- * A bare update answers with the row, or `{ updated: 0 }` when nothing
- * matched; a bare delete with `{ deleted: n }`; a bare insert with the row, or
- * `[]` when the conflict swallowed it, as in Gel. The update and delete shapes
- * are kept for backward compatibility, so the assertions here lean on row
- * counts and the stored `target`.
+ * A bare update, delete or insert answers, as in Gel, with the set of rows it
+ * wrote: `[]` when nothing matched or the conflict swallowed the insert. The
+ * assertions here lean on those row counts and the stored `target`.
  *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
@@ -89,10 +87,11 @@ Deno.test({
       return { body: await response.json(), status: response.status };
     }
 
-    function ok(reply: Reply, label: string): Record<string, unknown> {
+    /*** The rows a bare mutation answers with: the ones it wrote, `[]` when none. ***/
+    function ok(reply: Reply, label: string): Record<string, unknown>[] {
       assertEquals(reply.status, 200, `${label}: ${JSON.stringify(reply.body)}`);
       assertEquals(reply.body.errors, undefined, `${label}: ${JSON.stringify(reply.body)}`);
-      return reply.body.data as Record<string, unknown>;
+      return reply.body.data as Record<string, unknown>[];
     }
 
     async function seedRef(program: string, name: string, target: string): Promise<void> {
@@ -108,9 +107,9 @@ Deno.test({
       await t.step("bare Q1: matches on the current target, run twice (cache miss, cache hit)", async () => {
         await seedRef(PROGRAM_ID, "refs/heads/main", oid(1));
 
-        const first = ok(await post(BARE_Q1, { n: "refs/heads/main", new: oid(2), old: oid(1), p: PROGRAM_ID }), "first");
+        const [first] = ok(await post(BARE_Q1, { n: "refs/heads/main", new: oid(2), old: oid(1), p: PROGRAM_ID }), "first");
         assertEquals(first.target, oid(2));
-        const second = ok(await post(BARE_Q1, { n: "refs/heads/main", new: oid(3), old: oid(2), p: PROGRAM_ID }), "second");
+        const [second] = ok(await post(BARE_Q1, { n: "refs/heads/main", new: oid(3), old: oid(2), p: PROGRAM_ID }), "second");
         assertEquals(second.target, oid(3));
 
         assertEquals(await targets(PROGRAM_ID, "refs/heads/main"), [oid(3)]);
@@ -119,7 +118,7 @@ Deno.test({
       await t.step("bare Q1: a stale `old` updates nothing", async () => {
         const stale = ok(await post(BARE_Q1, { n: "refs/heads/main", new: oid(9), old: oid(1), p: PROGRAM_ID }), "stale");
 
-        assertEquals(stale, { updated: 0 });
+        assertEquals(stale, []);
         assertEquals(await targets(PROGRAM_ID, "refs/heads/main"), [oid(3)]);
       });
 
@@ -139,12 +138,12 @@ Deno.test({
           Array.from({ length: 20 }, (_, i) => post(BARE_Q1, { n: "refs/heads/race", new: oid(200 + i), old: oid(100), p: PROGRAM_ID }))
         );
         const results = replies.map((reply, i) => ok(reply, `caller ${i}`));
-        const winners = results.filter(data => data.updated !== 0);
-        const losers = results.filter(data => data.updated === 0);
+        const winners = results.filter(data => data.length === 1);
+        const losers = results.filter(data => data.length === 0);
 
         assertEquals(winners.length, 1, `expected exactly one winner, got: ${JSON.stringify(results)}`);
         assertEquals(losers.length, 19);
-        assertEquals(await targets(PROGRAM_ID, "refs/heads/race"), [winners[0].target as string], "the stored target is the winner's");
+        assertEquals(await targets(PROGRAM_ID, "refs/heads/race"), [winners[0][0].target as string], "the stored target is the winner's");
       });
 
       await t.step("bare Q2: a stale `old` deletes nothing; the current one deletes the ref", async () => {
@@ -152,17 +151,17 @@ Deno.test({
         await seedRef(OTHER_PROGRAM_ID, "refs/heads/gone", oid(7));
 
         const stale = ok(await post(BARE_Q2, { n: "refs/heads/gone", old: oid(8), p: PROGRAM_ID }), "stale");
-        assertEquals(stale, { deleted: 0 });
+        assertEquals(stale, []);
         assertEquals(await targets(PROGRAM_ID, "refs/heads/gone"), [oid(7)]);
 
         const current = ok(await post(BARE_Q2, { n: "refs/heads/gone", old: oid(7), p: PROGRAM_ID }), "current");
-        assertEquals(current, { deleted: 1 });
+        assertEquals(current.length, 1);
         assertEquals(await targets(PROGRAM_ID, "refs/heads/gone"), []);
         assertEquals(await targets(OTHER_PROGRAM_ID, "refs/heads/gone"), [oid(7)], "the other program's ref must survive");
       });
 
       await t.step("bare Q3: inserts once, does nothing the second time, raises nothing", async () => {
-        const created = ok(await post(BARE_Q3, { n: "refs/tags/v1", p: PROGRAM_ID, t: oid(11) }), "created");
+        const [created] = ok(await post(BARE_Q3, { n: "refs/tags/v1", p: PROGRAM_ID, t: oid(11) }), "created");
         assertEquals(created.target, oid(11));
 
         ok(await post(BARE_Q3, { n: "refs/tags/v1", p: PROGRAM_ID, t: oid(12) }), "conflict");

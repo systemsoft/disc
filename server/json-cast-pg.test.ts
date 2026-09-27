@@ -200,7 +200,7 @@ Deno.test({
       const run = await handlerFor(pool, dsn);
       const one = async (query: string, variables?: Record<string, unknown>): Promise<unknown> => {
         const rows = await run(query, variables);
-        return rows.length === 1 ? Object.values(rows[0] as Record<string, unknown>)[0] : rows;
+        return rows.length === 1 ? rows[0] : rows;
       };
 
       await t.step("scalars, arrays, tuples and to_json", async () => {
@@ -266,7 +266,8 @@ Deno.test({
       // the operand's) and `<json>(select T { … } …)` each object's shape.
       await t.step("<json> of objects", async () => {
         await run(`insert JsonCast { label := 'b', b := b'\\x00ab' }`);
-        const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]);
+        // A select of values (`<json>` is one) answers them bare, as Gel does.
+        const values = async (query: string): Promise<unknown[]> => await run(query);
         assertEquals(await values(`select <json>(select JsonCast { label, b } order by .label)`), [{ b: "YWI=", label: "a" }, {
           b: "AGFi",
           label: "b"
@@ -282,7 +283,7 @@ Deno.test({
 
       await t.step("a json variable is its JSON value", async () => {
         const [row] = await run(`select <json>$j`, { j: { a: [1] } });
-        assertEquals(Object.values(row as Record<string, unknown>), [{ a: [1] }]);
+        assertEquals(row, { a: [1] });
       });
     } finally {
       await resetTestDatabase(pool);

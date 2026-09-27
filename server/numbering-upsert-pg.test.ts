@@ -134,7 +134,7 @@ Deno.test({
     try {
       await t.step("an upsert whose else-update is filtered out answers [], on a cache miss and on a hit", async () => {
         for (const expected of [1, 2, 3]) {
-          const row = await data(CAPPED_UPSERT, { p: PROGRAM_ID }) as Record<string, unknown>;
+          const [row] = await data(CAPPED_UPSERT, { p: PROGRAM_ID }) as Record<string, unknown>[];
           assertEquals(Number(row.last), expected, JSON.stringify(row));
         }
         assertEquals(await data(CAPPED_UPSERT, { p: PROGRAM_ID }), []);
@@ -149,16 +149,16 @@ Deno.test({
         assertEquals(await last(PROGRAM_ID), [3]);
       });
 
-      await t.step("a bare update or delete matching nothing keeps { updated: 0 } / { deleted: 0 }", async () => {
-        assertEquals(await data("update collab::Numbering filter .last > 100 set { last := 0 }"), { updated: 0 });
-        assertEquals(await data("delete collab::Numbering filter .last > 100"), { deleted: 0 });
+      await t.step("a bare update or delete matching nothing answers [], as in Gel", async () => {
+        assertEquals(await data("update collab::Numbering filter .last > 100 set { last := 0 }"), []);
+        assertEquals(await data("delete collab::Numbering filter .last > 100"), []);
       });
 
       await t.step("n.last of a with-bound upsert is its new value in an insert", async () => {
         const query = "with n := (insert collab::Numbering { last := 1, program := <default::Program><uuid>$p } " +
           "unless conflict on .program else (update collab::Numbering set { last := .last + 1 })) " +
           "insert collab::Bug { program := n.program, author := <default::User><uuid>$u, number := n.last, title := n.program.name }";
-        const row = await data(query, { p: PROGRAM_ID, u: USER_ID }) as Record<string, unknown>;
+        const [row] = await data(query, { p: PROGRAM_ID, u: USER_ID }) as Record<string, unknown>[];
         assertEquals(Number(row.number), 4);
         assertEquals(row.title, "forge");
         const stored = await pool.query("SELECT program_id FROM bug WHERE number = 4");
@@ -167,11 +167,11 @@ Deno.test({
       });
 
       await t.step("n.last of a with-bound insert in an update's filter and values, a shape and a select", async () => {
-        const updated = await data(
+        const [updated] = await data(
           "with n := (insert collab::Numbering { last := 4, program := <default::Program><uuid>$p }) " +
             "update collab::Bug filter .number = n.last set { title := 'bumped', number := n.last + 100 }",
           { p: OTHER_PROGRAM_ID }
-        ) as Record<string, unknown>;
+        ) as Record<string, unknown>[];
         assertEquals(updated.title, "bumped");
         assertEquals(Number(updated.number), 104);
 
@@ -190,8 +190,8 @@ Deno.test({
             "select n.program.name",
           { p: THIRD_PROGRAM_ID, u: USER_ID }
         );
-        // A select of a path answers with rows keyed by the property's name.
-        assertEquals(selected, [{ name: "third" }]);
+        // A select of a path to a property answers with its values, as in Gel.
+        assertEquals(selected, ["third"]);
       });
 
       await t.step("select (with … insert …) { number } answers [{ number }]", async () => {

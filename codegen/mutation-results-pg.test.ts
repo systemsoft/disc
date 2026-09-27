@@ -10,11 +10,13 @@
  *   optional one `null` when unset, a multi one an array, `[]` when empty) and
  *   each single link as its target's id (`null` when an optional one is
  *   unset). Multi links, link properties and computed fields are absent.
- * - `update` of a missing id returns `{ updated: 0 }`.
+ * - The server answers each bare mutation with the set of rows it wrote (as
+ *   Gel does); the clients derive their results from it, unchanged:
+ * - `update` of a missing id returns `{ updated: 0 }` (Go `nil`, Rust `None`).
  * - `delete` returns `{ deleted: n }`.
  * - The typed builder's `select({ link: true })` returns a single link's
  *   target id (`null` when an optional one is unset) and a multi link's ids
- *   (`null` when it is empty, never `[]`); its default select (no shape)
+ *   (`[]` when it is empty, as in Gel); its default select (no shape)
  *   returns `id` and the stored properties, no links.
  *
  * The generated Go and Rust clients decode the same rows into their
@@ -117,7 +119,7 @@ const NATIVE_CONFIG: CodegenConfig = {
   typePrefix: ""
 };
 
-/*** What the Go and Rust programs print: an insert's single links as ids, an update's too, a missing id's update as an empty row, a delete's count. ***/
+/*** What the Go and Rust programs print: an insert's single links as ids, an update's too, a missing id's update as nil/None, a delete's count. ***/
 const EXPECTED = (title: string): string => [`inserted ${title} true true`, "updated true", "missing true", "deleted 1"].join("\n");
 
 const GO_MAIN = `package main
@@ -146,13 +148,13 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("updated", updated.Editor != nil && *updated.Editor == ann.Id)
+	fmt.Println("updated", updated != nil && updated.Editor != nil && *updated.Editor == ann.Id)
 	title := "x"
 	missing, err := posts.Update("00000000-0000-0000-0000-000000000000", discclient.MrPostUpdate{Title: &title})
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("missing", missing.Id == "")
+	fmt.Println("missing", missing == nil)
 	deleted, err := posts.Delete(post.Id)
 	if err != nil {
 		panic(err)
@@ -176,12 +178,13 @@ fn main() {
     println!("inserted {} {} {}", post.title, post.author == ann.id, post.editor.is_none());
     let updated = posts
         .update(&post.id, MrPostUpdate { editor: Some(ann.id.clone()), ..Default::default() })
+        .unwrap()
         .unwrap();
     println!("updated {}", updated.editor.as_deref() == Some(ann.id.as_str()));
     let missing = posts
         .update("00000000-0000-0000-0000-000000000000", MrPostUpdate { title: Some("x".to_string()), ..Default::default() })
         .unwrap();
-    println!("missing {}", missing.id.is_empty());
+    println!("missing {}", missing.is_none());
     let deleted = posts.delete(&post.id).unwrap();
     println!("deleted {}", deleted.deleted);
 }
@@ -261,9 +264,9 @@ Deno.test({
     const client = new DiscClient({ baseUrl });
 
     try {
-      const ann = await client.query<{ id: string; }>(`insert MrUser { name := "ann" }`);
-      const bob = await client.query<{ id: string; }>(`insert MrUser { name := "bob" }`);
-      const tag = await client.query<{ id: string; }>(`insert MrTag { label := "t1" }`);
+      const [ann] = await client.query<{ id: string; }[]>(`insert MrUser { name := "ann" }`);
+      const [bob] = await client.query<{ id: string; }[]>(`insert MrUser { name := "bob" }`);
+      const [tag] = await client.query<{ id: string; }[]>(`insert MrTag { label := "t1" }`);
 
       await t.step("generated client: insert, update and delete results", async () => {
         await withGeneratedClient(schema, baseUrl, async generated => {
@@ -293,8 +296,8 @@ Deno.test({
         const [row] = await qb.MrPost.select({ author: true, editor: true, tags: true, title: true }).filter(ref => ref.title.eq("p1b"));
         const author: string = row.author;
         const editor: string | null = row.editor;
-        const tags: string[] | null = row.tags;
-        assertEquals({ author, editor, tags }, { author: ann.id, editor: bob.id, tags: null });
+        const tags: string[] = row.tags;
+        assertEquals({ author, editor, tags }, { author: ann.id, editor: bob.id, tags: [] });
 
         await client.query(`update MrPost filter .title = "p1b" set { tags += (select MrTag), editor := {} }`);
         const [linked] = await qb.MrPost.select({ editor: true, tags: true }).filter(ref => ref.title.eq("p1b"));

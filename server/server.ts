@@ -580,6 +580,7 @@ export class DiscServer {
           ) => Promise<{
             rows: Record<string, unknown>[];
             status: string;
+            values?: boolean;
           }>;
         };
         const executor = handler.executeBinaryQuery ?

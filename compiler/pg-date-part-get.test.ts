@@ -67,9 +67,9 @@ async function withHandler(fn: (value: Value, failure: Failure) => Promise<void>
     const value: Value = async (query, variables) => {
       const response = await handler.handleRequest({ query, variables }, makeContext());
       assertEquals(response.errors, undefined, `${query}: ${JSON.stringify(response.errors)}`);
-      const rows = response.data as Record<string, unknown>[];
+      const rows = response.data as unknown[];
       assertEquals(rows.length, 1, query);
-      return unwrapExactNumbers(Object.values(rows[0])[0]);
+      return unwrapExactNumbers(rows[0]);
     };
     const failure: Failure = async (query, variables) => {
       const response = await handler.handleRequest({ query, variables }, makeContext());

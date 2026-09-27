@@ -199,7 +199,7 @@ Deno.test({
     try {
       await resetTestDatabase(pool);
       const run = await handlerFor(pool, dsn);
-      const one = async (query: string): Promise<unknown> => Object.values((await run(query))[0] as Record<string, unknown>)[0];
+      const one = async (query: string): Promise<unknown> => (await run(query))[0];
 
       await t.step("scalars, casts, tuples, arrays and JSON", async () => {
         const answers: [string, unknown][] = [];
@@ -222,15 +222,15 @@ Deno.test({
         const inserted = await run(
           `insert DurIso { label := 'a', d := <duration>'1 hour 2 minutes', r := <cal::relative_duration>'1 month 3 hours', dd := <cal::date_duration>'2 days', ds := [<duration>'1 second', <duration>'-1.5 seconds'] }`
         );
-        const row = (Array.isArray(inserted) ? inserted[0] : inserted) as Record<string, unknown>;
+        const row = inserted[0] as Record<string, unknown>;
         assertEquals([row.d, row.r, row.dd, row.ds], ["PT1H2M", "P1MT3H", "P2D", ["PT1S", "PT-1.5S"]]);
 
         const zero = await run(
           `insert DurIso { label := 'zero', d := <duration>'0 seconds', dd := <cal::date_duration>'0 days', dds := [<cal::date_duration>'0 days', <cal::date_duration>'1 day'], at := <datetime>'2024-01-01T00:00:00Z' }`
         );
-        const zeroRow = zero as unknown as Record<string, unknown>;
+        const zeroRow = zero[0] as Record<string, unknown>;
         assertEquals([zeroRow.d, zeroRow.dd, zeroRow.dds], ["PT0S", "P0D", ["P0D", "P1D"]]);
-        const updated = await run(`update DurIso filter .label = 'zero' set { dd := <cal::date_duration>'0 days' }`) as unknown as Record<string, unknown>;
+        const [updated] = await run(`update DurIso filter .label = 'zero' set { dd := <cal::date_duration>'0 days' }`) as Record<string, unknown>[];
         assertEquals([updated.dd, updated.dds], ["P0D", ["P0D", "P1D"]]);
         assertEquals(await run(`select DurIso { label, d, r, dd, ds, dds } order by .label`), [
           { d: "PT1H2M", dd: "P2D", dds: null, ds: ["PT1S", "PT-1.5S"], label: "a", r: "P1MT3H" },
@@ -246,7 +246,7 @@ Deno.test({
           await run(`select DurIso { since := <datetime>'2024-01-03T01:00:00Z' - .at } filter .label = 'zero'`),
           [{ since: "PT49H" }]
         );
-        const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]).sort();
+        const values = async (query: string): Promise<unknown[]> => (await run(query)).sort();
         assertEquals(await values(`select DurIso.d`), ["PT0S", "PT1H2M"]);
         assertEquals(await values(`select DurIso.dd`), ["P0D", "P2D"]);
       });
@@ -255,7 +255,8 @@ Deno.test({
       // value per object, none for an object where an element is empty.
       await t.step("tuples and arrays of stored properties, and `is` of them", async () => {
         await run(`update DurIso filter .label = 'zero' set { ld := <cal::local_date>'2024-01-02' }`);
-        const values = async (query: string): Promise<unknown[]> => (await run(query)).map(row => Object.values(row as Record<string, unknown>)[0]);
+        // A select of values answers them bare, as Gel does.
+        const values = async (query: string): Promise<unknown[]> => await run(query);
         assertEquals(await values(`select (DurIso.dd, DurIso.ld)`), [["P0D", "2024-01-02"]]);
         assertEquals(await values(`select <json>(DurIso.dd, DurIso.ld)`), [["P0D", "2024-01-02"]]);
         assertEquals(await run(`select (a := DurIso.dd, b := DurIso.ld)`), [{ a: "P0D", b: "2024-01-02" }]);

@@ -232,9 +232,12 @@ Deno.test("select over mutation - filter, order by and limit on the outer select
   assert(/ FROM m AS (m_\d+) WHERE \1\.name = 'main' ORDER BY \1\.name ASC LIMIT 5$/.test(parts.outer), parts.outer);
 });
 
-Deno.test("select over mutation - without a shape the row set of the CTE is selected as before", async () => {
-  assertStringIncludes(await sqlOf(`with u := (${UPDATE_OBJECT}) select u`), ") SELECT u_1.* FROM u AS u_1");
-  assertStringIncludes(await sqlOf(`select (${UPDATE_OBJECT})`), ") SELECT m_1.* FROM m AS m_1");
+// Keyed by property names, single links as ids, as a bare mutation's rows are.
+Deno.test("select over mutation - without a shape each row of the CTE is its stored row", async () => {
+  const row = "SELECT jsonb_build_object('id', $.id, 'content', translate(encode($.content, 'base64'), E'\\n', ''), " +
+    "'object_id', $.object_id, 'object_type', $.object_type, 'size', $.size, 'program', $.program_id)";
+  assertStringIncludes(await sqlOf(`with u := (${UPDATE_OBJECT}) select u`), `) ${row.replaceAll("$", "u_1")} FROM u AS u_1`);
+  assertStringIncludes(await sqlOf(`select (${UPDATE_OBJECT})`), `) ${row.replaceAll("$", "m_1")} FROM m AS m_1`);
 });
 
 // ---------------------------------------------------------------------------
@@ -327,18 +330,18 @@ Deno.test("describeResult - a select is a row set, whatever it selects from", ()
   assertEquals(describe("with module default select GitRef { id }"), { kind: "rows" });
 });
 
-Deno.test("describeResult - a bare mutation keeps the mutation response, says which statement, and names the type its row maps through", () => {
+Deno.test("describeResult - a bare mutation answers its rows, says which statement, and names the type its rows map through", () => {
   assertEquals(describe(BARE_Q1), { kind: "mutation", mutatedType: "GitRef", mutation: "update" });
   assertEquals(describe(BARE_Q3), { kind: "mutation", mutatedType: "GitRef", mutation: "insert" });
   assertEquals(describe("insert default::GitRef { name := 'x' }"), { kind: "mutation", mutatedType: "default::GitRef", mutation: "insert" });
-  assertEquals(describe(BARE_Q2), { kind: "mutation", mutation: "delete" });
+  assertEquals(describe(BARE_Q2), { kind: "mutation", mutatedType: "GitRef", mutation: "delete" });
 });
 
-Deno.test("describeResult - the with-form and a set-literal for follow the body's statement; the row is not mapped there (unchanged)", () => {
-  assertEquals(describe("with module default insert GitRef { name := 'x' }"), { kind: "mutation", mutation: "insert" });
-  assertEquals(describe(`with n := 'x' ${BARE_Q1}`), { kind: "mutation", mutation: "update" });
-  assertEquals(describe(`with n := 'x' ${BARE_Q2}`), { kind: "mutation", mutation: "delete" });
-  assertEquals(describe("for x in {'a', 'b'} union (insert GitRef { name := x })"), { kind: "mutation", mutation: "insert" });
+Deno.test("describeResult - the with-form and a set-literal for follow the body's statement, and map its rows through its type", () => {
+  assertEquals(describe("with module default insert GitRef { name := 'x' }"), { kind: "mutation", mutatedType: "GitRef", mutation: "insert" });
+  assertEquals(describe(`with n := 'x' ${BARE_Q1}`), { kind: "mutation", mutatedType: "GitRef", mutation: "update" });
+  assertEquals(describe(`with n := 'x' ${BARE_Q2}`), { kind: "mutation", mutatedType: "GitRef", mutation: "delete" });
+  assertEquals(describe("for x in {'a', 'b'} union (insert GitRef { name := x })"), { kind: "mutation", mutatedType: "GitRef", mutation: "insert" });
   assertEquals(describe("for x in {'a', 'b'} union (select GitRef { id } filter .name = x)"), { kind: "rows" });
   assertEquals(describe("for x in (select GitRef) union (insert GitRef { name := x.name })"), { kind: "rows" });
 });

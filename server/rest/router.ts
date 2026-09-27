@@ -210,8 +210,8 @@ async function handleInsert(
 
   // The compiler returns the inserted row's columns via `RETURNING *`,
   // which the protocol handler maps back to the camelCase property
-  // shape. The result is one record; we forward it as the 201 body so
-  // clients have the server-assigned id.
+  // shape. The result is the set of inserted rows (one); we forward the
+  // row as the 201 body so clients have the server-assigned id.
   const edgeql = `insert ${typeDef.name} { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);

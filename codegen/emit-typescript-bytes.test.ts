@@ -85,7 +85,7 @@ async function withGeneratedClient(
 }
 
 Deno.test("generated builder - insert sends a Uint8Array as base64 and returns one", async () => {
-  await withGeneratedClient({ chunks: ["AQ=="], content: "H4sA/w==", name: "a" }, async (blob, requests) => {
+  await withGeneratedClient([{ chunks: ["AQ=="], content: "H4sA/w==", name: "a" }], async (blob, requests) => {
     const row = await blob.insert({ chunks: [new Uint8Array([1])], content: new Uint8Array([0x1f, 0x8b, 0x00, 0xff]), name: "a" });
 
     assertEquals(requests[0].variables, { chunks: ["AQ=="], content: "H4sA/w==", name: "a" });
@@ -105,7 +105,7 @@ Deno.test("generated builder - filter, select and selectById return Uint8Array",
 });
 
 Deno.test("generated builder - update returns Uint8Array; null stays null", async () => {
-  await withGeneratedClient({ content: null, name: "a" }, async blob => {
+  await withGeneratedClient([{ content: null, name: "a" }], async blob => {
     assertEquals(await blob.update("00000000-0000-0000-0000-000000000001", { content: null }), { content: null, name: "a" });
   });
 });

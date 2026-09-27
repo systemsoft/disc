@@ -132,12 +132,12 @@ export type LinkStub = { id: string; };
  * Resolve a single field marker to the TS type it arrives as when selected
  * without a sub-shape (`select({ field: true })`). A link without a sub-shape
  * is its target's id: a single link a `string` (`null` when an optional one is
- * unset), a multi link a `string[]` of them (`null` when it is empty).
+ * unset), a multi link a `string[]` of them (`[]` when it is empty).
  */
 export type FieldType<S extends SchemaSpec, F> = F extends Scalar<string, infer T> ? T :
   F extends Optional<infer Inner> ? FieldType<S, Inner> | null :
   F extends Link<string, "single"> ? string :
-  F extends Link<string, "multi"> ? string[] | null :
+  F extends Link<string, "multi"> ? string[] :
   never;
 
 /** A link marker, optional or not. */

@@ -193,6 +193,17 @@ Deno.test({
         assertEquals(row.editor, null);
         assertEquals(row.tags.map(tag => tag.owner?.[0].name ?? null).sort(), ["ann", null]);
       });
+
+      // Gel answers an empty multi link `[]`; the declared type is `string[]`.
+      await t.step("typed query builder: a multi link without a sub-shape is its ids, [] when empty", async () => {
+        await client.query(`insert SlPost { title := "p2", author := (select SlUser filter .name = "ann" limit 1) }`);
+        const qb = createQueryBuilder(client, typedSchema);
+        const rows = await qb.SlPost.select({ tags: true, title: true }).orderBy(post => post.title);
+        const ids: string[] = rows[1].tags;
+        assertEquals(rows.map(row => [row.title, row.tags.length]), [["p1", 2], ["p2", 0]]);
+        assertEquals(ids, []);
+        await client.query(`delete SlPost filter .title = "p2"`);
+      });
     } finally {
       await listener.shutdown();
       await resetTestDatabase(pool);

@@ -9,9 +9,9 @@
  *     row set as-is: `[]` when nothing matched. All three emit
  *     `WITH … <mutation> … SELECT`, the SQL shape junction-backed multi-link
  *     writes have too, so the SQL text cannot tell them apart.
- *   - A bare mutation keeps its response: the row (keyed by property names, on
- *     every run), `{ updated: 0 }`, `{ deleted: n }`, or `[]` for an insert
- *     that wrote nothing (as Gel answers it).
+ *   - A bare mutation answers, as Gel does, with the set of rows it wrote
+ *     (keyed by property names, on every run): `[]` when it wrote none — an
+ *     update or delete that matched nothing, an insert that hit its conflict.
  *
  * Every case runs twice; the second run is a cache hit and has no query AST.
  *
@@ -151,26 +151,27 @@ Deno.test("result shape - a select over a mutation answers with every affected r
 
 Deno.test("result shape - a bare insert answers with the same keys on the first and on the repeated call", async () => {
   const { data } = await runTwice("insert Post { title := 't' }", { rowCount: 1, rows: [POST_ROW] });
-  const [first, second] = data as Record<string, unknown>[];
+  const [[first], [second]] = data as Record<string, unknown>[][];
 
   assertEquals(Object.keys(first).sort(), ["createdAt", "id", "title"]);
   assertEquals(Object.keys(second).sort(), Object.keys(first).sort());
   assertEquals(second, first);
 });
 
-Deno.test("result shape - a bare update answers with the same keys on both runs, and { updated: 0 } when nothing matched", async () => {
+Deno.test("result shape - a bare update answers with the same keys on both runs, and [] when nothing matched", async () => {
   const matched = await runTwice("update Post filter .title = 'x' set { title := 't' }", { rowCount: 1, rows: [POST_ROW] });
   const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
 
-  assertEquals(matched.data, [expected, expected]);
+  assertEquals(matched.data, [[expected], [expected]]);
 
   const stale = await runTwice("update Post filter .title = 'x' set { title := 't' }", NOTHING);
-  assertEquals(stale.data, [{ updated: 0 }, { updated: 0 }]);
+  assertEquals(stale.data, [[], []]);
 });
 
-Deno.test("result shape - a bare delete keeps { deleted: n } and a swallowed insert answers []", async () => {
-  const deleted = await runTwice("delete Post filter .title = 'x'", { rowCount: 3, rows: [{ id: "a" }, { id: "b" }, { id: "c" }] });
-  assertEquals(deleted.data, [{ deleted: 3 }, { deleted: 3 }]);
+Deno.test("result shape - a bare delete answers the deleted rows and a swallowed insert answers []", async () => {
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const deleted = await runTwice("delete Post filter .title = 'x'", { rowCount: 3, rows });
+  assertEquals(deleted.data, [rows, rows]);
 
   const swallowed = await runTwice("insert Post { title := 'taken' } unless conflict", NOTHING);
   assertEquals(swallowed.data, [[], []]);
@@ -178,19 +179,19 @@ Deno.test("result shape - a bare delete keeps { deleted: n } and a swallowed ins
 
 Deno.test("result shape - a junction-backed multi-link write keeps its single-row response on both runs", async () => {
   const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
-  // With nothing matched, each answers with its statement's documented shape
-  // (the update used to say `{ success: true }` — an artifact of sniffing the
-  // CTE's SQL, gone since the shape is chosen from the query).
+  // With nothing matched, each answers `[]` (the update used to say
+  // `{ success: true }` — an artifact of sniffing the CTE's SQL, gone since
+  // the shape is chosen from the query).
   const writes: Array<[string, unknown]> = [
     ["insert Post { title := 't', tags := (select Tag filter .name = 'a') }", []],
-    ["update Post filter .title = 't' set { tags += (select Tag filter .name = 'b') }", { updated: 0 }]
+    ["update Post filter .title = 't' set { tags += (select Tag filter .name = 'b') }", []]
   ];
 
   for (const [query, nothingMatched] of writes) {
     const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
 
     assert(matched.statements[0].trimStart().startsWith("WITH "), matched.statements[0]);
-    assertEquals(matched.data, [expected, expected], query);
+    assertEquals(matched.data, [[expected], [expected]], query);
 
     const nothing = await runTwice(query, NOTHING);
     assertEquals(nothing.data, [nothingMatched, nothingMatched], query);
@@ -200,7 +201,7 @@ Deno.test("result shape - a junction-backed multi-link write keeps its single-ro
 // The simple handler has no compiler and no cache: it emits one plain
 // SELECT/INSERT/UPDATE/DELETE per query and never a CTE. Its response shape
 // follows the query kind the same way.
-Deno.test("result shape - simple handler: a select answers with the row set, [] when empty; a bare update keeps { updated: 0 }", async () => {
+Deno.test("result shape - simple handler: a select answers with the row set, [] when empty; a bare update too", async () => {
   const statements: string[] = [];
   const handler = new SimpleEdgeQLProtocolHandler({ connectionPool: scriptedPool(NOTHING, statements), schema: await testSchema() });
 
@@ -211,7 +212,7 @@ Deno.test("result shape - simple handler: a select answers with the row set, [] 
 
     const updated = await handler.handleRequest({ query: "update Post filter .title = 'x' set { title := 't' }" }, makeContext());
     assertEquals(updated.errors, undefined);
-    assertEquals(updated.data, { updated: 0 });
+    assertEquals(updated.data, []);
   }
 });
 
@@ -223,37 +224,40 @@ Deno.test("result shape - a bare insert whose SQL contains a link subselect stil
 
   const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
   assert(/select/i.test(matched.statements[0]), matched.statements[0]);
-  assertEquals(matched.data, [expected, expected]);
+  assertEquals(matched.data, [[expected], [expected]]);
 
   const swallowed = await runTwice(`${query} unless conflict`, NOTHING);
   assertEquals(swallowed.data, [[], []]);
 });
 
-Deno.test("result shape - a bare delete whose filter walks a link keeps { deleted: n }", async () => {
-  const deleted = await runTwice("delete Post filter .author.name = 'ada'", { rowCount: 2, rows: [{ id: "a" }, { id: "b" }] });
+Deno.test("result shape - a bare delete whose filter walks a link answers the deleted rows", async () => {
+  const rows = [{ id: "a" }, { id: "b" }];
+  const deleted = await runTwice("delete Post filter .author.name = 'ada'", { rowCount: 2, rows });
   assert(/select/i.test(deleted.statements[0]), deleted.statements[0]);
-  assertEquals(deleted.data, [{ deleted: 2 }, { deleted: 2 }]);
+  assertEquals(deleted.data, [rows, rows]);
 });
 
-Deno.test("result shape - a bare update whose filter walks a link keeps the row / { updated: 0 }", async () => {
+Deno.test("result shape - a bare update whose filter walks a link answers the row / []", async () => {
   const query = "update Post filter .author.name = 'ada' set { title := 'x' }";
   const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
 
   const matched = await runTwice(query, { rowCount: 1, rows: [POST_ROW] });
   assert(/select/i.test(matched.statements[0]), matched.statements[0]);
-  assertEquals(matched.data, [expected, expected]);
-  assertEquals((await runTwice(query, NOTHING)).data, [{ updated: 0 }, { updated: 0 }]);
+  assertEquals(matched.data, [[expected], [expected]]);
+  assertEquals((await runTwice(query, NOTHING)).data, [[], []]);
 });
 
 Deno.test("result shape - the with-form of a bare mutation follows the body's kind", async () => {
+  // Its rows map to property names, as a bare mutation's do.
   const inserted = await runTwice("with n := 't' insert Post { title := n }", { rowCount: 1, rows: [POST_ROW] });
-  assertEquals(inserted.data, [POST_ROW, POST_ROW]);
+  const expected = { createdAt: "2026-09-21T00:00:00Z", id: "a", title: "t" };
+  assertEquals(inserted.data, [[expected], [expected]]);
 
   const updated = await runTwice("with n := 'x' update Post filter .title = n set { title := 'y' }", NOTHING);
-  assertEquals(updated.data, [{ updated: 0 }, { updated: 0 }]);
+  assertEquals(updated.data, [[], []]);
 
   const deleted = await runTwice("with n := 'x' delete Post filter .title = n", { rowCount: 1, rows: [{ id: "a" }] });
-  assertEquals(deleted.data, [{ deleted: 1 }, { deleted: 1 }]);
+  assertEquals(deleted.data, [[{ id: "a" }], [{ id: "a" }]]);
 });
 
 Deno.test("result shape - set global takes the session path on a cache hit too", async () => {

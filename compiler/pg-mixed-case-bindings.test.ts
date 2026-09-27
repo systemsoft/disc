@@ -95,15 +95,15 @@ Deno.test({
       assertEquals(await run("with Mine := (select McUser filter .name = 'ann') select Mine { name, posts: { title } order by .title }"), [
         { name: "ann", posts: [{ title: "Hello" }, { title: "World" }] }
       ]);
-      assertEquals(await run("with Mine := (select McUser filter .name = 'ann') select count(Mine)"), [{ count: 1 }]);
+      assertEquals(await run("with Mine := (select McUser filter .name = 'ann') select count(Mine)"), [1]);
       assertEquals(await run("with P := (select McPost filter .title = 'Hello') select McUser { name } filter P in .posts"), [{ name: "ann" }]);
-      assertEquals(await run("with myVals := {1, 2, 3} select myVals filter myVals > 1 order by myVals"), [{ value: 2 }, { value: 3 }]);
+      assertEquals(await run("with myVals := {1, 2, 3} select myVals filter myVals > 1 order by myVals"), [2, 3]);
 
       const perUser = (await run("for myUser in McUser union (select myUser { name, n := count(myUser.posts) })")) as { n: number; name: string; }[];
       assertEquals(perUser.sort((a, b) => a.name.localeCompare(b.name)), [{ n: 2, name: "ann" }, { n: 0, name: "bob" }]);
-      assertEquals(((await run("for Xs in {1, 2} union (Xs + 1)")) as Record<string, number>[]).map(row => Object.values(row)[0]).sort(), [2, 3]);
+      assertEquals(((await run("for Xs in {1, 2} union (Xs + 1)")) as number[]).sort(), [2, 3]);
       assertEquals(await run("select myUser := McUser { name } filter myUser.name = 'ann'"), [{ name: "ann" }]);
-      assertEquals(await run("select Mine := McUser.name filter Mine = 'bob'"), [{ value: "bob" }]);
+      assertEquals(await run("select Mine := McUser.name filter Mine = 'bob'"), ["bob"]);
     });
   }
 });
@@ -118,11 +118,11 @@ Deno.test({
         { name: "bob", visits: 1 }
       ]);
       assertEquals(await run("with Gone := (delete McPost filter .title = 'New') select Gone { title }"), [{ title: "New" }]);
-      assertEquals(await run("with Mine := (select McUser filter .name = 'ann') update McUser filter .id = Mine.id set { visits := 4 }"), {
+      assertEquals(await run("with Mine := (select McUser filter .name = 'ann') update McUser filter .id = Mine.id set { visits := 4 }"), [{
         id: ((await run("select McUser { id } filter .name = 'ann'")) as { id: string; }[])[0].id,
         name: "ann",
         visits: 4
-      });
+      }]);
       await run("for Each in McUser union (update Each set { visits := 7 })");
       assertEquals(await run("select McUser { name, visits } order by .name"), [{ name: "ann", visits: 7 }, { name: "bob", visits: 7 }]);
     });

@@ -2176,3 +2176,43 @@ Deno.test("Gel single-link results: a single link arrives as a one-element array
   const readme = await Deno.readTextFile(new URL("../codegen/README.md", import.meta.url));
   assert(readme.includes("post.author[0].name"), "codegen/README.md must document the single-link result shape (single-link pin).");
 });
+
+// ---------------------------------------------------------------------------
+// Gel bare-mutation rows — a bare `insert`, `update` or `delete` answers with
+// the set of objects it wrote, as in Gel, but Gel's objects are only
+// `{ "id" }` without a shape. Disc's are the whole stored row (`RETURNING *`):
+// `id`, stored properties and single links as target ids.
+//
+// Decided: keep the full rows. The generated clients' `insert()` / `update()`
+// return those columns, and the rows are a superset of Gel's. Cutting them to
+// `{ id }` would have to change the compiler's `RETURNING`, the generated
+// clients (which would wrap each mutation in `select (…) { * }`),
+// `server/bare-results-pg.test.ts`, the server.md / upgrading.md notes, and
+// this pin.
+// ---------------------------------------------------------------------------
+Deno.test("Gel bare-mutation rows: a bare mutation answers with its full stored rows, not only { id }", async () => {
+  const { EdgeQLParser } = await import("../edgeql/parser.ts");
+  const { EdgeQLCompiler } = await import("../compiler/compiler.ts");
+  const { SQLCodeGenerator } = await import("../compiler/codegen.ts");
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL("module default { type User { required name: str; nick: str; } }", { validate: false });
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+
+  for (const query of ["insert User { name := \"a\" }", "update User filter .name = \"a\" set { nick := \"b\" }", "delete User filter .name = \"a\""]) {
+    const result = new EdgeQLCompiler(schema, { enableAccessControl: false }).compile(new EdgeQLParser(query).parse());
+    if (!result.ok)
+      throw result.error;
+    const sql = new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " ");
+    assert(sql.endsWith("RETURNING *"), `a bare mutation returns its whole stored row (bare-mutation rows pin): ${sql}`);
+  }
+
+  const server = normalizeProse(await Deno.readTextFile(new URL("../vendor/disc.md/documents/server.md", import.meta.url)));
+  assert(
+    server.includes(normalizeProse("where Gel gives only `{ \"id\" }`")),
+    "server.md must document that bare-mutation rows are the full stored row (bare-mutation rows pin)."
+  );
+});

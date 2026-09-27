@@ -226,6 +226,20 @@ function subtypeName(subtype: Context.TypeDef): EdgeQLAST.TypeName {
   return EdgeQLAST.createTypeName(subtype.name.split("::"));
 }
 
+/*** The select whose rows are `query`'s rows: `query` itself, or the body of its `with` block or `for` loop. ***/
+function rowsSelect(query: EdgeQLAST.Query): EdgeQLAST.SelectQuery | undefined {
+  switch (query.kind) {
+    case "SelectQuery":
+      return query;
+    case "WithBlock":
+      return rowsSelect(query.body);
+    case "ForQuery":
+      return rowsSelect(query.body);
+    default:
+      return undefined;
+  }
+}
+
 export class EdgeQLCompiler extends ShapeCompilerLayer {
   /** Set while compiling the update or delete body of a `for` over objects, which also reads the iterator's rows. */
   private mutationReadsIterator = false;
@@ -253,6 +267,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       // A `for`'s values are its body's.
       const body = outer.kind === "ForQuery" ? outer.body : outer;
       this.outputExpression = body.kind === "SelectQuery" && !body.shape ? body.expr : undefined;
+      this.outputSelect = rowsSelect(query);
+      this.outputObjects = undefined;
 
       const statement = this.hoistMutations(this.compileQuery(query));
 
@@ -275,6 +291,17 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         )
       );
     }
+  }
+
+  /**
+   * Whether the statement `compile` compiled last selects values — scalars,
+   * tuples, arrays (`select User.name`, `select count(User)`) — rather than
+   * objects: each of its rows is one column holding one value, which the
+   * response answers bare, as Gel does. Recorded with the compilation as
+   * `ResultInfo.values`.
+   */
+  selectsValues(): boolean {
+    return this.outputObjects === false;
   }
 
   /**

@@ -338,24 +338,30 @@ export interface ResultInfo {
    * `"rows"`: the statement answers with its row set as-is, `[]` when empty —
    * a select (directly, or as the body of a `with` block, including a select
    * over a mutation), a group, a describe, an explain. `"mutation"`: anything
-   * else; the response keeps the bare-mutation shapes chosen by `mutation`
-   * (`{updated}`, `{deleted}`, `[]`, or the row), or a plain status.
+   * else; an insert, update or delete answers with the rows it wrote, as Gel
+   * does (`[]` when none), anything else with a plain status.
    */
   kind: "rows" | "mutation";
   /**
-   * For a bare `insert`/`update`: the mutated type as the query spelled it. Its
-   * `RETURNING *` row carries column names, which the response layer maps back
-   * to property names through this type.
+   * For a bare `insert`/`update`/`delete`: the mutated type as the query
+   * spelled it. Its `RETURNING *` rows carry column names, which the response
+   * layer maps back to property names through this type.
    */
   mutatedType?: string;
   /**
    * Which statement a `"mutation"` result comes from — bare, as the body of a
-   * `with` block, or as the body of a set-literal `for`. Chooses the response
-   * shape: insert → the row or `[]`, update → the row or
-   * `{updated: n}`, delete → `{deleted: n}`. Absent for statements with a
-   * plain status response (`configure`, `set global`).
+   * `with` block, or as the body of a set-literal `for`; the rows it wrote are
+   * the response. Absent for statements with a plain status response
+   * (`configure`, `set global`).
    */
   mutation?: "insert" | "update" | "delete";
+  /**
+   * For `"rows"`: the statement selects values, not objects (see
+   * `EdgeQLCompiler.selectsValues`), so each row's one column is answered
+   * bare — `select User.name` is `["ann"]`, not `[{"name": "ann"}]`. Set from
+   * the compilation, not from the query alone.
+   */
+  values?: boolean;
   /**
    * For `set global`: the global being set, so the handler takes the session
    * path (record the setting, answer `{success, global}`) on a cache hit too,
@@ -385,17 +391,15 @@ export function describeResult(query: EdgeQLAST.Query): ResultInfo {
     case "ExplainQuery":
       return { kind: "rows" };
     case "WithBlock": {
-      // The body decides. Its `RETURNING *` row is deliberately not mapped
-      // through `mutatedType` here (the with-form answers with column names,
-      // as it always has).
+      // The body decides; a mutation's `RETURNING *` rows map through its
+      // type, as a bare mutation's do.
       const body = describeResult(query.body);
-      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutation: body.mutation };
+      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutatedType: body.mutatedType, mutation: body.mutation };
     }
+    case "DeleteQuery":
     case "InsertQuery":
     case "UpdateQuery":
       return { kind: "mutation", mutatedType: query.type.name.parts.join("::"), mutation: MUTATION_OF[query.kind] };
-    case "DeleteQuery":
-      return { kind: "mutation", mutation: "delete" };
     case "ForQuery": {
       // `for x in <function or subquery> union (…)` answers with its row set:
       // for a bulk insert, the ids of the rows it inserted (`[]` when every row
@@ -405,7 +409,7 @@ export function describeResult(query: EdgeQLAST.Query): ResultInfo {
         return { kind: "rows" };
       }
       const body = describeResult(query.body);
-      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutation: body.mutation };
+      return body.kind === "rows" ? { kind: "rows" } : { kind: "mutation", mutatedType: body.mutatedType, mutation: body.mutation };
     }
     case "SetGlobalQuery":
       return { kind: "mutation", setGlobal: { module: query.module, name: query.name } };

@@ -5,15 +5,20 @@
  * A generated client's `insert` and `update` return the stored row, not a
  * shape: `id`, every stored property, and each single link as its target's id
  * (`null` when an optional one is unset). Multi links and computed fields are
- * absent. An update of a missing id returns `{ updated: 0 }`, a delete
- * `{ deleted: n }` (observed end to end in `mutation-results-pg.test.ts`). The
+ * absent. The server answers every mutation with the set of rows it wrote (as
+ * Gel does); the clients derive their results from it: an update of a missing
+ * id returns `{ updated: 0 }` (Rust `None`, Go `nil`), a delete `{ deleted: n }`
+ * (observed end to end in `mutation-results-pg.test.ts`). The
  * declared result types must say so, or `row.author.name` type-checks and
  * reads `undefined`:
  *
  * - TypeScript: `PostMutationResult` (`author: string`, `editor: string | null`),
  *   `update` resolving to it or `{ updated: 0 }`;
- * - Rust: `PostMutationResult` (`String`, `Option<String>`), `delete` -> `DeleteResult`;
- * - Go: `PostMutationResult` (`string`, `*string`), `Delete` -> `DeleteResult`.
+ * - Rust: `PostMutationResult` (`String`, `Option<String>`), `update` -> `Option<…>`, `delete` -> `DeleteResult`;
+ * - Go: `PostMutationResult` (`string`, `*string`), `Update` -> `*…`, `Delete` -> `DeleteResult`.
+ *
+ * Without a shape, `select()` / `selectById()` / `filter()` return `PostRow`:
+ * `id` and the stored properties, no links (the `{ * }` splat carries none).
  *
  * Insert/Update data is unchanged.
  */
@@ -112,6 +117,24 @@ Deno.test("mutation results - TypeScript declares the stored row, single links a
   assertStringIncludes(queries, "async delete(id: string): Promise<{ deleted: number }>");
 });
 
+Deno.test("row type - TypeScript declares what a select without a shape returns: id and stored properties, no links", () => {
+  const files = emitTypeScript(schemaToIR(schema()), config());
+  const body = interfaceBody(content(files, "interfaces.ts"), "PostRow");
+
+  assertStringIncludes(body, " id: string;\n");
+  assertStringIncludes(body, " title: string;\n");
+  assertStringIncludes(body, " subtitle: string | null;\n");
+  assertStringIncludes(body, " marks: bigint[];\n");
+  assert(!body.includes("author") && !body.includes("editor") && !body.includes("tags"), "links are absent");
+  assert(!body.includes("tag_count"), "a computed field is absent");
+
+  const queries = content(files, "queries.ts");
+  assertStringIncludes(queries, "select(): Promise<Types.$default.PostRow[]>;");
+  assertStringIncludes(queries, "select(shape: string): Promise<Types.$default.Post[]>;");
+  assertStringIncludes(queries, "selectById(id: string): Promise<Types.$default.PostRow | null>;");
+  assertStringIncludes(queries, "filter(filter: FilterArg<Types.$default.PostFilter> & { select?: undefined }): Promise<Types.$default.PostRow[]>;");
+});
+
 Deno.test("mutation results - Rust declares the stored row and a delete count", () => {
   const lib = emitRust(schemaToIR(schema()), config()).map(f => f.content).join("\n");
   const struct = lib.match(/pub struct PostMutationResult \{([^}]*)\}/);
@@ -122,7 +145,8 @@ Deno.test("mutation results - Rust declares the stored row and a delete count", 
   assertStringIncludes(struct[1], "pub marks: Vec<i64>,");
   assert(!struct[1].includes("tags") && !struct[1].includes("tag_count"), "multi links and computed fields are absent");
   assertStringIncludes(lib, "pub fn insert(&self, data: PostInsert) -> Result<PostMutationResult, DiscError>");
-  assertStringIncludes(lib, "pub fn update(&self, id: &str, data: PostUpdate) -> Result<PostMutationResult, DiscError>");
+  // An update of a missing id is None (the server answers `[]`), not a blank-id row.
+  assertStringIncludes(lib, "pub fn update(&self, id: &str, data: PostUpdate) -> Result<Option<PostMutationResult>, DiscError>");
   assertStringIncludes(lib, "pub fn delete(&self, id: &str) -> Result<crate::DeleteResult, DiscError>");
   assertStringIncludes(lib, "pub struct DeleteResult {\n    pub deleted: i64,\n}");
 });
@@ -139,7 +163,8 @@ Deno.test("mutation results - Go declares the stored row and a delete count", ()
 
   const queries = content(files, "queries.go");
   assertStringIncludes(queries, ") Insert(data PostInsert) (PostMutationResult, error)");
-  assertStringIncludes(queries, ") Update(id string, data PostUpdate) (PostMutationResult, error)");
+  // An update of a missing id is nil (the server answers `[]`), not a zero-value row.
+  assertStringIncludes(queries, ") Update(id string, data PostUpdate) (*PostMutationResult, error)");
   assertStringIncludes(queries, ") Delete(id string) (DeleteResult, error)");
   assertStringIncludes(queries, "type DeleteResult struct {\n\tDeleted int64 `json:\"deleted\"`\n}");
 });
@@ -183,6 +208,25 @@ export async function write(client: DiscClient): Promise<string[]> {
 
   const { deleted } = await client.post.delete(post.id);
   return [bad, String(tags), String(count), author, editor ?? "", String(marks), title, String(missing), updatedAuthor, String(deleted)];
+}
+
+export async function read(client: DiscClient): Promise<unknown[]> {
+  const [row] = await client.post.select();
+  // @ts-expect-error a select without a shape returns no links
+  const author = row.author;
+  const title: string = row.title;
+  const byId = await client.post.selectById("00000000-0000-0000-0000-000000000000");
+  // @ts-expect-error nor does selectById without a shape
+  const editor = byId?.editor;
+  const [filtered] = await client.post.filter({ title: "t" });
+  // @ts-expect-error nor does filter without a select
+  const tags = filtered.tags;
+  const [shaped] = await client.post.select("{ author: { name } }");
+  const shapedAuthor = shaped.author;
+  const [selected] = await client.post.filter({ select: { author: true }, title: "t" });
+  const selectedAuthor = selected.author;
+  const count: number = await client.post.count();
+  return [author, title, editor, tags, shapedAuthor, selectedAuthor, count];
 }
 `
     );

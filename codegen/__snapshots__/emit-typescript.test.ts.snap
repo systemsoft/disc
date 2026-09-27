@@ -110,7 +110,7 @@ export interface OrdOp<T> extends Op<T> {
 export interface StrOp extends OrdOp<string> {
   like?: string;
   ilike?: string;
-}/** Insert/Update/MutationResult/FilterVars/Filter/Select data types */
+}/** Insert/Update/MutationResult/Row/FilterVars/Filter/Select data types */
 export interface UserInsert {
   name: string;
   email: string;
@@ -131,6 +131,16 @@ export interface UserUpdate {
 
 /** User as insert() and update() return it: the stored row, single links as target ids; no multi links or computed fields */
 export interface UserMutationResult {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  active: boolean | null;
+  age: number | null;
+}
+
+/** User as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+export interface UserRow {
   id: string;
   name: string;
   email: string;
@@ -199,6 +209,14 @@ export interface PostMutationResult {
   body: string;
   createdAt: Date;
   author: string;
+}
+
+/** Post as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+export interface PostRow {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: Date;
 }
 
 export interface PostFilterVars {
@@ -282,25 +300,31 @@ export class UserQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all User objects */
-  async select(shape?: string): Promise<Types.User[]> {
+  /** Select all User objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.UserRow[]>;
+  select(shape: string): Promise<Types.User[]>;
+  async select(shape?: string): Promise<Types.UserRow[] | Types.User[]> {
     const query = shape 
       ? \`select User \${shape}\`
       : \`select User { * }\`;
-    return reviveTyped(await this.client.query<Types.User[]>(query), UserQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.UserRow[] | Types.User[]>(query), UserQueryBuilder._typeInfo);
   }
 
-  /** Select User by ID */
-  async selectById(id: string, shape?: string): Promise<Types.User | null> {
+  /** Select User by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.UserRow | null>;
+  selectById(id: string, shape: string): Promise<Types.User | null>;
+  async selectById(id: string, shape?: string): Promise<Types.UserRow | Types.User | null> {
     const query = shape
       ? \`select User \${shape} filter .id = <uuid>\$id\`
       : \`select User { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.User[]>(query, { id }), UserQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.UserRow | Types.User)[]>(query, { id }), UserQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter User objects */
-  async filter(filter: FilterArg<Types.UserFilter>): Promise<Types.User[]> {
+  /** Filter User objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.UserFilter> & { select?: undefined }): Promise<Types.UserRow[]>;
+  filter(filter: FilterArg<Types.UserFilter>): Promise<Types.User[]>;
+  async filter(filter: FilterArg<Types.UserFilter>): Promise<Types.UserRow[] | Types.User[]> {
     const compiled = compileFilter("User", filter, UserQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select User \${shape}\`];
@@ -308,7 +332,7 @@ export class UserQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.User[]>(parts.join(" "), compiled.variables), UserQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.UserRow[] | Types.User[]>(parts.join(" "), compiled.variables), UserQueryBuilder._typeInfo);
   }
 
   /** Insert new User. Resolves to its stored row: single links as ids, no multi links. */
@@ -324,7 +348,8 @@ export class UserQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${UserQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert User { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.UserMutationResult>(query, variables), UserQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.UserMutationResult[]>(query, variables), UserQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update User by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no User has that ID. */
@@ -354,13 +379,15 @@ export class UserQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${UserQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update User filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.UserMutationResult | { updated: 0 }>(query, variables), UserQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.UserMutationResult[]>(query, variables), UserQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete User by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete User filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count User objects */
@@ -368,7 +395,8 @@ export class UserQueryBuilder {
     const query = condition
       ? \`select count(User filter \${condition})\`
       : \`select count(User)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 
@@ -400,25 +428,31 @@ export class PostQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Post objects */
-  async select(shape?: string): Promise<Types.Post[]> {
+  /** Select all Post objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.PostRow[]>;
+  select(shape: string): Promise<Types.Post[]>;
+  async select(shape?: string): Promise<Types.PostRow[] | Types.Post[]> {
     const query = shape 
       ? \`select Post \${shape}\`
       : \`select Post { * }\`;
-    return reviveTyped(await this.client.query<Types.Post[]>(query), PostQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PostRow[] | Types.Post[]>(query), PostQueryBuilder._typeInfo);
   }
 
-  /** Select Post by ID */
-  async selectById(id: string, shape?: string): Promise<Types.Post | null> {
+  /** Select Post by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.PostRow | null>;
+  selectById(id: string, shape: string): Promise<Types.Post | null>;
+  async selectById(id: string, shape?: string): Promise<Types.PostRow | Types.Post | null> {
     const query = shape
       ? \`select Post \${shape} filter .id = <uuid>\$id\`
       : \`select Post { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.Post[]>(query, { id }), PostQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.PostRow | Types.Post)[]>(query, { id }), PostQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Post objects */
-  async filter(filter: FilterArg<Types.PostFilter>): Promise<Types.Post[]> {
+  /** Filter Post objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.PostFilter> & { select?: undefined }): Promise<Types.PostRow[]>;
+  filter(filter: FilterArg<Types.PostFilter>): Promise<Types.Post[]>;
+  async filter(filter: FilterArg<Types.PostFilter>): Promise<Types.PostRow[] | Types.Post[]> {
     const compiled = compileFilter("Post", filter, PostQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Post \${shape}\`];
@@ -426,7 +460,7 @@ export class PostQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.Post[]>(parts.join(" "), compiled.variables), PostQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PostRow[] | Types.Post[]>(parts.join(" "), compiled.variables), PostQueryBuilder._typeInfo);
   }
 
   /** Insert new Post. Resolves to its stored row: single links as ids, no multi links. */
@@ -442,7 +476,8 @@ export class PostQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PostQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Post { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.PostMutationResult>(query, variables), PostQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PostMutationResult[]>(query, variables), PostQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Post by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Post has that ID. */
@@ -472,13 +507,15 @@ export class PostQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PostQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Post filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.PostMutationResult | { updated: 0 }>(query, variables), PostQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PostMutationResult[]>(query, variables), PostQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Post by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Post filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Post objects */
@@ -486,7 +523,8 @@ export class PostQueryBuilder {
     const query = condition
       ? \`select count(Post filter \${condition})\`
       : \`select count(Post)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 ',
@@ -614,6 +652,13 @@ export namespace \$default {
     status: string | null;
   }
 
+  /** Merchant as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+  export interface MerchantRow {
+    id: string;
+    name: string;
+    status: string | null;
+  }
+
   export interface MerchantFilterVars {
     id?: string;
     name?: string;
@@ -688,6 +733,13 @@ export namespace api {
     key: string;
     active: boolean;
     merchant: string;
+  }
+
+  /** ApiKey as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+  export interface ApiKeyRow {
+    id: string;
+    key: string;
+    active: boolean;
   }
 
   export interface ApiKeyFilterVars {
@@ -766,6 +818,14 @@ export namespace payment {
     currency: string;
     status: string | null;
     merchant: string;
+  }
+
+  /** Payment as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+  export interface PaymentRow {
+    id: string;
+    amount: string;
+    currency: string;
+    status: string | null;
   }
 
   export interface PaymentFilterVars {
@@ -891,25 +951,31 @@ export class MerchantQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Merchant objects */
-  async select(shape?: string): Promise<Types.\$default.Merchant[]> {
+  /** Select all Merchant objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.\$default.MerchantRow[]>;
+  select(shape: string): Promise<Types.\$default.Merchant[]>;
+  async select(shape?: string): Promise<Types.\$default.MerchantRow[] | Types.\$default.Merchant[]> {
     const query = shape 
       ? \`select Merchant \${shape}\`
       : \`select Merchant { * }\`;
-    return reviveTyped(await this.client.query<Types.\$default.Merchant[]>(query), MerchantQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.MerchantRow[] | Types.\$default.Merchant[]>(query), MerchantQueryBuilder._typeInfo);
   }
 
-  /** Select Merchant by ID */
-  async selectById(id: string, shape?: string): Promise<Types.\$default.Merchant | null> {
+  /** Select Merchant by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.\$default.MerchantRow | null>;
+  selectById(id: string, shape: string): Promise<Types.\$default.Merchant | null>;
+  async selectById(id: string, shape?: string): Promise<Types.\$default.MerchantRow | Types.\$default.Merchant | null> {
     const query = shape
       ? \`select Merchant \${shape} filter .id = <uuid>\$id\`
       : \`select Merchant { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.\$default.Merchant[]>(query, { id }), MerchantQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.\$default.MerchantRow | Types.\$default.Merchant)[]>(query, { id }), MerchantQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Merchant objects */
-  async filter(filter: FilterArg<Types.\$default.MerchantFilter>): Promise<Types.\$default.Merchant[]> {
+  /** Filter Merchant objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.\$default.MerchantFilter> & { select?: undefined }): Promise<Types.\$default.MerchantRow[]>;
+  filter(filter: FilterArg<Types.\$default.MerchantFilter>): Promise<Types.\$default.Merchant[]>;
+  async filter(filter: FilterArg<Types.\$default.MerchantFilter>): Promise<Types.\$default.MerchantRow[] | Types.\$default.Merchant[]> {
     const compiled = compileFilter("Merchant", filter, MerchantQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Merchant \${shape}\`];
@@ -917,7 +983,7 @@ export class MerchantQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.\$default.Merchant[]>(parts.join(" "), compiled.variables), MerchantQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.MerchantRow[] | Types.\$default.Merchant[]>(parts.join(" "), compiled.variables), MerchantQueryBuilder._typeInfo);
   }
 
   /** Insert new Merchant. Resolves to its stored row: single links as ids, no multi links. */
@@ -933,7 +999,8 @@ export class MerchantQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${MerchantQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Merchant { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.MerchantMutationResult>(query, variables), MerchantQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.MerchantMutationResult[]>(query, variables), MerchantQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Merchant by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Merchant has that ID. */
@@ -963,13 +1030,15 @@ export class MerchantQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${MerchantQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Merchant filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.MerchantMutationResult | { updated: 0 }>(query, variables), MerchantQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.MerchantMutationResult[]>(query, variables), MerchantQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Merchant by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Merchant filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Merchant objects */
@@ -977,7 +1046,8 @@ export class MerchantQueryBuilder {
     const query = condition
       ? \`select count(Merchant filter \${condition})\`
       : \`select count(Merchant)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 
@@ -1007,25 +1077,31 @@ export class ApiKeyQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all ApiKey objects */
-  async select(shape?: string): Promise<Types.api.ApiKey[]> {
+  /** Select all ApiKey objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.api.ApiKeyRow[]>;
+  select(shape: string): Promise<Types.api.ApiKey[]>;
+  async select(shape?: string): Promise<Types.api.ApiKeyRow[] | Types.api.ApiKey[]> {
     const query = shape 
       ? \`select api::ApiKey \${shape}\`
       : \`select api::ApiKey { * }\`;
-    return reviveTyped(await this.client.query<Types.api.ApiKey[]>(query), ApiKeyQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.api.ApiKeyRow[] | Types.api.ApiKey[]>(query), ApiKeyQueryBuilder._typeInfo);
   }
 
-  /** Select ApiKey by ID */
-  async selectById(id: string, shape?: string): Promise<Types.api.ApiKey | null> {
+  /** Select ApiKey by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.api.ApiKeyRow | null>;
+  selectById(id: string, shape: string): Promise<Types.api.ApiKey | null>;
+  async selectById(id: string, shape?: string): Promise<Types.api.ApiKeyRow | Types.api.ApiKey | null> {
     const query = shape
       ? \`select api::ApiKey \${shape} filter .id = <uuid>\$id\`
       : \`select api::ApiKey { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.api.ApiKey[]>(query, { id }), ApiKeyQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.api.ApiKeyRow | Types.api.ApiKey)[]>(query, { id }), ApiKeyQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter ApiKey objects */
-  async filter(filter: FilterArg<Types.api.ApiKeyFilter>): Promise<Types.api.ApiKey[]> {
+  /** Filter ApiKey objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.api.ApiKeyFilter> & { select?: undefined }): Promise<Types.api.ApiKeyRow[]>;
+  filter(filter: FilterArg<Types.api.ApiKeyFilter>): Promise<Types.api.ApiKey[]>;
+  async filter(filter: FilterArg<Types.api.ApiKeyFilter>): Promise<Types.api.ApiKeyRow[] | Types.api.ApiKey[]> {
     const compiled = compileFilter("api::ApiKey", filter, ApiKeyQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select api::ApiKey \${shape}\`];
@@ -1033,7 +1109,7 @@ export class ApiKeyQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.api.ApiKey[]>(parts.join(" "), compiled.variables), ApiKeyQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.api.ApiKeyRow[] | Types.api.ApiKey[]>(parts.join(" "), compiled.variables), ApiKeyQueryBuilder._typeInfo);
   }
 
   /** Insert new ApiKey. Resolves to its stored row: single links as ids, no multi links. */
@@ -1049,7 +1125,8 @@ export class ApiKeyQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${ApiKeyQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert api::ApiKey { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.api.ApiKeyMutationResult>(query, variables), ApiKeyQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.api.ApiKeyMutationResult[]>(query, variables), ApiKeyQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update ApiKey by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no ApiKey has that ID. */
@@ -1079,13 +1156,15 @@ export class ApiKeyQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${ApiKeyQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update api::ApiKey filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.api.ApiKeyMutationResult | { updated: 0 }>(query, variables), ApiKeyQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.api.ApiKeyMutationResult[]>(query, variables), ApiKeyQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete ApiKey by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete api::ApiKey filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count ApiKey objects */
@@ -1093,7 +1172,8 @@ export class ApiKeyQueryBuilder {
     const query = condition
       ? \`select count(api::ApiKey filter \${condition})\`
       : \`select count(api::ApiKey)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 
@@ -1125,25 +1205,31 @@ export class PaymentQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Payment objects */
-  async select(shape?: string): Promise<Types.payment.Payment[]> {
+  /** Select all Payment objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.payment.PaymentRow[]>;
+  select(shape: string): Promise<Types.payment.Payment[]>;
+  async select(shape?: string): Promise<Types.payment.PaymentRow[] | Types.payment.Payment[]> {
     const query = shape 
       ? \`select payment::Payment \${shape}\`
       : \`select payment::Payment { * }\`;
-    return reviveTyped(await this.client.query<Types.payment.Payment[]>(query), PaymentQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.payment.PaymentRow[] | Types.payment.Payment[]>(query), PaymentQueryBuilder._typeInfo);
   }
 
-  /** Select Payment by ID */
-  async selectById(id: string, shape?: string): Promise<Types.payment.Payment | null> {
+  /** Select Payment by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.payment.PaymentRow | null>;
+  selectById(id: string, shape: string): Promise<Types.payment.Payment | null>;
+  async selectById(id: string, shape?: string): Promise<Types.payment.PaymentRow | Types.payment.Payment | null> {
     const query = shape
       ? \`select payment::Payment \${shape} filter .id = <uuid>\$id\`
       : \`select payment::Payment { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.payment.Payment[]>(query, { id }), PaymentQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.payment.PaymentRow | Types.payment.Payment)[]>(query, { id }), PaymentQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Payment objects */
-  async filter(filter: FilterArg<Types.payment.PaymentFilter>): Promise<Types.payment.Payment[]> {
+  /** Filter Payment objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.payment.PaymentFilter> & { select?: undefined }): Promise<Types.payment.PaymentRow[]>;
+  filter(filter: FilterArg<Types.payment.PaymentFilter>): Promise<Types.payment.Payment[]>;
+  async filter(filter: FilterArg<Types.payment.PaymentFilter>): Promise<Types.payment.PaymentRow[] | Types.payment.Payment[]> {
     const compiled = compileFilter("payment::Payment", filter, PaymentQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select payment::Payment \${shape}\`];
@@ -1151,7 +1237,7 @@ export class PaymentQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.payment.Payment[]>(parts.join(" "), compiled.variables), PaymentQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.payment.PaymentRow[] | Types.payment.Payment[]>(parts.join(" "), compiled.variables), PaymentQueryBuilder._typeInfo);
   }
 
   /** Insert new Payment. Resolves to its stored row: single links as ids, no multi links. */
@@ -1167,7 +1253,8 @@ export class PaymentQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PaymentQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert payment::Payment { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.payment.PaymentMutationResult>(query, variables), PaymentQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.payment.PaymentMutationResult[]>(query, variables), PaymentQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Payment by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Payment has that ID. */
@@ -1197,13 +1284,15 @@ export class PaymentQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PaymentQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update payment::Payment filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.payment.PaymentMutationResult | { updated: 0 }>(query, variables), PaymentQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.payment.PaymentMutationResult[]>(query, variables), PaymentQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Payment by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete payment::Payment filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Payment objects */
@@ -1211,7 +1300,8 @@ export class PaymentQueryBuilder {
     const query = condition
       ? \`select count(payment::Payment filter \${condition})\`
       : \`select count(payment::Payment)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 ',
@@ -1384,7 +1474,7 @@ export interface OrdOp<T> extends Op<T> {
 export interface StrOp extends OrdOp<string> {
   like?: string;
   ilike?: string;
-}/** Insert/Update/MutationResult/FilterVars/Filter/Select data types */
+}/** Insert/Update/MutationResult/Row/FilterVars/Filter/Select data types */
 export interface PersonInsert {
   name: string;
 }
@@ -1395,6 +1485,12 @@ export interface PersonUpdate {
 
 /** Person as insert() and update() return it: the stored row, single links as target ids; no multi links or computed fields */
 export interface PersonMutationResult {
+  id: string;
+  name: string;
+}
+
+/** Person as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+export interface PersonRow {
   id: string;
   name: string;
 }
@@ -1461,6 +1557,18 @@ export interface PlaceMutationResult {
   route: { lat: number; lng: number }[] | null;
   openedAt: string | null;
   owner: string;
+}
+
+/** Place as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+export interface PlaceRow {
+  id: string;
+  name: string;
+  kind: Kind;
+  visits: number | null;
+  tags: string[] | null;
+  point: { a: number; b: number };
+  route: { lat: number; lng: number }[] | null;
+  openedAt: string | null;
 }
 
 export interface PlaceFilterVars {
@@ -1550,25 +1658,31 @@ export class PersonQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Person objects */
-  async select(shape?: string): Promise<Types.Person[]> {
+  /** Select all Person objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.PersonRow[]>;
+  select(shape: string): Promise<Types.Person[]>;
+  async select(shape?: string): Promise<Types.PersonRow[] | Types.Person[]> {
     const query = shape 
       ? \`select Person \${shape}\`
       : \`select Person { * }\`;
-    return reviveTyped(await this.client.query<Types.Person[]>(query), PersonQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PersonRow[] | Types.Person[]>(query), PersonQueryBuilder._typeInfo);
   }
 
-  /** Select Person by ID */
-  async selectById(id: string, shape?: string): Promise<Types.Person | null> {
+  /** Select Person by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.PersonRow | null>;
+  selectById(id: string, shape: string): Promise<Types.Person | null>;
+  async selectById(id: string, shape?: string): Promise<Types.PersonRow | Types.Person | null> {
     const query = shape
       ? \`select Person \${shape} filter .id = <uuid>\$id\`
       : \`select Person { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.Person[]>(query, { id }), PersonQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.PersonRow | Types.Person)[]>(query, { id }), PersonQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Person objects */
-  async filter(filter: FilterArg<Types.PersonFilter>): Promise<Types.Person[]> {
+  /** Filter Person objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.PersonFilter> & { select?: undefined }): Promise<Types.PersonRow[]>;
+  filter(filter: FilterArg<Types.PersonFilter>): Promise<Types.Person[]>;
+  async filter(filter: FilterArg<Types.PersonFilter>): Promise<Types.PersonRow[] | Types.Person[]> {
     const compiled = compileFilter("Person", filter, PersonQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Person \${shape}\`];
@@ -1576,7 +1690,7 @@ export class PersonQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PersonRow[] | Types.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Insert new Person. Resolves to its stored row: single links as ids, no multi links. */
@@ -1592,7 +1706,8 @@ export class PersonQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Person { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.PersonMutationResult>(query, variables), PersonQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PersonMutationResult[]>(query, variables), PersonQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Person by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Person has that ID. */
@@ -1622,13 +1737,15 @@ export class PersonQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Person filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.PersonMutationResult | { updated: 0 }>(query, variables), PersonQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PersonMutationResult[]>(query, variables), PersonQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Person by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Person filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Person objects */
@@ -1636,7 +1753,8 @@ export class PersonQueryBuilder {
     const query = condition
       ? \`select count(Person filter \${condition})\`
       : \`select count(Person)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 
@@ -1682,25 +1800,31 @@ export class PlaceQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Place objects */
-  async select(shape?: string): Promise<Types.Place[]> {
+  /** Select all Place objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.PlaceRow[]>;
+  select(shape: string): Promise<Types.Place[]>;
+  async select(shape?: string): Promise<Types.PlaceRow[] | Types.Place[]> {
     const query = shape 
       ? \`select Place \${shape}\`
       : \`select Place { * }\`;
-    return reviveTyped(await this.client.query<Types.Place[]>(query), PlaceQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PlaceRow[] | Types.Place[]>(query), PlaceQueryBuilder._typeInfo);
   }
 
-  /** Select Place by ID */
-  async selectById(id: string, shape?: string): Promise<Types.Place | null> {
+  /** Select Place by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.PlaceRow | null>;
+  selectById(id: string, shape: string): Promise<Types.Place | null>;
+  async selectById(id: string, shape?: string): Promise<Types.PlaceRow | Types.Place | null> {
     const query = shape
       ? \`select Place \${shape} filter .id = <uuid>\$id\`
       : \`select Place { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.Place[]>(query, { id }), PlaceQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.PlaceRow | Types.Place)[]>(query, { id }), PlaceQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Place objects */
-  async filter(filter: FilterArg<Types.PlaceFilter>): Promise<Types.Place[]> {
+  /** Filter Place objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.PlaceFilter> & { select?: undefined }): Promise<Types.PlaceRow[]>;
+  filter(filter: FilterArg<Types.PlaceFilter>): Promise<Types.Place[]>;
+  async filter(filter: FilterArg<Types.PlaceFilter>): Promise<Types.PlaceRow[] | Types.Place[]> {
     const compiled = compileFilter("Place", filter, PlaceQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Place \${shape}\`];
@@ -1708,7 +1832,7 @@ export class PlaceQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.Place[]>(parts.join(" "), compiled.variables), PlaceQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.PlaceRow[] | Types.Place[]>(parts.join(" "), compiled.variables), PlaceQueryBuilder._typeInfo);
   }
 
   /** Insert new Place. Resolves to its stored row: single links as ids, no multi links. */
@@ -1724,7 +1848,8 @@ export class PlaceQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PlaceQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Place { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.PlaceMutationResult>(query, variables), PlaceQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PlaceMutationResult[]>(query, variables), PlaceQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Place by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Place has that ID. */
@@ -1754,13 +1879,15 @@ export class PlaceQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PlaceQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Place filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.PlaceMutationResult | { updated: 0 }>(query, variables), PlaceQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.PlaceMutationResult[]>(query, variables), PlaceQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Place by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Place filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Place objects */
@@ -1768,7 +1895,8 @@ export class PlaceQueryBuilder {
     const query = condition
       ? \`select count(Place filter \${condition})\`
       : \`select count(Place)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 ',
@@ -1869,6 +1997,11 @@ export namespace \$default {
     id: string;
   }
 
+  /** Person as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+  export interface PersonRow {
+    id: string;
+  }
+
   export interface PersonFilterVars {
     id?: string;
     [key: string]: unknown;
@@ -1920,6 +2053,11 @@ export namespace \$default {
   export interface PetMutationResult {
     id: string;
     owner: string;
+  }
+
+  /** Pet as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields */
+  export interface PetRow {
+    id: string;
   }
 
   export interface PetFilterVars {
@@ -2029,25 +2167,31 @@ export class PersonQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Person objects */
-  async select(shape?: string): Promise<Types.\$default.Person[]> {
+  /** Select all Person objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.\$default.PersonRow[]>;
+  select(shape: string): Promise<Types.\$default.Person[]>;
+  async select(shape?: string): Promise<Types.\$default.PersonRow[] | Types.\$default.Person[]> {
     const query = shape 
       ? \`select Person \${shape}\`
       : \`select Person { * }\`;
-    return reviveTyped(await this.client.query<Types.\$default.Person[]>(query), PersonQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.PersonRow[] | Types.\$default.Person[]>(query), PersonQueryBuilder._typeInfo);
   }
 
-  /** Select Person by ID */
-  async selectById(id: string, shape?: string): Promise<Types.\$default.Person | null> {
+  /** Select Person by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.\$default.PersonRow | null>;
+  selectById(id: string, shape: string): Promise<Types.\$default.Person | null>;
+  async selectById(id: string, shape?: string): Promise<Types.\$default.PersonRow | Types.\$default.Person | null> {
     const query = shape
       ? \`select Person \${shape} filter .id = <uuid>\$id\`
       : \`select Person { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.\$default.Person[]>(query, { id }), PersonQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.\$default.PersonRow | Types.\$default.Person)[]>(query, { id }), PersonQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Person objects */
-  async filter(filter: FilterArg<Types.\$default.PersonFilter>): Promise<Types.\$default.Person[]> {
+  /** Filter Person objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.\$default.PersonFilter> & { select?: undefined }): Promise<Types.\$default.PersonRow[]>;
+  filter(filter: FilterArg<Types.\$default.PersonFilter>): Promise<Types.\$default.Person[]>;
+  async filter(filter: FilterArg<Types.\$default.PersonFilter>): Promise<Types.\$default.PersonRow[] | Types.\$default.Person[]> {
     const compiled = compileFilter("Person", filter, PersonQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Person \${shape}\`];
@@ -2055,7 +2199,7 @@ export class PersonQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.\$default.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.PersonRow[] | Types.\$default.Person[]>(parts.join(" "), compiled.variables), PersonQueryBuilder._typeInfo);
   }
 
   /** Insert new Person. Resolves to its stored row: single links as ids, no multi links. */
@@ -2071,7 +2215,8 @@ export class PersonQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Person { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.PersonMutationResult>(query, variables), PersonQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.PersonMutationResult[]>(query, variables), PersonQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Person by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Person has that ID. */
@@ -2101,13 +2246,15 @@ export class PersonQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PersonQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Person filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.PersonMutationResult | { updated: 0 }>(query, variables), PersonQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.PersonMutationResult[]>(query, variables), PersonQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Person by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Person filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Person objects */
@@ -2115,7 +2262,8 @@ export class PersonQueryBuilder {
     const query = condition
       ? \`select count(Person filter \${condition})\`
       : \`select count(Person)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 
@@ -2144,25 +2292,31 @@ export class PetQueryBuilder {
 
   constructor(private client: DiscClient) {}
 
-  /** Select all Pet objects */
-  async select(shape?: string): Promise<Types.\$default.Pet[]> {
+  /** Select all Pet objects: without a shape, \`id\` and the stored properties */
+  select(): Promise<Types.\$default.PetRow[]>;
+  select(shape: string): Promise<Types.\$default.Pet[]>;
+  async select(shape?: string): Promise<Types.\$default.PetRow[] | Types.\$default.Pet[]> {
     const query = shape 
       ? \`select Pet \${shape}\`
       : \`select Pet { * }\`;
-    return reviveTyped(await this.client.query<Types.\$default.Pet[]>(query), PetQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.PetRow[] | Types.\$default.Pet[]>(query), PetQueryBuilder._typeInfo);
   }
 
-  /** Select Pet by ID */
-  async selectById(id: string, shape?: string): Promise<Types.\$default.Pet | null> {
+  /** Select Pet by ID: without a shape, \`id\` and the stored properties */
+  selectById(id: string): Promise<Types.\$default.PetRow | null>;
+  selectById(id: string, shape: string): Promise<Types.\$default.Pet | null>;
+  async selectById(id: string, shape?: string): Promise<Types.\$default.PetRow | Types.\$default.Pet | null> {
     const query = shape
       ? \`select Pet \${shape} filter .id = <uuid>\$id\`
       : \`select Pet { * } filter .id = <uuid>\$id\`;
-    const results = reviveTyped(await this.client.query<Types.\$default.Pet[]>(query, { id }), PetQueryBuilder._typeInfo);
+    const results = reviveTyped(await this.client.query<(Types.\$default.PetRow | Types.\$default.Pet)[]>(query, { id }), PetQueryBuilder._typeInfo);
     return results[0] || null;
   }
 
-  /** Filter Pet objects */
-  async filter(filter: FilterArg<Types.\$default.PetFilter>): Promise<Types.\$default.Pet[]> {
+  /** Filter Pet objects: without a \`select\`, \`id\` and the stored properties */
+  filter(filter: FilterArg<Types.\$default.PetFilter> & { select?: undefined }): Promise<Types.\$default.PetRow[]>;
+  filter(filter: FilterArg<Types.\$default.PetFilter>): Promise<Types.\$default.Pet[]>;
+  async filter(filter: FilterArg<Types.\$default.PetFilter>): Promise<Types.\$default.PetRow[] | Types.\$default.Pet[]> {
     const compiled = compileFilter("Pet", filter, PetQueryBuilder._typeInfo);
     const shape = compiled.selectShape ?? "{ * }";
     const parts: string[] = [\`select Pet \${shape}\`];
@@ -2170,7 +2324,7 @@ export class PetQueryBuilder {
     if (compiled.orderBy) parts.push(compiled.orderBy);
     if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);
     if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);
-    return reviveTyped(await this.client.query<Types.\$default.Pet[]>(parts.join(" "), compiled.variables), PetQueryBuilder._typeInfo);
+    return reviveTyped(await this.client.query<Types.\$default.PetRow[] | Types.\$default.Pet[]>(parts.join(" "), compiled.variables), PetQueryBuilder._typeInfo);
   }
 
   /** Insert new Pet. Resolves to its stored row: single links as ids, no multi links. */
@@ -2186,7 +2340,8 @@ export class PetQueryBuilder {
       return \`\${escapeEdgeQLIdent(key)} := \${PetQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`;
     }).join(", ");
     const query = \`insert Pet { \${assignments} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.PetMutationResult>(query, variables), PetQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.PetMutationResult[]>(query, variables), PetQueryBuilder._typeInfo);
+    return row;
   }
 
   /** Update Pet by ID. Resolves to its stored row (single links as ids, no multi links), or \`{ updated: 0 }\` when no Pet has that ID. */
@@ -2216,13 +2371,15 @@ export class PetQueryBuilder {
       assignments.push(\`\${escapeEdgeQLIdent(key)} := \${PetQueryBuilder._typeCasts[key] || "<str>"}\$\${key}\`);
     }
     const query = \`update Pet filter .id = <uuid>\$id set { \${assignments.join(", ")} }\`;
-    return reviveTyped(await this.client.query<Types.\$default.PetMutationResult | { updated: 0 }>(query, variables), PetQueryBuilder._typeInfo);
+    const [row] = reviveTyped(await this.client.query<Types.\$default.PetMutationResult[]>(query, variables), PetQueryBuilder._typeInfo);
+    return row ?? { updated: 0 };
   }
 
   /** Delete Pet by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */
   async delete(id: string): Promise<{ deleted: number }> {
     const query = \`delete Pet filter .id = <uuid>\$id\`;
-    return await this.client.query<{ deleted: number }>(query, { id });
+    const rows = await this.client.query<unknown[]>(query, { id });
+    return { deleted: rows.length };
   }
 
   /** Count Pet objects */
@@ -2230,7 +2387,8 @@ export class PetQueryBuilder {
     const query = condition
       ? \`select count(Pet filter \${condition})\`
       : \`select count(Pet)\`;
-    return await this.client.query<number>(query, variables);
+    const [count] = await this.client.query<[number]>(query, variables);
+    return count;
   }
 }
 ',

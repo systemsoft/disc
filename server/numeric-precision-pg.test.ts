@@ -110,16 +110,16 @@ Deno.test({
       return reply.body.data;
     }
 
-    /*** Each answered row's one value. ***/
+    /*** The answered values (a select of values answers them bare). ***/
     async function scalars(query: string, variables?: Record<string, unknown>): Promise<unknown[]> {
-      return ((await data(query, variables)) as Record<string, unknown>[]).map(row => Object.values(row)[0]);
+      return (await data(query, variables)) as unknown[];
     }
 
     try {
-      const inserted = await data(
+      const [inserted] = await data(
         "insert PreciseItem { label := 'a', big := <bigint>$big, bigs := <array<bigint>>$bigs, dec := <decimal>$dec, f64 := 0.5, i64 := <int64>$i64 }",
         { big: BIG, bigs: [BIG, "1"], dec: DEC, i64: I64 }
-      ) as Record<string, unknown>;
+      ) as Record<string, unknown>[];
       assertEquals(
         { big: inserted.big, bigs: inserted.bigs, dec: inserted.dec, f64: inserted.f64, i64: inserted.i64 },
         { big: num(BIG), bigs: [num(BIG), num("1")], dec: num(DEC), f64: num("0.5"), i64: num(I64) },
@@ -136,7 +136,7 @@ Deno.test({
         });
         const reply = parseKeepingNumbers(await response.text()) as Reply["body"];
         assertEquals(response.status, 200, JSON.stringify(reply));
-        return (reply.data as Record<string, unknown>[]).map(row => Object.values(row)[0]);
+        return reply.data as unknown[];
       };
 
       assertEquals(await rawScalars("select <bigint>$x", `{"x":${BIG}}`), [num(BIG)], "bigint variable as a JSON number");

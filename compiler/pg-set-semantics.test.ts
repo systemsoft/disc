@@ -53,6 +53,11 @@ const SDL = `module default {
 
 type Run = (query: string, variables?: Record<string, unknown>) => Promise<unknown[]>;
 
+/*** An object answered for a shaped select (a tuple or array value is not one). ***/
+function isShapedRow(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function makeContext(): ServerTypes.QueryContext {
   return {
     auth: { permissions: [], roles: [] },
@@ -88,9 +93,10 @@ async function withHandler(fn: (run: Run, values: Run) => Promise<void>): Promis
       assertEquals(response.errors, undefined, `${query}: ${JSON.stringify(response.errors)}`);
       return unwrapExactNumbers(response.data) as unknown[];
     };
+    // Each answered value: a select of values answers them bare (as Gel does); a shaped row gives its one field.
     const values: Run = async (query, variables) =>
-      ((await run(query, variables)) as Record<string, unknown>[])
-        .map(row => JSON.stringify(Object.values(row)[0]))
+      (await run(query, variables))
+        .map(value => JSON.stringify(isShapedRow(value) ? Object.values(value)[0] : value))
         .sort()
         .map(value => JSON.parse(value));
 
@@ -119,7 +125,7 @@ Deno.test({
       const x = { x: [3, 1, 2] };
       assertEquals(await values("with a := (select array_unpack(<array<int64>>$x)) select a filter a > 1", x), [2, 3]);
       assertEquals(
-        (await run("with a := (select array_unpack(<array<int64>>$x)) select a order by a desc", x)).map(row => Object.values(row as object)[0]),
+        await run("with a := (select array_unpack(<array<int64>>$x)) select a order by a desc", x),
         [3, 2, 1]
       );
       assertEquals(await values("with a := (select SetUser.name) select a filter a != 'ann'"), ["bob"]);
@@ -208,7 +214,7 @@ Deno.test({
     await withHandler(async (run, values) => {
       assertEquals(await values("select {1, 2} + 1"), [2, 3]);
       // Gel's order: the left operand outermost.
-      assertEquals((await run("select {1, 2} + {10, 20}")).map(row => Object.values(row as object)[0]), [11, 21, 12, 22]);
+      assertEquals(await run("select {1, 2} + {10, 20}"), [11, 21, 12, 22]);
       assertEquals(await values("select 'a' ++ {'x', 'y'}"), ["ax", "ay"]);
       assertEquals(await values("select SetUser.name ++ '!'"), ["ann!", "bob!"]);
       assertEquals(await values("select {1, 2} = 1"), [false, true]);

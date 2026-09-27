@@ -261,7 +261,7 @@ Deno.test({
       const [row] = await run(
         `select ((2, 'b') in array_unpack([(1, 'a'), (2, 'b')]), (3, 'b') in array_unpack(<array<tuple<int64, str>>>[(1, 'a'), (2, 'b')]))`
       );
-      assertEquals(Object.values(row)[0], [true, false]);
+      assertEquals(row as unknown, [true, false]);
     });
   }
 });
@@ -275,7 +275,7 @@ Deno.test({
         `select ((1, 'a') = (a := 1, b := 'a'), (a := 1, b := 'a') = (b := 1, a := 'a'), (1, 'a') != (a := 1, b := 'b'), ` +
           `(a := 1, b := 'a') ?= (1, 'a'), (1, 'a') in {(a := 1, b := 'a')}, (x := (1, 'a')) = (y := (a := 1, b := 'a')))`
       );
-      assertEquals(Object.values(row)[0], [true, true, true, true, true, true]);
+      assertEquals(row as unknown, [true, true, true, true, true, true]);
 
       await run(`insert TupRow { name := "u", u := (9, <datetime>'2024-01-01T00:00:00Z') }`);
       assertEquals(await names(run, `select TupRow { name } filter .u = (a := 9, b := <datetime>'2024-01-01T00:00:00Z')`), ["u"]);
@@ -288,8 +288,8 @@ Deno.test({
   ignore: !RUN_PG,
   fn: async () => {
     await withSchema(async run => {
-      assertEquals(Object.values((await run(`select [(1, 'a'), (2, 'b')]`))[0]), [[[1, "a"], [2, "b"]]]);
-      assertEquals(Object.values((await run(`select [(n := 1, s := 'a')]`))[0]), [[{ n: 1, s: "a" }]]);
+      assertEquals((await run(`select [(1, 'a'), (2, 'b')]`)) as unknown[], [[[1, "a"], [2, "b"]]]);
+      assertEquals((await run(`select [(n := 1, s := 'a')]`)) as unknown[], [[{ n: 1, s: "a" }]]);
       await run(`insert TupRow { name := "a" }`);
       const [shape] = await run(`select TupRow { name, x := [(n := 1, at := <datetime>'2024-01-01T00:00:00Z')] }`);
       assertEquals(shape.x, [{ at: "2024-01-01T00:00:00+00:00", n: 1 }]);
@@ -345,12 +345,12 @@ Deno.test({
 async function value(run: Run, query: string, variables?: Record<string, unknown>): Promise<unknown> {
   const rows = await run(query, variables);
   assertEquals(rows.length, 1, `${query}: ${JSON.stringify(rows)}`);
-  return Object.values(rows[0])[0];
+  return rows[0];
 }
 
-/*** The values `query` selects, in order. ***/
+/*** The values `query` selects, in order (a select of values answers them bare, as Gel does). ***/
 async function values(run: Run, query: string, variables?: Record<string, unknown>): Promise<unknown[]> {
-  return (await run(query, variables)).map(row => Object.values(row)[0]);
+  return await run(query, variables);
 }
 
 Deno.test({

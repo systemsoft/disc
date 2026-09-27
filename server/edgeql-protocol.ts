@@ -387,7 +387,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         sqlString = this.generateSQLString(sqlStatement);
         parameterNames = Compiler.parameterBindOrder(ast, parameterIndex);
         optionalParameters = Compiler.optionalParameterNames(ast);
-        resultInfo = Compiler.describeResult(ast);
+        resultInfo = this.describeCompiled(ast);
 
         // Store in compilation cache
         this.compilationCache.set(compilationKey, {
@@ -479,20 +479,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         });
       }
 
-      // Mutation responses come back from `RETURNING *` as raw PG rows
-      // with snake_case column names. Map them back through the schema's
-      // PropertyDef to give callers the camelCase property shape they
-      // see for SELECTs — otherwise `row.created_at` vs `row.createdAt`
-      // varies by query type, which is hostile to clients. The mutated type
-      // comes from the cache entry, so a repeated call maps like the first.
-      const mappedData = this.mapMutationResponseToSchema(
-        result.data,
-        resultInfo.mutatedType
-      );
-
       // Return successful response
       const response: Types.QueryResponse = {
-        data: mappedData,
+        data: result.data,
         extensions: {
           durationMs,
           parseMs,
@@ -650,14 +639,13 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    */
   /**
    * Rename snake_case PG column keys back to camelCase property names
-   * for INSERT/UPDATE responses. SELECT shapes are already camelCase
-   * because the compiler emits `jsonb_build_object('camelCase', col)`
+   * for INSERT/UPDATE/DELETE response rows. SELECT shapes are already
+   * camelCase because the compiler emits `jsonb_build_object('camelCase', col)`
    * pairs; mutations bypass that and return raw `RETURNING *` rows.
    *
-   * `mutatedType` is `ResultInfo.mutatedType`: set for a bare insert/update
-   * only. Returns the input unchanged without it, when the type isn't in the
-   * schema, or when data isn't a row (e.g. `{ deleted: 1 }`, or `[]` for an
-   * insert that wrote nothing).
+   * `mutatedType` is `ResultInfo.mutatedType`: set for a bare
+   * insert/update/delete only. Returns the input unchanged without it, when
+   * the type isn't in the schema, or when data isn't a row.
    */
   private mapMutationResponseToSchema(
     data: any,
@@ -701,6 +689,40 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       out[colToProp.get(k) ?? k] = !dateDurationColumns.has(k) ? v : Array.isArray(v) ? v.map(dateDurationText) : dateDurationText(v);
     }
     return out;
+  }
+
+  /*** What the query just compiled answers with: `describeResult`, and whether it selects values (`ResultInfo.values`). ***/
+  private describeCompiled(ast: EdgeQL.Query): Compiler.ResultInfo {
+    const info = Compiler.describeResult(ast);
+    return info.kind === "rows" && this.compiler.selectsValues() ? { ...info, values: true } : info;
+  }
+
+  /**
+   * The response data for a statement's rows (HTTP and binary alike).
+   *
+   * - A select of values (`resultInfo.values`) answers each row's one column
+   *   bare: `select User.name` is `["ann"]`, `select count(User)` is `[2]`,
+   *   `select (1, 'a')` is `[[1, "a"]]`, as in Gel.
+   * - A select of objects: the compiler emits `SELECT jsonb_build_object(…)`
+   *   for a shape, which surfaces as rows of `{jsonb_build_object: {…}}`;
+   *   that single-column wrapper is unwrapped so callers see the objects.
+   * - A bare insert, update or delete: its `RETURNING *` rows, whose
+   *   snake_case column names map back through the mutated type to property
+   *   names (`mapMutationResponseToSchema`), as a select would name them.
+   *   The type comes from the cache entry, so a repeated call maps like the
+   *   first.
+   */
+  private answerRows(rows: any[], resultInfo: Compiler.ResultInfo): any[] {
+    if (resultInfo.values) {
+      return rows.map(row => {
+        const values = row && typeof row === "object" ? Object.values(row) : [];
+        return values.length === 1 ? values[0] : row;
+      });
+    }
+    if (resultInfo.mutatedType) {
+      return rows.map(row => this.mapMutationResponseToSchema(row, resultInfo.mutatedType));
+    }
+    return this.unwrapJsonbRows(rows);
   }
 
   /**
@@ -806,29 +828,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // contain `select`, and the latter two share the `WITH … INSERT/UPDATE
         // … SELECT` shape.
         //
-        // A select answers with its row set as-is, `[]` when empty — also when
-        // it selects from a mutation (`select (update …) { id }`, the
-        // with-form). The compiler emits `SELECT jsonb_build_object(...)` for
-        // shape expressions, which surfaces as rows of `{jsonb_build_object:
-        // {...}}`; unwrap that single-column wrapper so callers see clean
-        // object shapes — UI/SDK consumers expect `row.id` to work directly.
-        if (resultInfo.kind === "rows") {
-          return { data: this.unwrapJsonbRows(rows) };
+        // A select answers with its row set, `[]` when empty — also when it
+        // selects from a mutation (`select (update …) { id }`, the with-form):
+        // objects, or the values it selects (see `answerRows`).
+        //
+        // An insert, update or delete answers, as in Gel, with the set of
+        // objects it wrote — `[]` when it wrote none (an update or delete
+        // that matched nothing, an insert that hit its `unless conflict`
+        // target or whose `else` update kept the existing object).
+        if (resultInfo.kind === "rows" || resultInfo.mutation) {
+          return { data: this.answerRows(rows, resultInfo) };
         }
-
-        // The bare-mutation response shapes. An insert that wrote nothing (it
-        // hit its `unless conflict` target, or the `else` update's filter kept
-        // the existing object) is the empty set, as in Gel.
-        switch (resultInfo.mutation) {
-          case "insert":
-            return { data: rows[0] ?? [] };
-          case "update":
-            return { data: rows[0] || { updated: result.rowCount } };
-          case "delete":
-            return { data: { deleted: result.rowCount } };
-          default:
-            return { data: { rowCount: result.rowCount, success: true } };
-        }
+        return { data: { rowCount: result.rowCount, success: true } };
       } catch (error) {
         // Let QueryTimeoutError propagate directly
         if (error instanceof QueryTimeoutError) {
@@ -1142,10 +1153,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    * poor fit for the binary path) and runs parse → compile → execute
    * against the same compiler and pool the HTTP handler uses. The
    * returned rows are already in the same shape executeSQL produces:
-   *   - SELECT  → unwrapped jsonb_build_object objects, one per row
-   *   - INSERT  → single RETURNING row mapped back to camelCase
-   *   - UPDATE  → single RETURNING row mapped back to camelCase
-   *   - DELETE  → empty rows; status reports the deleted count
+   *   - SELECT  → unwrapped jsonb_build_object objects, one per row; for a
+   *               select of values (`values: true`), each row's one column
+   *               holds the value
+   *   - INSERT, UPDATE, DELETE → every RETURNING row, mapped back to
+   *               camelCase (none when it wrote none)
    *
    * `args` is keyed by the bare parameter name (no leading `$`). The
    * compiler's parameterIndex (built from the same AST) decides the
@@ -1157,7 +1169,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     commandText: string,
     args: Record<string, unknown>,
     caller: { admin: boolean; } = { admin: false }
-  ): Promise<{ rows: Record<string, unknown>[]; status: string; }> {
+  ): Promise<{ rows: Record<string, unknown>[]; status: string; values?: boolean; }> {
     const parser = new EdgeQL.EdgeQLParser(commandText);
     const ast = parser.parse();
 
@@ -1191,6 +1203,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
     const sqlStatement = compileResult.value;
     const sql = this.generateSQLString(sqlStatement);
+    // Read now: the shared compiler compiles other queries while this one runs.
+    const values = this.compiler.selectsValues();
 
     // Same binding as HTTP variables: jsonb (tuples, json) as JSON text,
     // bytes decoded, exact numbers as digits, missing arguments reported.
@@ -1212,18 +1226,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const result = await this.pool.query(sql, positionalValues);
 
     if (status === "SELECT") {
-      return { rows: this.unwrapJsonbRows(result.rows), status };
+      // The encoder reads a value from its row's one column, so a select of
+      // values keeps its rows and says so.
+      return values ?
+        { rows: result.rows, status, values: true } :
+        { rows: this.unwrapJsonbRows(result.rows), status };
     }
-    if (status === "INSERT" || status === "UPDATE") {
-      const row = result.rows[0];
-      if (row && typeof row === "object") {
-        const mapped = this.mapMutationResponseToSchema(row, Compiler.describeResult(ast).mutatedType);
-        return { rows: [mapped as Record<string, unknown>], status };
-      }
-      return { rows: [], status };
-    }
-    if (status === "DELETE") {
-      return { rows: [], status };
+    if (status === "INSERT" || status === "UPDATE" || status === "DELETE") {
+      const mutatedType = Compiler.describeResult(ast).mutatedType;
+      return { rows: result.rows.map(row => this.mapMutationResponseToSchema(row, mutatedType) as Record<string, unknown>), status };
     }
     return { rows: result.rows ?? [], status };
   }

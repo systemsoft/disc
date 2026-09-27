@@ -129,7 +129,7 @@ Deno.test({
       await t.step("insert: base64 in is stored as the bytes it stands for; the RETURNING row carries base64", async () => {
         await twice(INSERT, round => ({ content: encodeBase64(ALL_VALUES), oid: `all-${round}`, p: PROGRAM_ID }), async (data, round) => {
           assert(sameBytes((await stored(`all-${round}`)).content, ALL_VALUES), "stored bytes differ from the bytes sent");
-          assertEquals((data as Record<string, unknown>).content, encodeBase64(ALL_VALUES));
+          assertEquals((data as Record<string, unknown>[])[0].content, encodeBase64(ALL_VALUES));
         });
       });
 
@@ -147,7 +147,7 @@ Deno.test({
         const reply = await post(INSERT, { content: "\\x1f8b00ff", oid: "hex", p: PROGRAM_ID });
         assertEquals(reply.status, 200, JSON.stringify(reply.body));
         assert(sameBytes((await stored("hex")).content, GZIP_MAGIC));
-        assertEquals((reply.body.data as Record<string, unknown>).content, "H4sA/w==");
+        assertEquals((reply.body.data as Record<string, unknown>[])[0].content, "H4sA/w==");
       });
 
       await t.step("insert: invalid base64 is HTTP 400 naming the variable, and nothing is stored", async () => {
@@ -216,7 +216,7 @@ Deno.test({
 
       await t.step("bare RETURNING rows: update, and a mutation selected without a shape", async () => {
         await twice("update GitObject filter .object_id = 'hex' set { content := <bytes>$content }", () => ({ content: "H4sA/w==" }), data => {
-          assertEquals((data as Record<string, unknown>).content, "H4sA/w==");
+          assertEquals((data as Record<string, unknown>[])[0].content, "H4sA/w==");
         });
         await twice("select (update GitObject filter .object_id = 'hex' set { object_id := 'hex' })", () => undefined, data => {
           assertEquals((data as Record<string, unknown>[])[0].content, "H4sA/w==");
@@ -225,7 +225,7 @@ Deno.test({
 
       await t.step("unshaped select: a <bytes> parameter goes to PostgreSQL and comes back as the same base64", async () => {
         await twice("select <bytes>$b", () => ({ b: encodeBase64(ALL_VALUES) }), data => {
-          assertEquals((data as Record<string, unknown>[]).map(row => Object.values(row)[0]), [encodeBase64(ALL_VALUES)]);
+          assertEquals(data, [encodeBase64(ALL_VALUES)]);
         });
       });
 
@@ -237,7 +237,7 @@ Deno.test({
           const row = await stored(`chunks-${round}`);
           assertEquals(row.chunks?.length, 3);
           chunks.forEach((chunk, i) => assert(sameBytes(row.chunks![i], chunk), `stored chunk ${i}`));
-          assertEquals((data as Record<string, unknown>).chunks, wire);
+          assertEquals((data as Record<string, unknown>[])[0].chunks, wire);
         });
 
         assertEquals((await post(INSERT_CHUNKS, { chunks: [], oid: "chunks-empty", p: PROGRAM_ID })).status, 200);

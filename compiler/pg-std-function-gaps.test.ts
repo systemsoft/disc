@@ -70,9 +70,8 @@ async function withHandler(fn: (run: Run, values: Values) => Promise<void>): Pro
       assertEquals(response.errors, undefined, `${query}: ${JSON.stringify(response.errors)}`);
       return response.data;
     };
-    // A scalar select is one row per value, with one column; a numeric value may arrive as an exact JSON number.
-    const values: Values = async (query, variables) =>
-      ((await run(query, variables)) as Record<string, unknown>[]).map(row => unwrapExactNumbers(Object.values(row)[0]));
+    // A scalar select answers its values bare, as in Gel; a numeric value may arrive as an exact JSON number.
+    const values: Values = async (query, variables) => ((await run(query, variables)) as unknown[]).map(value => unwrapExactNumbers(value));
 
     await fn(run, values);
   } finally {

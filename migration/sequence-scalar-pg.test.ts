@@ -156,7 +156,7 @@ Deno.test({
       await reset(pool);
       await migrate(pool, SDL);
       const run = await handlerFor(pool, dsn);
-      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers(Object.values((await run(query))[0] as Record<string, unknown>)[0]));
+      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers((await run(query))[0]));
 
       assertEquals(await value(`select sequence_next(introspect SqTicketNo)`), 1);
       await run(`insert SqTicket { title := "a" }`);
@@ -255,7 +255,7 @@ Deno.test({
         assertEquals(response.errors, undefined, `${query}: ${JSON.stringify(response.errors)}`);
         return response.data as unknown[];
       };
-      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers(Object.values((await run(query))[0] as Record<string, unknown>)[0]));
+      const value = async (query: string): Promise<number> => Number(unwrapExactNumbers((await run(query))[0]));
 
       await run(`insert SqCounter { label := "a" }`);
       await run(`insert SqCounter { label := "b" }`);
@@ -294,9 +294,8 @@ Deno.test({
       await reset(pool);
       await migrate(pool, SDL);
       const run = await handlerFor(pool, dsn);
-      // A scalar select returns one row with one column; numeric values arrive as exact JSON numbers.
-      const one = async (query: string, variables: Record<string, unknown>): Promise<unknown> =>
-        unwrapExactNumbers(Object.values((await run(query, variables))[0] as Record<string, unknown>)[0]);
+      // A scalar select answers its value bare, as in Gel; numeric values arrive as exact JSON numbers.
+      const one = async (query: string, variables: Record<string, unknown>): Promise<unknown> => unwrapExactNumbers((await run(query, variables))[0]);
 
       assertEquals(Number(await one(`select <std::int64>$x + 1`, { x: 41 })), 42);
       assertEquals(await one(`select <std::str>$x ++ "!"`, { x: "hi" }), "hi!");

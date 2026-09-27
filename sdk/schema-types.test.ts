@@ -218,9 +218,9 @@ declare const _resolveSelectedChecks: [
   Expect<Equal<DeepRow, { author: [{ manager: [{ name: string; }] | null; }]; }>>,
   Expect<Equal<SingleInMultiRow, { posts: { author: [{ name: string; }]; }[]; }>>,
   // A link without a sub-shape is its target's id: a single link's (null when
-  // an optional one is unset), a multi link's ids (null when it is empty).
+  // an optional one is unset), a multi link's ids ([] when it is empty).
   Expect<Equal<RequiredLinkIdRow, { author: string; }>>,
-  Expect<Equal<LinkIdRow, { manager: string | null; posts: string[] | null; }>>
+  Expect<Equal<LinkIdRow, { manager: string | null; posts: string[]; }>>
 ];
 
 Deno.test("typed link without a sub-shape is its target's id, not an object", () => {

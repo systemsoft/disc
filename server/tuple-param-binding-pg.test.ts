@@ -50,8 +50,7 @@ Deno.test({
         makeContext()
       );
       assertEquals(res.errors, undefined);
-      const row = (res.data as unknown[])[0] as Record<string, unknown>;
-      assertEquals(Object.values(row)[0], { name: "x", url: "y" });
+      assertEquals(res.data, [{ name: "x", url: "y" }]);
     } finally {
       await handler.close();
     }
@@ -73,8 +72,7 @@ Deno.test({
         makeContext()
       );
       assertEquals(res.errors, undefined);
-      const row = (res.data as unknown[])[0] as Record<string, unknown>;
-      assertEquals(Object.values(row)[0], links);
+      assertEquals(res.data, [links]);
     } finally {
       await handler.close();
     }
@@ -92,8 +90,7 @@ Deno.test({
         makeContext()
       );
       assertEquals(res.errors, undefined);
-      const row = (res.data as unknown[])[0] as Record<string, unknown>;
-      assertEquals(Object.values(row)[0], ["one", "two"]);
+      assertEquals(res.data, [["one", "two"]]);
     } finally {
       await handler.close();
     }

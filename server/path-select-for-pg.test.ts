@@ -4,7 +4,7 @@
 /**
  * PG end-to-end, over HTTP: path selects, computed paths, backlink
  * sub-shapes and `for` loops over objects answer on `/query` like any shaped
- * select — one object (or value) per row.
+ * select — one object, or one bare value, per row.
  *
  * Every read runs twice with the same query text, so the second run is a
  * compiled-query cache hit.
@@ -90,23 +90,18 @@ Deno.test({
       return { body: await response.json(), status: response.status };
     }
 
-    /*** The answered rows: a shaped select's objects, else one `{ column: value }` per row. ***/
+    /*** The answered rows: a select of objects answers the objects, a select of values the values (as Gel does). ***/
     async function answer(query: string): Promise<unknown[]> {
       const reply = await post(query);
       assertEquals(reply.status, 200, JSON.stringify(reply.body));
       return reply.body.data as unknown[];
     }
 
-    /*** Each answered row's one value. ***/
-    async function values(query: string): Promise<unknown[]> {
-      return (await answer(query)).map(row => Object.values(row as Record<string, unknown>)[0]);
-    }
-
     try {
       for (const round of ["cache miss", "cache hit"]) {
         // World is linked from ann and bob, and comes back once.
         assertEquals(await answer("select HttpUser.posts { title } order by .title"), [{ title: "Hello" }, { title: "World" }], round);
-        assertEquals(await values("select count(HttpUser.posts)"), [2], round);
+        assertEquals(await answer("select count(HttpUser.posts)"), [2], round);
         assertEquals(
           await answer("select HttpUser { name, titles := .posts.title } filter .name = 'bob'"),
           [{ name: "bob", titles: ["World"] }],
@@ -118,7 +113,7 @@ Deno.test({
           round
         );
         assertEquals(await answer("for x in (select HttpUser filter .name = 'ann') union (select x { name })"), [{ name: "ann" }], round);
-        assertEquals(await values("for x in (select HttpUser filter .name = 'bob') union x.name"), ["bob"], round);
+        assertEquals(await answer("for x in (select HttpUser filter .name = 'bob') union x.name"), ["bob"], round);
       }
 
       const inserted = await post("for x in (select HttpUser filter .name = 'bob') union (insert HttpPost { author := x, title := x.name ++ '!' })");

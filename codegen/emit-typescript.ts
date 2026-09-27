@@ -275,6 +275,8 @@ class TypeScriptEmitter {
           content += "\n";
           content += this.generateMutationResultType(tsName, obj, "  ", module.name);
           content += "\n";
+          content += this.generateRowType(tsName, obj, "  ", module.name);
+          content += "\n";
           content += this.generateFilterVarsType(tsName, obj, "  ", module.name);
           content += "\n";
           content += this.generateFilterType(obj, "  ", module.name);
@@ -542,10 +544,32 @@ class TypeScriptEmitter {
    * id. Multi links, link properties and computed fields are absent.
    */
   private generateMutationResultType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
+    const doc = `${obj.name.name} as insert() and update() return it: the stored row, single links as target ids; no multi links or computed fields`;
+    return this.generateStoredRowType(`${tsTypeName}MutationResult`, doc, obj, true, indent, currentModule);
+  }
+
+  /**
+   * What `select()`, `selectById()` and `filter()` return without a shape
+   * (`{ * }`): `id` and every stored property, as in the mutation result, but
+   * no links -- the splat carries none.
+   */
+  private generateRowType(tsTypeName: string, obj: ObjectType, indent: string = "", currentModule?: string): string {
+    const doc = `${obj.name.name} as select(), selectById() and filter() return it without a shape: id and stored properties; no links or computed fields`;
+    return this.generateStoredRowType(`${tsTypeName}Row`, doc, obj, false, indent, currentModule);
+  }
+
+  /*** `interface <name>`: `id`, the stored properties and, with `singleLinks`, each single link as its target's id. ***/
+  private generateStoredRowType(
+    name: string,
+    doc: string,
+    obj: ObjectType,
+    singleLinks: boolean,
+    indent: string,
+    currentModule: string | undefined
+  ): string {
     let content = "";
-    content +=
-      `${indent}/** ${obj.name.name} as insert() and update() return it: the stored row, single links as target ids; no multi links or computed fields */\n`;
-    content += `${indent}export interface ${tsTypeName}MutationResult {\n`;
+    content += `${indent}/** ${doc} */\n`;
+    content += `${indent}export interface ${name} {\n`;
     content += `${indent}  id: string;\n`;
 
     for (const field of obj.fields) {
@@ -554,7 +578,7 @@ class TypeScriptEmitter {
       const required = isRequired(field.cardinality);
       const multi = isMulti(field.cardinality);
       if (field.isLink) {
-        if (!multi)
+        if (!multi && singleLinks)
           content += `${indent}  ${field.name}: string${required ? "" : " | null"};\n`;
         continue;
       }
@@ -730,7 +754,7 @@ class TypeScriptEmitter {
     content += this.generateOperatorHelpers();
 
     if (!this.isMultiModule()) {
-      content += `/** Insert/Update/MutationResult/FilterVars/Filter/Select data types */\n`;
+      content += `/** Insert/Update/MutationResult/Row/FilterVars/Filter/Select data types */\n`;
 
       for (const obj of this.allObjects()) {
         const tsTypeName = this.getTypeScriptTypeName(obj.name.name);
@@ -740,6 +764,8 @@ class TypeScriptEmitter {
         content += this.generateUpdateType(tsTypeName, obj);
         content += "\n";
         content += this.generateMutationResultType(tsTypeName, obj);
+        content += "\n";
+        content += this.generateRowType(tsTypeName, obj);
         content += "\n";
         content += this.generateFilterVarsType(tsTypeName, obj);
         content += "\n";
@@ -824,6 +850,7 @@ class TypeScriptEmitter {
     const insertRef = multiModule ? `Types.${ns}.${typeName}Insert` : `Types.${typeName}Insert`;
     const updateRef = multiModule ? `Types.${ns}.${typeName}Update` : `Types.${typeName}Update`;
     const mutationResultRef = multiModule ? `Types.${ns}.${typeName}MutationResult` : `Types.${typeName}MutationResult`;
+    const rowRef = multiModule ? `Types.${ns}.${typeName}Row` : `Types.${typeName}Row`;
 
     const typeCastEntries: string[] = [];
     // Multi scalar properties: the whole set is bound as one array parameter
@@ -960,25 +987,33 @@ class TypeScriptEmitter {
     content += `\n  };\n\n`;
     content += `  constructor(private client: DiscClient) {}\n\n`;
 
-    content += `  /** Select all ${typeName} objects */\n`;
-    content += `  async select(shape?: string): Promise<${typeRef}[]> {\n`;
+    // Without a shape (`{ * }`) a row carries `id` and the stored properties
+    // only (`<T>Row`); with one, whatever the shape selects.
+    content += `  /** Select all ${typeName} objects: without a shape, \`id\` and the stored properties */\n`;
+    content += `  select(): Promise<${rowRef}[]>;\n`;
+    content += `  select(shape: string): Promise<${typeRef}[]>;\n`;
+    content += `  async select(shape?: string): Promise<${rowRef}[] | ${typeRef}[]> {\n`;
     content += `    const query = shape \n`;
     content += `      ? \`select ${edgeqlTypeName} \${shape}\`\n`;
     content += `      : \`select ${edgeqlTypeName} { * }\`;\n`;
-    content += `    return reviveTyped(await this.client.query<${typeRef}[]>(query), ${builderName}._typeInfo);\n`;
+    content += `    return reviveTyped(await this.client.query<${rowRef}[] | ${typeRef}[]>(query), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
-    content += `  /** Select ${typeName} by ID */\n`;
-    content += `  async selectById(id: string, shape?: string): Promise<${typeRef} | null> {\n`;
+    content += `  /** Select ${typeName} by ID: without a shape, \`id\` and the stored properties */\n`;
+    content += `  selectById(id: string): Promise<${rowRef} | null>;\n`;
+    content += `  selectById(id: string, shape: string): Promise<${typeRef} | null>;\n`;
+    content += `  async selectById(id: string, shape?: string): Promise<${rowRef} | ${typeRef} | null> {\n`;
     content += `    const query = shape\n`;
     content += `      ? \`select ${edgeqlTypeName} \${shape} filter .id = <uuid>$id\`\n`;
     content += `      : \`select ${edgeqlTypeName} { * } filter .id = <uuid>$id\`;\n`;
-    content += `    const results = reviveTyped(await this.client.query<${typeRef}[]>(query, { id }), ${builderName}._typeInfo);\n`;
+    content += `    const results = reviveTyped(await this.client.query<(${rowRef} | ${typeRef})[]>(query, { id }), ${builderName}._typeInfo);\n`;
     content += `    return results[0] || null;\n`;
     content += `  }\n\n`;
 
-    content += `  /** Filter ${typeName} objects */\n`;
-    content += `  async filter(filter: FilterArg<${filterRef}>): Promise<${typeRef}[]> {\n`;
+    content += `  /** Filter ${typeName} objects: without a \`select\`, \`id\` and the stored properties */\n`;
+    content += `  filter(filter: FilterArg<${filterRef}> & { select?: undefined }): Promise<${rowRef}[]>;\n`;
+    content += `  filter(filter: FilterArg<${filterRef}>): Promise<${typeRef}[]>;\n`;
+    content += `  async filter(filter: FilterArg<${filterRef}>): Promise<${rowRef}[] | ${typeRef}[]> {\n`;
     content += `    const compiled = compileFilter("${edgeqlTypeName}", filter, ${builderName}._typeInfo);\n`;
     content += `    const shape = compiled.selectShape ?? "{ * }";\n`;
     content += `    const parts: string[] = [\`select ${edgeqlTypeName} \${shape}\`];\n`;
@@ -986,7 +1021,7 @@ class TypeScriptEmitter {
     content += `    if (compiled.orderBy) parts.push(compiled.orderBy);\n`;
     content += `    if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);\n`;
     content += `    if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);\n`;
-    content += `    return reviveTyped(await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables), ${builderName}._typeInfo);\n`;
+    content += `    return reviveTyped(await this.client.query<${rowRef}[] | ${typeRef}[]>(parts.join(" "), compiled.variables), ${builderName}._typeInfo);\n`;
     content += `  }\n\n`;
 
     content += `  /** Insert new ${typeName}. Resolves to its stored row: single links as ids, no multi links. */\n`;
@@ -1005,7 +1040,9 @@ class TypeScriptEmitter {
     content += `      return \`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`;\n`;
     content += `    }).join(", ");\n`;
     content += `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
-    content += `    return reviveTyped(await this.client.query<${mutationResultRef}>(query, variables), ${builderName}._typeInfo);\n`;
+    // The server answers a mutation with the set of rows it wrote; an insert writes one.
+    content += `    const [row] = reviveTyped(await this.client.query<${mutationResultRef}[]>(query, variables), ${builderName}._typeInfo);\n`;
+    content += `    return row;\n`;
     content += `  }\n\n`;
 
     content +=
@@ -1043,13 +1080,16 @@ class TypeScriptEmitter {
     content += `      assignments.push(\`\${escapeEdgeQLIdent(key)} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`);\n`;
     content += `    }\n`;
     content += `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments.join(", ")} }\`;\n`;
-    content += `    return reviveTyped(await this.client.query<${mutationResultRef} | { updated: 0 }>(query, variables), ${builderName}._typeInfo);\n`;
+    // The set of rows the update wrote: one, or none for a missing id.
+    content += `    const [row] = reviveTyped(await this.client.query<${mutationResultRef}[]>(query, variables), ${builderName}._typeInfo);\n`;
+    content += `    return row ?? { updated: 0 };\n`;
     content += `  }\n\n`;
 
     content += `  /** Delete ${typeName} by ID. Resolves to the number of rows deleted (0 or 1); use \`select (delete …) { … }\` to read the row back. */\n`;
     content += `  async delete(id: string): Promise<{ deleted: number }> {\n`;
     content += `    const query = \`delete ${edgeqlTypeName} filter .id = <uuid>$id\`;\n`;
-    content += `    return await this.client.query<{ deleted: number }>(query, { id });\n`;
+    content += `    const rows = await this.client.query<unknown[]>(query, { id });\n`;
+    content += `    return { deleted: rows.length };\n`;
     content += `  }\n\n`;
 
     content += `  /** Count ${typeName} objects */\n`;
@@ -1057,7 +1097,8 @@ class TypeScriptEmitter {
     content += `    const query = condition\n`;
     content += `      ? \`select count(${edgeqlTypeName} filter \${condition})\`\n`;
     content += `      : \`select count(${edgeqlTypeName})\`;\n`;
-    content += `    return await this.client.query<number>(query, variables);\n`;
+    content += `    const [count] = await this.client.query<[number]>(query, variables);\n`;
+    content += `    return count;\n`;
     content += `  }\n`;
 
     content += `}\n`;

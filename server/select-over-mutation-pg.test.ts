@@ -14,7 +14,8 @@
  *   - Only the requested fields come back.
  *   - A bare insert answers with the same keys on the first and on the repeated
  *     call (D14); a junction-backed multi-link write, whose SQL has the same
- *     `WITH … INSERT/UPDATE … SELECT` shape, keeps its single-row response.
+ *     `WITH … INSERT/UPDATE … SELECT` shape, answers like any bare mutation:
+ *     the set of rows it wrote (Gel's shape), each the stored row.
  *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
@@ -236,12 +237,12 @@ Deno.test({
         const second = await post(bare, { n: "refs/heads/d14-b", p: PROGRAM_ID, t: oid(1) });
 
         assertEquals(second.body.extensions?.cacheHit, true);
-        const firstKeys = Object.keys(ok(first, "first") as Record<string, unknown>).sort();
+        const firstKeys = Object.keys((ok(first, "first") as Record<string, unknown>[])[0]).sort();
         assertEquals(firstKeys, ["id", "name", "peeled", "program", "target"]);
-        assertEquals(Object.keys(ok(second, "second") as Record<string, unknown>).sort(), firstKeys);
+        assertEquals(Object.keys((ok(second, "second") as Record<string, unknown>[])[0]).sort(), firstKeys);
       });
 
-      await t.step("a junction-backed multi-link write keeps its single-row response on both runs", async () => {
+      await t.step("a junction-backed multi-link write answers the one row it wrote on both runs", async () => {
         await pool.query("INSERT INTO label (name) VALUES ('a'), ('b')");
         const insert = "insert Note { title := <str>$t, labels := (select Label filter .name = <str>$l) }";
         const update = "update Note filter .title = <str>$t set { labels += (select Label filter .name = <str>$l) }";
@@ -252,9 +253,10 @@ Deno.test({
             t: "n2"
           }]] as const
         ) {
-          const data = ok(await post(query, variables), query) as Record<string, unknown>;
+          const rows = ok(await post(query, variables), query) as Record<string, unknown>[];
 
-          assert(!Array.isArray(data), `a multi-link write answers with the row, not a row set: ${JSON.stringify(data)}`);
+          assertEquals(rows.length, 1, `a multi-link write answers the set of the one row it wrote: ${JSON.stringify(rows)}`);
+          const [data] = rows;
           assertEquals(data.title, variables.t);
           assertEquals(Object.keys(data).sort(), ["id", "title"]);
         }

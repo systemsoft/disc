@@ -89,6 +89,11 @@ function namedPaths(node: unknown, names: Set<string>): { name: string; node: Ed
   return Object.entries(node).flatMap(([key, value]) => key === "type" ? [] : namedPaths(value, names));
 }
 
+/*** `aggregate` of a link's target ids, or `[]` when it has none (as Gel answers an empty link), not NULL. ***/
+function emptyArrayWhenNone(aggregate: SQL.SQLExpression): SQL.SQLExpression {
+  return SQL.createFunctionCall("COALESCE", [aggregate, { kind: "RawSQLExpression", sql: "'[]'::jsonb" }]);
+}
+
 /*** CTE name for the anonymous binding of `select (insert|update|delete …) { shape }`. ***/
 const MUTATION_CTE_NAME = "m";
 /*** The binding a shape on a select of objects, selected again (`select (select T …) { … } filter …`), reads it through. ***/
@@ -100,6 +105,10 @@ type ShapeClauses = Pick<EdgeQLAST.ShapeElement, "filter" | "orderBy" | "offset"
 export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   /** The expression the statement being compiled selects as its result (`select <expr>`), whose value leaves the query. */
   protected outputExpression: EdgeQLAST.Expression | undefined;
+  /** The select whose rows are the statement's rows (the body of a `with` block or of a `for` over a query), if it has one. */
+  protected outputSelect: EdgeQLAST.SelectQuery | undefined;
+  /** Whether `outputSelect` answers with objects, decided when it is compiled; undefined until then. */
+  protected outputObjects: boolean | undefined;
 
   // Implemented by the top compiler layer (compiler.ts).
   protected abstract compileSelectQueryRaw(
@@ -109,6 +118,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   protected compileSelectQuery(
     query: EdgeQLAST.SelectQuery
   ): SQL.SQLStatement {
+    // Decided here, where the statement's `with` bindings and `for` variable are in scope.
+    if (query === this.outputSelect && this.outputObjects === undefined) {
+      this.outputObjects = this.selectAnswersObjects(query);
+    }
+
     // Handle set operations (UNION, INTERSECT, EXCEPT) at the query level
     if (query.expr.kind === "BinaryOp" && this.isSetOperator(query.expr.op)) {
       return this.compileSetOperation(query.expr);
@@ -256,6 +270,90 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       });
     } finally {
       Context.popScope(this.ctx);
+    }
+  }
+
+  /**
+   * Whether a select of `expr` without a shape answers with objects — a type,
+   * a path ending in a link, a binding or `for` variable over objects, or a
+   * subquery, set or choice of them — rather than with values (scalars,
+   * tuples, arrays), which the response answers bare, as Gel does:
+   * `select User.name` is `["ann"]`. Where it cannot tell, objects: the
+   * response then answers the rows as it always has.
+   */
+  private selectsObjects(expr: EdgeQLAST.Expression): boolean {
+    const detached = detachedOperand(expr);
+    if (detached) {
+      return this.selectsObjects(detached);
+    }
+    switch (expr.kind) {
+      case "TypeName": {
+        const name = expr.name.parts.join("::");
+        const typeDef = this.scopeVariable(name)?.row ? undefined : Context.resolveTypeName(this.ctx, name);
+        return typeDef === undefined || typeDef.kind === "object";
+      }
+      case "Identifier": {
+        const variable = this.scopeVariable(expr.name);
+        if (variable) {
+          return variable.row !== undefined;
+        }
+        const cte = Context.getCTEAlias(this.ctx, expr.name);
+        return cte ? !cte.values : Context.resolveAlias(this.ctx.schema, expr.name, this.ctx.moduleScope) !== undefined;
+      }
+      case "Path":
+        return this.isObjectPath(expr);
+      case "Subquery":
+        return this.queryAnswersObjects(expr.query);
+      case "SetExpr":
+        return expr.elements.some(element => this.selectsObjects(element));
+      case "BinaryOp":
+        return ["??", "EXCEPT", "INTERSECT", "UNION"].includes(expr.op.toUpperCase()) &&
+          (this.selectsObjects(expr.left) || this.selectsObjects(expr.right));
+      case "IfElse":
+        return this.selectsObjects(expr.then) || this.selectsObjects(expr.else);
+      case "UnaryOp":
+        return expr.op === "DISTINCT" && this.selectsObjects(expr.operand);
+      case "TypeCast":
+        // `<User><uuid>$id` is an object.
+        return Context.resolveTypeName(this.ctx, expr.type.name.parts.join("::"))?.kind === "object";
+      case "FunctionCall": {
+        const name = expr.name.parts[expr.name.parts.length - 1];
+        const argument = expr.args[0]?.value;
+        return ["assert_distinct", "assert_exists", "assert_single", "max", "min"].includes(name) && argument !== undefined &&
+          this.selectsObjects(argument);
+      }
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Whether `select` answers with objects: it has a shape, or selects objects
+   * (see `selectsObjects`). A shape on a cast (`<json>T { … }`) is the
+   * operand's, so the cast decides: `<json>` of objects is a JSON value each.
+   */
+  private selectAnswersObjects(select: EdgeQLAST.SelectQuery): boolean {
+    if (select.expr.kind === "TypeCast") {
+      return this.selectsObjects(select.expr);
+    }
+    return select.shape !== undefined || this.selectsObjects(select.expr);
+  }
+
+  /*** Whether `query`, as a subquery selected without a shape, answers with objects (see `selectsObjects`). ***/
+  private queryAnswersObjects(query: EdgeQLAST.Query): boolean {
+    switch (query.kind) {
+      case "SelectQuery":
+        return this.selectAnswersObjects(query);
+      case "WithBlock":
+      case "ForQuery":
+        return this.queryAnswersObjects(query.body);
+      case "DeleteQuery":
+      case "GroupQuery":
+      case "InsertQuery":
+      case "UpdateQuery":
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -656,6 +754,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         } else if (cteAlias.typeDef && !cteAlias.mutation) {
           // No explicit shape — select all columns as JSON object
           selectItems = this.compileImplicitShape(cteAlias.typeDef, tableAlias);
+        } else if (cteAlias.typeDef?.kind === "object") {
+          // A mutation's rows without a shape (`with r := (insert …) select r`,
+          // `select (insert …)`): the stored row, keyed by property names,
+          // as a bare mutation answers.
+          selectItems = this.compileImplicitShape(cteAlias.typeDef, tableAlias, true);
         } else {
           // No type info — select all columns
           selectItems = [
@@ -1712,7 +1815,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * A link's value from `query`, a select of its objects: with a shape, a
    * single link is a one-element array or null when empty, a multi link an
    * array; without (`query` selects their ids), a single link is the id or
-   * null, a multi link the ids (null when empty), as compileLinkReference
+   * null, a multi link the ids (`[]` when empty), as compileLinkReference
    * answers.
    */
   private compileLinkRows(link: Context.LinkDef, query: EdgeQLAST.SelectQuery, shaped: boolean): SQL.SQLExpression {
@@ -1723,16 +1826,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * The rows of a select of objects (`rows`: with a shape, or `{ id }`) read
    * as a link is: with a shape, one object is a one-element array or null
    * when empty, several an array; without, one is the id or null, several
-   * the ids (null when empty), as compileLinkReference answers.
+   * the ids — `[]` when empty either way, as Gel answers an empty set and as
+   * compileLinkReference answers.
    */
   private compileObjectsAsLink(rows: SQL.SQLStatement, multi: boolean, shaped: boolean): SQL.SQLExpression {
     const row = SQL.createColumnReference("v", "__agg");
     let value: SQL.SQLExpression = SQL.createFunctionCall("jsonb_agg", [
       shaped ? row : SQL.createBinaryExpression("->", row, SQL.createLiteral("string", "id"))
     ]);
-    if (shaped && multi) {
-      value = SQL.createFunctionCall("COALESCE", [value, { kind: "RawSQLExpression", sql: "'[]'::jsonb" }]);
-    } else if (!shaped && !multi) {
+    if (multi) {
+      value = emptyArrayWhenNone(value);
+    } else if (!shaped) {
       value = SQL.createBinaryExpression("->", value, SQL.createLiteral("number", 0));
     }
     return SQL.createSubqueryExpression(SQL.createSelectStatement({
@@ -1929,7 +2033,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   private compileImplicitShape(
     typeDef: Context.TypeDef,
-    tableAlias: string
+    tableAlias: string,
+    /** Also each single link, as its target's id (a mutation's stored row). */
+    singleLinks = false
   ): SQL.SelectItem[] {
     const fields: SQL.JsonField[] = [];
 
@@ -1943,6 +2049,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       }
       const value = this.compilePropertyReference(property, tableAlias, typeDef.name);
       fields.push(SQL.createJsonField(name, value));
+    }
+    if (singleLinks) {
+      for (const [name, link] of typeDef.links) {
+        if (link.columnName && !Context.isExpressionLink(link)) {
+          fields.push(SQL.createJsonField(name, SQL.createColumnReference(link.columnName, tableAlias)));
+        }
+      }
     }
 
     const jsonObject = SQL.createJsonBuildObject(fields);
@@ -1976,11 +2089,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([
-          SQL.createSelectItem(
-            SQL.createFunctionCall("jsonb_agg", [
-              SQL.createColumnReference(tgtCol, jt)
-            ])
-          )
+          SQL.createSelectItem(emptyArrayWhenNone(SQL.createFunctionCall("jsonb_agg", [SQL.createColumnReference(tgtCol, jt)])))
         ]),
         from: SQL.createFromClause([SQL.createTableReference(jt)]),
         where: SQL.createWhereClause(readable ? SQL.createBinaryExpression("AND", correlation, readable) : correlation)
@@ -2003,11 +2112,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([
-          SQL.createSelectItem(
-            SQL.createFunctionCall("jsonb_agg", [
-              SQL.createColumnReference("id", targetAlias)
-            ])
-          )
+          SQL.createSelectItem(emptyArrayWhenNone(SQL.createFunctionCall("jsonb_agg", [SQL.createColumnReference("id", targetAlias)])))
         ]),
         from: SQL.createFromClause([
           SQL.createTableReference(targetTypeDef.tableName, targetAlias)

@@ -1543,25 +1543,34 @@ function encodeRowAsObject(
 function encodeRowsAsObjects(
   rows: Record<string, unknown>[],
   shape: OutputShape,
-  outputFormat: number
+  outputFormat: number,
+  values = false
 ): Uint8Array[] {
   if (outputFormat === OutputFormat.NONE) {
     return [];
   }
+
+  // In JSON, a select of values is its values (`["ann"]`), as in Gel.
+  const elements: unknown[] = values ?
+    rows.map(row => {
+      const columns = Object.values(row);
+      return columns.length === 1 ? columns[0] : row;
+    }) :
+    rows;
 
   if (outputFormat === OutputFormat.JSON) {
     // JSON format: the whole result set is one JSON-encoded element.
     // Empty rows still emit `[]` so downstream JSON-parser callers see
     // a uniform shape — that's what the Phase 4.3 test asserts.
     return [
-      new TextEncoder().encode(JSON.stringify(rows))
+      new TextEncoder().encode(JSON.stringify(elements))
     ];
   }
 
   if (outputFormat === OutputFormat.JSON_ELEMENTS) {
     // One JSON-encoded element per row.
     const enc = new TextEncoder();
-    return rows.map(row => enc.encode(JSON.stringify(row)));
+    return elements.map(element => enc.encode(JSON.stringify(element)));
   }
 
   if (shape.fields.length === 0) {
@@ -1818,6 +1827,8 @@ interface CachedStatement {
 export interface BinaryExecutionResult {
   rows: Record<string, unknown>[];
   status: string;
+  /** The query selects values (`select User.name`): each row's one column holds the value. */
+  values?: boolean;
 }
 
 /**
@@ -2526,9 +2537,11 @@ export class BinaryConnection {
       const args = decodeArgs(msg.arguments, params);
 
       let rows: Record<string, unknown>[] = [];
+      let values = false;
       if (this.executor) {
         const result = await this.executor(msg.commandText, args, { admin: this.passwordAuthenticated });
         rows = result.rows;
+        values = result.values === true;
         // Prefer the executor's status (it knows whether INSERT had a
         // RETURNING clause, etc.) over the heuristic prefix detection.
         if (result.status) {
@@ -2545,7 +2558,8 @@ export class BinaryConnection {
       const dataElements = encodeRowsAsObjects(
         rows,
         outputShape,
-        msg.outputFormat
+        msg.outputFormat,
+        values
       );
 
       // Send one Data message per row — the upstream Gel Python client's
