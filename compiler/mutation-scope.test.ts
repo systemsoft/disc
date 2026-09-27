@@ -19,6 +19,7 @@ import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";
+import { withoutWriteChecks } from "./test-helpers.ts";
 
 const SDL = `
 module default {
@@ -125,8 +126,9 @@ async function sqlOf(edgeql: string, context?: AccessContext): Promise<string> {
   return compiled.sql!;
 }
 
+/*** Occurrences of `needle` outside the checks on written rows, which repeat the policy's condition. ***/
 function countOf(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
+  return withoutWriteChecks(haystack).split(needle).length - 1;
 }
 
 /*** A direct mutation: no CTE, no id-materializing subselect, no join. ***/
@@ -257,7 +259,8 @@ Deno.test("mutation scope + policy - update carries the owner predicate next to 
   assertStringIncludes(sql, `WHERE ((${OWNER_PREDICATE})) AND (`);
   assertStringIncludes(sql, `"doc"."program_id" = CAST($`);
   assertStringIncludes(sql, "doc.title = CAST($");
-  assertDirect(sql);
+  // Its one subselect is the check on each updated object (update write).
+  assertDirect(withoutWriteChecks(sql));
 });
 
 Deno.test("mutation scope + policy - delete carries the owner predicate next to the qualified filter", async () => {

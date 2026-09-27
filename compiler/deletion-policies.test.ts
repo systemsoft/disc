@@ -366,7 +366,7 @@ Deno.test("DDL: source delete trigger generated for delete target", () => {
 
   // Should have a trigger function that deletes from child table
   assertStringIncludes(allDdl, "disc_source_delete_parent_child");
-  assertStringIncludes(allDdl, "BEFORE DELETE ON");
+  assertStringIncludes(allDdl, "AFTER DELETE ON");
   assertStringIncludes(allDdl, "DELETE FROM");
   assertStringIncludes(allDdl, "LANGUAGE plpgsql");
 });

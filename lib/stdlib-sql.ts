@@ -61,6 +61,19 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql VOLATILE;`,
 
+  // disc_access_check(passes, violation) — the access policy check on each
+  // object an insert or update writes (compiler/compiler.ts `writeCheck`):
+  // TRUE when it passes, else Gel's access policy violation, raised as
+  // SQLSTATE 42501 (insufficient_privilege), which aborts the statement.
+  `CREATE OR REPLACE FUNCTION disc_access_check(passes boolean, violation text) RETURNS boolean AS $$
+     BEGIN
+       IF passes IS NOT TRUE THEN
+         RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = violation;
+       END IF;
+       RETURN TRUE;
+     END;
+   $$ LANGUAGE plpgsql VOLATILE;`,
+
   // Per-element checks for `multi` str properties, stored as `text[]`
   // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
   // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty

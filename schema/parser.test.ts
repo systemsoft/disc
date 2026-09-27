@@ -473,6 +473,29 @@ Deno.test("SDL Parser - Access Policy with errmessage (Gel #4095)", () => {
   }
 });
 
+Deno.test("SDL Parser - Access Policy with update read and update write", () => {
+  const source = `
+    type Document {
+      required title: str;
+      access policy split {
+        allow select, update read;
+        deny update write, delete;
+        allow update;
+      };
+    }
+  `;
+
+  const typeDecl = new SDLParser(source).parse().declarations[0];
+  assertEquals(typeDecl.kind, "TypeDeclaration");
+  if (typeDecl.kind === "TypeDeclaration") {
+    const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+    assertEquals(policy?.kind, "AccessPolicy");
+    if (policy?.kind === "AccessPolicy") {
+      assertEquals(policy.actions.map(action => action.operations), [["select", "update read"], ["update write", "delete"], ["update"]]);
+    }
+  }
+});
+
 Deno.test("SDL Parser - Access Policy without errmessage leaves it undefined", () => {
   const source = `
     type Document {

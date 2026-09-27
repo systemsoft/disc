@@ -1593,8 +1593,10 @@ export class MigrationEngine {
         WHERE c.contype = 'f' AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
       [tableNames]
     );
+    /*** `tgtype` bit 1 marks a BEFORE trigger, bit 6 an INSTEAD OF one (PostgreSQL's TRIGGER_TYPE_BEFORE / TRIGGER_TYPE_INSTEAD). ***/
     const triggers = await this.pool!.query(
-      `SELECT t.relname AS table_name, g.tgname AS trigger_name
+      `SELECT t.relname AS table_name, g.tgname AS trigger_name,
+              CASE WHEN g.tgtype & 2 <> 0 THEN 'BEFORE' WHEN g.tgtype & 64 <> 0 THEN 'INSTEAD OF' ELSE 'AFTER' END AS timing
          FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid
         WHERE NOT g.tgisinternal AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
       [tableNames]
@@ -1606,9 +1608,9 @@ export class MigrationEngine {
         return [`${r.table_name}.${r.constraint_name}`, onDeleteActions[r.on_delete] ?? r.on_delete];
       })),
       tables: new Set(tables.rows.map(row => (row as { tablename: string; }).tablename)),
-      triggers: new Set(triggers.rows.map(row => {
-        const r = row as { table_name: string; trigger_name: string; };
-        return `${r.table_name}.${r.trigger_name}`;
+      triggers: new Map(triggers.rows.map(row => {
+        const r = row as { table_name: string; timing: string; trigger_name: string; };
+        return [`${r.table_name}.${r.trigger_name}`, r.timing];
       }))
     };
   }

@@ -116,6 +116,8 @@ export interface InsertStatement extends SQLNode {
   insertSelect?: SelectStatement;
   returning?: SelectItem[];
   onConflict?: OnConflictClause;
+  /** The check each written row passes before it is returned (see `checkedRow`). */
+  writeCheck?: SQLExpression;
 }
 
 export interface OnConflictClause extends SQLNode {
@@ -145,6 +147,8 @@ export interface UpdateStatement extends SQLNode {
   from?: TableReference[];
   where?: WhereClause;
   returning?: SelectItem[];
+  /** The check each written row passes before it is returned (see `checkedRow`). */
+  writeCheck?: SQLExpression;
 }
 
 export interface DeleteStatement extends SQLNode {
@@ -445,6 +449,18 @@ export interface CTEStatement extends SQLNode {
   kind: "CTEStatement";
   ctes: CTE[];
   query: SQLStatement;
+}
+
+/**
+ * `(CASE WHEN <check> THEN <table> END)`: the row of `table` that an INSERT
+ * or UPDATE wrote (or a SELECT reads), once `check` passes. The check raises
+ * for a row that fails, so the value is the row itself: `(…).*` returns its
+ * columns as `*` would, and `(…).<column>` one of them. As PostgreSQL computes
+ * RETURNING for every written row, even for a data-modifying CTE no one reads,
+ * a failing row aborts the statement.
+ */
+export function checkedRow(table: string, check: string): string {
+  return `(CASE WHEN ${check} THEN ${table} END)`;
 }
 
 export function withCTEs(ctes: CTE[], query: SQLStatement): CTEStatement {

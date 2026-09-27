@@ -151,7 +151,7 @@ Deno.test({
       assertEquals(await migrate(pool, sdl), 1);
       assertEquals(await hasTrigger(pool, "trg_source_delete_bug_programs"), true);
 
-      await pool.query(`DROP TRIGGER trg_source_delete_bug_programs ON bug`);
+      await pool.query(`DROP TRIGGER trg_source_delete_bug_programs ON bug_programs`);
       await pool.query(`DROP FUNCTION disc_source_delete_bug_programs()`);
 
       assertStringIncludes(await preview(pool, sdl), "CREATE TRIGGER trg_source_delete_bug_programs");
@@ -166,6 +166,77 @@ Deno.test({
       assertEquals(await count(pool, "program"), 0);
 
       assertEquals(await migrate(pool, sdl), 0);
+    })
+});
+
+/*** Timing and table of each trigger with the given name (`BEFORE bug`, `AFTER bug_programs`). ***/
+async function triggerTimings(pool: ConnectionPool, trigger: string): Promise<string[]> {
+  const result = await pool.query(
+    `SELECT CASE WHEN g.tgtype & 2 <> 0 THEN 'BEFORE' ELSE 'AFTER' END || ' ' || t.relname AS timing
+       FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid WHERE g.tgname = $1 ORDER BY 1`,
+    [trigger]
+  );
+  return result.rows.map(row => row.timing as string);
+}
+
+Deno.test({
+  name: "PG delete-rule drift: a single link's BEFORE delete-target trigger is replaced by an AFTER one, once",
+  ignore: !canRunPgTests(),
+  fn: () =>
+    run(async pool => {
+      const sdl = schema("link program: Program { on source delete delete target; };");
+      assertEquals(await migrate(pool, sdl), 1);
+
+      /*** What `on source delete delete target` created before: a BEFORE trigger the RESTRICT FK blocks. ***/
+      await pool.query(`DROP TRIGGER trg_source_delete_bug_program ON bug`);
+      await pool.query(
+        `CREATE OR REPLACE FUNCTION disc_source_delete_bug_program() RETURNS TRIGGER AS $$ BEGIN DELETE FROM program WHERE id = OLD.program_id; RETURN OLD; END; $$ LANGUAGE plpgsql`
+      );
+      await pool.query(`CREATE TRIGGER trg_source_delete_bug_program BEFORE DELETE ON bug FOR EACH ROW EXECUTE FUNCTION disc_source_delete_bug_program()`);
+
+      const program = (await pool.query(`INSERT INTO program (name) VALUES ('disc') RETURNING id`)).rows[0].id as string;
+      await pool.query(`INSERT INTO bug (title, program_id) VALUES ('crash', $1)`, [program]);
+      await assertRejects(() => pool.query(`DELETE FROM bug`));
+
+      assertStringIncludes(await preview(pool, sdl), "CREATE TRIGGER trg_source_delete_bug_program AFTER DELETE ON bug");
+
+      assertEquals(await migrate(pool, sdl), 1);
+      assertEquals(await triggerTimings(pool, "trg_source_delete_bug_program"), ["AFTER bug"]);
+
+      await pool.query(`DELETE FROM bug`);
+      assertEquals(await count(pool, "program"), 0);
+
+      assertEquals(await migrate(pool, sdl), 0, "once repaired, the next migrate is a no-op");
+    })
+});
+
+Deno.test({
+  name: "PG delete-rule drift: a multi link's delete-target trigger on the source table moves to the junction, once",
+  ignore: !canRunPgTests(),
+  fn: () =>
+    run(async pool => {
+      const sdl = schema("multi link programs: Program { on target delete restrict; on source delete delete target; };");
+      assertEquals(await migrate(pool, sdl), 1);
+
+      /*** What `on source delete delete target` created before: a BEFORE trigger on the source table. ***/
+      await pool.query(`DROP TRIGGER trg_source_delete_bug_programs ON bug_programs`);
+      await pool.query(
+        `CREATE OR REPLACE FUNCTION disc_source_delete_bug_programs() RETURNS TRIGGER AS $$ BEGIN DELETE FROM program WHERE id IN (SELECT target_id FROM bug_programs WHERE source_id = OLD.id); RETURN OLD; END; $$ LANGUAGE plpgsql`
+      );
+      await pool.query(`CREATE TRIGGER trg_source_delete_bug_programs BEFORE DELETE ON bug FOR EACH ROW EXECUTE FUNCTION disc_source_delete_bug_programs()`);
+
+      const program = (await pool.query(`INSERT INTO program (name) VALUES ('disc') RETURNING id`)).rows[0].id as string;
+      const bug = (await pool.query(`INSERT INTO bug (title) VALUES ('crash') RETURNING id`)).rows[0].id as string;
+      await pool.query(`INSERT INTO bug_programs (source_id, target_id) VALUES ($1, $2)`, [bug, program]);
+      await assertRejects(() => pool.query(`DELETE FROM bug`));
+
+      assertEquals(await migrate(pool, sdl), 1);
+      assertEquals(await triggerTimings(pool, "trg_source_delete_bug_programs"), ["AFTER bug_programs"]);
+
+      await pool.query(`DELETE FROM bug`);
+      assertEquals(await count(pool, "program"), 0);
+
+      assertEquals(await migrate(pool, sdl), 0, "once repaired, the next migrate is a no-op");
     })
 });
 

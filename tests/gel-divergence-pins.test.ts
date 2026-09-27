@@ -604,8 +604,13 @@ Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injec
  * `clock_timestamp()` and `gen_random_bytes()`. Marking it IMMUTABLE would let
  * PostgreSQL fold it to a single value per statement, so a multi-row INSERT
  * would hand every row the same primary key.
+ *
+ * `disc_access_check` raises an access policy violation for a written row
+ * that fails its check. IMMUTABLE, a check that fails whatever the row (no
+ * allowing policy) would be folded, and raise, at plan time — even for a
+ * statement that writes no rows.
  */
-const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_uuidv7"]);
+const STDLIB_VOLATILE_ALLOWLIST = new Set(["disc_access_check", "disc_uuidv7"]);
 
 Deno.test("Gel #8811: stdlib SQL declares no table reads", async () => {
   const src = await Deno.readTextFile(

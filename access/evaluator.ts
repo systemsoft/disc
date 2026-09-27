@@ -34,6 +34,16 @@ import {
 /*** EXPORT ------------------------------------------- ***/
 
 /**
+ * One policy's condition on the objects an insert or update writes (see
+ * `AccessEvaluator.writePolicies`): SQL over the written object's columns,
+ * unqualified.
+ */
+export interface WritePolicy {
+  condition: string;
+  errmessage?: string;
+}
+
+/**
  * The globals a policy reads from the request's access context (the caller's
  * identity), decided at compile time. Every other global is a custom global:
  * session state `set global` stores in PostgreSQL, read by the policy's SQL.
@@ -62,24 +72,8 @@ export class AccessEvaluator {
    */
   evaluate(objectType: string, operation: AccessOperation, context: AccessContext): AccessDecision {
     const appliedPolicies: string[] = [];
-    const globalPolicies = this.policies.get("__global__") || [];
     const sqlConditions: string[] = [];
-    const typePolicies = this.policies.get(objectType) || [];
-    let allPolicies = [...globalPolicies, ...typePolicies];
-
-    /*** Per-policy disable (gh/geldata#6432 slice 3). Filter out any policy whose fully-qualified
-         name appears in `context.disabledPolicies`. Done before the no-policies-defined check
-         below so disabling every policy on a type falls back to `defaultAllow` semantics — same
-         shape as a type with no policies declared, which is the expected mental model
-         for testing. ***/
-    const disabled = context.disabledPolicies;
-
-    if (disabled && disabled.size > 0) {
-      allPolicies = allPolicies.filter(p => {
-        const qualifiedName = `${p.objectType ?? "__global__"}.${p.name}`;
-        return !disabled.has(qualifiedName);
-      });
-    }
+    const allPolicies = this.policiesFor(objectType, context);
 
     if (allPolicies.length === 0) {
       return {
@@ -156,6 +150,48 @@ export class AccessEvaluator {
       reason,
       sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined
     };
+  }
+
+  /**
+   * The policies that check each object an `operation` writes, as Gel's
+   * insert and update write policies are "post-insert" and "post-update"
+   * checks: an object passes when an allowing policy's condition holds for it
+   * and no denying one's does. A policy's condition is its `using` (TRUE when
+   * it has none), AND its `with check` when it has one. Undefined when nothing
+   * is checked: the type has no policies (the default allow or deny decides),
+   * or row-level security is off.
+   */
+  writePolicies(
+    objectType: string,
+    operation: "insert" | "update write",
+    context: AccessContext
+  ): { allow: WritePolicy[]; deny: WritePolicy[]; } | undefined {
+    const policies = this.policiesFor(objectType, context);
+
+    if (policies.length === 0 || !this.config.enableRLS)
+      return undefined;
+
+    const allow: WritePolicy[] = [];
+    const deny: WritePolicy[] = [];
+
+    for (const policy of policies) {
+      const conditions = [policy.using, policy.withCheck]
+        .filter((expr): expr is AccessExpressionNode => expr !== undefined)
+        .map(expr => `(${this.expressionToSQL(expr, context, policy.objectType)})`);
+      const writePolicy: WritePolicy = {
+        condition: conditions.length > 0 ? conditions.join(" AND ") : "TRUE",
+        errmessage: policy.errmessage
+      };
+
+      for (const action of policy.actions) {
+        if (this.operationMatches(operation, action.operations)) {
+          (action.allow ? allow : deny).push(writePolicy);
+          break;
+        }
+      }
+    }
+
+    return { allow, deny };
   }
 
   /**
@@ -519,6 +555,13 @@ export class AccessEvaluator {
         // Generate SQL condition for row-level security
         if (policy.using && this.config.enableRLS)
           sqlCondition = this.expressionToSQL(policy.using, context, policy.objectType);
+      } else if (
+        (operation === "insert" || operation === "update write") && this.config.enableRLS && policy.using &&
+        containsColumnReference(policy.using)
+      ) {
+        /*** A deny over the object's values denies the objects it matches, which the write
+             check decides for each object written (see `writePolicies`). ***/
+        continue;
       } else {
         denied = true;
       }
@@ -528,10 +571,29 @@ export class AccessEvaluator {
   }
 
   /**
-   * Check if an operation matches any of the specified operations
+   * Check if an operation matches any of the specified operations. `update`
+   * is both `update read` and `update write`.
    */
   private operationMatches(operation: AccessOperation, operations: AccessOperation[]): boolean {
-    return operations.includes(operation) || operations.includes("all");
+    return operations.includes(operation) || operations.includes("all") ||
+      ((operation === "update read" || operation === "update write") && operations.includes("update"));
+  }
+
+  /**
+   * The policies that apply to `objectType`: global ones and the type's own
+   * (inherited ones included), less those `context.disabledPolicies` names
+   * (gh/geldata#6432 slice 3). Disabling every policy on a type leaves it
+   * with none, so `defaultAllow` decides — same shape as a type with no
+   * policies declared, which is the expected mental model for testing.
+   */
+  private policiesFor(objectType: string, context: AccessContext): AccessPolicy[] {
+    const policies = [...this.policies.get("__global__") || [], ...this.policies.get(objectType) || []];
+    const disabled = context.disabledPolicies;
+
+    if (!disabled || disabled.size === 0)
+      return policies;
+
+    return policies.filter(p => !disabled.has(`${p.objectType ?? "__global__"}.${p.name}`));
   }
 
   /**
@@ -548,6 +610,39 @@ export class AccessEvaluator {
     }
 
     return current;
+  }
+}
+
+/**
+ * Returns true if the expression tree contains any AccessPath nodes
+ * (column references that can only be resolved against database rows).
+ */
+export function containsColumnReference(expr: AccessExpressionNode): boolean {
+  switch (expr.kind) {
+    case "AccessPath": {
+      return true;
+    }
+
+    case "AccessLiteral":
+    case "AccessGlobal": {
+      return false;
+    }
+
+    case "AccessComparison": {
+      return containsColumnReference(expr.left) || containsColumnReference(expr.right);
+    }
+
+    case "AccessLogical": {
+      return expr.operands.some(containsColumnReference);
+    }
+
+    case "AccessFunction": {
+      return expr.args.some(containsColumnReference);
+    }
+
+    default: {
+      return false;
+    }
   }
 }
 

@@ -1315,7 +1315,12 @@ export class SDLParser {
       } else if (this.match(TokenType.INSERT)) {
         operations.push("insert");
       } else if (this.match(TokenType.UPDATE)) {
-        operations.push("update");
+        // `update read` / `update write` name one half of `update` (Gel).
+        if (this.check(TokenType.IDENT) && (this.peek().value === "read" || this.peek().value === "write")) {
+          operations.push(this.advance().value === "read" ? "update read" : "update write");
+        } else {
+          operations.push("update");
+        }
       } else if (this.match(TokenType.DELETE)) {
         operations.push("delete");
       } else if (this.check(TokenType.IDENT) && this.peek().value === "all") {

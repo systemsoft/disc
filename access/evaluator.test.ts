@@ -12,6 +12,7 @@ import { assertEquals } from "@std/assert";
 /*** UTILITY ------------------------------------------ ***/
 
 import { AccessEvaluator } from "./evaluator.ts";
+import type { AccessExpressionNode } from "./ast.ts";
 import { type AccessConfig, type AccessContext, type AccessPolicy } from "./types.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -594,6 +595,47 @@ Deno.test("AccessEvaluator - disabledPolicies on a different type is a no-op (Bu
 
   assertEquals(decision.allowed, true);
   assertEquals(decision.appliedPolicies, ["owner_select"]);
+});
+
+Deno.test("AccessEvaluator - update is update read and update write", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["update"] }], name: "edit", objectType: "Doc" });
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["update read"] }], name: "reach", objectType: "Note" });
+
+  assertEquals(evaluator.evaluate("Doc", "update read", { userId: "u1" }).allowed, true);
+  assertEquals(evaluator.evaluate("Doc", "update write", { userId: "u1" }).allowed, true);
+  assertEquals(evaluator.evaluate("Note", "update read", { userId: "u1" }).allowed, true);
+  assertEquals(evaluator.evaluate("Note", "update write", { userId: "u1" }).allowed, false);
+});
+
+Deno.test("AccessEvaluator - writePolicies gives each policy's condition on written objects", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const owner: AccessExpressionNode = {
+    kind: "AccessComparison",
+    left: { kind: "AccessPath", path: ["owner"] },
+    operator: "=",
+    right: { kind: "AccessGlobal", name: "current_user" }
+  };
+
+  evaluator.registerPolicy({ actions: [{ allow: true, operations: ["all"] }], errmessage: "yours only", name: "own", objectType: "Doc", using: owner });
+  evaluator.registerPolicy({
+    actions: [{ allow: false, operations: ["insert"] }],
+    name: "no_draft",
+    objectType: "Doc",
+    using: { kind: "AccessPath", path: ["draft"] },
+    withCheck: { kind: "AccessLiteral", type: "boolean", value: true }
+  });
+
+  assertEquals(evaluator.writePolicies("Doc", "insert", { userId: "u1" }), {
+    allow: [{ condition: "((owner = E'u1'))", errmessage: "yours only" }],
+    deny: [{ condition: "(draft) AND (true)", errmessage: undefined }]
+  });
+  assertEquals(evaluator.writePolicies("Doc", "update write", { userId: "u1" })?.deny, []);
+  assertEquals(evaluator.writePolicies("Other", "insert", { userId: "u1" }), undefined);
+  // A deny over the object's values is left to the write check: the insert itself is allowed.
+  assertEquals(evaluator.evaluate("Doc", "insert", { userId: "u1" }).allowed, true);
+  assertEquals(evaluator.evaluate("Doc", "delete", { userId: "u1" }).allowed, true);
 });
 
 /*** HELPER ------------------------------------------- ***/

@@ -62,7 +62,7 @@ export class AccessSQLInjector {
               operations.push("SELECT");
             } else if (op === "insert") {
               operations.push("INSERT");
-            } else if (op === "update") {
+            } else if (op === "update" || op === "update read" || op === "update write") {
               operations.push("UPDATE");
             } else if (op === "delete") {
               operations.push("DELETE");

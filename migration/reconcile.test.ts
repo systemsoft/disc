@@ -80,7 +80,7 @@ function restrictingDatabase(asked: string[][]): (tableNames: string[]) => Promi
     return Promise.resolve({
       foreignKeys: new Map([["bug.fk_bug_program_id", "RESTRICT"]]),
       tables: new Set(["bug"]),
-      triggers: new Set<string>()
+      triggers: new Map<string, string>()
     });
   };
 }
@@ -113,7 +113,7 @@ Deno.test("reconcileLinkDeleteRules reports a foreign key that doesn't exist ins
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set(["bug"]), triggers: new Set<string>() })
+    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set(["bug"]), triggers: new Map<string, string>() })
   );
 
   assertEquals(result.operations, []);
@@ -125,7 +125,7 @@ Deno.test("reconcileLinkDeleteRules skips a table that doesn't exist yet", async
     [DELETE_SOURCE],
     [],
     new DDLGenerator(),
-    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set<string>(), triggers: new Set<string>() })
+    () => Promise.resolve({ foreignKeys: new Map(), tables: new Set<string>(), triggers: new Map<string, string>() })
   );
 
   assertEquals(result, { missingForeignKeys: [], operations: [] });

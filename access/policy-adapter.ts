@@ -10,7 +10,7 @@
 
 /*** UTILITY ------------------------------------------ ***/
 
-import { BUILTIN_ACCESS_GLOBALS } from "./evaluator.ts";
+import { BUILTIN_ACCESS_GLOBALS, containsColumnReference } from "./evaluator.ts";
 import { convertExpression } from "./expression-converter.ts";
 
 import type { AccessExpressionNode } from "./ast.ts";
@@ -19,38 +19,7 @@ import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccess
 
 /*** EXPORT ------------------------------------------- ***/
 
-/**
- * Returns true if the expression tree contains any AccessPath nodes
- * (column references that can only be resolved against database rows).
- */
-export function containsColumnReference(expr: AccessExpressionNode): boolean {
-  switch (expr.kind) {
-    case "AccessPath": {
-      return true;
-    }
-
-    case "AccessLiteral":
-    case "AccessGlobal": {
-      return false;
-    }
-
-    case "AccessComparison": {
-      return containsColumnReference(expr.left) || containsColumnReference(expr.right);
-    }
-
-    case "AccessLogical": {
-      return expr.operands.some(containsColumnReference);
-    }
-
-    case "AccessFunction": {
-      return expr.args.some(containsColumnReference);
-    }
-
-    default: {
-      return false;
-    }
-  }
-}
+export { containsColumnReference };
 
 /**
  * Extracts a minimal condition guard from an expression by collecting the
@@ -132,8 +101,8 @@ function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[])
  *
  * Note on withCheck (P1-37): the SDL parser surfaces `with check (...)` as
  * `sdl.withCheck`; this adapter forwards the converted expression to
- * `runtime.withCheck`, which the SQL injector emits as a row-level CHECK
- * constraint on INSERT/UPDATE.
+ * `runtime.withCheck`, which the compiler checks, with `using`, on every
+ * object an insert or update writes (see `AccessEvaluator.writePolicies`).
  *
  * Note on deny policies (P1-38): deny policies currently compile to a
  * coarse gate (if the policy matches and the action is denied, reject the

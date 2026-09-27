@@ -18,6 +18,7 @@ import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";
+import { withoutWriteChecks } from "./test-helpers.ts";
 
 const SDL = `
 module default {
@@ -112,8 +113,9 @@ function asBypass(edgeql: string): Promise<Compiled> {
   return compileAs({ bypass: true, userId: USER_ID }, edgeql);
 }
 
+/*** Occurrences of `needle` outside the checks on written rows, which repeat the policy's condition. ***/
 function countOf(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
+  return withoutWriteChecks(haystack).split(needle).length - 1;
 }
 
 /*** Asserts the owner predicate sits inside the mutation itself, exactly once. ***/
@@ -124,6 +126,10 @@ function assertOwnerScoped(compiled: Compiled, mutationPrefix: string): void {
   const upToReturning = mutation.slice(0, mutation.indexOf("RETURNING"));
   assertStringIncludes(upToReturning, OWNER_PREDICATE, `policy predicate missing from the mutation: ${compiled.sql}`);
   assertEquals(countOf(compiled.sql, OWNER_PREDICATE), 1, `policy applied more than once: ${compiled.sql}`);
+  // An update also checks each object it wrote against the policy (update write).
+  if (mutationPrefix.startsWith("UPDATE")) {
+    assertStringIncludes(mutation, `disc_access_check(COALESCE(((${OWNER_PREDICATE})), FALSE)`);
+  }
 }
 
 function assertDenied(compiled: Compiled, operation: string): void {

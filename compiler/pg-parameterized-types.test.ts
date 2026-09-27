@@ -10,7 +10,7 @@
  *   - Array column DDL + data round-trip
  *   - Tuple-as-JSONB column DDL + data round-trip
  *   - on target delete set empty (SET NULL FK)
- *   - on source delete delete target (BEFORE DELETE trigger)
+ *   - on source delete delete target (AFTER DELETE trigger)
  *   - Link inheritance constraints (schema-level)
  *   - Polymorphic function resolution (compile-time)
  *   - Array + tuple combined schema
@@ -313,7 +313,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name: "PG Stage 35: AFTER DELETE trigger deletes target when source is deleted",
+  name: "PG Stage 35: on source delete delete target deletes a RESTRICT-linked target when the source is deleted",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -324,47 +324,27 @@ Deno.test({
     const targetTable = "owned_entity";
 
     try {
-      // Create target table first (no FK dependency)
-      await execSQL(
-        dsn,
-        `CREATE TABLE ${targetTable} (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name TEXT NOT NULL
-        )`
-      );
+      // The link keeps the default `on target delete restrict`: the trigger
+      // Disc generates deletes the target once the source row is gone.
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
 
-      // Create source table with a reference to target
-      await execSQL(
-        dsn,
-        `CREATE TABLE ${sourceTable} (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name TEXT NOT NULL,
-          owned_id UUID REFERENCES ${targetTable}(id)
-        )`
-      );
-
-      // Create an AFTER DELETE trigger function. AFTER fires once the
-      // source row is already gone, so deleting the referenced target
-      // doesn't trip the source's FK constraint. (BEFORE DELETE on this
-      // shape would require a DEFERRABLE FK or `RETURN NULL`.)
-      await execSQL(
-        dsn,
-        `CREATE OR REPLACE FUNCTION delete_owned_on_source_delete()
-         RETURNS TRIGGER AS $$
-         BEGIN
-           DELETE FROM ${targetTable} WHERE id = OLD.owned_id;
-           RETURN OLD;
-         END;
-         $$ LANGUAGE plpgsql`
-      );
-
-      // Create the trigger
-      await execSQL(
-        dsn,
-        `CREATE TRIGGER trg_delete_owned
-         AFTER DELETE ON ${sourceTable}
-         FOR EACH ROW
-         EXECUTE FUNCTION delete_owned_on_source_delete()`
+      const result = await manager.applySchema(`
+        type OwnedEntity {
+          required name: str;
+        }
+        type OwnerEntity {
+          required name: str;
+          link owned -> OwnedEntity {
+            on source delete delete target;
+          };
+        }
+      `);
+      await manager.close();
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Insert target and source rows
@@ -408,10 +388,16 @@ Deno.test({
       );
     } finally {
       // Drop trigger function after tables
-      await dropTables(dsn, sourceTable, targetTable);
+      await dropTables(
+        dsn,
+        sourceTable,
+        targetTable,
+        "disc_migrations",
+        "disc_migration_checkpoints"
+      );
       await execSQL(
         dsn,
-        "DROP FUNCTION IF EXISTS delete_owned_on_source_delete() CASCADE"
+        "DROP FUNCTION IF EXISTS disc_source_delete_owner_entity_owned() CASCADE"
       )
         .catch(() => {
           // best-effort cleanup

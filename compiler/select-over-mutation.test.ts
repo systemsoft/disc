@@ -23,6 +23,7 @@ import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { describeResult, EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";
+import { withoutWriteChecks } from "./test-helpers.ts";
 
 const FIXTURE_URL = new URL("../tests/fixtures/git-forge.disc", import.meta.url);
 const USER_ID = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -86,8 +87,9 @@ async function sqlOf(edgeql: string, context?: AccessContext): Promise<string> {
   return compiled.sql!;
 }
 
+/*** Occurrences of `needle` outside the checks on written rows, which repeat the policy's condition. ***/
 function countOf(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
+  return withoutWriteChecks(haystack).split(needle).length - 1;
 }
 
 interface CteParts {
@@ -98,9 +100,9 @@ interface CteParts {
   outer: string;
 }
 
-/*** Splits `WITH <name> AS ( <inner> ) <outer>`; the inner statement ends at its `RETURNING *`. ***/
+/*** Splits `WITH <name> AS ( <inner> ) <outer>`; the inner statement ends at its `RETURNING *` (read from the checked row under a write policy). ***/
 function cteParts(sql: string): CteParts {
-  const match = /^WITH (\w+) AS \( (.*? RETURNING \*) \) (SELECT .*)$/.exec(sql);
+  const match = /^WITH (\w+) AS \( (.*? RETURNING (?:\*|\(CASE WHEN <write check> THEN doc END\)\.\*)) \) (SELECT .*)$/.exec(withoutWriteChecks(sql));
   assert(match, `expected one data-modifying CTE followed by a select, got: ${sql}`);
   return { inner: match[2], name: match[1], outer: match[3] };
 }

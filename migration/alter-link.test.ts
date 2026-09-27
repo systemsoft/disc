@@ -114,7 +114,7 @@ Deno.test("alter link - on source delete delete target creates the trigger again
 
   assertStringIncludes(ddl, "CREATE OR REPLACE FUNCTION disc_source_delete_bug_program()");
   assertStringIncludes(ddl, "DELETE FROM program WHERE id = OLD.program_id;");
-  assertStringIncludes(ddl, "CREATE TRIGGER trg_source_delete_bug_program BEFORE DELETE ON bug");
+  assertStringIncludes(ddl, "CREATE TRIGGER trg_source_delete_bug_program AFTER DELETE ON bug");
   assert(!ddl.includes("--"), ddl);
 });
 

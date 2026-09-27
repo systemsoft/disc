@@ -40,3 +40,14 @@ export function compileEdgeQL(edgeql: string, schema: Schema): string {
   const codegen = new SQLCodeGenerator();
   return codegen.generate(result.value);
 }
+
+/**
+ * `sql` with each access policy check on written rows (the
+ * `(SELECT … disc_access_check(…) … AS "__written")` a policied insert or
+ * update carries in its RETURNING) replaced by `<write check>`, for tests that
+ * count a policy's row filter: the check repeats the policy's condition, over
+ * the written row.
+ */
+export function withoutWriteChecks(sql: string): string {
+  return sql.replace(/\(SELECT (CASE WHEN "\w+"\.xmax = 0 THEN )?disc_access_check\([\s\S]*? FROM \(SELECT "\w+"\.\*\) AS "__written"\)/g, "<write check>");
+}

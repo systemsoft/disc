@@ -223,15 +223,32 @@ export class SQLCodeGenerator {
     }
 
     if (stmt.returning) {
-      parts.push(
-        "\nRETURNING " +
-          stmt.returning.map(item => this.generateSelectItem(item)).join(
-            ", "
-          )
-      );
+      parts.push("\nRETURNING " + this.generateReturning(stmt));
     }
 
     return parts.join("");
+  }
+
+  /**
+   * A RETURNING list. With a write check, each column is read from the
+   * checked row (see `SQL.checkedRow`), so every written row is checked.
+   */
+  private generateReturning(stmt: SQL.InsertStatement | SQL.UpdateStatement): string {
+    const returning = stmt.returning ?? [];
+    if (!stmt.writeCheck) {
+      return returning.map(item => this.generateSelectItem(item)).join(", ");
+    }
+
+    const row = SQL.checkedRow(this.escapeIdentifier(stmt.table), this.generateExpression(stmt.writeCheck));
+    return returning
+      .map(item => {
+        if (item.expression.kind !== "ColumnReference") {
+          throw new Error(`A write-checked ${stmt.kind} returns only columns of its table`);
+        }
+        const column = item.expression.column === "*" ? "*" : this.escapeIdentifier(item.expression.column);
+        return `${row}.${column}` + (item.alias ? ` AS ${this.escapeIdentifier(item.alias)}` : "");
+      })
+      .join(", ");
   }
 
   private generateOnConflictClause(onConflict: SQL.OnConflictClause): string {
@@ -271,8 +288,7 @@ export class SQLCodeGenerator {
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING " +
-        stmt.returning.map(item => this.generateSelectItem(item)).join(", ");
+      sql += "\nRETURNING " + this.generateReturning(stmt);
     }
 
     return sql;

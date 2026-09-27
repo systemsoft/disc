@@ -76,6 +76,10 @@ module default {
 };
 ```
 
+### Write Checks
+
+As in Gel, `update` is `update read` (which objects an update reaches) plus `update write`, and `insert` / `update write` policies check each object a statement writes, with its new values: it must pass an allowing policy's `using` (and Disc's optional `with check`) and no denying one's, or the statement fails with `access policy violation on <insert|update> of <module::Type>` (SQLSTATE 42501, plus the policies' `errmessage`s) and writes nothing. The compiler reads the RETURNING rows of every insert and update through `disc_access_check` (`lib/stdlib-sql.ts`); see `AccessEvaluator.writePolicies`.
+
 ### Programmatic Usage
 
 ```typescript

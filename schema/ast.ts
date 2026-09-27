@@ -232,7 +232,11 @@ export interface AccessAction extends SDLNode {
   operations: AccessOperation[];
 }
 
-export type AccessOperation = "select" | "insert" | "update" | "delete" | "all";
+/**
+ * `update` is `update read` (which objects an update may reach) plus
+ * `update write` (the check on the objects it wrote), as in Gel.
+ */
+export type AccessOperation = "select" | "insert" | "update" | "update read" | "update write" | "delete" | "all";
 
 // Function parameter
 export interface FunctionParameter extends SDLNode {

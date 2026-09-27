@@ -471,8 +471,8 @@ export interface ExistingDeleteRules {
   foreignKeys: Map<string, string>;
   /** The asked-about tables that exist. */
   tables: Set<string>;
-  /** Each trigger, keyed `<table>.<trigger>`. */
-  triggers: Set<string>;
+  /** Timing (`BEFORE`, `AFTER`, `INSTEAD OF`) of each trigger, keyed `<table>.<trigger>`. */
+  triggers: Map<string, string>;
 }
 
 /**
@@ -483,7 +483,7 @@ export type ExistingDeleteRuleReader = (tableNames: string[]) => Promise<Existin
 
 /** How the DDL generator names a link's delete rules and which FK action it gives the link (see `DDLGenerator`). */
 export interface LinkDeleteRuleNaming {
-  sourceDeleteTriggerName(tableName: string, linkName: string): string;
+  sourceDeleteTrigger(tableName: string, link: LinkDefinition): { name: string; table: string; timing: string; };
   targetForeignKey(tableName: string, link: LinkDefinition): { constraint: string; onDelete: string; table: string; };
 }
 
@@ -514,10 +514,14 @@ function pgStoredName(name: string): string {
  *
  * Compares every declared link (`declared`) with the database: the ON DELETE
  * action of its target FK (`fk_<table>_<link>_id`, or `fk_<junction>_target_id`
- * on a multi link), and whether its `trg_source_delete_…` trigger exists.
+ * on a multi link), and whether its `trg_source_delete_…` trigger exists —
+ * with the timing and on the table Disc creates it with now (AFTER DELETE;
+ * a multi link's on its junction). Earlier Disc created it BEFORE DELETE on
+ * the source table, where the target's RESTRICT FK blocked deleting the
+ * source; such a trigger is replaced.
  * Returns one `AlterType` → `AlterLink` per link that differs, carrying the
  * same `ChangeOnDelete` / `ChangeOnSourceDelete` the ALTER LINK path turns
- * into DDL (drop and re-add the FK; create or drop the trigger).
+ * into DDL (drop and re-add the FK; create, replace or drop the trigger).
  *
  * Skips the FK (trigger) of links the pending migration (`planned`) creates
  * or whose `on target delete` (`on source delete`) it changes, and tables
@@ -572,7 +576,11 @@ export async function reconcileLinkDeleteRules(
   }
 
   const existing = await readExisting([
-    ...new Set(candidates.flatMap(entry => [entry.tableName, naming.targetForeignKey(entry.tableName, entry.link).table]))
+    ...new Set(candidates.flatMap(entry => [
+      entry.tableName,
+      naming.targetForeignKey(entry.tableName, entry.link).table,
+      naming.sourceDeleteTrigger(entry.tableName, entry.link).table
+    ]))
   ]);
   const missingForeignKeys: string[] = [];
   const operations: AlterTypeOperation[] = [];
@@ -594,10 +602,15 @@ export async function reconcileLinkDeleteRules(
       }
     }
 
-    if (!triggerPlanned.has(key) && existing.tables.has(entry.tableName)) {
-      const trigger = pgStoredName(naming.sourceDeleteTriggerName(entry.tableName, entry.link.name));
-      const present = existing.triggers.has(`${entry.tableName}.${trigger}`);
-      if (present !== (entry.link.onSourceDelete === "DELETE TARGET")) {
+    const trigger = naming.sourceDeleteTrigger(entry.tableName, entry.link);
+    if (!triggerPlanned.has(key) && existing.tables.has(entry.tableName) && existing.tables.has(trigger.table)) {
+      const name = pgStoredName(trigger.name);
+      const timing = existing.triggers.get(`${trigger.table}.${name}`);
+      /*** Where a multi link's trigger was before it moved to the junction: the source table. ***/
+      const misplaced = trigger.table !== entry.tableName && existing.triggers.has(`${entry.tableName}.${name}`);
+      const present = timing !== undefined || misplaced;
+      const matches = entry.link.onSourceDelete === "DELETE TARGET" ? timing === trigger.timing && !misplaced : !present;
+      if (!matches) {
         changes.push({ kind: "ChangeOnSourceDelete", newValue: entry.link.onSourceDelete, oldValue: present ? "DELETE TARGET" : undefined });
       }
     }

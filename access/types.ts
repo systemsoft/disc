@@ -13,9 +13,11 @@ import type { PermissionChecker } from "./runtime-permissions.ts";
 /*** EXPORT ------------------------------------------- ***/
 
 /**
- * Access control operations that can be restricted
+ * Access control operations that can be restricted. As in Gel, `update` is
+ * `update read` (which objects an update may reach) plus `update write` (the
+ * check on the objects it wrote), and `all` is every operation.
  */
-export type AccessOperation = "all" | "delete" | "insert" | "select" | "update";
+export type AccessOperation = "all" | "delete" | "insert" | "select" | "update" | "update read" | "update write";
 
 /**
  * Access control action: allow or deny specific operations
@@ -40,7 +42,8 @@ export interface AccessPolicy {
   name: string;
   objectType: string;
   using?: AccessExpressionNode; /*** For row-level security ***/
-  withCheck?: AccessExpressionNode; /*** For insert/update checks ***/
+  /*** Disc's extra condition on the objects an insert or update writes (see `AccessEvaluator.writeCheck`) ***/
+  withCheck?: AccessExpressionNode;
 }
 
 /**
