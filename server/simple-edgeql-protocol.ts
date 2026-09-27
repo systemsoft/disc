@@ -526,7 +526,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
         switch (resultInfo.mutation) {
           case "insert":
-            return { data: rows[0] || { success: true } };
+            return { data: rows[0] ?? [] };
           case "update":
             return { data: rows[0] || { updated: result.rowCount } };
           case "delete":

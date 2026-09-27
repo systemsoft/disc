@@ -339,7 +339,7 @@ export interface ResultInfo {
    * a select (directly, or as the body of a `with` block, including a select
    * over a mutation), a group, a describe, an explain. `"mutation"`: anything
    * else; the response keeps the bare-mutation shapes chosen by `mutation`
-   * (`{updated}`, `{deleted}`, `{success}`, or the row), or a plain status.
+   * (`{updated}`, `{deleted}`, `[]`, or the row), or a plain status.
    */
   kind: "rows" | "mutation";
   /**
@@ -351,7 +351,7 @@ export interface ResultInfo {
   /**
    * Which statement a `"mutation"` result comes from — bare, as the body of a
    * `with` block, or as the body of a set-literal `for`. Chooses the response
-   * shape: insert → the row or `{success: true}`, update → the row or
+   * shape: insert → the row or `[]`, update → the row or
    * `{updated: n}`, delete → `{deleted: n}`. Absent for statements with a
    * plain status response (`configure`, `set global`).
    */

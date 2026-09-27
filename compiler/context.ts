@@ -66,6 +66,12 @@ export interface CTEAlias {
    */
   mutation?: boolean;
   /**
+   * The binding is one object at most: an insert (`n := (insert T { … })`,
+   * with or without `unless conflict`), which Gel infers as a singleton. A
+   * path from it (`n.last`) is one value, not a set.
+   */
+  singleton?: boolean;
+  /**
    * Set when a query reads from the CTE by name. A plain expression binding
    * (`with x := <str>$n`) is inlined where it is used, so its CTE is only
    * emitted when something selects from it (`select x`).

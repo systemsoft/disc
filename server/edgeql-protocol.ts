@@ -656,8 +656,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    *
    * `mutatedType` is `ResultInfo.mutatedType`: set for a bare insert/update
    * only. Returns the input unchanged without it, when the type isn't in the
-   * schema, or when data isn't an object (e.g. `{ deleted: 1 }` or
-   * `{ success: true }` placeholders).
+   * schema, or when data isn't a row (e.g. `{ deleted: 1 }`, or `[]` for an
+   * insert that wrote nothing).
    */
   private mapMutationResponseToSchema(
     data: any,
@@ -816,10 +816,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           return { data: this.unwrapJsonbRows(rows) };
         }
 
-        // The bare-mutation response shapes.
+        // The bare-mutation response shapes. An insert that wrote nothing (it
+        // hit its `unless conflict` target, or the `else` update's filter kept
+        // the existing object) is the empty set, as in Gel.
         switch (resultInfo.mutation) {
           case "insert":
-            return { data: rows[0] || { success: true } };
+            return { data: rows[0] ?? [] };
           case "update":
             return { data: rows[0] || { updated: result.rowCount } };
           case "delete":

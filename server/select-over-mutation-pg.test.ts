@@ -7,8 +7,8 @@
  * i.e. `select (insert|update|delete …) { id }`.
  *
  *   - The answer is the affected row set: `[{ id }]`, or `[]` when the
- *     compare-and-swap was stale or the insert hit its conflict target. Never
- *     `{ success: true }`, and the same for update, delete and insert.
+ *     compare-and-swap was stale or the insert hit its conflict target, and
+ *     the same for update, delete and insert.
  *   - Every response-shape step sends its query at least twice, so the later
  *     runs are compiled-query cache hits, where no query AST exists.
  *   - Only the requested fields come back.

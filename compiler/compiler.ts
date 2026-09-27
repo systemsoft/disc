@@ -1924,6 +1924,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         cteName,
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         select: value.kind === "Subquery" && value.query.kind === "SelectQuery" ? value.query : undefined,
+        singleton: value.kind === "Subquery" && value.query.kind === "InsertQuery",
         typeName: underlyingTypeName,
         typeDef,
         values,

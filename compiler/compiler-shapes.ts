@@ -115,6 +115,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // it, and the mutation is compiled by the mutation compilers (policy
     // included) either way.
     // The binding is `m` unless another CTE of the query already has that name.
+    // `select (with n := (…) insert …) { shape }` is
+    // `with n := (…) select (insert …) { shape }`: the inner block's bindings
+    // are in scope of the mutation either way, and nothing else reads them.
+    if (query.expr.kind === "Subquery" && query.expr.query.kind === "WithBlock" && this.endsInMutation(query.expr.query)) {
+      const { body, ...block } = query.expr.query;
+      return this.compileQuery({ ...block, body: { ...query, expr: { kind: "Subquery", query: body } } });
+    }
     if (query.expr.kind === "Subquery" && isMutationQuery(query.expr.query)) {
       const name = this.claimCteName(MUTATION_CTE_NAME);
       return this.compileQuery({
@@ -218,6 +225,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     } finally {
       Context.popScope(this.ctx);
     }
+  }
+
+  /*** True when `query` is a `with` block whose body (through any nested blocks) is an insert, update or delete. ***/
+  private endsInMutation(query: EdgeQLAST.Query): boolean {
+    return query.kind === "WithBlock" ? this.endsInMutation(query.body) : isMutationQuery(query);
   }
 
   /**
@@ -2013,6 +2025,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       }
     }
 
+    const fromBinding = this.bindingPathSelect(path);
+    if (fromBinding) {
+      return this.compileExpression({ kind: "Subquery", query: fromBinding });
+    }
+
     if (path.steps.some(step => step.type === "link_property")) {
       return this.compileLinkPropertyPath(path);
     }
@@ -2159,6 +2176,23 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
 
     throw new CompilationError(`Complex path expressions not yet implemented`);
+  }
+
+  /**
+   * `select n.last` when `path` starts at a `with` binding of objects (a
+   * select, or a mutation's rows: `n := (insert …)`), else null. As one value
+   * (`number := n.last`) the path is that select, as `(select n.last)` is; a
+   * path to objects (`program := n.program`) stands for their id. More than
+   * one row fails at run time, as any scalar subquery does.
+   */
+  private bindingPathSelect(path: EdgeQLAST.Path): EdgeQLAST.SelectQuery | null {
+    const resolved = path.rooted && path.steps.length > 1 ? this.resolvePath(path) : null;
+    if (resolved?.start.kind !== "binding") {
+      return null;
+    }
+    const idStep: EdgeQLAST.PathStep = { kind: "PathStep", name: "id", type: "property" };
+    const expr: EdgeQLAST.Path = resolved.property ? path : { ...path, steps: [...path.steps, idStep] };
+    return { distinct: false, expr, kind: "SelectQuery", span: path.span };
   }
 
   /**

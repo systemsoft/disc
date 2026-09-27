@@ -10,7 +10,8 @@
  *     `WITH … <mutation> … SELECT`, the SQL shape junction-backed multi-link
  *     writes have too, so the SQL text cannot tell them apart.
  *   - A bare mutation keeps its response: the row (keyed by property names, on
- *     every run), `{ updated: 0 }`, `{ deleted: n }`, `{ success: true }`.
+ *     every run), `{ updated: 0 }`, `{ deleted: n }`, or `[]` for an insert
+ *     that wrote nothing (as Gel answers it).
  *
  * Every case runs twice; the second run is a cache hit and has no query AST.
  *
@@ -167,12 +168,12 @@ Deno.test("result shape - a bare update answers with the same keys on both runs,
   assertEquals(stale.data, [{ updated: 0 }, { updated: 0 }]);
 });
 
-Deno.test("result shape - a bare delete keeps { deleted: n } and a swallowed insert keeps { success: true }", async () => {
+Deno.test("result shape - a bare delete keeps { deleted: n } and a swallowed insert answers []", async () => {
   const deleted = await runTwice("delete Post filter .title = 'x'", { rowCount: 3, rows: [{ id: "a" }, { id: "b" }, { id: "c" }] });
   assertEquals(deleted.data, [{ deleted: 3 }, { deleted: 3 }]);
 
   const swallowed = await runTwice("insert Post { title := 'taken' } unless conflict", NOTHING);
-  assertEquals(swallowed.data, [{ success: true }, { success: true }]);
+  assertEquals(swallowed.data, [[], []]);
 });
 
 Deno.test("result shape - a junction-backed multi-link write keeps its single-row response on both runs", async () => {
@@ -181,7 +182,7 @@ Deno.test("result shape - a junction-backed multi-link write keeps its single-ro
   // (the update used to say `{ success: true }` — an artifact of sniffing the
   // CTE's SQL, gone since the shape is chosen from the query).
   const writes: Array<[string, unknown]> = [
-    ["insert Post { title := 't', tags := (select Tag filter .name = 'a') }", { success: true }],
+    ["insert Post { title := 't', tags := (select Tag filter .name = 'a') }", []],
     ["update Post filter .title = 't' set { tags += (select Tag filter .name = 'b') }", { updated: 0 }]
   ];
 
@@ -225,7 +226,7 @@ Deno.test("result shape - a bare insert whose SQL contains a link subselect stil
   assertEquals(matched.data, [expected, expected]);
 
   const swallowed = await runTwice(`${query} unless conflict`, NOTHING);
-  assertEquals(swallowed.data, [{ success: true }, { success: true }]);
+  assertEquals(swallowed.data, [[], []]);
 });
 
 Deno.test("result shape - a bare delete whose filter walks a link keeps { deleted: n }", async () => {

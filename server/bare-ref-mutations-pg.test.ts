@@ -12,9 +12,9 @@
  *
  * A bare update answers with the row, or `{ updated: 0 }` when nothing
  * matched; a bare delete with `{ deleted: n }`; a bare insert with the row, or
- * `{ success: true }` when the conflict swallowed it. Those shapes are kept
- * for backward compatibility, so the assertions here lean on row counts and
- * the stored `target`.
+ * `[]` when the conflict swallowed it, as in Gel. The update and delete shapes
+ * are kept for backward compatibility, so the assertions here lean on row
+ * counts and the stored `target`.
  *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */

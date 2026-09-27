@@ -51,7 +51,7 @@ export interface ResolvedPath {
   typeDef: Context.TypeDef;
   /** The property of those objects the path ends in (`.posts.title`), if any. */
   property?: Context.PropertyDef;
-  /** More than one object (or value) per start row: the start is a set, or a hop is multi. */
+  /** More than one object (or value) per start row: the start is a set (not a singleton binding), or a hop is multi. */
   multi: boolean;
 }
 
@@ -84,7 +84,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
 
     const hops: PathHop[] = [];
     let typeDef = origin.startType;
-    let multi = origin.start.kind !== "row";
+    let multi = origin.start.kind === "type" || (origin.start.kind === "binding" && !origin.start.cte.singleton);
     for (const [index, step] of origin.steps.entries()) {
       const last = index === origin.steps.length - 1;
       if (step.type === "property" && last) {
