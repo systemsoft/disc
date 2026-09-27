@@ -41,6 +41,29 @@ const log = getLogger("simple-edgeql-protocol");
 const CONFIG_RELOAD_TIMEOUT_MS = 500;
 const CONFIG_RELOAD_POLL_MS = 5;
 
+/**
+ * `sql` with each `$name` of `variables` replaced by its value, in one pass (a
+ * `$name` in a value stays as it is): null as NULL, a number or boolean as
+ * written, any other value as a string literal, `'` doubled (an object or
+ * array as its JSON).
+ */
+export function substituteVariables(sql: string, variables: Record<string, unknown>): string {
+  return sql.replace(/\$(\w+)/g, (match, name: string) => {
+    if (!Object.hasOwn(variables, name)) {
+      return match;
+    }
+    const value = variables[name];
+    if (value === null || value === undefined) {
+      return "NULL";
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    return `'${text.replaceAll("'", "''")}'`;
+  });
+}
+
 export interface SimpleEdgeQLOptions {
   schema?: Context.Schema;
   enableExplain?: boolean;
@@ -300,14 +323,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           };
       }
 
-      // Replace variables in SQL (simplified)
-      let finalSQL = sql;
-      for (const [name, value] of Object.entries(variables)) {
-        const sqlValue = typeof value === "string" ?
-          `'${value}'` :
-          String(value);
-        finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
-      }
+      const finalSQL = substituteVariables(sql, variables);
 
       log.debug("Generated SQL", { sql: finalSQL });
       return { success: true, sql: finalSQL };
@@ -333,12 +349,13 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         .elements
         .map(element => {
           if (element.expr.kind === "Identifier") {
-            return element.expr.name;
+            const name = element.expr.name;
+            return `'${name.replaceAll("'", "''")}', "${name.replaceAll("\"", "\"\"")}"`;
           }
-          return "*";
+          return "'*', *";
         })
         .join(", ");
-      sql += `jsonb_build_object(${fields.split(", ").map(f => `'${f}', ${f}`).join(", ")})`;
+      sql += `jsonb_build_object(${fields})`;
     } else {
       sql += "*";
     }

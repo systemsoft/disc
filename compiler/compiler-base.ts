@@ -1070,7 +1070,8 @@ export abstract class CompilerBase {
       });
     };
     const key = this.overlayKey(table).map(column => `"${column}"`).join(", ");
-    const touched = writes.map(write => `SELECT ${key} FROM "${write.cte}"`).join(" UNION ALL ");
+    // A CTE is named after its `with` binding, which can hold a `"`.
+    const touched = writes.map(write => `SELECT ${key} FROM "${write.cte.replaceAll("\"", "\"\"")}"`).join(" UNION ALL ");
     const untouched = readAll(table);
     untouched.where = SQL.createWhereClause({ kind: "RawSQLExpression", sql: `(${key}) NOT IN (${touched})` });
     const written = writes.filter(write => write.statement.kind !== "DeleteStatement").map(write => readAll(write.cte));

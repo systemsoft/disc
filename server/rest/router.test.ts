@@ -12,6 +12,7 @@
 
 import { assert, assertEquals } from "@std/assert";
 import type { Schema, TypeDef } from "../../compiler/context.ts";
+import { EdgeQLParser } from "../../edgeql/parser.ts";
 import type * as Types from "../types.ts";
 import { dispatchRest } from "./router.ts";
 
@@ -252,6 +253,59 @@ Deno.test("GET /api/User rejects unknown filter field with 400", async () => {
     String(body.error ?? "").includes("nonexistent"),
     `error should mention 'nonexistent', got: ${JSON.stringify(body)}`
   );
+});
+
+/*** The string literals of `edgeql`, as the EdgeQL parser reads them. ***/
+function stringLiterals(edgeql: string): string[] {
+  const found: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+    } else if (node && typeof node === "object") {
+      const record = node as Record<string, unknown>;
+      if (record.kind === "Literal" && record.type === "string") {
+        found.push(String(record.value));
+      }
+      Object.values(record).forEach(walk);
+    }
+  };
+  walk(new EdgeQLParser(edgeql).parse());
+  return found;
+}
+
+// EdgeQL escapes a quote in a string with a backslash; `''` is two strings
+// (or, at the start, a triple-quoted one), so values quoted that way could
+// end their literal early and be read as query text.
+Deno.test("GET /api/User filter values are EdgeQL string literals holding exactly the value", async () => {
+  const values = ["a'b", "''", "'''x", "c\\", "d\\'e", "\"f\""];
+  for (const value of values) {
+    const { handler, captured } = makeStubHandler(() => []);
+    const params = new URLSearchParams({ email__in: `${value},${value}`, name: value });
+    const result = await dispatchRest({
+      request: new Request(`http://localhost/api/User?${params}`),
+      schema: buildSchema(),
+      protocolHandler: handler,
+      context: makeContext()
+    });
+    assert(result instanceof Response);
+    assertEquals(result.status, 200);
+    assertEquals(stringLiterals(captured[0].query), [value, value, value], captured[0].query);
+  }
+});
+
+Deno.test("POST /api/User body strings are EdgeQL string literals holding exactly the value", async () => {
+  const { handler, captured } = makeStubHandler(() => [{ id: "1" }]);
+  await dispatchRest({
+    request: new Request("http://localhost/api/User", {
+      body: JSON.stringify({ email: "'''", name: "x'' , y\\" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    schema: buildSchema(),
+    protocolHandler: handler,
+    context: makeContext()
+  });
+  assertEquals(stringLiterals(captured[0].query).sort(), ["'''", "x'' , y\\"].sort(), captured[0].query);
 });
 
 // ---------------------------------------------------------------------------

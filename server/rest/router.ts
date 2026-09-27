@@ -680,14 +680,14 @@ function isValidUuid(s: string): boolean {
 }
 
 /**
- * Quote a string as an EdgeQL string literal. Doubles single-quotes (the
- * SQL-standard form) and escapes backslashes for parser robustness.
+ * Quote a string as an EdgeQL string literal: a backslash before each
+ * backslash and single quote. EdgeQL has no `''` escape — `'a''b'` is two
+ * literals, and a value starting `''` would open a triple-quoted one — so a
+ * quote doubled SQL-style could end the literal and leave the rest of the
+ * value as query text.
  */
 function edgeqlString(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "''");
-  return `'${escaped}'`;
+  return `'${value.replace(/[\\']/g, "\\$&")}'`;
 }
 
 async function readJsonBody(

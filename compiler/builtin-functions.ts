@@ -481,6 +481,14 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       ],
       returnType: "datetime"
     }],
+    ["duration_get", {
+      name: "duration_get",
+      args: [
+        { name: "val", type: "duration", required: true },
+        { name: "field", type: "str", required: true }
+      ],
+      returnType: "float64"
+    }],
     ["to_datetime", {
       name: "to_datetime",
       args: [{ name: "val", type: "any", required: true }],
@@ -507,6 +515,22 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       name: "cal_to_local_datetime",
       args: [{ name: "val", type: "any", required: true }],
       returnType: "cal::local_datetime"
+    }],
+    ["cal_date_get", {
+      name: "cal_date_get",
+      args: [
+        { name: "val", type: "cal::local_date", required: true },
+        { name: "field", type: "str", required: true }
+      ],
+      returnType: "float64"
+    }],
+    ["cal_time_get", {
+      name: "cal_time_get",
+      args: [
+        { name: "val", type: "cal::local_time", required: true },
+        { name: "field", type: "str", required: true }
+      ],
+      returnType: "float64"
     }],
 
     // JSON functions

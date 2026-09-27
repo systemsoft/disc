@@ -22,6 +22,7 @@ import {
   DatabaseExecutionError,
   InternalError,
   InvalidReferenceError,
+  InvalidValueError,
   QueryError,
   QueryTimeoutError,
   SchemaError,
@@ -228,6 +229,11 @@ Deno.test("query-execution - mapErrorToGelCode: SchemaError -> SchemaDefinitionE
 Deno.test("query-execution - mapErrorToGelCode: CompilationError -> QueryError", () => {
   const err = new CompilationError("compilation failed");
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.QueryError);
+});
+
+Deno.test("query-execution - mapErrorToGelCode: InvalidValueError -> InvalidValueError", () => {
+  const err = new InvalidValueError("invalid unit for std::datetime_get: 'fortnight'");
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.InvalidValueError);
 });
 
 Deno.test("query-execution - mapErrorToGelCode: QueryError -> QueryError", () => {

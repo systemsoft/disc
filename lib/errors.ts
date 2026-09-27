@@ -87,6 +87,16 @@ export class InvalidReferenceError extends CompilationError {
   }
 }
 
+/**
+ * A query passes a value the operation can't take, found while compiling it
+ * (Gel's `InvalidValueError`): `datetime_get(dt, 'fortnight')`.
+ */
+export class InvalidValueError extends CompilationError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
 export class ValidationError extends DiscError {
   constructor(message: string, context?: ErrorContext) {
     super(message, context);

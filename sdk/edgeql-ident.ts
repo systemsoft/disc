@@ -40,11 +40,20 @@ const RESERVED_EDGEQL_KEYWORDS = new Set([
   "intersect"
 ]);
 
+/** An EdgeQL identifier, as the lexer reads one. */
+const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
  * Backtick-quote `name` if it collides with a reserved EdgeQL keyword;
  * otherwise return it unchanged. The keyword check is case-insensitive
  * because the EdgeQL lexer lowercases keywords before matching.
+ *
+ * Throws when `name` isn't an identifier: it is written into the query text
+ * as is, and a filter object's or insert data's keys can come from a request.
  */
 export function escapeEdgeQLIdent(name: string): string {
+  if (!IDENT_RE.test(name)) {
+    throw new Error(`Invalid field name: ${JSON.stringify(name)}`);
+  }
   return RESERVED_EDGEQL_KEYWORDS.has(name.toLowerCase()) ? `\`${name}\`` : name;
 }

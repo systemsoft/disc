@@ -339,8 +339,14 @@ export function popScope(ctx: CompilationContext): void {
   }
 }
 
+/**
+ * A new table alias named after `base`. A `with` binding or `for` variable
+ * name can hold any character (`` `a"b` ``), and aliases are written between
+ * double quotes in hand-built SQL (`"${alias}"."id"`), so any character but a
+ * letter, digit or underscore becomes an underscore.
+ */
 export function generateAlias(ctx: CompilationContext, base: string): string {
-  return `${base}_${++ctx.aliasCounter}`;
+  return `${base.replace(/\W/g, "_")}_${++ctx.aliasCounter}`;
 }
 
 export function addTableAlias(

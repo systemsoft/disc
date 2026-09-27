@@ -9,8 +9,9 @@
  * in Stage 27.
  */
 
-import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertExists, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { InvalidValueError } from "../lib/errors.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
@@ -158,10 +159,49 @@ Deno.test("Stage 27 — datetime_of_transaction compiles to TRANSACTION_TIMESTAM
   assertStringIncludes(sql, "TRANSACTION_TIMESTAMP");
 });
 
-Deno.test("Stage 27 — datetime_get compiles to EXTRACT", () => {
+Deno.test("Stage 27 — datetime_get compiles to date_part with the unit as a quoted literal", () => {
   const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), 'year')`);
-  assertStringIncludes(sql, "EXTRACT");
-  assertStringIncludes(sql, "year");
+  assertStringIncludes(sql, "date_part('year', NOW())");
+});
+
+Deno.test("datetime_get: epochseconds is PostgreSQL's epoch", () => {
+  const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), 'epochseconds')`);
+  assertStringIncludes(sql, "date_part('epoch', NOW())");
+});
+
+// The unit used to be spliced into `EXTRACT(<unit> FROM …)` unquoted, so any
+// text in the string literal became SQL.
+Deno.test("datetime_get: a unit that is not one of Gel's is InvalidValueError and never reaches the SQL", () => {
+  const error = assertThrows(
+    () => compileEdgeQL(`SELECT datetime_get(datetime_current(), 'year FROM NOW()) + (SELECT 1')`),
+    InvalidValueError
+  );
+  assertEquals(error.message, "invalid unit for std::datetime_get: 'year FROM NOW()) + (SELECT 1'");
+  assertThrows(() => compileEdgeQL(`SELECT datetime_get(datetime_current(), 'epoch')`), InvalidValueError);
+  assertThrows(() => compileEdgeQL(`SELECT datetime_get(datetime_current(), 'timezone')`), InvalidValueError);
+});
+
+Deno.test("datetime_get: a unit that is not a literal is checked when the query runs", () => {
+  const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), <str>$unit)`);
+  assertStringIncludes(sql, "disc_date_part('std::datetime_get', CAST($1 AS text), NOW(), ARRAY[");
+  assertStringIncludes(sql, "'epochseconds'");
+});
+
+Deno.test("duration_get: units by duration type, as in Gel", () => {
+  assertStringIncludes(compileEdgeQL(`SELECT duration_get(<duration>'1 hour', 'totalseconds')`), "date_part('epoch', ");
+  assertStringIncludes(compileEdgeQL(`SELECT duration_get(<duration>'1 hour', 'minutes')`), "date_part('minutes', ");
+  assertThrows(() => compileEdgeQL(`SELECT duration_get(<duration>'1 hour', 'day')`), InvalidValueError, "invalid unit for std::duration_get: 'day'");
+  assertStringIncludes(compileEdgeQL(`SELECT duration_get(<cal::relative_duration>'1 day', 'day')`), "date_part('day', ");
+  assertStringIncludes(compileEdgeQL(`SELECT duration_get(<cal::date_duration>'1 day', 'month')`), "date_part('month', ");
+  assertThrows(() => compileEdgeQL(`SELECT duration_get(<cal::date_duration>'1 day', 'hour')`), InvalidValueError);
+  assertThrows(() => compileEdgeQL(`SELECT duration_get(<duration>'1 hour', 'x\\')--')`), InvalidValueError, "invalid unit for std::duration_get: 'x'')--'");
+});
+
+Deno.test("cal::time_get and cal::date_get: Gel's units only", () => {
+  assertStringIncludes(compileEdgeQL(`SELECT cal::time_get(<cal::local_time>'10:00', 'midnightseconds')`), "date_part('epoch', ");
+  assertStringIncludes(compileEdgeQL(`SELECT cal::date_get(<cal::local_date>'2024-01-01', 'isodow')`), "date_part('isodow', ");
+  assertThrows(() => compileEdgeQL(`SELECT cal::time_get(<cal::local_time>'10:00', 'year')`), InvalidValueError, "invalid unit for std::time_get: 'year'");
+  assertThrows(() => compileEdgeQL(`SELECT cal::date_get(<cal::local_date>'2024-01-01', 'hour')`), InvalidValueError, "invalid unit for std::date_get: 'hour'");
 });
 
 Deno.test("Stage 27 — datetime_truncate compiles to DATE_TRUNC", () => {

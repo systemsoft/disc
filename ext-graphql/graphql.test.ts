@@ -14,6 +14,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { GraphQLExtension } from "./extension.ts";
 import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
@@ -680,4 +681,25 @@ Deno.test("GraphQLExtension - POST /graphql short-circuits __schema introspectio
   // Crucially, the response should NOT carry __edgeql — introspection
   // is answered directly from the cached schema.
   assertEquals("__edgeql" in body.data, false);
+});
+
+// A GraphQL string argument becomes an EdgeQL string literal: a `"` or `\` in
+// it is backslash-escaped, so the literal holds exactly the value.
+Deno.test("GraphQL query translation - string arguments are EdgeQL literals holding exactly the value", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery(
+    "mutation { createUser(input: {name: \"a\\\"b\\\\\", email: \"\\\\\\\"}\"}) { id } }"
+  );
+  const values = parsed.selections[0].arguments.input as Record<string, string>;
+  assertEquals([values.name, values.email], ["a\"b\\", "\\\"}"]);
+  const insert = new EdgeQLParser(translateToEdgeQL(parsed, schema).edgeql).parse() as unknown as {
+    shape: { elements: { expr: { value: unknown; }; }[]; };
+  };
+  assertEquals(insert.shape.elements.map(element => element.expr.value), ["a\"b\\", "\\\"}"]);
+});
+
+Deno.test("GraphQL query translation - list arguments format each element as an EdgeQL value", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery("mutation { createUser(input: {name: [\"a\\\"\", 1]}) { id } }");
+  assertEquals(translateToEdgeQL(parsed, schema).edgeql, "INSERT User {name := [\"a\\\"\", 1]}");
 });

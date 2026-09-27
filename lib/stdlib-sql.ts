@@ -115,6 +115,22 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
 
+  // disc_date_part(func_name, unit, val, units) — `datetime_get`,
+  // `duration_get`, `cal::time_get` and `cal::date_get` with a unit that isn't
+  // a literal (compiler `compileDatePartGet`, which checks a literal one):
+  // PostgreSQL's date_part of `val`, when `unit` is one of `units`, else
+  // Gel's invalid unit error (SQLSTATE 22007, InvalidValueError). The
+  // `epochseconds`, `midnightseconds` and `totalseconds` units are `epoch`.
+  `CREATE OR REPLACE FUNCTION disc_date_part(func_name text, unit text, val anyelement, units text[]) RETURNS double precision AS $$
+     BEGIN
+       IF unit <> ALL(units) THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = format('invalid unit for %s: %L', func_name, unit),
+           HINT = format('Supported units: %s.', array_to_string(units, ', '));
+       END IF;
+       RETURN date_part(CASE WHEN unit IN ('epochseconds', 'midnightseconds', 'totalseconds') THEN 'epoch' ELSE unit END, val);
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
   // Per-element checks for `multi` str properties, stored as `text[]`
   // (migration/ddl.ts). A CHECK constraint can't contain a subquery, so the
   // unnest lives in these IMMUTABLE helpers. Each yields NULL for an empty

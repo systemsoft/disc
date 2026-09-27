@@ -9,7 +9,7 @@
 
 import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { CompilationError, InvalidReferenceError, type ErrorContext } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError, InvalidValueError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
 import { normalizeStdTypeName } from "../lib/std-types.ts";
 import {
@@ -52,6 +52,71 @@ const INTEGER_LITERAL_TYPES = new Set(["bigint", "integer"]);
 
 /*** The PostgreSQL types of int16, int32 and int64. ***/
 const INTEGER_PG_TYPES = new Set(["bigint", "integer", "smallint"]);
+
+/**
+ * The units Gel's `datetime_get`, `duration_get`, `cal::time_get` and
+ * `cal::date_get` take (edb/lib/std/30-datetimefuncs.edgeql, edb/lib/cal.edgeql),
+ * with the name Gel's error gives each. `duration_get`'s depend on the
+ * duration's type. EPOCH_UNITS are PostgreSQL's `epoch`; every other unit is
+ * passed to `date_part` as spelled, as Gel does.
+ */
+const DATE_PART_UNITS = new Map<string, { name: string; units: readonly string[]; }>([
+  ["cal_date_get", {
+    name: "std::date_get",
+    units: ["century", "day", "decade", "dow", "doy", "isodow", "isoyear", "millennium", "month", "quarter", "week", "year"]
+  }],
+  ["cal_time_get", { name: "std::time_get", units: ["hour", "microseconds", "midnightseconds", "milliseconds", "minutes", "seconds"] }],
+  ["datetime_get", {
+    name: "std::datetime_get",
+    units: [
+      "epochseconds",
+      "century",
+      "day",
+      "decade",
+      "dow",
+      "doy",
+      "hour",
+      "isodow",
+      "isoyear",
+      "microseconds",
+      "millennium",
+      "milliseconds",
+      "minutes",
+      "month",
+      "quarter",
+      "seconds",
+      "week",
+      "year"
+    ]
+  }],
+  ["duration_get:date_duration", {
+    name: "std::duration_get",
+    units: ["millennium", "century", "decade", "year", "quarter", "month", "day", "totalseconds"]
+  }],
+  ["duration_get:duration", { name: "std::duration_get", units: ["hour", "minutes", "seconds", "milliseconds", "microseconds", "totalseconds"] }],
+  ["duration_get:relative_duration", {
+    name: "std::duration_get",
+    units: [
+      "millennium",
+      "century",
+      "decade",
+      "year",
+      "quarter",
+      "month",
+      "day",
+      "hour",
+      "minutes",
+      "seconds",
+      "milliseconds",
+      "microseconds",
+      "totalseconds"
+    ]
+  }]
+]);
+const EPOCH_UNITS = new Set(["epochseconds", "midnightseconds", "totalseconds"]);
+
+/*** A PostgreSQL type a cast may name in the SQL: words (`double precision`), optionally an array of them. ***/
+const PG_TYPE_NAME = /^[A-Za-z_][\w ]*(\[\])?$/;
 
 /*** The types a cast to bigint rounds, as Gel's `round($1)::edgedbt.bigint_t` casts do. ***/
 const ROUNDED_TO_BIGINT = new Set(["decimal", "float32", "float64"]);
@@ -1876,23 +1941,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return SQL.createBinaryExpression("~", args[1], args[0]);
 
       // Datetime special compilation
-      case "datetime_get": {
-        // datetime_get(val, field) → EXTRACT(field FROM val)
-        if (args.length !== 2) {
-          throw new CompilationError(
-            "datetime_get() requires exactly 2 arguments"
-          );
-        }
-        const getFieldArg = funcCall.args[1].value;
-        const getField = getFieldArg.kind === "Literal" &&
-            typeof getFieldArg.value === "string" ?
-          getFieldArg.value :
-          "epoch";
-        return {
-          kind: "RawSQLExpression" as const,
-          sql: `EXTRACT(${getField} FROM ${this.renderSqlExpr(args[0])})`
-        };
-      }
+      case "cal_date_get":
+      case "cal_time_get":
+      case "datetime_get":
+      case "duration_get":
+        return this.compileDatePartGet(functionName, funcCall, args);
 
       case "datetime_truncate": {
         // datetime_truncate(val, field) → DATE_TRUNC(field, val)
@@ -2082,6 +2135,43 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const sqlName = funcDef.sqlName ?? funcDef.name.replaceAll("::", "_");
 
     return SQL.createFunctionCall(sqlName, args);
+  }
+
+  /**
+   * `datetime_get`, `duration_get`, `cal::time_get`, `cal::date_get`:
+   * PostgreSQL's `date_part` of one of the units Gel allows (DATE_PART_UNITS).
+   * A literal unit is checked now, an InvalidValueError as in Gel; any other
+   * is checked when the query runs, by `disc_date_part` (lib/stdlib-sql.ts).
+   * The unit reaches the SQL only as a quoted literal or a bound value. A
+   * `duration_get` of a duration whose type isn't known statically takes a
+   * `cal::relative_duration`'s units, which include every other duration's.
+   */
+  private compileDatePartGet(functionName: string, funcCall: EdgeQLAST.FunctionCall, args: SQL.SQLExpression[]): SQL.SQLExpression {
+    if (args.length !== 2) {
+      throw new CompilationError(`${funcCall.name.parts.join("::")}() requires exactly 2 arguments`);
+    }
+    let key = functionName;
+    if (functionName === "duration_get") {
+      const type = this.staticNumericType(funcCall.args[0].value)?.split("::").pop();
+      key = `duration_get:${type === "duration" || type === "date_duration" ? type : "relative_duration"}`;
+    }
+    const { name, units } = DATE_PART_UNITS.get(key)!;
+    const unit = funcCall.args[1].value;
+    if (unit.kind !== "Literal" || typeof unit.value !== "string") {
+      return SQL.createFunctionCall("disc_date_part", [
+        SQL.createLiteral("string", name),
+        args[1],
+        args[0],
+        SQL.createFunctionCall("ARRAY", units.map(allowed => SQL.createLiteral("string", allowed)))
+      ]);
+    }
+    if (!units.includes(unit.value)) {
+      throw new InvalidValueError(`invalid unit for ${name}: '${unit.value.replaceAll("'", "''")}'`, {
+        ...this.expressionLocation(unit),
+        hint: `Supported units: ${units.join(", ")}.`
+      });
+    }
+    return SQL.createFunctionCall("date_part", [SQL.createLiteral("string", EPOCH_UNITS.has(unit.value) ? "epoch" : unit.value), args[0]]);
   }
 
   /**
@@ -2456,6 +2546,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // `CAST(… AS Progam)`.
     if (pgType === typeName && !isUuidTypeName(typeName) && cast.expr.kind === "TypeCast" && isUuidTypeName(renderEdgeQLTypeName(cast.expr.type))) {
       throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}><uuid>…`);
+    }
+    // A name that is no known type is passed through as the PostgreSQL type,
+    // written into the SQL as is; a backtick-quoted one can hold any
+    // character, so only a plain name may be.
+    if (!PG_TYPE_NAME.test(pgType)) {
+      throw new InvalidReferenceError(`Unknown type '${typeName}' in cast <${typeName}>`, this.expressionLocation(cast));
     }
 
     // A decimal or float cast to bigint is rounded, as Gel's

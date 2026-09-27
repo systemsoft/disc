@@ -2749,6 +2749,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private compileConfigureQuery(
     query: EdgeQLAST.ConfigureQuery
   ): SQL.RawSQLStatement {
+    // The key is written into the SQL as is (`SET LOCAL <key>`, and between
+    // quotes for disc_config); a backtick-quoted one can hold any character,
+    // so it must have the form of a PostgreSQL setting's name.
+    if (!/^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$/.test(query.key)) {
+      throw new CompilationError(`'${query.key}' is not a configuration parameter name`);
+    }
     const pgKey = lookupConfigKey(query.key)?.pgName ?? query.key;
 
     if (query.action === "RESET") {

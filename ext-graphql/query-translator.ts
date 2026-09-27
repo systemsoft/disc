@@ -873,11 +873,12 @@ function buildShape(selections: GraphQLSelection[]): string {
 }
 
 /**
- * Format a value for use in EdgeQL.
+ * Format a value for use in EdgeQL. A string's `"` and `\` are
+ * backslash-escaped, so the literal holds exactly the value.
  */
 function formatEdgeQLValue(value: unknown): string {
   if (typeof value === "string") {
-    return `"${value}"`;
+    return `"${value.replace(/[\\"]/g, "\\$&")}"`;
   }
   if (typeof value === "number") {
     return String(value);
@@ -893,7 +894,10 @@ function formatEdgeQLValue(value: unknown): string {
   ) {
     return `<str>$${(value as { __variable: string; }).__variable}`;
   }
-  return String(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(formatEdgeQLValue).join(", ")}]`;
+  }
+  throw new Error(`Unsupported GraphQL argument value: ${JSON.stringify(value)}`);
 }
 
 /**

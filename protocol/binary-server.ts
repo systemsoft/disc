@@ -51,6 +51,7 @@ import {
   DatabaseExecutionError,
   DiscError,
   InvalidReferenceError,
+  InvalidValueError,
   postgresErrorFields,
   QueryError,
   QueryTimeoutError,
@@ -598,6 +599,8 @@ const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
   ["assert_distinct", SAME_AS_ARGUMENT],
   ["assert_exists", SAME_AS_ARGUMENT],
   ["assert_single", SAME_AS_ARGUMENT],
+  ["cal::date_get", "float64"],
+  ["cal::time_get", "float64"],
   ["contains", "bool"],
   ["count", "int64"],
   ["datetime_current", "datetime"],
@@ -605,6 +608,7 @@ const STD_FUNCTION_TYPES = new Map<string, FunctionResultType>([
   ["datetime_of_statement", "datetime"],
   ["datetime_of_transaction", "datetime"],
   ["datetime_truncate", "datetime"],
+  ["duration_get", "float64"],
   // One `(index, element)` tuple per element.
   ["enumerate", ([arg]) => arg === null ? null : `tuple<int64, ${arg}>`],
   ["find", "int64"],
@@ -1713,6 +1717,7 @@ function sqlStateToGelCode(sqlState: string): number | undefined {
  * - SyntaxError -> EdgeQLSyntaxError
  * - SchemaError -> SchemaDefinitionError
  * - InvalidReferenceError -> InvalidReferenceError
+ * - InvalidValueError -> InvalidValueError
  * - CompilationError, QueryError -> QueryError
  * - ValidationError -> InvalidValueError
  * - DatabaseExecutionError -> its `cause`'s code (a compile error the
@@ -1734,6 +1739,9 @@ export function mapErrorToGelCode(error: Error): number {
   }
   if (error instanceof InvalidReferenceError) {
     return GEL_ERROR_CODES.InvalidReferenceError;
+  }
+  if (error instanceof InvalidValueError) {
+    return GEL_ERROR_CODES.InvalidValueError;
   }
   if (error instanceof CompilationError) {
     return GEL_ERROR_CODES.QueryError;
