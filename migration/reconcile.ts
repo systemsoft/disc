@@ -24,7 +24,7 @@
  */
 
 import { MigrationError } from "../lib/errors.ts";
-import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import { PG_MAX_IDENTIFIER_BYTES, propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
 import type {
   AddLinkOperation,
   AddPropertyOperation,
@@ -34,10 +34,15 @@ import type {
   ConvertTextColumnOperation,
   CreateIndexOperation,
   CreateTypeOperation,
+  DeclaredAbstractMirror,
   DeclaredColumn,
+  DeclaredLink,
   DeclaredLinkProperty,
   IndexDefinition,
-  MigrationOperation
+  LinkChange,
+  LinkDefinition,
+  MigrationOperation,
+  MirrorAbstractTypeOperation
 } from "./types.ts";
 
 /** A column the database currently reports for an existing table. */
@@ -460,6 +465,155 @@ export async function reconcileDeclaredLinkProperties(
   }));
 }
 
+/** The delete rules the database has on the tables it was asked about. */
+export interface ExistingDeleteRules {
+  /** ON DELETE action (`CASCADE`, `RESTRICT`, …) of each foreign key, keyed `<table>.<constraint>`. */
+  foreignKeys: Map<string, string>;
+  /** The asked-about tables that exist. */
+  tables: Set<string>;
+  /** Each trigger, keyed `<table>.<trigger>`. */
+  triggers: Set<string>;
+}
+
+/**
+ * Reads the foreign keys and triggers of the given tables. Injected by the
+ * engine, like {@link ExistingColumnReader}.
+ */
+export type ExistingDeleteRuleReader = (tableNames: string[]) => Promise<ExistingDeleteRules>;
+
+/** How the DDL generator names a link's delete rules and which FK action it gives the link (see `DDLGenerator`). */
+export interface LinkDeleteRuleNaming {
+  sourceDeleteTriggerName(tableName: string, linkName: string): string;
+  targetForeignKey(tableName: string, link: LinkDefinition): { constraint: string; onDelete: string; table: string; };
+}
+
+/** The repairs `reconcileLinkDeleteRules` plans, and the foreign keys it found missing and left alone. */
+export interface ReconciledDeleteRules {
+  missingForeignKeys: string[];
+  operations: AlterTypeOperation[];
+}
+
+/*** The name PostgreSQL stores for a generated identifier: it cuts longer ones to 63 bytes. ***/
+function pgStoredName(name: string): string {
+  const encoder = new TextEncoder();
+  let stored = name;
+
+  while (encoder.encode(stored).length > PG_MAX_IDENTIFIER_BYTES)
+    stored = stored.slice(0, -1);
+
+  return stored;
+}
+
+/**
+ * Repair link delete rules the database lacks. Before Disc applied a changed
+ * `on target delete` / `on source delete`, `migrate` emitted only a comment
+ * and still recorded the new schema — so the stored snapshot declares the new
+ * rule, the diff between two snapshots is empty, and PostgreSQL keeps the old
+ * foreign-key action (or the delete-target trigger never appears, or never
+ * goes away).
+ *
+ * Compares every declared link (`declared`) with the database: the ON DELETE
+ * action of its target FK (`fk_<table>_<link>_id`, or `fk_<junction>_target_id`
+ * on a multi link), and whether its `trg_source_delete_…` trigger exists.
+ * Returns one `AlterType` → `AlterLink` per link that differs, carrying the
+ * same `ChangeOnDelete` / `ChangeOnSourceDelete` the ALTER LINK path turns
+ * into DDL (drop and re-add the FK; create or drop the trigger).
+ *
+ * Skips the FK (trigger) of links the pending migration (`planned`) creates
+ * or whose `on target delete` (`on source delete`) it changes, and tables
+ * that don't exist yet. A foreign key that doesn't exist at all is reported
+ * in `missingForeignKeys`, never re-created: why it is missing isn't knowable
+ * from here. Idempotent: once repaired, it returns nothing.
+ */
+export async function reconcileLinkDeleteRules(
+  declared: DeclaredLink[],
+  planned: MigrationOperation[],
+  naming: LinkDeleteRuleNaming,
+  readExisting: ExistingDeleteRuleReader
+): Promise<ReconciledDeleteRules> {
+  const foreignKeyPlanned = new Set<string>();
+  const triggerPlanned = new Set<string>();
+  const planBoth = (key: string): void => {
+    foreignKeyPlanned.add(key);
+    triggerPlanned.add(key);
+  };
+
+  for (const op of planned) {
+    if (op.kind === "CreateType") {
+      for (const link of (op as CreateTypeOperation).links) {
+        planBoth(`${(op as CreateTypeOperation).typeName}.${link.name}`);
+      }
+    } else if (op.kind === "AlterType") {
+      const alter = op as AlterTypeOperation;
+      for (const sub of alter.operations) {
+        if (sub.kind === "AddLink") {
+          planBoth(`${alter.typeName}.${(sub as AddLinkOperation).link.name}`);
+        } else if (sub.kind === "AlterLink") {
+          const key = `${alter.typeName}.${(sub as AlterLinkOperation).linkName}`;
+          for (const change of (sub as AlterLinkOperation).changes) {
+            if (change.kind === "ChangeOnDelete") {
+              foreignKeyPlanned.add(key);
+            } else if (change.kind === "ChangeOnSourceDelete") {
+              triggerPlanned.add(key);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const candidates = declared.filter(entry => {
+    const key = `${entry.typeName}.${entry.link.name}`;
+    return !foreignKeyPlanned.has(key) || !triggerPlanned.has(key);
+  });
+
+  if (candidates.length === 0) {
+    return { missingForeignKeys: [], operations: [] };
+  }
+
+  const existing = await readExisting([
+    ...new Set(candidates.flatMap(entry => [entry.tableName, naming.targetForeignKey(entry.tableName, entry.link).table]))
+  ]);
+  const missingForeignKeys: string[] = [];
+  const operations: AlterTypeOperation[] = [];
+
+  for (const entry of candidates) {
+    const key = `${entry.typeName}.${entry.link.name}`;
+    const changes: LinkChange[] = [];
+
+    const foreignKey = naming.targetForeignKey(entry.tableName, entry.link);
+    if (!foreignKeyPlanned.has(key) && existing.tables.has(foreignKey.table)) {
+      const actual = existing.foreignKeys.get(`${foreignKey.table}.${pgStoredName(foreignKey.constraint)}`);
+      if (actual === undefined) {
+        missingForeignKeys.push(
+          `link '${entry.link.name}' on '${entry.typeName}' has no foreign key "${foreignKey.constraint}" on "${foreignKey.table}" ` +
+            `(expected ON DELETE ${foreignKey.onDelete}); not re-created — add it by hand`
+        );
+      } else if (actual !== foreignKey.onDelete) {
+        changes.push({ kind: "ChangeOnDelete", newValue: entry.link.onTargetDelete, oldValue: actual });
+      }
+    }
+
+    if (!triggerPlanned.has(key) && existing.tables.has(entry.tableName)) {
+      const trigger = pgStoredName(naming.sourceDeleteTriggerName(entry.tableName, entry.link.name));
+      const present = existing.triggers.has(`${entry.tableName}.${trigger}`);
+      if (present !== (entry.link.onSourceDelete === "DELETE TARGET")) {
+        changes.push({ kind: "ChangeOnSourceDelete", newValue: entry.link.onSourceDelete, oldValue: present ? "DELETE TARGET" : undefined });
+      }
+    }
+
+    if (changes.length > 0) {
+      operations.push({
+        kind: "AlterType",
+        typeName: entry.typeName,
+        operations: [{ kind: "AlterLink", linkName: entry.link.name, changes, link: entry.link } as AlterLinkOperation]
+      });
+    }
+  }
+
+  return { missingForeignKeys, operations };
+}
+
 /*** The property changes whose DDL changes the column's type. ***/
 const RETYPING_CHANGES = new Set(["ChangeComputed", "ChangeMulti", "ChangeType"]);
 
@@ -533,4 +687,39 @@ export async function reconcileTextColumns(
   }
 
   return operations;
+}
+
+/**
+ * Reads the `disc_abstract_mirror` triggers in the database: each table that
+ * has one, with the abstract tables its rows are copied to. Injected by the
+ * engine, like {@link ExistingColumnReader}.
+ */
+export type ExistingMirrorReader = () => Promise<Map<string, string[]>>;
+
+/**
+ * Create, change or drop the triggers that copy concrete types' rows to the
+ * tables of the abstract types they extend (see `MirrorAbstractTypeOperation`).
+ * Read from the database rather than diffed, so databases created before
+ * Disc kept those copies get them — and their rows copied — like new ones.
+ *
+ * Returns one `MirrorAbstractType` per declared table whose trigger is
+ * missing or copies to other tables than it should, and one with no
+ * `abstractTables` (a drop) per declared table whose trigger it no longer
+ * needs. Tables of the new schema that don't exist yet are the pending
+ * migration's to create; their triggers come with them, since the backfill
+ * runs after it. Idempotent: once the triggers match, it returns nothing.
+ */
+export async function reconcileAbstractMirrors(
+  declared: DeclaredAbstractMirror[],
+  readExisting: ExistingMirrorReader
+): Promise<MirrorAbstractTypeOperation[]> {
+  const existing = await readExisting();
+
+  return declared
+    .filter(mirror => {
+      const current = existing.get(mirror.tableName) ?? [];
+      return current.length !== mirror.abstractTables.length ||
+        current.some((table, index) => table !== mirror.abstractTables[index]);
+    })
+    .map(mirror => ({ ...mirror, kind: "MirrorAbstractType" }));
 }

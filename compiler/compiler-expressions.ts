@@ -1978,7 +1978,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         const targetTd = Context.resolveTypeName(this.ctx, link.target);
         // Only the targets the select policy shows are counted.
         const readable = targetTd ? this.readableIdConditionSql(targetTd, `"${link.junctionTable}"."${tgtCol}"`) : "";
-        const sql = `(SELECT COUNT(*) FROM "${link.junctionTable}" ` +
+        const sql = `(SELECT COUNT(*) FROM ${this.junctionTableSql(link.junctionTable)} ` +
           `WHERE "${link.junctionTable}"."${srcCol}" = "${parent.alias}"."id"${readable})`;
         return { kind: "RawSQLExpression", sql };
       }
@@ -2029,7 +2029,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const srcCol = fwd.junctionSourceColumn ?? "source_id";
       const tgtCol = fwd.junctionTargetColumn ?? "target_id";
       fromSql = `${this.readableTableSql(targetType)} "${rowAlias}" ` +
-        `JOIN "${fwd.junctionTable}" ON "${fwd.junctionTable}"."${srcCol}" = ` +
+        `JOIN ${this.junctionTableSql(fwd.junctionTable)} ON "${fwd.junctionTable}"."${srcCol}" = ` +
         `"${rowAlias}"."id"`;
       correlation = `"${fwd.junctionTable}"."${tgtCol}" = "${parent.alias}"."id"`;
     } else {
@@ -2190,7 +2190,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         const jAlias = `__j_${firstStep.name}`;
 
         if (secondStep.name === "id") {
-          const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+          const sql = `EXISTS (SELECT 1 FROM ${this.junctionTableSql(link.junctionTable, jAlias)} ` +
             `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id"${this.readableIdConditionSql(targetType, `"${jAlias}"."${targetCol}"`)} ` +
             `AND ${this.renderInnerPredicate(`"${jAlias}"."${targetCol}"`, op, rhsExpr)})`;
           return { kind: "RawSQLExpression", sql };
@@ -2202,7 +2202,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           return null;
         }
 
-        const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+        const sql = `EXISTS (SELECT 1 FROM ${this.junctionTableSql(link.junctionTable, jAlias)} ` +
           `INNER JOIN ${this.readableTableSql(targetType)} "${tAlias}" ` +
           `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" ` +
           `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
@@ -2270,7 +2270,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const jAlias = `__blj_${step.name}`;
       const srcCol = forward.junctionSourceColumn ?? "source_id";
       const tgtCol = forward.junctionTargetColumn ?? "target_id";
-      const sql = `EXISTS (SELECT 1 FROM "${forward.junctionTable}" "${jAlias}" ` +
+      const sql = `EXISTS (SELECT 1 FROM ${this.junctionTableSql(forward.junctionTable, jAlias)} ` +
         `INNER JOIN ${this.readableTableSql(sourceType)} "${rowAlias}" ON "${rowAlias}"."id" = "${jAlias}"."${srcCol}" ` +
         `WHERE "${jAlias}"."${tgtCol}" = "${current.alias}"."id" AND ${predicate})`;
       return { kind: "RawSQLExpression", sql };
@@ -2406,7 +2406,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const tgtCol = link.junctionTargetColumn ?? "target_id";
       const jAlias = `__hj${depth}_${linkName}`;
       fromSql = `${this.readableTableSql(targetType)} "${tAlias}" ` +
-        `INNER JOIN "${link.junctionTable}" "${jAlias}" ` +
+        `INNER JOIN ${this.junctionTableSql(link.junctionTable, jAlias)} ` +
         `ON "${jAlias}"."${tgtCol}" = "${tAlias}"."id"`;
       correlation = `"${jAlias}"."${srcCol}" = ${parentRef}."id"`;
     } else if (link.multi && link.backlink) {
@@ -2527,7 +2527,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       const targetCol = link.junctionTargetColumn ?? "target_id";
       const target = Context.resolveTypeName(this.ctx, link.target);
       const readable = target ? this.readableIdConditionSql(target, `"${jAlias}"."${targetCol}"`) : "";
-      const sql = `${negate ? "NOT " : ""}EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+      const sql = `${negate ? "NOT " : ""}EXISTS (SELECT 1 FROM ${this.junctionTableSql(link.junctionTable, jAlias)} ` +
         `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id"${readable} AND ${predicate})`;
       return { kind: "RawSQLExpression", sql };
     }

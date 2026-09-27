@@ -1179,8 +1179,12 @@ export class CLICommands {
       getLogger("cli").info(`Loaded ${sources.length} schema files: ${sources.map(f => f.split("/").pop()).join(", ")}`);
 
     if (dryRun) {
-      /*** Dry-run: plan and show DDL without executing ***/
-      const planResult = manager.planModules(modules);
+      /*** Dry-run: plan and show DDL without executing — including the backfill and repairs
+           `disc migrate` would add from reading the database (see `withIndexBackfill`). ***/
+      const diffResult = manager.planModules(modules);
+      const planResult = diffResult.ok ?
+        await manager.withIndexBackfill(diffResult.value, modules) :
+        diffResult;
 
       if (!planResult.ok)
         throw new Error(`Migration planning failed: ${planResult.error.message}`);

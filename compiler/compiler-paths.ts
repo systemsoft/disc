@@ -135,15 +135,9 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
    */
   protected compilePathSource(resolved: ResolvedPath): PathSource {
     const { start, typeDef } = resolved;
-    // An abstract type's objects live in its subtypes' tables; its own table
-    // is always empty, so reading it would answer nothing without an error.
-    const abstract = [...(start.kind === "type" ? [resolved.startType] : []), ...resolved.hops.map(hop => hop.target)].find(type => type.abstract);
-    if (abstract) {
-      throw new CompilationError(
-        `A path through the abstract type '${abstract.name}' is not supported yet: its objects are stored in its subtypes' tables. ` +
-          `Start from or link to a concrete type.`
-      );
-    }
+    // A path through an abstract type reads its table (and the junctions of
+    // its multi links) like any other; the reads become ones of its concrete
+    // subtypes' tables, where its objects live (see restrictObjectReads).
     let source: PathSource;
     if (resolved.hops.length === 0 && start.kind === "row") {
       source = { alias: start.row.alias, from: [] };

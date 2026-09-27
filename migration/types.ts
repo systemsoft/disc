@@ -280,6 +280,32 @@ export interface ConvertTextColumnOperation extends MigrationOperation, Declared
   kind: "ConvertTextColumn";
 }
 
+/*** A concrete type's table and the tables of the abstract types it extends (see `MirrorAbstractTypeOperation`). ***/
+export interface DeclaredAbstractMirror {
+  /** The abstract ancestors' tables, nearest first; empty when the type extends no abstract type. */
+  abstractTables: string[];
+  tableName: string;
+}
+
+/**
+ * Keep a copy of a concrete type's rows in the tables of the abstract types
+ * it extends, so a link whose target is abstract can have a foreign key.
+ *
+ * An abstract type's objects are stored in its concrete subtypes' tables
+ * (the compiler reads their union). A link to it (`owner: Named`) still
+ * references the abstract type's table, which is how PostgreSQL enforces
+ * the link — an object must exist to be linked, and deleting it follows
+ * the link's `on target delete` (restrict, allow, delete source, …) — with
+ * one foreign key, whichever subtype the object is. So the abstract table
+ * holds a copy of every subtype row, which the `disc_abstract_mirror()`
+ * trigger on the subtype's table inserts, updates and deletes along with
+ * the row; the operation creates that trigger and copies the rows the
+ * table already holds. With no `abstractTables`, it drops the trigger.
+ */
+export interface MirrorAbstractTypeOperation extends MigrationOperation, DeclaredAbstractMirror {
+  kind: "MirrorAbstractType";
+}
+
 // Global operations
 export interface CreateGlobalOperation extends MigrationOperation {
   kind: "CreateGlobal";
@@ -478,6 +504,13 @@ export interface DeclaredLinkProperty {
   linkName: string;
   junctionTable: string;
   property: PropertyDefinition;
+}
+
+/** A link as a type's table stores it (inherited links included), for checking its delete rules. */
+export interface DeclaredLink {
+  link: LinkDefinition;
+  tableName: string;
+  typeName: string;
 }
 
 /** A column holding a stored property (or link property), and the column type its declared type maps to. */

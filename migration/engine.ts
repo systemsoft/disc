@@ -15,12 +15,15 @@ import { DataMigrationRunner } from "./data-migration.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import {
+  reconcileAbstractMirrors,
   reconcileCreateTables,
   reconcileDeclaredIndexes,
   reconcileDeclaredLinkProperties,
+  reconcileLinkDeleteRules,
   reconcileTextColumns,
   withoutDropsOf,
-  type ExistingColumn
+  type ExistingColumn,
+  type ExistingDeleteRules
 } from "./reconcile.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
@@ -260,20 +263,33 @@ export class MigrationEngine {
    * already create (see `reconcileDeclaredIndexes`), plus the junction columns
    * of declared link properties the database lacks (see
    * `reconcileDeclaredLinkProperties`), plus the conversion of columns created
-   * as TEXT before Disc mapped their type (see `reconcileTextColumns`). The backfill travels as
+   * as TEXT before Disc mapped their type (see `reconcileTextColumns`), plus
+   * the repair of link delete rules migrated before Disc applied them (see
+   * `reconcileLinkDeleteRules`). The backfill travels as
    * ordinary operations of the plan, so preview, unsafe-op gating, execution,
    * history and rollback treat it like any other change — and a plan whose
    * diff is empty stops being a no-op exactly when there is something to fix.
    *
-   * Returns the plan unchanged when there is no database to look at (dry-run)
+   * Only reads the database, so a dry-run engine with a pool previews it too.
+   * Returns the plan unchanged when there is no database to look at
    * or nothing is missing, which is what makes a second `disc migrate` a no-op.
    */
   async withIndexBackfill(plan: Types.MigrationPlan, newSchema: Module[]): Promise<Types.MigrationPlan> {
-    if (!this.pool || this.config.dryRun || plan.migrations.length === 0)
+    if (!this.pool || plan.migrations.length === 0)
       return plan;
 
     const planned = plan.migrations.flatMap(m => m.operations);
     this.primeScalarTypes(newSchema);
+    const deleteRules = await reconcileLinkDeleteRules(
+      this.differ.declaredLinks(newSchema),
+      planned,
+      this.ddlGenerator,
+      tableNames => this.readExistingDeleteRules(tableNames)
+    );
+
+    for (const missing of deleteRules.missingForeignKeys)
+      logger.warn(`Delete-rule check: ${missing}`);
+
     const backfill: Types.MigrationOperation[] = [
       // Junction columns of link properties declared before Disc stored them
       // (see `reconcileDeclaredLinkProperties`) — same reasoning as indexes.
@@ -282,6 +298,9 @@ export class MigrationEngine {
         planned,
         tableName => this.readExistingColumns(tableName)
       ),
+      // FK actions and delete-target triggers the snapshot declares but the
+      // database lacks (see `reconcileLinkDeleteRules`).
+      ...deleteRules.operations,
       ...await reconcileDeclaredIndexes(
         await this.onExistingTables(this.differ.declaredIndexes(newSchema)),
         planned,
@@ -294,7 +313,12 @@ export class MigrationEngine {
         this.differ.declaredColumns(newSchema, property => this.ddlGenerator.propertyColumnType(property)),
         planned,
         tableName => this.readExistingColumns(tableName)
-      )
+      ),
+      // The copies of concrete types' rows in their abstract ancestors'
+      // tables, which links to an abstract type reference (see
+      // `reconcileAbstractMirrors`). After the conversions, so the rows are
+      // copied with their final column types.
+      ...await reconcileAbstractMirrors(this.differ.declaredAbstractMirrors(newSchema), () => this.readAbstractMirrors())
     ];
 
     if (backfill.length === 0)
@@ -1527,6 +1551,23 @@ export class MigrationEngine {
     return indexes.filter(index => existing.has(index.table));
   }
 
+  /*** The tables with a `disc_abstract_mirror` trigger, each with the trigger's arguments: the abstract tables it copies rows to. ***/
+  private async readAbstractMirrors(): Promise<Map<string, string[]>> {
+    const result = await this.pool!.query(
+      `SELECT c.relname AS table_name, encode(t.tgargs, 'escape') AS args
+       FROM pg_trigger t
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE t.tgname = 'disc_abstract_mirror' AND n.nspname = current_schema()`
+    );
+
+    // Each argument is followed by a NUL byte, which `escape` encoding writes as `\000`.
+    return new Map(result.rows.map(row => {
+      const { args, table_name } = row as { args: string; table_name: string; };
+      return [table_name, args.split("\\000").slice(0, -1)];
+    }));
+  }
+
   private async readExistingIndexNames(indexNames: string[]): Promise<Set<string>> {
     const result = await this.pool!.query(
       `SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ANY($1::text[])`,
@@ -1534,6 +1575,42 @@ export class MigrationEngine {
     );
 
     return new Set(result.rows.map(row => (row as { indexname: string; }).indexname));
+  }
+
+  /**
+   * The existing tables among `tableNames`, with their foreign keys' ON
+   * DELETE actions and their triggers. Feeds the delete-rule repair.
+   */
+  private async readExistingDeleteRules(tableNames: string[]): Promise<ExistingDeleteRules> {
+    const onDeleteActions: Record<string, string> = { a: "NO ACTION", c: "CASCADE", d: "SET DEFAULT", n: "SET NULL", r: "RESTRICT" };
+    const tables = await this.pool!.query(
+      `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1::text[])`,
+      [tableNames]
+    );
+    const foreignKeys = await this.pool!.query(
+      `SELECT t.relname AS table_name, c.conname AS constraint_name, c.confdeltype AS on_delete
+         FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'f' AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
+      [tableNames]
+    );
+    const triggers = await this.pool!.query(
+      `SELECT t.relname AS table_name, g.tgname AS trigger_name
+         FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid
+        WHERE NOT g.tgisinternal AND t.relnamespace = current_schema()::regnamespace AND t.relname = ANY($1::text[])`,
+      [tableNames]
+    );
+
+    return {
+      foreignKeys: new Map(foreignKeys.rows.map(row => {
+        const r = row as { constraint_name: string; on_delete: string; table_name: string; };
+        return [`${r.table_name}.${r.constraint_name}`, onDeleteActions[r.on_delete] ?? r.on_delete];
+      })),
+      tables: new Set(tables.rows.map(row => (row as { tablename: string; }).tablename)),
+      triggers: new Set(triggers.rows.map(row => {
+        const r = row as { table_name: string; trigger_name: string; };
+        return `${r.table_name}.${r.trigger_name}`;
+      }))
+    };
   }
 
   /**

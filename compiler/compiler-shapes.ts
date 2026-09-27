@@ -780,29 +780,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     resolvedName: string,
     shape?: EdgeQLAST.Shape
   ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause; } | null {
-    const allSubs = Context.getAllSubtypes(this.ctx.schema, resolvedName);
-    const concreteSubs = allSubs
-      .map(n => this.ctx.schema.types.get(n))
-      .filter((t): t is Context.TypeDef => t !== undefined && !t.abstract);
+    const concreteSubs = this.concreteSubtypes(typeDef);
 
     if (concreteSubs.length === 0) {
       return null;
     }
 
-    // Phase 1 — abstract type's columns. `id` is always present; every
-    // property of the abstract type is inherited (same column name) by
-    // every subtype, so projecting them is safe regardless of which
-    // subtype's table backs the row.
-    const inheritedColumns = ["id"];
-    for (const prop of typeDef.properties.values()) {
-      if (prop.computed) {
-        continue;
-      }
-      const col = prop.columnName ?? prop.name;
-      if (!inheritedColumns.includes(col)) {
-        inheritedColumns.push(col);
-      }
-    }
+    // Phase 1 — abstract type's columns: `id`, `__type__`, and those of its
+    // properties and single links, inherited (same column name) by every
+    // subtype, so projecting them is safe regardless of which subtype's
+    // table backs the row.
+    const inheritedColumns = this.abstractColumns(typeDef);
 
     // Phase 2 — subtype-specific columns referenced via polymorphic
     // shape fields like `[IS Circle].radius`. Without this projection
@@ -1985,7 +1973,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const tgtCol = link.junctionTargetColumn ?? "target_id";
       const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${rowAlias}"."id")), '[]'::jsonb) ` +
         `FROM ${this.readableTableSql(targetType)} "${rowAlias}" ` +
-        `JOIN "${link.junctionTable}" ON "${link.junctionTable}"."${srcCol}" = "${rowAlias}"."id" ` +
+        `JOIN ${this.junctionTableSql(link.junctionTable)} ON "${link.junctionTable}"."${srcCol}" = "${rowAlias}"."id" ` +
         `WHERE "${link.junctionTable}"."${tgtCol}" = "${currentAlias.alias}"."id")`;
       return { kind: "RawSQLExpression", sql };
     }

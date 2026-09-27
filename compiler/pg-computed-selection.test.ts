@@ -51,7 +51,7 @@ const SDL = `module default {
   }
 }`;
 
-const TABLES = ["count_video", "count_post", "count_channel"];
+const TABLES = ["count_video", "count_post", "count_channel", "count_base"];
 const CH_ID = "01234567-89ab-7cde-8f01-23456789abcd";
 
 async function dropAll(pool: { query: (sql: string) => Promise<unknown>; }) {

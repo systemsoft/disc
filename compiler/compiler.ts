@@ -38,9 +38,16 @@ interface MultiLinkOp {
   targets: LinkTarget[];
 }
 
+/*** The name of `subtype` as a statement's type (`update <subtype> …`). ***/
+function subtypeName(subtype: Context.TypeDef): EdgeQLAST.TypeName {
+  return EdgeQLAST.createTypeName(subtype.name.split("::"));
+}
+
 export class EdgeQLCompiler extends ShapeCompilerLayer {
   /** Set while compiling the update or delete body of a `for` over objects, which also reads the iterator's rows. */
   private mutationReadsIterator = false;
+  /** Prefixes the names of a multi-link update's CTEs while it is one of several in a statement (see compileAbstractMutation). */
+  private mutationCtePrefix = "";
 
   compile(
     query: EdgeQLAST.Query,
@@ -331,6 +338,12 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
+    }
+    if (typeDef.abstract) {
+      throw new CompilationError(
+        `Cannot insert an object of the abstract type '${typeDef.name}': insert one of a concrete type extending it.`,
+        locationOf(query)
+      );
     }
 
     // Insert policies are allow/deny only (no row check), so there is no
@@ -779,8 +792,58 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
+    if (this.concreteSubtypes(typeDef).length > 0) {
+      return this.compileAbstractMutation(typeDef, "upd", subtype => this.compileUpdateQuery({ ...query, type: subtypeName(subtype) }));
+    }
 
     return this.withMutationScope(typeName, typeDef, () => this.compileUpdateInScope(query, typeName, typeDef));
+  }
+
+  /**
+   * An update or delete of an abstract type, whose objects live in its
+   * concrete subtypes' tables: as in Gel, it affects the matching objects of
+   * every subtype. `compile` gives the statement on one subtype — its filter,
+   * assignments and access policies (a subtype answers to the abstract
+   * type's policies as its own) — and the statements run as the
+   * data-modifying CTEs of one statement, which returns the affected objects
+   * in the abstract type's columns:
+   *
+   *   WITH abs_person_upd_1 AS (UPDATE abs_person … RETURNING *),
+   *        abs_company_upd_2 AS (UPDATE abs_company … RETURNING *)
+   *   SELECT id, … FROM abs_person_upd_1 UNION ALL SELECT id, … FROM abs_company_upd_2
+   *
+   * A subtype's statement that is itself a WITH (an update of a multi link)
+   * has its CTEs, named after the subtype's, lifted into this one: a
+   * data-modifying WITH must be at the top level.
+   */
+  private compileAbstractMutation(
+    typeDef: Context.TypeDef,
+    operation: "upd" | "del",
+    compile: (subtype: Context.TypeDef) => SQL.SQLStatement
+  ): SQL.CTEStatement {
+    const columns = this.abstractColumns(typeDef);
+    const ctes: SQL.CTE[] = [];
+    const selects = this.concreteSubtypes(typeDef).map(subtype => {
+      const name = Context.generateAlias(this.ctx, `${subtype.tableName}_${operation}`);
+      const previousPrefix = this.mutationCtePrefix;
+      this.mutationCtePrefix = `${name}_`;
+      let statement: SQL.SQLStatement;
+      try {
+        statement = compile(subtype);
+      } finally {
+        this.mutationCtePrefix = previousPrefix;
+      }
+      if (statement.kind === "CTEStatement") {
+        ctes.push(...statement.ctes);
+        statement = statement.query;
+      }
+      ctes.push({ columns: [], kind: "CTE", name, query: statement, recursive: false });
+      return SQL.createSelectStatement({
+        from: SQL.createFromClause([SQL.createTableReference(name)]),
+        select: SQL.createSelectClause(columns.map(column => SQL.createSelectItem(SQL.createColumnReference(column))))
+      });
+    });
+    return SQL.withCTEs(ctes, selects.length === 1 ? selects[0] : SQL.unionAll(selects));
   }
 
   // The body of compileUpdateQuery: `set` and `filter` are compiled with the
@@ -889,7 +952,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     whereClause: SQL.WhereClause | undefined,
     multiLinkOps: MultiLinkOp[]
   ): SQL.CTEStatement {
-    const sourceCte = "upd";
+    const sourceCte = `${this.mutationCtePrefix}upd`;
     const sourceId = SQL.createColumnReference("id", sourceCte);
 
     let sourceQuery: SQL.SQLStatement;
@@ -928,7 +991,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     let insertCount = 0;
     const insertTargets = (link: Context.LinkDef, targets: LinkTarget[]) => {
       for (const target of targets) {
-        ctes.push(this.buildJunctionInsertCTE(`link_${insertCount++}`, link, sourceId, target, sourceCte));
+        ctes.push(this.buildJunctionInsertCTE(`${this.mutationCtePrefix}link_${insertCount++}`, link, sourceId, target, sourceCte));
       }
     };
 
@@ -944,7 +1007,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           // just-deleted row and trip the unique constraint.
           ctes.push(
             this.buildJunctionDeleteCTE(
-              `del_${index}`,
+              `${this.mutationCtePrefix}del_${index}`,
               link,
               sourceCte,
               idSelects,
@@ -963,7 +1026,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           if (idSelects.length > 0) {
             ctes.push(
               this.buildJunctionDeleteCTE(
-                `del_${index}`,
+                `${this.mutationCtePrefix}del_${index}`,
                 link,
                 sourceCte,
                 idSelects
@@ -980,12 +1043,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
   private compileDeleteQuery(
     deletion: EdgeQLAST.DeleteQuery
-  ): SQL.DeleteStatement {
+  ): SQL.DeleteStatement | SQL.CTEStatement {
     const query = this.mutationOfVariable(deletion);
     const typeName = query.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
+    }
+    if (this.concreteSubtypes(typeDef).length > 0) {
+      return this.compileAbstractMutation(typeDef, "del", subtype => this.compileDeleteQuery({ ...query, type: subtypeName(subtype) }));
     }
 
     // Compile WHERE clause
@@ -1126,6 +1192,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         bindingQuery = SQL.createSelectStatement({
           select: SQL.createSelectClause([SQL.createSelectItem(expr)])
         });
+      }
+
+      // A data-modifying WITH must be at the top level: a mutation compiled to
+      // a WITH of its own (an update or delete of an abstract type, an update
+      // of a multi link) has its CTEs join this one, ahead of the binding.
+      if (bindingQuery.kind === "CTEStatement" && value.kind === "Subquery" && isMutationQuery(value.query)) {
+        ctes.push(...bindingQuery.ctes);
+        bindingQuery = bindingQuery.query;
       }
 
       const cteName = binding.name.name;
@@ -1480,13 +1554,6 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     } else if (expr?.kind === "Path" && this.isObjectPath(expr)) {
       typeDef = this.resolvePath(expr)?.typeDef;
     }
-    if (typeDef?.abstract) {
-      throw new CompilationError(
-        `A \`for\` over the abstract type '${typeDef.name}' is not supported yet: its objects are stored in its subtypes' tables. ` +
-          `Iterate a concrete type.`,
-        locationOf(query)
-      );
-    }
     return select && typeDef?.kind === "object" ? { select, typeDef } : null;
   }
 
@@ -1521,17 +1588,19 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       }
       if (body.kind === "UpdateQuery") {
         const update = this.compileIteratorMutation(() => this.compileUpdateQuery(body));
-        if (update.kind !== "UpdateStatement") {
-          throw new CompilationError(
-            "An update in a `for` over objects cannot assign a multi link yet. Update the link without the loop: `update T filter … set { link += … }`.",
-            locationOf(query)
-          );
-        }
-        return { ...update, from: [iteratorTable], returning: [SQL.createSelectItem(SQL.createColumnReference("*", update.table))] };
+        return this.eachMutation<SQL.UpdateStatement>(update, "UpdateStatement", query, statement => ({
+          ...statement,
+          from: [iteratorTable],
+          returning: [SQL.createSelectItem(SQL.createColumnReference("*", statement.table))]
+        }));
       }
       if (body.kind === "DeleteQuery") {
         const deletion = this.compileIteratorMutation(() => this.compileDeleteQuery(body));
-        return { ...deletion, returning: [SQL.createSelectItem(SQL.createColumnReference("*", deletion.table))], using: [iteratorTable] };
+        return this.eachMutation<SQL.DeleteStatement>(deletion, "DeleteStatement", query, statement => ({
+          ...statement,
+          returning: [SQL.createSelectItem(SQL.createColumnReference("*", statement.table))],
+          using: [iteratorTable]
+        }));
       }
 
       return SQL.createSelectStatement({
@@ -1547,6 +1616,31 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     } finally {
       Context.popScope(this.ctx);
     }
+  }
+
+  /**
+   * `apply` to the update or delete that is the body of a `for` over
+   * objects — or, for one of an abstract type, to each subtype's (see
+   * compileAbstractMutation). An update of a multi link is a WITH of other
+   * statements too, which the loop cannot run yet.
+   */
+  private eachMutation<S extends SQL.UpdateStatement | SQL.DeleteStatement>(
+    statement: SQL.SQLStatement,
+    kind: S["kind"],
+    query: EdgeQLAST.ForQuery,
+    apply: (statement: S) => S
+  ): SQL.SQLStatement {
+    const isMutation = (candidate: SQL.SQLStatement): candidate is S => candidate.kind === kind;
+    if (isMutation(statement)) {
+      return apply(statement);
+    }
+    if (statement.kind === "CTEStatement" && statement.ctes.every(cte => isMutation(cte.query))) {
+      return { ...statement, ctes: statement.ctes.map(cte => ({ ...cte, query: apply(cte.query as S) })) };
+    }
+    throw new CompilationError(
+      "An update in a `for` over objects cannot assign a multi link yet. Update the link without the loop: `update T filter … set { link += … }`.",
+      locationOf(query)
+    );
   }
 
   /*** True when `query` selects one operator, function or cast result without a shape (`u.visits + 1`, `str_upper(u.name)`). ***/

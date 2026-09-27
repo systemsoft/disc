@@ -87,6 +87,59 @@ Deno.test({
 });
 
 Deno.test({
+  name: "PG: disc migrate --dry-run previews the repair of a delete rule the database lacks",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    const capture = new ConsoleCapture();
+    const cwd = Deno.cwd();
+    const tempDir = await createTempDir();
+    const sdl = `module default {
+      type Program { required name: str; };
+      type Bug { required program: Program { on target delete delete source; }; };
+    };`;
+
+    try {
+      await resetTestDatabase(pool);
+
+      const manager = new SchemaManager({ pool });
+      await manager.initialize();
+      const applied = await manager.applySchema(sdl);
+      await manager.close();
+      assertEquals(applied.ok, true, applied.ok ? "" : applied.error.message);
+
+      /*** A database migrated before ALTER LINK applied delete rules: the snapshot says delete source, the FK restricts. ***/
+      await pool.query(
+        `ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE RESTRICT`
+      );
+
+      const schema = `${tempDir}/schema.disc`;
+      await Deno.writeTextFile(schema, sdl);
+
+      Deno.chdir(tempDir);
+      capture.start();
+      await new CLICommands().migrate({ _: ["migrate"], "backend-dsn": dsn, "dry-run": true, schema });
+      capture.stop();
+
+      const output = [...capture.getLogs(), ...capture.getErrors()].join("\n");
+      assertStringIncludes(output, "ON DELETE CASCADE");
+
+      const action = await pool.query(`SELECT confdeltype FROM pg_constraint WHERE conname = 'fk_bug_program_id'`);
+      assertEquals(action.rows[0].confdeltype, "r", "a dry run repairs nothing");
+    } finally {
+      capture.stop();
+      Deno.chdir(cwd);
+      await cleanupTempDir(tempDir);
+      await resetTestDatabase(pool);
+      await pool.close();
+    }
+  }
+});
+
+Deno.test({
   name: "disc migrate --dry-run fails clearly when the database is unreachable",
   /*** The pool's connect retries leave timers behind on failure. ***/
   sanitizeOps: false,

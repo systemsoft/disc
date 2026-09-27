@@ -1617,11 +1617,14 @@ export class SchemaManager {
    * index the schema declares that the database lacks and the plan does not
    * already create. The diff cannot see these — it compares two schema
    * snapshots, never the database — so a constraint that was declared before
-   * Disc enforced it would otherwise never get its index.
+   * Disc enforced it would otherwise never get its index. The other database
+   * repairs (link-property columns, delete rules, TEXT columns) join it — see
+   * `MigrationEngine.withIndexBackfill`.
    *
    * `applySchema()` / `applyModules()` do this themselves. Callers that only
-   * plan (`disc migrate --create`) call it to preview the same statements.
-   * Reads `pg_indexes`; a dry-run manager returns the plan unchanged.
+   * plan (`disc migrate --create` / `--dry-run`) call it to preview the same
+   * statements. Only reads the database; a manager without a pool returns the
+   * plan unchanged.
    */
   withIndexBackfill(
     plan: Types.MigrationPlan,

@@ -549,6 +549,19 @@ export abstract class CompilerBase {
     if (!this.enableAccessControl || !this.accessEvaluator || this.accessContext.bypass || typeDef.kind !== "object") {
       return undefined;
     }
+    // An abstract type's objects answer to their own types' policies: the
+    // ones the union of its subtypes' readable rows keeps (see restrictReads).
+    const subtypes = this.concreteSubtypes(typeDef);
+    if (subtypes.length > 0) {
+      if (!subtypes.some(subtype => this.selectPolicyFilter(subtype))) {
+        return undefined;
+      }
+      const readable = SQL.createSelectStatement({
+        from: SQL.createFromClause([SQL.createTableReference(typeDef.tableName)]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("id"))])
+      });
+      return SQL.createBinaryExpression("IN", SQL.createColumnReference("id"), SQL.createSubqueryExpression(readable));
+    }
     const decision = this.accessEvaluator.evaluate(typeDef.name, "select", this.accessContext);
     if (!decision.allowed) {
       return SQL.createLiteral("boolean", false);
@@ -580,9 +593,27 @@ export abstract class CompilerBase {
    */
   protected readableTableSql(typeDef: Context.TypeDef): string {
     const filter = this.selectPolicyFilter(typeDef);
-    return filter ?
-      `(${new SQLCodeGenerator().generate(this.tableRowsWhere(typeDef, filter))})` :
-      `"${typeDef.tableName}"`;
+    if (filter) {
+      return `(${this.renderSqlStatement(this.tableRowsWhere(typeDef, filter))})`;
+    }
+    // An abstract type's table stands for its subtypes' rows (see abstractTableRows).
+    const abstractRows = this.abstractTableRows(typeDef.tableName);
+    return abstractRows ? `(${this.renderSqlStatement(abstractRows)})` : `"${typeDef.tableName}"`;
+  }
+
+  /**
+   * A junction table as SQL text, for a FROM or JOIN the compiler writes as
+   * text: `"<junction>"`, followed by `alias` when given. The junction of a
+   * multi link declared on an abstract type holds no rows of its own: it is
+   * the union of its subtypes' junctions (see abstractTableRows), aliased by
+   * `alias` or else by the junction's name, so `"<junction>".col` still resolves.
+   */
+  protected junctionTableSql(junctionTable: string, alias?: string): string {
+    const abstractRows = this.abstractTableRows(junctionTable);
+    if (abstractRows) {
+      return `(${this.renderSqlStatement(abstractRows)}) "${alias ?? junctionTable}"`;
+    }
+    return alias ? `"${junctionTable}" "${alias}"` : `"${junctionTable}"`;
   }
 
   /**
@@ -623,13 +654,13 @@ export abstract class CompilerBase {
   protected readableIdSql(typeDef: Context.TypeDef, idSql: string): string {
     const id: SQL.SQLExpression = { kind: "RawSQLExpression", sql: idSql };
     const readable = this.readableId(typeDef, id);
-    return readable === id ? idSql : new SQLCodeGenerator().generateExpression(readable);
+    return readable === id ? idSql : this.renderSqlExpr(readable);
   }
 
   /*** `readableIdCondition` as SQL text, prefixed ` AND `; empty when the type is not narrowed. ***/
   protected readableIdConditionSql(typeDef: Context.TypeDef, idSql: string): string {
     const condition = this.readableIdCondition(typeDef, { kind: "RawSQLExpression", sql: idSql });
-    return condition ? ` AND ${new SQLCodeGenerator().generateExpression(condition)}` : "";
+    return condition ? ` AND ${this.renderSqlExpr(condition)}` : "";
   }
 
   /**
@@ -657,20 +688,24 @@ export abstract class CompilerBase {
    * table references: an update or delete narrows its target itself, by the
    * select policy and its own (see `mutationRowCondition`).
    *
+   * It is also where a read of an abstract type's table becomes a read of
+   * its objects, which live in its concrete subtypes' tables (see
+   * `abstractTableRows`) — whether or not access control is on. Each
+   * subtype's table is then narrowed by its own select policy, as Gel
+   * applies each object's own type's policies.
+   *
    * `shadowed` holds the CTE names in scope: a reference to one reads the
    * CTE, not a table of the same name. A non-recursive CTE sees only the
    * CTEs before it; a recursive WITH sees all of its own.
    */
   protected restrictObjectReads(node: unknown, shadowed: ReadonlySet<string>): void {
-    if (this.enableAccessControl && this.accessEvaluator && !this.accessContext.bypass) {
-      this.restrictReads(node, shadowed);
-    }
+    this.restrictReads(node, shadowed, this.enableAccessControl && this.accessEvaluator !== undefined && !this.accessContext.bypass);
   }
 
-  private restrictReads(node: unknown, shadowed: ReadonlySet<string>): void {
+  private restrictReads(node: unknown, shadowed: ReadonlySet<string>, restrict: boolean): void {
     if (Array.isArray(node)) {
       for (const item of node) {
-        this.restrictReads(item, shadowed);
+        this.restrictReads(item, shadowed, restrict);
       }
       return;
     }
@@ -687,20 +722,22 @@ export abstract class CompilerBase {
         statement.ctes.forEach(cte => inScope.add(cte.name));
       }
       for (const cte of statement.ctes) {
-        this.restrictReads(cte.query, inScope);
+        this.restrictReads(cte.query, inScope, restrict);
         inScope.add(cte.name);
       }
-      this.restrictReads(statement.query, inScope);
+      this.restrictReads(statement.query, inScope, restrict);
       return;
     }
 
     if (sqlNode.kind === "TableReference") {
       const table = node as SQL.TableReference;
-      if (!this.exemptTables.has(table) && !table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
-        const typeDef = this.objectTypeOfTable(table.name);
+      if (!table.subquery && !table.expression && table.name && !shadowed.has(table.name)) {
+        const abstractRows = this.abstractTableRows(table.name);
+        const typeDef = abstractRows || !restrict || this.exemptTables.has(table) ? undefined : this.objectTypeOfTable(table.name);
         const filter = typeDef ? this.selectPolicyFilter(typeDef) : undefined;
-        if (typeDef && filter) {
-          table.subquery = this.tableRowsWhere(typeDef, filter);
+        const rows = abstractRows ?? (typeDef && filter ? this.tableRowsWhere(typeDef, filter) : undefined);
+        if (rows) {
+          table.subquery = rows;
           table.alias = table.alias ?? table.name;
           table.name = "";
         }
@@ -708,8 +745,95 @@ export abstract class CompilerBase {
     }
 
     for (const value of Object.values(node)) {
-      this.restrictReads(value, shadowed);
+      this.restrictReads(value, shadowed, restrict);
     }
+  }
+
+  /**
+   * The concrete types whose tables hold the objects of the abstract type
+   * `typeDef`: its subtypes at any depth, less the abstract ones. Empty for a
+   * concrete type.
+   */
+  protected concreteSubtypes(typeDef: Context.TypeDef): Context.TypeDef[] {
+    if (!typeDef.abstract) {
+      return [];
+    }
+    return [...new Set(Context.getAllSubtypes(this.ctx.schema, typeDef.name))]
+      .map(name => this.ctx.schema.types.get(name))
+      .filter((subtype): subtype is Context.TypeDef => subtype !== undefined && !subtype.abstract);
+  }
+
+  /**
+   * The columns an abstract type's objects have in each of its concrete
+   * subtypes' tables: `id`, the `__type__` discriminator, and the columns of
+   * its stored properties and single links, which every subtype inherits
+   * under the same names.
+   */
+  protected abstractColumns(typeDef: Context.TypeDef): string[] {
+    const columns = ["id", "__type__"];
+    for (const property of typeDef.properties.values()) {
+      if (!property.computed) {
+        columns.push(property.columnName ?? property.name);
+      }
+    }
+    for (const link of typeDef.links.values()) {
+      if (link.columnName && !link.computed) {
+        columns.push(link.columnName);
+      }
+    }
+    return [...new Set(columns)];
+  }
+
+  /**
+   * The rows a read of `table` stands for when it is the table of an abstract
+   * type, or the junction table of a multi link declared on one. Neither ever
+   * holds a row: an abstract type's objects, and their links, are stored in
+   * its concrete subtypes' tables. So the read is of their union —
+   * `SELECT <columns> FROM "<subtype>" UNION ALL …` over the columns the
+   * subtypes share with the abstract type (or its junction).
+   *
+   * Undefined for any other table, and for an abstract type without concrete
+   * subtypes, which has no objects: its own table is that empty set.
+   */
+  protected abstractTableRows(table: string): SQL.SQLStatement | undefined {
+    for (const typeDef of this.ctx.schema.types.values()) {
+      if (typeDef.kind !== "object" || !typeDef.abstract) {
+        continue;
+      }
+      const subtypes = this.concreteSubtypes(typeDef);
+      if (subtypes.length === 0) {
+        continue;
+      }
+      if (typeDef.tableName === table) {
+        return this.unionOfTables(subtypes.map(subtype => subtype.tableName), this.abstractColumns(typeDef));
+      }
+      for (const link of typeDef.links.values()) {
+        if (link.junctionTable !== table) {
+          continue;
+        }
+        const columns = [
+          link.junctionSourceColumn ?? "source_id",
+          link.junctionTargetColumn ?? "target_id",
+          ...[...(link.properties?.values() ?? [])].filter(property => !property.computed).map(property => property.columnName)
+        ];
+        const junctions = subtypes
+          .map(subtype => subtype.links.get(link.name)?.junctionTable)
+          .filter((junction): junction is string => junction !== undefined);
+        return this.unionOfTables(junctions, columns);
+      }
+    }
+    return undefined;
+  }
+
+  /*** `SELECT <columns> FROM "<t1>" UNION ALL SELECT <columns> FROM "<t2>" …`. ***/
+  private unionOfTables(tables: string[], columns: string[]): SQL.SQLStatement {
+    const selects = tables.map(table =>
+      SQL.createSelectStatement({
+        from: SQL.createFromClause([SQL.createTableReference(table)]),
+        select: SQL.createSelectClause(columns.map(column => SQL.createSelectItem(SQL.createColumnReference(column))))
+      })
+    );
+    return selects.length === 1 ? selects[0] : SQL.unionAll(selects);
   }
 
   /*** The object type stored in `table`, if any. ***/

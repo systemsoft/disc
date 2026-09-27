@@ -19,6 +19,35 @@ import * as Types from "./types.ts";
 const EMPTY_ARRAY = "'{}'";
 
 /**
+ * The trigger function keeping a concrete type's rows copied in the tables of
+ * its abstract ancestors, named by the trigger's arguments (see
+ * `MirrorAbstractTypeOperation`). A copy is the row read as the abstract
+ * table's record, so it needs no column list of its own: an update rewrites
+ * every column the abstract table has, read from pg_attribute.
+ */
+const ABSTRACT_MIRROR_FUNCTION = `CREATE OR REPLACE FUNCTION disc_abstract_mirror() RETURNS trigger AS $$
+  DECLARE
+    target text;
+    target_columns text;
+  BEGIN
+    FOREACH target IN ARRAY TG_ARGV LOOP
+      IF TG_OP = 'INSERT' THEN
+        EXECUTE format('INSERT INTO %I SELECT (jsonb_populate_record(NULL::%I, $1)).*', target, target) USING to_jsonb(NEW);
+      ELSIF TG_OP = 'UPDATE' THEN
+        SELECT string_agg(quote_ident(attname), ', ' ORDER BY attnum) INTO target_columns
+        FROM pg_attribute
+        WHERE attrelid = format('%I', target)::regclass AND attnum > 0 AND NOT attisdropped;
+        EXECUTE format('UPDATE %I SET (%s) = (SELECT %s FROM jsonb_populate_record(NULL::%I, $1)) WHERE id = $2', target, target_columns, target_columns, target)
+          USING to_jsonb(NEW), OLD.id;
+      ELSE
+        EXECUTE format('DELETE FROM %I WHERE id = $1', target) USING OLD.id;
+      END IF;
+    END LOOP;
+    RETURN NULL;
+  END;
+$$ LANGUAGE plpgsql;`;
+
+/**
  * Column types PostgreSQL casts between directly (numbers among numbers,
  * dates and timestamps among themselves). See `DDLGenerator.castExpression`.
  */
@@ -275,6 +304,11 @@ export class DDLGenerator {
             `ALTER TABLE ${this.escapeIdentifier(op.tableName)} ALTER COLUMN ${column} TYPE TEXT USING ${column}::text;`
         ];
       }
+      case "MirrorAbstractType": {
+        // The trigger goes; the next migration's backfill puts back what the schema needs.
+        const op = operation as Types.MirrorAbstractTypeOperation;
+        return [`DROP TRIGGER IF EXISTS "disc_abstract_mirror" ON ${this.escapeIdentifier(op.tableName)};`];
+      }
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -344,6 +378,10 @@ export class DDLGenerator {
         return this.generateConvertTextColumn(
           operation as Types.ConvertTextColumnOperation
         );
+      case "MirrorAbstractType":
+        return this.generateMirrorAbstractType(
+          operation as Types.MirrorAbstractTypeOperation
+        );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -362,6 +400,31 @@ export class DDLGenerator {
    */
   private scalarTypeName(operation: { pgTypeName?: string; scalarName: string; }): string {
     return operation.pgTypeName ?? enumTypeName("default", operation.scalarName, false);
+  }
+
+  /**
+   * Copy a concrete type's rows to its abstract ancestors' tables (see
+   * `MirrorAbstractTypeOperation`): the trigger that keeps the copies, then
+   * the copies of the rows the table already holds. A copy is the row read
+   * as the abstract table's record — the columns the subtype inherited.
+   * With no abstract tables, the trigger is dropped.
+   */
+  private generateMirrorAbstractType(operation: Types.MirrorAbstractTypeOperation): string[] {
+    const table = this.escapeIdentifier(operation.tableName);
+    if (operation.abstractTables.length === 0) {
+      return [`DROP TRIGGER IF EXISTS "disc_abstract_mirror" ON ${table};`];
+    }
+
+    const args = operation.abstractTables.map(abstractTable => `'${abstractTable.replace(/'/g, "''")}'`).join(", ");
+    return [
+      ABSTRACT_MIRROR_FUNCTION,
+      `CREATE OR REPLACE TRIGGER "disc_abstract_mirror" AFTER INSERT OR UPDATE OR DELETE ON ${table} ` +
+      `FOR EACH ROW EXECUTE FUNCTION disc_abstract_mirror(${args});`,
+      ...operation.abstractTables.map(abstractTable => {
+        const target = this.escapeIdentifier(abstractTable);
+        return `INSERT INTO ${target} SELECT (jsonb_populate_record(NULL::${target}, to_jsonb(disc_row))).* FROM ${table} AS disc_row ON CONFLICT (id) DO NOTHING;`;
+      })
+    ];
   }
 
   /**
@@ -1478,6 +1541,22 @@ END $$;`,
   }
 
   /**
+   * The FK from a link to its target as CREATE and ALTER LINK emit it: the
+   * table holding it, its constraint name and its ON DELETE action. The
+   * delete-rule repair (`reconcileLinkDeleteRules`) compares the database's
+   * foreign keys against it.
+   */
+  targetForeignKey(tableName: string, link: Types.LinkDefinition): { constraint: string; onDelete: string; table: string; } {
+    const table = link.multi ? `${tableName}_${link.name}` : tableName;
+
+    return {
+      constraint: this.foreignKeyName(table, link.multi ? "target_id" : linkColumnName(link.name)),
+      onDelete: this.targetOnDelete(link),
+      table
+    };
+  }
+
+  /**
    * ON DELETE action of the FK from a link to its target. A single link's
    * `<link>_id` column defaults to RESTRICT. A multi link's junction row is the
    * link itself, so it defaults to CASCADE (on create and alter alike), and
@@ -2230,7 +2309,7 @@ END $$;`,
   ): string[] {
     const targetTable = typeNameToTableName(link.target);
     const fnName = `disc_source_delete_${tableName}_${link.name}`;
-    const triggerName = `trg_source_delete_${tableName}_${link.name}`;
+    const triggerName = this.sourceDeleteTriggerName(tableName, link.name);
 
     if (link.multi) {
       // Multi-valued link uses junction table
@@ -2257,6 +2336,11 @@ END $$;`,
     ];
   }
 
+  /** Name of the BEFORE DELETE trigger behind a link's `on source delete delete target`. */
+  sourceDeleteTriggerName(tableName: string, linkName: string): string {
+    return `trg_source_delete_${tableName}_${linkName}`;
+  }
+
   /**
    * Generate DROP statements for a source delete trigger and its function.
    */
@@ -2265,7 +2349,7 @@ END $$;`,
     linkName: string
   ): string[] {
     const fnName = `disc_source_delete_${tableName}_${linkName}`;
-    const triggerName = `trg_source_delete_${tableName}_${linkName}`;
+    const triggerName = this.sourceDeleteTriggerName(tableName, linkName);
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${this.escapeIdentifier(tableName)};`,

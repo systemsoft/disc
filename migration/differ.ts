@@ -1290,6 +1290,51 @@ export class SchemaDiffer {
   }
 
   /**
+   * Every link of a schema with the table that stores it — what the
+   * database's foreign keys and delete-target triggers should match. Used by
+   * the delete-rule repair (`reconcileLinkDeleteRules`): a delete-rule change
+   * migrated before Disc applied it was recorded in the snapshot only, so
+   * diffing two snapshots never touches the foreign key again.
+   */
+  declaredLinks(schema: Module[]): Types.DeclaredLink[] {
+    const types = this.extractTypes(schema);
+
+    return [...types.values()].flatMap(typeDef =>
+      this.extractLinksWithInheritance(typeDef, types).map(link => ({
+        link,
+        tableName: typeNameToTableName(typeDef.name.value),
+        typeName: typeDef.name.value
+      }))
+    );
+  }
+
+  /**
+   * For every concrete type of a schema, the tables of the abstract types it
+   * extends at any depth, nearest first — the tables that keep a copy of its
+   * rows (see `MirrorAbstractTypeOperation`). Empty for a type extending no
+   * abstract type. Used by the mirror backfill (`reconcileAbstractMirrors`).
+   */
+  declaredAbstractMirrors(schema: Module[]): Types.DeclaredAbstractMirror[] {
+    const types = this.extractTypes(schema);
+    const abstractAncestors = (typeDef: AST.TypeDeclaration, seen: Set<AST.TypeDeclaration>): string[] =>
+      (typeDef.extending ?? []).flatMap(ext => {
+        const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
+        if (!parent || seen.has(parent)) {
+          return [];
+        }
+        seen.add(parent);
+        return [...(parent.abstract ? [typeNameToTableName(parent.name.value)] : []), ...abstractAncestors(parent, seen)];
+      });
+
+    return [...types.values()]
+      .filter(typeDef => !typeDef.abstract)
+      .map(typeDef => ({
+        abstractTables: abstractAncestors(typeDef, new Set()),
+        tableName: typeNameToTableName(typeDef.name.value)
+      }));
+  }
+
+  /**
    * Every stored column of a schema — properties, and link properties on
    * junction tables — with the column type `columnType` gives its property.
    * Used by the TEXT-column backfill (`reconcileTextColumns`): Disc created

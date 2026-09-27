@@ -560,6 +560,25 @@ Deno.test({
       // The abstract parent reads each subtype's rows under that subtype's policies.
       assertEquals(await sorted(pool, schema, "select AcpOwned { title }"), [{ title: "ann-doc" }, { title: "ann-sheet" }, { title: "shared" }]);
       assertEquals(await values(pool, schema, "select count(AcpDoc)"), [1]);
+      // So does a path, and a `for`, over the abstract parent.
+      assertEquals(await sorted(pool, schema, "select AcpOwned.title"), ["ann-doc", "ann-sheet", "shared"]);
+      assertEquals(await sorted(pool, schema, "for o in AcpOwned union (select o.title)"), ["ann-doc", "ann-sheet", "shared"]);
+    })
+});
+
+Deno.test({
+  name: "PG access policy inheritance: an update or delete of the abstract parent answers to each subtype's policies",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      // 'shared' is visible, but only the owner may update it (the parent's `owned`).
+      await run(pool, schema, "update AcpOwned set { title := .title ++ '!' }");
+      assertEquals(await column(pool, "SELECT title FROM acp_doc ORDER BY title"), ["ann-doc!", "bob-doc"]);
+      assertEquals(await column(pool, "SELECT title FROM acp_sheet ORDER BY title"), ["ann-sheet!", "bob-sheet", "shared"]);
+
+      await run(pool, schema, "delete AcpOwned");
+      assertEquals(await column(pool, "SELECT title FROM acp_doc ORDER BY title"), ["bob-doc"]);
+      assertEquals(await column(pool, "SELECT title FROM acp_sheet ORDER BY title"), ["bob-sheet", "shared"]);
     })
 });
 

@@ -201,8 +201,12 @@ Deno.test("path select - unsupported steps fail with a clear error and location"
   const backlink = await errorOf("select\n  User.<author");
   assertStringIncludes(backlink.message, "without a type intersection");
   assertEquals([backlink.context?.location?.line, backlink.context?.location?.column], [2, 7]);
+});
 
-  assertStringIncludes((await errorOf("select User.labels.name")).message, "abstract type 'Named' is not supported yet");
+Deno.test("path select - a path through an abstract type reads its concrete subtypes' table", async () => {
+  // Named's objects are Tags: its own table holds none.
+  assertMatch(await sqlOf("select User.labels.name"), /^SELECT (named_\d+)\.name FROM \(SELECT id, __type__, name FROM tag\) AS \1 WHERE/);
+  assertMatch(await sqlOf("select Named.name"), /^SELECT (named_\d+)\.name FROM \(SELECT id, __type__, name FROM tag\) AS \1$/);
 });
 
 Deno.test("for over objects - a select body reads the iterator row in LATERAL", async () => {
@@ -245,10 +249,8 @@ Deno.test("for over objects - a delete body is DELETE … USING the iterator", a
   );
 });
 
-Deno.test("for over objects - an abstract type fails with a clear error", async () => {
-  const error = await errorOf("for x in Named union (select x.name)");
-  assertStringIncludes(error.message, "A `for` over the abstract type 'Named' is not supported yet");
-  assertEquals(error.context?.location?.line, 1);
+Deno.test("for over objects - an abstract type iterates its concrete subtypes' objects", async () => {
+  assertStringIncludes(await sqlOf("for x in Named union (select x.name)"), "FROM tag");
 });
 
 Deno.test("for over values - a path to values is a subquery iterator", async () => {
