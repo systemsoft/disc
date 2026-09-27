@@ -120,6 +120,27 @@ Deno.test("reconcileLinkDeleteRules defers the foreign key of a link to an abstr
   ]);
 });
 
+Deno.test("reconcileLinkDeleteRules turns a plain RESTRICT foreign key of a deferred restrict link into a deferred NO ACTION one", async () => {
+  const deferredRestrict: DeclaredLink = { ...DELETE_SOURCE, link: { ...DELETE_SOURCE.link, onTargetDelete: "DEFERRED RESTRICT" } };
+  const result = await reconcileLinkDeleteRules([deferredRestrict], [], new DDLGenerator(), restrictingDatabase([]));
+
+  assertEquals(new DDLGenerator().generateDDL(result.operations), [
+    "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;"
+  ]);
+
+  /*** A deferred RESTRICT (what a link to an abstract type gets) is still not a deferred restrict: its delete check is immediate. ***/
+  const database = (onDelete: string): () => Promise<ExistingDeleteRules> => () =>
+    Promise.resolve({
+      deferredForeignKeys: new Set(["bug.fk_bug_program_id"]),
+      foreignKeys: new Map([["bug.fk_bug_program_id", onDelete]]),
+      tables: new Set(["bug"]),
+      triggerBodies: new Map<string, string>(),
+      triggers: new Map<string, string>()
+    });
+  assertEquals((await reconcileLinkDeleteRules([deferredRestrict], [], new DDLGenerator(), database("RESTRICT"))).operations.length, 1);
+  assertEquals((await reconcileLinkDeleteRules([deferredRestrict], [], new DDLGenerator(), database("NO ACTION"))).operations, []);
+});
+
 Deno.test("SchemaDiffer marks the links whose target is abstract, and DDL defers their foreign keys", () => {
   const modules = new SDLConverter().convertToModules(
     new SDLParser(`module default {

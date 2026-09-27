@@ -117,6 +117,29 @@ Deno.test({
 });
 
 Deno.test({
+  name: "PG delete-rule drift: a deferred restrict link's FK left at plain RESTRICT is re-added deferred, once",
+  ignore: !canRunPgTests(),
+  fn: () =>
+    run(async pool => {
+      const sdl = schema("required link program: Program { on target delete deferred restrict; };");
+      assertEquals(await migrate(pool, sdl), 1);
+
+      /*** What a migrate before deferred restrict existed left behind: a plain RESTRICT FK. ***/
+      await pool.query(
+        `ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE RESTRICT`
+      );
+
+      assertStringIncludes(await preview(pool, sdl), "ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED");
+      assertEquals(await migrate(pool, sdl), 1);
+
+      const rule = await pool.query(`SELECT confdeltype, condeferred FROM pg_constraint WHERE conname = 'fk_bug_program_id'`);
+      assertEquals([rule.rows[0].confdeltype, rule.rows[0].condeferred], ["a", true]);
+
+      assertEquals(await migrate(pool, sdl), 0, "once repaired, the next migrate is a no-op");
+    })
+});
+
+Deno.test({
   name: "PG delete-rule drift: a multi link's junction FK left at RESTRICT is re-added with CASCADE, once",
   ignore: !canRunPgTests(),
   fn: () =>

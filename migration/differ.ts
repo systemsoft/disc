@@ -906,8 +906,9 @@ export class SchemaDiffer {
     }
     switch (value) {
       case "restrict":
-      case "deferred restrict":
         return "RESTRICT";
+      case "deferred restrict":
+        return "DEFERRED RESTRICT";
       case "cascade":
         return "CASCADE";
       case "delete source":

@@ -520,7 +520,8 @@ function pgStoredName(name: string): string {
  * Compares every declared link (`declared`) with the database: the ON DELETE
  * action of its target FK (`fk_<table>_<link>_id`, or `fk_<junction>_target_id`
  * on a multi link) and whether that FK is deferred (a link to an abstract
- * type's is, see `LinkDefinition.targetAbstract`), and whether its `trg_source_delete_…` trigger exists —
+ * type's is, see `LinkDefinition.targetAbstract`, and a `deferred restrict`
+ * link's, whose action is NO ACTION rather than RESTRICT), and whether its `trg_source_delete_…` trigger exists —
  * with the timing, on the table and running the function body Disc creates
  * it with now (AFTER DELETE; a multi link's on its junction; `if orphan`
  * adds a check). Earlier Disc created it BEFORE DELETE on the source table,

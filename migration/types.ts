@@ -411,7 +411,12 @@ export interface LinkDefinition {
   multi: boolean;
   cardinality?: string;
   extending?: string[];
-  onTargetDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+  /**
+   * `DEFERRED RESTRICT` is Gel's `deferred restrict`: like `RESTRICT`, but
+   * checked at commit — an FK `ON DELETE NO ACTION DEFERRABLE INITIALLY
+   * DEFERRED` (PostgreSQL never defers a `RESTRICT`).
+   */
+  onTargetDelete?: "RESTRICT" | "DEFERRED RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   /**
    * `DELETE TARGET` deletes the targets with their source; `DELETE TARGET IF
    * ORPHAN` only the targets no other object links through the same link.
@@ -487,9 +492,9 @@ export interface ColumnDefinition {
   references?: {
     table: string;
     column: string;
-    /** `DEFERRABLE INITIALLY DEFERRED` (see `LinkDefinition.targetAbstract`). */
+    /** `DEFERRABLE INITIALLY DEFERRED` (see `LinkDefinition.targetAbstract` and `onTargetDelete`). */
     deferred?: boolean;
-    onDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+    onDelete?: "RESTRICT" | "NO ACTION" | "CASCADE" | "SET NULL" | "SET DEFAULT";
     onUpdate?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   };
 }

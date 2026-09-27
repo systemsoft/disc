@@ -56,7 +56,7 @@ Deno.test("alter link - the re-added constraint is the one CREATE emits for the 
 Deno.test("alter link - each on-target-delete policy maps to the FK action CREATE uses", () => {
   const cases: [string, string][] = [
     ["cascade", "CASCADE"],
-    ["deferred restrict", "RESTRICT"],
+    ["deferred restrict", "NO ACTION DEFERRABLE INITIALLY DEFERRED"],
     ["delete source", "CASCADE"],
     ["restrict", "RESTRICT"],
     ["set empty", "SET NULL"]
@@ -69,6 +69,54 @@ Deno.test("alter link - each on-target-delete policy maps to the FK action CREAT
 
     assertStringIncludes(ddl, `REFERENCES program (id) ON DELETE ${action};`, policy);
   }
+});
+
+Deno.test("create type - deferred restrict is a NO ACTION FK checked at commit, on a single link and a multi link's junction", () => {
+  const single = initialDDL(bug("required link program: Program { on target delete deferred restrict; };")).join("\n");
+  assertStringIncludes(single, "REFERENCES program (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;");
+
+  const junction = initialDDL(bug("multi link programs: Program { on target delete deferred restrict; };"))
+    .find(statement => statement.startsWith("CREATE TABLE bug_programs"))!;
+  assertStringIncludes(junction, "REFERENCES program (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED");
+});
+
+Deno.test("alter link - switching between restrict and deferred restrict re-adds the FK", () => {
+  const deferred = "required link program: Program { on target delete deferred restrict; };";
+
+  assertEquals(migrationDDL(bug(RESTRICT), bug(deferred)), [
+    "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, " +
+    "ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;"
+  ]);
+  assertEquals(migrationDDL(bug(deferred), bug("required link program: Program { on target delete restrict; };")), [
+    "ALTER TABLE bug DROP CONSTRAINT fk_bug_program_id, " +
+    "ADD CONSTRAINT fk_bug_program_id FOREIGN KEY (program_id) REFERENCES program (id) ON DELETE RESTRICT;"
+  ]);
+  assertEquals(
+    migrationDDL(
+      bug("multi link programs: Program { on target delete restrict; };"),
+      bug("multi link programs: Program { on target delete deferred restrict; };")
+    ),
+    [
+      "ALTER TABLE bug_programs DROP CONSTRAINT fk_bug_programs_target_id, " +
+      "ADD CONSTRAINT fk_bug_programs_target_id FOREIGN KEY (target_id) REFERENCES program (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;"
+    ]
+  );
+});
+
+Deno.test("create type - deferred restrict to an abstract type is deferred once, restrict to one keeps RESTRICT", () => {
+  const sdl = (policy: string): string =>
+    `module default {
+    abstract type Named { required name: str; };
+    type Person extending Named {};
+    type Thing { link owner -> Named { on target delete ${policy}; }; multi link fans -> Named { on target delete ${policy}; }; };
+  };`;
+
+  const deferred = initialDDL(sdl("deferred restrict")).join("\n");
+  assertStringIncludes(deferred, "REFERENCES named (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;");
+  assertStringIncludes(deferred, "FOREIGN KEY (target_id) REFERENCES named (id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED");
+  assert(!deferred.includes("DEFERRED DEFERRABLE"), deferred);
+
+  assertStringIncludes(initialDDL(sdl("restrict")).join("\n"), "REFERENCES named (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;");
 });
 
 Deno.test("alter link - dropping the policy restores the default RESTRICT", () => {

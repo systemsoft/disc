@@ -591,3 +591,49 @@ Deno.test({
     }
   }
 });
+
+Deno.test({
+  name: "PG: rolling back a change from deferred restrict to restrict makes the foreign key deferred again",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    const capture = new ConsoleCapture();
+    const cwd = Deno.cwd();
+    const tempDir = await createTempDir();
+    const linked = (policy: string): string =>
+      `module default {
+        type RbkTag { required name: str; };
+        type RbkPost { link tag: RbkTag { on target delete ${policy}; }; };
+      };`;
+    const rule = async (): Promise<unknown[]> => {
+      const result = await pool.query(`SELECT confdeltype, condeferred FROM pg_constraint WHERE conname = 'fk_rbk_post_tag_id'`);
+      return [result.rows[0].confdeltype, result.rows[0].condeferred];
+    };
+
+    try {
+      await dropLinkedObjects(pool);
+      Deno.chdir(tempDir);
+      capture.start();
+
+      await cliMigrate(dsn, tempDir, linked("deferred restrict"));
+      await cliMigrate(dsn, tempDir, linked("restrict"));
+      assertEquals(await rule(), ["r", false]);
+
+      await cliRollback(dsn);
+      assertEquals(await migrationCount(pool), 1);
+      assertEquals(await rule(), ["a", true]);
+
+      await cliMigrate(dsn, tempDir, linked("deferred restrict"));
+      assertEquals(await migrationCount(pool), 1, "migrating to the rolled-back-to schema is a no-op");
+    } finally {
+      capture.stop();
+      Deno.chdir(cwd);
+      await cleanupTempDir(tempDir);
+      await dropLinkedObjects(pool);
+      await pool.close();
+    }
+  }
+});

@@ -51,7 +51,9 @@ $$ LANGUAGE plpgsql;`;
  * How a link to an abstract type defers its FK (see
  * `LinkDefinition.targetAbstract`). Only the check that the target exists
  * waits for the commit: PostgreSQL never defers a RESTRICT, CASCADE or SET
- * NULL action, so deleting a target behaves the same as without it.
+ * NULL action, so deleting a target behaves the same as without it. A
+ * `deferred restrict` link's NO ACTION FK is deferred the same way, and NO
+ * ACTION is checked at commit too.
  */
 const DEFERRED = " DEFERRABLE INITIALLY DEFERRED";
 
@@ -756,7 +758,7 @@ END $$;`,
           references: {
             table: typeNameToTableName(link.target),
             column: "id",
-            deferred: link.targetAbstract,
+            deferred: this.targetDeferred(link),
             onDelete: this.targetOnDelete(link)
           }
         });
@@ -821,7 +823,7 @@ END $$;`,
             references: {
               table: targetTable,
               column: "id",
-              deferred: link.targetAbstract,
+              deferred: this.targetDeferred(link),
               onDelete: this.targetOnDelete(link)
             }
           },
@@ -1382,7 +1384,7 @@ END $$;`,
           references: {
             table: targetTable,
             column: "id",
-            deferred: link.targetAbstract,
+            deferred: this.targetDeferred(link),
             onDelete: this.targetOnDelete(link)
           }
         },
@@ -1412,7 +1414,7 @@ END $$;`,
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(`fk_${tableName}_${columnName}`)} FOREIGN KEY (${
           this.escapeIdentifier(columnName)
-        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${this.targetOnDelete(link)}${link.targetAbstract ? DEFERRED : ""};`
+        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${this.targetOnDelete(link)}${this.targetDeferred(link) ? DEFERRED : ""};`
       );
       statements.push(
         `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${columnName}`)} ON ${this.escapeIdentifier(tableName)} (${this.escapeIdentifier(columnName)});`
@@ -1566,7 +1568,7 @@ END $$;`,
   /**
    * The FK from a link to its target as CREATE and ALTER LINK emit it: the
    * table holding it, its constraint name, its ON DELETE action and whether
-   * it is deferred (see `LinkDefinition.targetAbstract`). The
+   * it is deferred (see `targetDeferred`). The
    * delete-rule repair (`reconcileLinkDeleteRules`) compares the database's
    * foreign keys against it.
    */
@@ -1575,7 +1577,7 @@ END $$;`,
 
     return {
       constraint: this.foreignKeyName(table, link.multi ? "target_id" : linkColumnName(link.name)),
-      deferred: link.targetAbstract ?? false,
+      deferred: this.targetDeferred(link),
       onDelete: this.targetOnDelete(link),
       table
     };
@@ -1586,13 +1588,22 @@ END $$;`,
    * `<link>_id` column defaults to RESTRICT. A multi link's junction row is the
    * link itself, so it defaults to CASCADE (on create and alter alike), and
    * `allow` / `set empty` cascade too: `target_id` is NOT NULL, so SET NULL
-   * could only fail.
+   * could only fail. `deferred restrict` is NO ACTION: unlike RESTRICT,
+   * PostgreSQL checks it at commit once the FK is deferred (`targetDeferred`).
    */
-  private targetOnDelete(link: Types.LinkDefinition): NonNullable<Types.LinkDefinition["onTargetDelete"]> {
+  private targetOnDelete(link: Types.LinkDefinition): NonNullable<NonNullable<Types.ColumnDefinition["references"]>["onDelete"]> {
+    if (link.onTargetDelete === "DEFERRED RESTRICT") {
+      return "NO ACTION";
+    }
     if (!link.multi) {
       return link.onTargetDelete || "RESTRICT";
     }
     return link.onTargetDelete === "RESTRICT" ? "RESTRICT" : "CASCADE";
+  }
+
+  /*** Whether a link's target FK is `DEFERRABLE INITIALLY DEFERRED`: its target is abstract (`LinkDefinition.targetAbstract`) or it is `deferred restrict`. ***/
+  private targetDeferred(link: Types.LinkDefinition): boolean {
+    return link.targetAbstract === true || link.onTargetDelete === "DEFERRED RESTRICT";
   }
 
   /**
@@ -1608,7 +1619,7 @@ END $$;`,
       primaryKey: false,
       references: {
         column: "id",
-        deferred: link.targetAbstract,
+        deferred: this.targetDeferred(link),
         onDelete: this.targetOnDelete(link),
         table: typeNameToTableName(link.target)
       },
