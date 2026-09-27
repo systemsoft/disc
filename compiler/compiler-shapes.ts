@@ -2256,16 +2256,23 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         return { kind: "RawSQLExpression", sql: this.readableIdSql(currentTargetType, currentSql) };
       }
 
+      // A single link at the terminus (`.best.lead`) is its FK column: the
+      // linked object's id, or NULL when the select policy hides it.
+      const finalLink = currentTargetType.links.get(finalStep);
+      const finalTarget = finalLink && !finalLink.multi && !finalLink.junctionTable && finalLink.columnName ?
+        Context.resolveTypeName(this.ctx, finalLink.target) :
+        undefined;
       const targetProp = currentTargetType.properties.get(finalStep);
-      if (!targetProp?.columnName) {
+      const column = targetProp?.columnName ?? (finalTarget ? finalLink?.columnName : undefined);
+      if (!column) {
         return null;
       }
 
       const lastLink = stepNames.length - 2;
       const hopAlias = `__l${lastLink}_${stepNames[lastLink]}`;
-      const sql = `(SELECT "${hopAlias}"."${targetProp.columnName}" FROM ${this.readableTableSql(currentTargetType)} "${hopAlias}" ` +
+      const sql = `(SELECT "${hopAlias}"."${column}" FROM ${this.readableTableSql(currentTargetType)} "${hopAlias}" ` +
         `WHERE "${hopAlias}"."id" = ${currentSql})`;
-      return { kind: "RawSQLExpression", sql };
+      return { kind: "RawSQLExpression", sql: finalTarget && !targetProp ? this.readableIdSql(finalTarget, sql) : sql };
     }
     return null;
   }

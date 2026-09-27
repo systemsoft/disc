@@ -37,6 +37,13 @@ export class EdgeQLParser {
   private tokens: Token[];
   private current = 0;
   private skipShapeInPostfix = false;
+  /**
+   * The names `with` bindings, `for` variables and named selects bind where
+   * the parser is. A bound name is an identifier even when it starts with a
+   * capital letter, which otherwise reads as a type name (`with Foo := …
+   * select Foo`).
+   */
+  private boundNames: string[] = [];
 
   constructor(source: string) {
     const lexer = new EdgeQLLexer(source);
@@ -260,6 +267,12 @@ export class EdgeQLParser {
       }
     }
 
+    // Each binding's name is bound in the bindings after it and in the body.
+    return this.withBound([], () => this.parseWithBindings(module));
+  }
+
+  /*** The bindings and body of a `with` block, after `with [module <name>,]`. ***/
+  private parseWithBindings(module: string | undefined): AST.WithBlock {
     const bindings: AST.WithBinding[] = [];
 
     do {
@@ -286,7 +299,8 @@ export class EdgeQLParser {
 
       const name = this.parseIdentifier();
       this.consume(TokenType.ASSIGN, "Expected ':=' in WITH binding");
-      const value = this.parseExpression();
+      const value = this.withBound(recursive ? [name.name] : [], () => this.parseExpression());
+      this.boundNames.push(name.name);
 
       bindings.push({
         kind: "WithBinding",
@@ -322,15 +336,26 @@ export class EdgeQLParser {
     // `union Expr`): `union x.name`, `union (x.name ++ '!')`, `union x { name }`.
     const statementBody = this.check(TokenType.LPAREN) && FOR_BODY_STATEMENTS.has(this.tokens[this.current + 1]?.type);
     if (!statementBody) {
-      return { body: this.parseExpressionAsSelect(), iterator, kind: "ForQuery", span, variable };
+      return { body: this.withBound([variable.name], () => this.parseExpressionAsSelect()), iterator, kind: "ForQuery", span, variable };
     }
     this.consume(TokenType.LPAREN, "Expected '(' after UNION");
 
-    const body = this.parseQuery();
+    const body = this.withBound([variable.name], () => this.parseQuery());
 
     this.consume(TokenType.RPAREN, "Expected ')' after query body");
 
     return { body, iterator, kind: "ForQuery", span, variable };
+  }
+
+  /*** `parse()` with `names` bound (see `boundNames`). ***/
+  private withBound<T>(names: string[], parse: () => T): T {
+    const outer = this.boundNames.length;
+    this.boundNames.push(...names);
+    try {
+      return parse();
+    } finally {
+      this.boundNames.length = outer;
+    }
   }
 
   /*** An expression standing for a statement (`x { name }`, `x.name`), as the select of it. ***/
@@ -354,7 +379,7 @@ export class EdgeQLParser {
     if (this.check(TokenType.IDENT) && this.tokens[this.current + 1]?.type === TokenType.ASSIGN) {
       const name = this.parseIdentifier();
       this.advance(); // consume :=
-      const select = this.parseSelectRest(distinct);
+      const select = this.withBound([name.name], () => this.parseSelectRest(distinct));
       const binding: AST.WithBinding = { kind: "WithBinding", name, value: select.expr };
       return { bindings: [binding], body: { ...select, expr: AST.createIdentifier(name.name) }, kind: "WithBlock" };
     }
@@ -1768,7 +1793,7 @@ export class EdgeQLParser {
       }
 
       // Check if it's a type name (starts with uppercase or is qualified)
-      if (parts.length > 1 || /^[A-Z]/.test(parts[0])) {
+      if (parts.length > 1 || (/^[A-Z]/.test(parts[0]) && !this.boundNames.includes(parts[0]))) {
         return { ...AST.createTypeName(parts), span };
       }
 

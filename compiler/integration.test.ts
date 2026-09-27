@@ -224,7 +224,8 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
   assertStringIncludes(normalized, "'posts'");
   assertStringIncludes(
     normalized,
-    "jsonb_agg(jsonb_build_object('title', posts_2.title, 'createdAt', posts_2.createdAt))"
+    // A column name with a capital letter is quoted: unquoted, PostgreSQL would fold it.
+    "jsonb_agg(jsonb_build_object('title', posts_2.title, 'createdAt', posts_2.\"createdAt\"))"
   );
   assertStringIncludes(normalized, "FROM posts");
   assertStringIncludes(normalized, "posts_2.author_id =");

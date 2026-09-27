@@ -595,9 +595,12 @@ export class SQLCodeGenerator {
     // Reserved words must be quoted or Postgres rejects the statement —
     // `INSERT INTO user` is a syntax error. DDL quotes the same set when
     // creating the table (`lib/identifiers.ts`), so the quoted form is
-    // exactly the relation name on disk.
+    // exactly the relation name on disk. So must a name with a capital
+    // letter (a `with` binding's CTE, `with myRows := …`): unquoted,
+    // PostgreSQL folds it to lower case, and hand-written SQL that quotes it
+    // (`mutationOverlay`) no longer finds it.
     if (
-      /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier) &&
+      /^[a-z_][a-z0-9_]*$/.test(identifier) &&
       !isReservedPgKeyword(identifier)
     ) {
       return identifier;

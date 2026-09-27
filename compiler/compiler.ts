@@ -2569,9 +2569,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       const outer = variables.get(typeName);
       variables.set(typeName, { expression: query.expr, name: typeName, sqlOverride: SQL.star(), type: typeName });
       let havingCondition: SQL.SQLExpression;
+      this.ctx.currentScope.groupRows = true;
       try {
         havingCondition = this.compileExpression(query.filter);
       } finally {
+        delete this.ctx.currentScope.groupRows;
         if (outer) {
           variables.set(typeName, outer);
         } else {
@@ -2767,18 +2769,22 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       );
     }
     const pgKey = def.pgName;
+    // Gel renamed `configure system` to `configure instance` (keeping the old
+    // name as an alias): both are the server-wide setting, which is the
+    // backing PostgreSQL's (`ALTER SYSTEM`).
+    const system = query.scope === "SYSTEM" || query.scope === "INSTANCE";
 
     if (query.action === "RESET") {
       if (query.scope === "SESSION") {
         return { kind: "RawSQLStatement", sql: `RESET ${pgKey}` };
       }
-      if (query.scope === "SYSTEM") {
+      if (system) {
         return {
           kind: "RawSQLStatement",
           sql: `ALTER SYSTEM RESET ${pgKey}`
         };
       }
-      // DATABASE/INSTANCE: delete from config table
+      // DATABASE: delete from config table
       return {
         kind: "RawSQLStatement",
         sql: `DELETE FROM disc_config WHERE key = '${query.key}' AND scope = '${query.scope}'`
@@ -2798,13 +2804,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         sql: `SET LOCAL ${pgKey} = ${valueSql}`
       };
     }
-    if (query.scope === "SYSTEM") {
+    if (system) {
       return {
         kind: "RawSQLStatement",
         sql: `ALTER SYSTEM SET ${pgKey} = ${valueSql}`
       };
     }
-    // DATABASE/INSTANCE: upsert into config table
+    // DATABASE: upsert into config table
     return {
       kind: "RawSQLStatement",
       sql:

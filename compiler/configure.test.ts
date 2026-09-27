@@ -168,20 +168,25 @@ Deno.test("CONFIGURE compile — DATABASE RESET deletes from disc_config", () =>
   assertStringIncludes(sql, "'DATABASE'");
 });
 
-Deno.test("CONFIGURE compile — INSTANCE SET uses INSTANCE scope", () => {
-  const sql = compileEdgeQL(
-    "CONFIGURE INSTANCE SET max_connections := 200"
-  );
-  assertStringIncludes(sql, "INSERT INTO disc_config");
-  assertStringIncludes(sql, "'INSTANCE'");
+// Gel's `configure instance` is what `configure system` was renamed to (the
+// older name stays as an alias): the server-wide setting, here the backing
+// PostgreSQL's (`ALTER SYSTEM`). There is no `disc_config` table to write.
+Deno.test("CONFIGURE compile — INSTANCE SET is CONFIGURE SYSTEM's ALTER SYSTEM SET", () => {
+  const sql = compileEdgeQL("CONFIGURE INSTANCE SET max_connections := 200");
+  assertEquals(sql, compileEdgeQL("CONFIGURE SYSTEM SET max_connections := 200"));
+  assertStringIncludes(sql, "ALTER SYSTEM SET max_connections = 200");
 });
 
-Deno.test("CONFIGURE compile — INSTANCE RESET deletes from disc_config", () => {
-  const sql = compileEdgeQL(
-    "CONFIGURE INSTANCE RESET max_connections"
+Deno.test("CONFIGURE compile — INSTANCE RESET is CONFIGURE SYSTEM's ALTER SYSTEM RESET", () => {
+  const sql = compileEdgeQL("CONFIGURE INSTANCE RESET max_connections");
+  assertEquals(sql, "ALTER SYSTEM RESET max_connections");
+});
+
+Deno.test("CONFIGURE compile — INSTANCE of a session-level key is ALTER SYSTEM too", () => {
+  assertStringIncludes(
+    compileEdgeQL("CONFIGURE INSTANCE SET query_execution_timeout := '5s'"),
+    "ALTER SYSTEM SET statement_timeout = '5s'"
   );
-  assertStringIncludes(sql, "DELETE FROM disc_config");
-  assertStringIncludes(sql, "'INSTANCE'");
 });
 
 Deno.test("CONFIGURE compile — unknown key is rejected, not passed to PostgreSQL", () => {

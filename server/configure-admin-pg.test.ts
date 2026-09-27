@@ -125,6 +125,17 @@ Deno.test({
       assertEquals((await query("configure system reset default_statistics_target", SERVICE_TOKEN)).status, 200);
       assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
 
+      // `configure instance` is Gel's name for `configure system`: the same setting, for an administrator only.
+      assertEquals((await query("configure instance set default_statistics_target := 432")).status, 403);
+      assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
+      const instance = await query("configure instance set default_statistics_target := 432", SERVICE_TOKEN);
+      assertEquals(instance.status, 200, JSON.stringify(instance.body));
+      assertEquals(await autoConfValue(pool, "default_statistics_target"), "432");
+      assertEquals((await query("configure instance reset default_statistics_target")).status, 403);
+      assertEquals((await query("configure instance reset default_statistics_target", SERVICE_TOKEN)).status, 200);
+      assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
+      assertEquals((await query("configure instance set archive_command := 'x'", SERVICE_TOKEN)).status, 400);
+
       // A WITH block around it changes nothing.
       assertEquals((await query("with x := 1 configure system set effective_io_concurrency := 7")).status, 403);
       assertEquals(await autoConfValue(pool, "effective_io_concurrency"), undefined);

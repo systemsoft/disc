@@ -1672,8 +1672,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     // An aggregate over one value (or none) aggregates that value's set. A
     // group's filter aggregates the group's rows instead (`count(User)` is
-    // `COUNT(*)` there).
-    const isGroupRows = args[0]?.kind === "ColumnReference" && args[0].column === "*";
+    // `COUNT(*)` there, `sum(.visits)` `SUM(user_1.visits)`).
+    const isGroupRows = this.ctx.currentScope.groupRows === true || (args[0]?.kind === "ColumnReference" && args[0].column === "*");
     const overValue = args.length === 1 && !isGroupRows ? this.compileAggregateOverValue(functionName, args[0]) : null;
     if (overValue) {
       return overValue;

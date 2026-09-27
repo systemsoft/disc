@@ -265,6 +265,12 @@ export interface ArgDef {
 
 export interface Scope {
   aliases: Map<string, TableAlias>;
+  /**
+   * Set while a group's filter compiles: an aggregate there aggregates the
+   * group's rows (`sum(.visits)` is `SUM(user_1.visits)` in the HAVING), not
+   * one object's value. A select nested in the filter has a scope of its own.
+   */
+  groupRows?: boolean;
   variables: Map<string, VariableDef>;
   /**
    * Set inside a link's sub-shape: the link being traversed and the SQL
@@ -342,11 +348,13 @@ export function popScope(ctx: CompilationContext): void {
 /**
  * A new table alias named after `base`. A `with` binding or `for` variable
  * name can hold any character (`` `a"b` ``), and aliases are written between
- * double quotes in hand-built SQL (`"${alias}"."id"`), so any character but a
- * letter, digit or underscore becomes an underscore.
+ * double quotes in hand-built SQL (`"${alias}"."id"`) as well as bare, so any
+ * character but a letter, digit or underscore becomes an underscore, and the
+ * alias is lower case (`myRows` → `myrows_3`): quoted or not, it is the same
+ * name to PostgreSQL.
  */
 export function generateAlias(ctx: CompilationContext, base: string): string {
-  return `${base.replace(/\W/g, "_")}_${++ctx.aliasCounter}`;
+  return `${base.replace(/\W/g, "_").toLowerCase()}_${++ctx.aliasCounter}`;
 }
 
 export function addTableAlias(
