@@ -29,13 +29,13 @@
   "private": true,
   "scripts": {
     "build": "vite build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo --watch",
+    "check": "bun check-typescript-pin.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
+    "check:watch": "bun check-typescript-pin.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo --watch",
     "dev": "vite dev",
     "preview": "vite preview",
     "test": "vitest --config vite.config.test.ts --run --passWithNoTests",
     "test:coverage": "vitest --config vite.config.test.ts --run --coverage --passWithNoTests",
-    "test:dependencies": "bun update --latest",
+    "test:dependencies": "bun update-dependencies.ts",
     "test:e2e": "playwright test",
     "test:ui": "vitest --config vite.config.test.ts --ui",
     "test:watch": "vitest --config vite.config.test.ts"
