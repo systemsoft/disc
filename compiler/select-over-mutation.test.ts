@@ -154,7 +154,7 @@ Deno.test("select over mutation - Q3: create-if-absent keeps its composite confl
   const parts = cteParts(sql);
 
   assertEquals(parts.inner, await sqlOf(BARE_Q3));
-  assertStringIncludes(parts.inner, "INSERT INTO git_ref (program_id, name, target) VALUES (CAST($1 AS uuid), ");
+  assertStringIncludes(parts.inner, "INSERT INTO git_ref (program_id, name, target) VALUES (disc_object_cast(CAST($1 AS uuid), ");
   assertStringIncludes(parts.inner, "ON CONFLICT (program_id, name) DO NOTHING RETURNING *");
   assertProjects(parts, ["id"], ["git_ref"]);
 });
@@ -250,8 +250,11 @@ Deno.test("select over mutation - a shape over an object cast is a compile error
   assert(/shape/i.test(shaped.error ?? ""), `expected a compile error about the shape, got: ${JSON.stringify(shaped)}`);
   assertStringIncludes(shaped.error ?? "", "select Program { … } filter .id = ");
 
-  // Without a shape there is nothing to drop: the cast is the uuid.
-  assertEquals(await sqlOf("select <Program><uuid>$u"), "SELECT CAST($1 AS uuid)");
+  // Without a shape there is nothing to drop: the cast is the uuid, checked to name a Program.
+  assertEquals(
+    await sqlOf("select <Program><uuid>$u"),
+    "SELECT disc_object_cast(CAST($1 AS uuid), EXISTS ( SELECT program_2.id FROM program AS program_2 WHERE program_2.id = CAST($1 AS uuid) ), 'default::Program')"
+  );
 });
 
 Deno.test("select over mutation - a shape over a parenthesized select of objects is the inner select with the shape", async () => {

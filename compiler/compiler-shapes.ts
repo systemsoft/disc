@@ -116,6 +116,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   protected abstract compileSelectQueryRaw(
     query: EdgeQLAST.SelectQuery
   ): SQL.SelectStatement;
+  protected abstract compileGroupQuery(query: EdgeQLAST.GroupQuery, over?: EdgeQLAST.SelectQuery): SQL.SelectStatement;
 
   protected compileSelectQuery(
     query: EdgeQLAST.SelectQuery
@@ -123,6 +124,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // Decided here, where the statement's `with` bindings and `for` variable are in scope.
     if (query === this.outputSelect && this.outputObjects === undefined) {
       this.outputObjects = this.selectAnswersObjects(query);
+    }
+
+    // `select (group …) [{ shape }] [filter …] …`: the groups, each shaped (see compileGroupQuery).
+    if (query.expr.kind === "Subquery" && query.expr.query.kind === "GroupQuery") {
+      return this.compileGroupQuery(query.expr.query, query);
     }
 
     // Handle set operations (UNION, INTERSECT, EXCEPT) at the query level
@@ -2534,9 +2540,17 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         // A select of values (`(select .visits + 1)`, `x := .name ++ {'a', 'b'}`)
         // pushes a scope with no table: the path is the enclosing row's.
         const subject = this.ctx.currentScope.aliases.size === 0 ? this.implicitSubject(step) : undefined;
-        const property = subject ? Context.resolveTypeName(this.ctx, subject.type)?.properties.get(step.name) : undefined;
+        const subjectType = subject ? Context.resolveTypeName(this.ctx, subject.type) : undefined;
+        const property = subjectType?.properties.get(step.name);
         if (subject && property?.columnName && !property.computed) {
           return SQL.createColumnReference(property.columnName, subject.alias);
+        }
+        // So is a single link's (`not (.author = us)`): its id, as above.
+        const link = subjectType?.links.get(step.name);
+        if (subject && link?.columnName) {
+          const target = Context.resolveTypeName(this.ctx, link.target);
+          const column = SQL.createColumnReference(link.columnName, subject.alias);
+          return target ? this.readableId(target, column) : column;
         }
         // Fallback: emit the step name verbatim. Pre-existing behavior
         // for paths whose owning type isn't in the alias scope yet.

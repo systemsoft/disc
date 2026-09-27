@@ -85,7 +85,7 @@ Deno.test("with-bound paths - n.last in an insert's values is (select n.last)", 
   const selected = await sqlOf(`with n := (${UPSERT}) insert collab::Bug { ${BUG_VALUES}, number := (select n.last) }`);
 
   assertEquals(bare, selected);
-  assertStringIncludes(bare, "( SELECT n_1.last FROM n AS n_1 )");
+  assert(/\( SELECT (n_\d+)\.last FROM n AS \1 \)/.test(bare), bare);
 });
 
 Deno.test("with-bound paths - n.last of a with-bound select of at most one is (select n.last) too; of several, refused", async () => {
@@ -112,15 +112,15 @@ Deno.test("with-bound paths - n.program as a link value is the linked object's i
 Deno.test("with-bound paths - n.last in an update's values and filter", async () => {
   const sql = await sqlOf(`with n := (${UPSERT}) update collab::Bug filter .number = n.last set { number := n.last + 1 }`);
 
-  assertStringIncludes(sql, "SET number = ( SELECT n_1.last FROM n AS n_1 ) + 1");
+  assert(/SET number = \( SELECT (n_\d+)\.last FROM n AS \1 \) \+ 1/.test(sql), sql);
   assert(/WHERE bug\.number = \( SELECT (n_\d+)\.last FROM n AS \1 \)/.test(sql), sql);
 });
 
 Deno.test("with-bound paths - a path from an inserted object is one value in a shape; from a select, an array", async () => {
   const inserted = await sqlOf(`with n := (${UPSERT}) select collab::Bug { number, x := n.last, y := n.id }`);
   assert(!inserted.includes("jsonb_agg"), inserted);
-  assertStringIncludes(inserted, "'x', ( SELECT n_2.last FROM n AS n_2 )");
-  assertStringIncludes(inserted, "'y', ( SELECT n_3.id FROM n AS n_3 )");
+  assert(/'x', \( SELECT (n_\d+)\.last FROM n AS \1 \)/.test(inserted), inserted);
+  assert(/'y', \( SELECT (n_\d+)\.id FROM n AS \1 \)/.test(inserted), inserted);
 
   const selected = await sqlOf("with n := (select collab::Numbering) select collab::Bug { number, x := n.last }");
   assertStringIncludes(selected, "jsonb_agg");
@@ -134,7 +134,7 @@ Deno.test("with-bound paths - select (with … insert …) { shape } is with …
   assertEquals(inner, outer);
   assert(inner.startsWith("WITH n AS ( INSERT INTO numbering"), inner);
   assertStringIncludes(inner, "ON CONFLICT (program_id) DO UPDATE SET last = numbering.last + 1 RETURNING * ), m AS ( INSERT INTO bug");
-  assert(inner.endsWith("SELECT jsonb_build_object('number', m_2.number) FROM m AS m_2"), inner);
+  assert(/SELECT jsonb_build_object\('number', (m_\d+)\.number\) FROM m AS \1$/.test(inner), inner);
 });
 
 Deno.test("with-bound paths - select (with … update|delete …) { shape }, and bindings of several with blocks", async () => {

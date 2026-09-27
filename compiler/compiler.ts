@@ -240,6 +240,24 @@ function rowsSelect(query: EdgeQLAST.Query): EdgeQLAST.SelectQuery | undefined {
   }
 }
 
+/*** A group's fields as SQL, over its rows (see `EdgeQLCompiler.compileGroupQuery`): `elements`, `grouping`, `key`, and each key. ***/
+interface GroupFields {
+  elements: SQL.SQLExpression;
+  grouping: SQL.SQLExpression;
+  key: SQL.SQLExpression;
+  keys: { name: string; sql: SQL.SQLExpression; }[];
+}
+
+/*** The name a shape element reads or defines (`key`, `n := …`). ***/
+function groupFieldName(element: EdgeQLAST.ShapeElement): string | undefined {
+  return element.name?.name ?? (element.expr.kind === "Identifier" ? element.expr.name : undefined);
+}
+
+/*** Gel's error for a field a group (a free object) does not have. ***/
+function noGroupField(name: string | undefined, node: EdgeQLAST.EdgeQLNode): InvalidReferenceError {
+  return new InvalidReferenceError(`object type 'std::FreeObject' has no link or property '${name ?? "*"}'`, locationOf(node));
+}
+
 export class EdgeQLCompiler extends ShapeCompilerLayer {
   /** Set while compiling the update or delete body of a `for` over objects, which also reads the iterator's rows. */
   private mutationReadsIterator = false;
@@ -2056,7 +2074,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
       let bindingQuery: SQL.SQLStatement;
       let underlyingTypeName: string | undefined;
-      const value = this.bindingSetValue(binding.value);
+      // `n := assert_single(<objects>)` binds the objects, one at most (`assertingOne`).
+      const asserted = this.assertedObjects(binding.value);
+      const value = asserted ?? this.bindingSetValue(binding.value);
 
       if (value.kind === "Subquery") {
         // Extract the underlying type name from the inner query for shape
@@ -2072,6 +2092,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           bindingQuery = this.compileSelectQueryRaw(value.query);
         } else {
           bindingQuery = this.compileQuery(value.query);
+        }
+        if (asserted) {
+          bindingQuery = this.assertingOne(bindingQuery);
         }
       } else if (value.kind === "SetExpr") {
         // A set literal selected from (`with xs := {1, 2} select xs`) is one
@@ -2125,7 +2148,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         cteName,
         mutation: value.kind === "Subquery" && isMutationQuery(value.query),
         select: value.kind === "Subquery" && value.query.kind === "SelectQuery" ? value.query : undefined,
-        singleton: this.bindsOneObject(value),
+        singleton: asserted !== null || this.bindsOneObject(value),
         typeName: underlyingTypeName,
         typeDef,
         values,
@@ -2198,6 +2221,50 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     }
     const limit = query.kind === "SelectQuery" || query.kind === "DeleteQuery" ? query.limit : undefined;
     return this.selectsAtMostOne({ expr: subject, filter: "filter" in query ? query.filter : undefined, kind: "SelectQuery", limit }, typeDef);
+  }
+
+  /**
+   * The select of objects a binding's `assert_single(…)` is over
+   * (`n := assert_single((select Counter filter …))`, `assert_single(Counter)`),
+   * else null. Gel infers the binding as one object, so a path from it
+   * (`n.last`) is one value (see `assertingOne`).
+   */
+  private assertedObjects(value: EdgeQLAST.Expression): EdgeQLAST.Subquery | null {
+    if (
+      value.kind !== "FunctionCall" || value.args.length !== 1 || value.args[0].name ||
+      value.name.parts.join("::").replace(/^std::/, "") !== "assert_single"
+    ) {
+      return null;
+    }
+    const objects = this.bindingSetValue(value.args[0].value);
+    if (objects.kind !== "Subquery" || objects.query.kind !== "SelectQuery") {
+      return null;
+    }
+    const typeName = this.extractQueryTypeName(objects.query);
+    return typeName && Context.resolveTypeName(this.ctx, typeName)?.kind === "object" ? objects : null;
+  }
+
+  /**
+   * A binding's rows, one at most: more than one is Gel's
+   * CardinalityViolationError, raised when the binding is read by
+   * `disc_assert_single` (lib/stdlib-sql.ts, SQLSTATE 21000).
+   *
+   *   WITH __rows AS (<rows>) SELECT * FROM __rows WHERE disc_assert_single(TRUE, (SELECT COUNT(*) FROM __rows))
+   */
+  private assertingOne(rows: SQL.SQLStatement): SQL.SQLStatement {
+    const name = "__rows";
+    const count = SQL.createSubqueryExpression(SQL.createSelectStatement({
+      from: SQL.createFromClause([SQL.createTableReference(name)]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createFunctionCall("COUNT", [SQL.star()]))])
+    }));
+    return SQL.withCTEs(
+      [{ columns: [], kind: "CTE", name, query: rows, recursive: false }],
+      SQL.createSelectStatement({
+        from: SQL.createFromClause([SQL.createTableReference(name)]),
+        select: SQL.createSelectClause([SQL.createSelectItem(SQL.star())]),
+        where: SQL.createWhereClause(SQL.createFunctionCall("disc_assert_single", [SQL.createLiteral("boolean", true), count]))
+      })
+    );
   }
 
   /**
@@ -2709,8 +2776,16 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    *   → SELECT jsonb_build_object('key', jsonb_build_object('n', LENGTH(user_1.name), 'team', user_1.team),
    *       'grouping', jsonb_build_array('n', 'team'), 'elements', jsonb_agg(jsonb_build_object('name', user_1.name)))
    *     FROM users AS user_1 GROUP BY LENGTH(user_1.name), user_1.team
+   *
+   * `over` is a select over the group (`select (group …) { … } filter …
+   * order by … offset … limit …`): its shape is each group's object, and its
+   * clauses apply to the groups (`groupFieldPaths`).
+   *
+   *   select (group User by .role) { key: {role}, n := count(.elements) } filter .n > 1
+   *   → SELECT jsonb_build_object('key', jsonb_build_object('role', user_1.role), 'n', COUNT(*))
+   *     FROM "user" AS user_1 GROUP BY user_1.role HAVING COUNT(*) > 1
    */
-  private compileGroupQuery(query: EdgeQLAST.GroupQuery): SQL.SelectStatement {
+  protected compileGroupQuery(query: EdgeQLAST.GroupQuery, over?: EdgeQLAST.SelectQuery): SQL.SelectStatement {
     const subject = query.expr.kind === "ShapeExpr" ? query.expr.expr : query.expr;
     // The expr must be a TypeName so we can resolve the table
     if (subject.kind !== "TypeName") {
@@ -2726,8 +2801,13 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
 
     Context.pushScope(this.ctx);
     try {
-      // The group's objects, bound as the subject the keys and the filter read.
-      const { fromClause, selectItems, where } = this.compileSelectExpression(subject, query.expr.kind === "ShapeExpr" ? query.expr.shape : undefined);
+      // The group's objects, bound as the subject the keys and the filter
+      // read; a select over the group may shape them (`elements: { … }`).
+      const elementsShape = over?.shape?.elements.find(element => groupFieldName(element) === "elements")?.shape;
+      const { fromClause, selectItems, where } = this.compileSelectExpression(
+        subject,
+        elementsShape ?? (query.expr.kind === "ShapeExpr" ? query.expr.shape : undefined)
+      );
 
       // A key's value; a tuple's, or an array of tuples', canonical, so equal
       // ones stored as different JSON are one group (`canonicalTuple`).
@@ -2764,23 +2844,22 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         return { name: propName, sql: groupKey(EdgeQLAST.createPath([{ kind: "PathStep", name: propName, type: "property" }])) };
       });
 
-      const resultObject = SQL.createJsonBuildObject([
-        SQL.createJsonField("key", SQL.createJsonBuildObject(keys.map(key => SQL.createJsonField(key.name, key.sql)))),
-        SQL.createJsonField("grouping", SQL.createFunctionCall("jsonb_build_array", keys.map(key => SQL.createLiteral("string", key.name)))),
-        SQL.createJsonField("elements", SQL.createJsonAgg(selectItems[0].expression))
-      ]);
+      const fields: GroupFields = {
+        elements: SQL.createJsonAgg(selectItems[0].expression),
+        grouping: SQL.createFunctionCall("jsonb_build_array", keys.map(key => SQL.createLiteral("string", key.name))),
+        key: SQL.createJsonBuildObject(keys.map(key => SQL.createJsonField(key.name, key.sql))),
+        keys
+      };
 
-      // Compile FILTER to HAVING clause
-      let havingClause: SQL.HavingClause | undefined;
-      if (query.filter) {
-        // In the filter, the grouped type is the group's rows: `count(User)` is `COUNT(*)`.
+      // In the filter (and a select over the group), the grouped type is the
+      // group's rows: `count(User)` is `COUNT(*)`.
+      const inGroup = (expr: EdgeQLAST.Expression): SQL.SQLExpression => {
         const variables = this.ctx.currentScope.variables;
         const outer = variables.get(typeName);
         variables.set(typeName, { expression: subject, name: typeName, sqlOverride: SQL.star(), type: typeName });
-        let havingCondition: SQL.SQLExpression;
         this.ctx.currentScope.groupRows = true;
         try {
-          havingCondition = this.compileExpression(query.filter);
+          return this.compileExpression(expr);
         } finally {
           delete this.ctx.currentScope.groupRows;
           if (outer) {
@@ -2789,22 +2868,154 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
             variables.delete(typeName);
           }
         }
-        havingClause = {
-          kind: "HavingClause",
-          condition: havingCondition
-        };
-      }
+      };
+
+      // A select over the group reads the group's fields and, in its filter
+      // and order by, its shape's computables.
+      const computables = new Map(
+        (over?.shape?.elements ?? []).flatMap(element => element.computable && element.name ? [[element.name.name, element.expr] as const] : [])
+      );
+      const read = (expr: EdgeQLAST.Expression, named: Map<string, EdgeQLAST.Expression> = computables): SQL.SQLExpression =>
+        inGroup(this.groupFieldPaths(expr, subject, fields, named));
+
+      const resultObject = over?.shape ?
+        SQL.createJsonBuildObject(over.shape.elements.map(element => this.groupShapeField(element, fields, expr => read(expr, new Map())))) :
+        SQL.createJsonBuildObject([
+          SQL.createJsonField("key", fields.key),
+          SQL.createJsonField("grouping", fields.grouping),
+          SQL.createJsonField("elements", fields.elements)
+        ]);
+
+      // Compile FILTER to HAVING clause, with a select over the group's filter.
+      const conditions = [
+        ...(query.filter ? [inGroup(query.filter)] : []),
+        ...(over?.filter ? [read(over.filter)] : [])
+      ];
+      const havingClause: SQL.HavingClause | undefined = conditions.length > 0 ?
+        { condition: conditions.reduce((all, condition) => SQL.createBinaryExpression("AND", all, condition)), kind: "HavingClause" } :
+        undefined;
+
+      const orderBy: SQL.OrderByClause | undefined = over?.orderBy?.length ?
+        {
+          items: over.orderBy.map(item => ({
+            direction: item.direction ?? "ASC",
+            expression: read(item.expr),
+            kind: "OrderByItem" as const,
+            ...compileEmptyOrder(item)
+          })),
+          kind: "OrderByClause"
+        } :
+        undefined;
 
       return SQL.createSelectStatement({
         select: SQL.createSelectClause([SQL.createSelectItem(resultObject)]),
         from: fromClause,
         where: where ? SQL.createWhereClause(where) : undefined,
         groupBy: { kind: "GroupByClause", expressions: keys.map(key => key.sql) },
-        having: havingClause
+        having: havingClause,
+        orderBy,
+        limit: over?.limit ? { count: this.compileExpression(over.limit), kind: "LimitClause" } : undefined,
+        offset: over?.offset ? { count: this.compileExpression(over.offset), kind: "OffsetClause" } : undefined
       });
     } finally {
       Context.popScope(this.ctx);
     }
+  }
+
+  /**
+   * One element of the shape of a select over a group, as the group's JSON
+   * field: `key` (or `key: { k, … }`, those keys), `grouping`, `elements`
+   * (shaped by compileGroupQuery), or a computable (`read`). A group has no
+   * other field, as in Gel.
+   */
+  private groupShapeField(
+    element: EdgeQLAST.ShapeElement,
+    fields: GroupFields,
+    read: (expr: EdgeQLAST.Expression) => SQL.SQLExpression
+  ): SQL.JsonField {
+    const name = groupFieldName(element);
+    if (element.computable && name) {
+      return SQL.createJsonField(name, read(element.expr));
+    }
+    switch (name) {
+      case "key": {
+        if (!element.shape) {
+          return SQL.createJsonField(name, fields.key);
+        }
+        return SQL.createJsonField(
+          name,
+          SQL.createJsonBuildObject(element.shape.elements.map(keyElement => {
+            const keyName = groupFieldName(keyElement);
+            const key = keyElement.computable ? undefined : fields.keys.find(candidate => candidate.name === keyName);
+            if (!key) {
+              throw noGroupField(keyName, keyElement);
+            }
+            return SQL.createJsonField(key.name, key.sql);
+          }))
+        );
+      }
+      case "grouping":
+        return SQL.createJsonField(name, fields.grouping);
+      case "elements":
+        return SQL.createJsonField(name, fields.elements);
+      default:
+        throw noGroupField(name, element);
+    }
+  }
+
+  /**
+   * `expr`, in a select over a group, with its paths reading the group (Gel's
+   * free object): `.elements` is the group's objects — the grouped type,
+   * which the group's rows stand for (`count(.elements)` is `COUNT(*)`) —
+   * `.elements.p` their `.p`, `.key` and `.key.k` the key and a key's value,
+   * `.grouping` the keys' names, and `.c` the computable `c` of `computables`.
+   * A field's SQL is a scope variable of the group's scope. A nested query is
+   * left as it is.
+   */
+  private groupFieldPaths(
+    expr: EdgeQLAST.Expression,
+    subject: EdgeQLAST.TypeName,
+    fields: GroupFields,
+    computables: Map<string, EdgeQLAST.Expression>
+  ): EdgeQLAST.Expression {
+    const field = (sql: SQL.SQLExpression): EdgeQLAST.Identifier => {
+      const name = Context.generateAlias(this.ctx, "__group");
+      this.ctx.currentScope.variables.set(name, { expression: EdgeQLAST.createIdentifier(name), name, sqlOverride: sql, type: "any" });
+      return EdgeQLAST.createIdentifier(name);
+    };
+    const pathField = (path: EdgeQLAST.Path): EdgeQLAST.Expression => {
+      const [head, ...rest] = path.steps;
+      if (head.type === "property") {
+        if (head.name === "elements") {
+          return rest.length === 0 ? subject : { ...path, steps: rest };
+        }
+        const key = head.name === "key" && rest.length === 1 ? fields.keys.find(candidate => candidate.name === rest[0].name) : undefined;
+        if (key) {
+          return field(key.sql);
+        }
+        if (rest.length === 0 && (head.name === "key" || head.name === "grouping")) {
+          return field(head.name === "key" ? fields.key : fields.grouping);
+        }
+        const computable = rest.length === 0 ? computables.get(head.name) : undefined;
+        if (computable) {
+          return this.groupFieldPaths(computable, subject, fields, new Map());
+        }
+      }
+      throw noGroupField(head.name === "key" && rest.length > 0 ? rest[0].name : head.name, head);
+    };
+    const map = (node: unknown): unknown => {
+      if (Array.isArray(node)) {
+        return node.map(map);
+      }
+      if (typeof node !== "object" || node === null || (node as EdgeQLAST.EdgeQLNode).kind === "Subquery") {
+        return node;
+      }
+      if ((node as EdgeQLAST.EdgeQLNode).kind === "Path" && !(node as EdgeQLAST.Path).rooted) {
+        return pathField(node as EdgeQLAST.Path);
+      }
+      return Object.fromEntries(Object.entries(node).map(([name, value]) => [name, map(value)]));
+    };
+    return map(expr) as EdgeQLAST.Expression;
   }
 
   /**

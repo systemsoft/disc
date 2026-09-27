@@ -572,9 +572,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (set) {
         return SQL.createBinaryExpression(binOp.op, this.compileExpression(binOp.left), set);
       }
-      // One object (a bound subject, a `for` variable): `in` it is `=` it.
+      // One object (a bound subject, a `for` variable, an object cast): `in` it is `=` it.
       const name = right.kind === "TypeName" ? right.name.parts.join("::") : right.kind === "Identifier" ? right.name : undefined;
-      if (name !== undefined && this.scopeVariable(name)?.row) {
+      const objectCast = right.kind === "TypeCast" && Context.resolveTypeName(this.ctx, renderEdgeQLTypeName(right.type))?.kind === "object";
+      if (objectCast || (name !== undefined && this.scopeVariable(name)?.row)) {
         return SQL.createBinaryExpression(binOp.op === "IN" ? "=" : "<>", this.compileExpression(binOp.left), this.compileExpression(right));
       }
     }
@@ -1817,17 +1818,35 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (!operands || (expr.kind === "BinaryOp" && this.anyElementComparisons.has(expr))) {
       return null;
     }
-    const sets = operands.map(operand => expr.kind !== "FunctionCall" && this.isObjectBinding(operand) ? null : this.setArgument(operand));
+    const sets = operands.map(operand =>
+      expr.kind !== "FunctionCall" && this.isObjectBinding(operand) ? this.bindingIdsQuery(operand) : this.setArgument(operand)
+    );
     return sets.some(set => set !== null) ? sets : null;
   }
 
   /*** True when `expr` names a `with` binding compiled to a CTE of objects or of a mutation's rows, not of values. ***/
-  private isObjectBinding(expr: EdgeQLAST.Expression): boolean {
+  private isObjectBinding(expr: EdgeQLAST.Expression): expr is EdgeQLAST.Identifier {
     if (expr.kind !== "Identifier" || this.scopeVariable(expr.name)) {
       return false;
     }
     const cte = Context.getCTEAlias(this.ctx, expr.name);
     return cte !== undefined && !cte.values;
+  }
+
+  /**
+   * The ids of a `with` binding of objects (`isObjectBinding`) that may be
+   * several, as a set operand: `.author = us` compares the author with each
+   * (as Gel does), where the binding's expression form is one id, a scalar
+   * subquery failing on more than one row. Null for a binding of one object
+   * at most, which is that one id.
+   */
+  private bindingIdsQuery(expr: EdgeQLAST.Identifier): EdgeQLAST.Subquery | null {
+    if (Context.getCTEAlias(this.ctx, expr.name)?.singleton) {
+      return null;
+    }
+    const query: EdgeQLAST.SelectQuery = { distinct: false, expr, kind: "SelectQuery", span: expr.span };
+    this.objectIdSelects.add(query);
+    return { kind: "Subquery", query };
   }
 
   /**
@@ -1870,13 +1889,18 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   ): { from: SQL.TableReference[]; value: SQL.SQLExpression; where?: SQL.SQLExpression; } {
     const from: SQL.TableReference[] = [];
     const operands = this.elementWiseOperands(expr)!;
+    // A function's arguments may be optional; `?=` compares empty operands.
+    const optional = expr.kind === "FunctionCall" || (expr.kind === "BinaryOp" && OPTIONAL_OPERAND_OPERATORS.has(expr.op));
     const elements = operands.map((operand, index) => {
       const set = sets[index];
       if (!set) {
         return operand;
       }
       const alias = Context.generateAlias(this.ctx, "__arg");
-      from.push({ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery: this.compileQuery(set.query) });
+      const rows = this.compileQuery(set.query);
+      // `?=` and `?!=` compare an empty set as one empty (NULL) element.
+      const subquery = expr.kind === "BinaryOp" && optional ? this.emptyAsNull(rows) : rows;
+      from.push({ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery });
       this.ctx.currentScope.variables.set(alias, {
         element: true,
         expression: operand,
@@ -1889,8 +1913,6 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     });
     const value = this.compileExpression(this.withOperands(expr, elements));
 
-    // A function's arguments may be optional; `?=` compares empty operands.
-    const optional = expr.kind === "FunctionCall" || (expr.kind === "BinaryOp" && OPTIONAL_OPERAND_OPERATORS.has(expr.op));
     const conditions = optional ?
       [] :
       operands
@@ -1901,6 +1923,33 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       undefined
     );
     return { from, value, where };
+  }
+
+  /**
+   * A set's rows (one column), or one NULL row when there are none: `?=` and
+   * `?!=` compare an empty set as a whole, so `{} ?= {}` is true and
+   * `x ?!= {}` true, as in Gel. A set has no NULLs, so the NULL row is the
+   * empty set.
+   *
+   *   SELECT __rows.value FROM (SELECT 1) AS __one LEFT JOIN (<rows>) AS __rows(value) ON TRUE
+   */
+  private emptyAsNull(rows: SQL.SQLStatement): SQL.SelectStatement {
+    const one = SQL.createSelectStatement({ select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("number", 1))]) });
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([{
+        alias: "__one",
+        joins: [{
+          condition: SQL.createLiteral("boolean", true),
+          kind: "JoinClause",
+          table: { alias: "__rows", columnAliases: ["value"], kind: "TableReference", name: "", subquery: rows },
+          type: "LEFT"
+        }],
+        kind: "TableReference",
+        name: "",
+        subquery: one
+      }]),
+      select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("value", "__rows"))])
+    });
   }
 
   /**
@@ -3394,6 +3443,37 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return pgType === "text" ? text : SQL.createCastExpression(text, pgType);
   }
 
+  /**
+   * `<T><uuid>x`: the id `x`, when an object of `T` (or of a subtype) the
+   * query may read has it; else Gel's CardinalityViolationError ("'default::T'
+   * with id '…' does not exist"), raised by `disc_object_cast`
+   * (lib/stdlib-sql.ts, SQLSTATE 21000). An empty `x` is the empty set.
+   *
+   *   <User><uuid>$u
+   *   → disc_object_cast(CAST($1 AS uuid), EXISTS (SELECT … FROM "user" AS user_2 WHERE user_2.id = CAST($1 AS uuid)), 'default::User')
+   */
+  private objectCast(id: SQL.SQLExpression, type: EdgeQLAST.TypeName, typeDef: Context.TypeDef): SQL.SQLExpression {
+    const name = Context.generateAlias(this.ctx, "__cast_id");
+    const variables = this.ctx.currentScope.variables;
+    variables.set(name, { expression: EdgeQLAST.createIdentifier(name), name, sqlOverride: id, staticType: "uuid", type: "any" });
+    let found: SQL.SQLExpression;
+    try {
+      const idStep: EdgeQLAST.PathStep = { kind: "PathStep", name: "id", type: "property" };
+      const query: EdgeQLAST.SelectQuery = {
+        distinct: false,
+        expr: { expr: type, kind: "Detached" },
+        filter: EdgeQLAST.createBinaryOp("=", EdgeQLAST.createPath([idStep]), EdgeQLAST.createIdentifier(name)),
+        kind: "SelectQuery"
+      };
+      this.objectIdSelects.add(query);
+      found = this.compileExpression(EdgeQLAST.createUnaryOp("EXISTS", { kind: "Subquery", query }));
+    } finally {
+      variables.delete(name);
+    }
+    const qualified = typeDef.name.includes("::") ? typeDef.name : `${typeDef.module ?? "default"}::${typeDef.name}`;
+    return SQL.createFunctionCall("disc_object_cast", [id, found, SQL.createLiteral("string", qualified)]);
+  }
+
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     this.assertNotOverSet(cast, `<${renderEdgeQLTypeName(cast.type)}>`);
     const tuple = this.tupleLiteralCast(cast);
@@ -3418,10 +3498,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     // `<Program><uuid>$p` names an object by its id. A link column stores that
-    // uuid, so the cast is the uuid expression itself; there is no SQL type to
-    // cast to.
+    // uuid, so the cast is the uuid expression itself, checked (`objectCast`);
+    // there is no SQL type to cast to.
     if (resolved?.kind === "object") {
-      return expr;
+      return this.objectCast(expr, cast.type, resolved);
     }
 
     const pgType = edgeqlTypeToPgType(typeName, this.ctx.schema.scalars);

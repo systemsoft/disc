@@ -112,6 +112,9 @@ async function compile(edgeql: string, context?: AccessContext, sdl?: string): P
 }
 
 const ITEM = "for_iter.val";
+/*** `<Program><uuid>$program`: the id, checked to name a Program (`disc_object_cast`). ***/
+const PROGRAM =
+  "disc_object_cast(CAST($2 AS uuid), EXISTS ( SELECT program_2.id FROM program AS program_2 WHERE program_2.id = CAST($2 AS uuid) ), 'default::Program')";
 
 Deno.test("bulk insert: Q4 is one INSERT … SELECT over the JSON array", async () => {
   const { sql } = await compile(Q4);
@@ -119,7 +122,7 @@ Deno.test("bulk insert: Q4 is one INSERT … SELECT over the JSON array", async 
   assertEquals(
     sql,
     "INSERT INTO git_object (program_id, object_id, object_type, size, content) " +
-      `SELECT CAST($2 AS uuid), (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'object_type') #>> '{}', ` +
+      `SELECT ${PROGRAM}, (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'object_type') #>> '{}', ` +
       `CAST((${ITEM} -> 'size') #>> '{}' AS bigint), std_base64_decode((${ITEM} -> 'content') #>> '{}') ` +
       "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val) " +
       "ON CONFLICT (program_id, object_id) DO NOTHING RETURNING id"
@@ -142,7 +145,7 @@ Deno.test("bulk insert: Q5 rebuilds parents in order", async () => {
   assertEquals(
     sql,
     "INSERT INTO git_commit (program_id, object_id, tree_id, commit_time, parents) " +
-      `SELECT CAST($2 AS uuid), (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'tree_id') #>> '{}', ` +
+      `SELECT ${PROGRAM}, (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'tree_id') #>> '{}', ` +
       `CAST((${ITEM} -> 'commit_time') #>> '{}' AS bigint), ` +
       `CASE WHEN (${parents} IS NULL) OR (JSONB_TYPEOF(${parents}) = 'null') THEN NULL ELSE ` +
       `CAST(ARRAY(SELECT e.v FROM jsonb_array_elements_text(${parents}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord) AS text[]) END ` +

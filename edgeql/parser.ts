@@ -532,7 +532,12 @@ export class EdgeQLParser {
   private parseGroupQuery(): AST.GroupQuery {
     this.consume(TokenType.GROUP, "Expected 'GROUP'");
 
+    // A shape on the grouped type is the group's, even in the subject of a
+    // select that keeps its shape for itself (`select (group T { … } by …) { … }`).
+    const enclosingSkipShape = this.skipShapeInPostfix;
+    this.skipShapeInPostfix = false;
     const expr = this.parseExpression();
+    this.skipShapeInPostfix = enclosingSkipShape;
 
     const using: AST.WithBinding[] = [];
     if (
@@ -1803,6 +1808,14 @@ export class EdgeQLParser {
     if (this.check(TokenType.RANGE)) {
       const value = this.advance().value.toLowerCase();
       return AST.createIdentifier(value);
+    }
+
+    // A group in expression position: `select (group User by .role) { … }`.
+    // `group` is a soft keyword (checkIdentLike), so this comes first; a
+    // group's subject is a name or a parenthesized query.
+    const next = this.tokens[this.current + 1]?.type;
+    if (this.check(TokenType.GROUP) && (next === TokenType.IDENT || next === TokenType.LPAREN)) {
+      return { kind: "Subquery", query: this.parseGroupQuery() };
     }
 
     // Type name or identifier (also accepts soft keywords like `type`)

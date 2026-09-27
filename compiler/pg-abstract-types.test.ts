@@ -443,11 +443,12 @@ Deno.test({
   ignore: !RUN_PG,
   fn: () =>
     withAbstractSchema(async (pool, schema) => {
-      const bad = `insert AbsThing { title := "bad", owner := <AbsNamed><uuid>"01234567-89ab-7cde-8f01-000000000099" }`;
+      // Written as SQL: `<AbsNamed><uuid>…` of a missing id is refused before the FK is checked.
+      const bad = `INSERT INTO abs_thing (title, owner_id) VALUES ('bad', '01234567-89ab-7cde-8f01-000000000099')`;
       const conn = await pool.acquire();
       try {
         await conn.query("BEGIN");
-        await conn.query(compileEdgeQL(bad, schema));
+        await conn.query(bad);
         await assertRejects(() => conn.query("COMMIT"), Error, `violates foreign key constraint "fk_abs_thing_owner_id"`);
         await conn.query("ROLLBACK");
 

@@ -2216,3 +2216,41 @@ Deno.test("Gel bare-mutation rows: a bare mutation answers with its full stored 
     "server.md must document that bare-mutation rows are the full stored row (bare-mutation rows pin)."
   );
 });
+
+// ---------------------------------------------------------------------------
+// Gel group filter — `group T by … filter <condition>` keeps the groups the
+// condition holds for, compiled to SQL `HAVING`; in it, the grouped type is
+// the group's objects (`count(User)` is the group's size). Gel 7.1 has no
+// `filter` on `group`: `group User by .role filter .active` and
+// `group User filter .active by .role` are both
+// `EdgeQLSyntaxError: Unexpected keyword 'FILTER'`. Gel's spelling is a
+// select over the group, which Disc also compiles:
+// `select (group User by .role) { key, n := count(.elements) } filter .n > 10`.
+//
+// Decided: keep the clause as a documented Disc extension. Removing it would
+// break queries that rely on it; edgeql.md says it is Disc's and not Gel's.
+// ---------------------------------------------------------------------------
+Deno.test("Gel group filter: `group … by … filter` is a Disc extension compiled to HAVING", async () => {
+  const { EdgeQLParser } = await import("../edgeql/parser.ts");
+  const { EdgeQLCompiler } = await import("../compiler/compiler.ts");
+  const { SQLCodeGenerator } = await import("../compiler/codegen.ts");
+  const { SchemaManager } = await import("../migration/schema-manager.ts");
+
+  const manager = new SchemaManager({ dryRun: true });
+  const parsed = manager.parseSDL("module default { type User { required name: str; role: str; } }", { validate: false });
+  if (!parsed.ok)
+    throw parsed.error;
+  const schema = manager.modulesToSchema(parsed.value);
+
+  const result = new EdgeQLCompiler(schema, { enableAccessControl: false }).compile(new EdgeQLParser("group User by .role filter count(User) > 1").parse());
+  if (!result.ok)
+    throw result.error;
+  const sql = new SQLCodeGenerator().generate(result.value).replace(/\s+/g, " ");
+  assert(sql.endsWith("GROUP BY user_1.role HAVING COUNT(*) > 1"), `a group's filter is its HAVING (group filter pin): ${sql}`);
+
+  const edgeql = normalizeProse(await readPublishedDoc("edgeql.md"));
+  assert(
+    edgeql.includes(normalizeProse("This is a Disc extension (it compiles to SQL `HAVING`); Gel’s `group` has no `filter`.")),
+    "edgeql.md must document `group … filter` as a Disc extension (group filter pin)."
+  );
+});

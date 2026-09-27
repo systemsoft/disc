@@ -130,6 +130,21 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE;`,
 
+  // disc_object_cast(id, present, type_name) — `<T><uuid>x` (compiler
+  // `objectCast`): the id, unless it is not NULL and names no object of the
+  // type (`present` is FALSE): Gel's CardinalityViolationError,
+  // "'default::T' with id '…' does not exist", SQLSTATE 21000. The query
+  // that finds the object is the caller's (`present`), so this reads no table.
+  // (Not `found`: PL/pgSQL's FOUND would shadow it.)
+  `CREATE OR REPLACE FUNCTION disc_object_cast(id uuid, present boolean, type_name text) RETURNS uuid AS $$
+     BEGIN
+       IF id IS NOT NULL AND present IS NOT TRUE THEN
+         RAISE EXCEPTION USING ERRCODE = 'cardinality_violation', MESSAGE = format('%L with id %L does not exist', type_name, id::text);
+       END IF;
+       RETURN id;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE;`,
+
   // disc_finite_numeric(value, type_name) — every cast to `decimal` or
   // `bigint` (compiler `finiteNumeric`): the value, unless it is NaN or
   // ±Infinity. PostgreSQL's numeric has them; Gel's decimal and bigint do not

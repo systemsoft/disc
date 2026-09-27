@@ -402,13 +402,20 @@ async function compileError(edgeql: string, context?: AccessContext): Promise<st
 
 const BARE_Q3 = "insert GitRef { program := <Program><uuid>$p, name := <str>$n, target := <str>$t } unless conflict on ((.program, .name))";
 
-Deno.test("git-forge Q3 (bare) - <Program><uuid>$p is the uuid, and the conflict target is (program_id, name)", async () => {
+/*** `<Program><uuid>$1`: the uuid, checked to name a Program (`disc_object_cast`), as a regular expression's source. ***/
+const PROGRAM_CAST =
+  "disc_object_cast\\(CAST\\(\\$1 AS uuid\\), EXISTS \\( SELECT (program_\\d+)\\.id FROM program AS \\1 WHERE \\1\\.id = CAST\\(\\$1 AS uuid\\) \\), 'default::Program'\\)";
+
+Deno.test("git-forge Q3 (bare) - <Program><uuid>$p is the uuid, checked, and the conflict target is (program_id, name)", async () => {
   const sql = await compileGitForge(BARE_Q3);
 
-  assertEquals(
-    sql,
-    "INSERT INTO git_ref (program_id, name, target) VALUES (CAST($1 AS uuid), CAST($2 AS text), CAST($3 AS text)) " +
-      "ON CONFLICT (program_id, name) DO NOTHING RETURNING *"
+  assert(
+    new RegExp(
+      `^INSERT INTO git_ref \\(program_id, name, target\\) VALUES \\(${PROGRAM_CAST}, CAST\\(\\$2 AS text\\), CAST\\(\\$3 AS text\\)\\) ` +
+        "ON CONFLICT \\(program_id, name\\) DO NOTHING RETURNING \\*$"
+    )
+      .test(sql),
+    sql
   );
 });
 
@@ -447,22 +454,22 @@ Deno.test("git-forge - every composite conflict target matches the unique index 
 Deno.test("object-type cast - module-qualified type name", async () => {
   const sql = await compileGitForge("insert GitRef { program := <default::Program><uuid>$p, name := 'n', target := 't' }");
 
-  assertStringIncludes(sql, "VALUES (CAST($1 AS uuid), 'n', 't')");
+  assert(new RegExp(`VALUES \\(${PROGRAM_CAST}, 'n', 't'\\)`).test(sql), sql);
 });
 
 Deno.test("object-type cast - .link = <Type><uuid>$x in a select filter compares the FK column", async () => {
   const sql = await compileGitForge("select GitRef { name } filter .program = <Program><uuid>$p");
 
-  assert(/WHERE (gitref_\d+)\.program_id = CAST\(\$1 AS uuid\)/.test(sql), sql);
-  assert(!/AS Program/i.test(sql), sql);
+  assert(new RegExp(`WHERE gitref_\\d+\\.program_id = ${PROGRAM_CAST}`).test(sql), sql);
+  assert(!/AS Program\)/i.test(sql), sql);
 });
 
 Deno.test("object-type cast - .link = <Type><uuid>$x in update and delete filters compares the FK column", async () => {
   const update = await compileGitForge("update GitRef filter .program = <Program><uuid>$p and .name = <str>$n set { target := <str>$t }");
   const remove = await compileGitForge("delete GitRef filter .program = <Program><uuid>$p");
 
-  assertStringIncludes(update, "(git_ref.program_id = CAST($1 AS uuid)) AND (git_ref.name = CAST($2 AS text))");
-  assertStringIncludes(remove, "WHERE git_ref.program_id = CAST($1 AS uuid) RETURNING");
+  assert(new RegExp(`\\(git_ref\\.program_id = ${PROGRAM_CAST}\\) AND \\(git_ref\\.name = CAST\\(\\$2 AS text\\)\\)`).test(update), update);
+  assert(new RegExp(`WHERE git_ref\\.program_id = ${PROGRAM_CAST} RETURNING`).test(remove), remove);
 });
 
 Deno.test("object-type cast - an unknown type is a compile error naming it", async () => {
