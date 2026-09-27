@@ -808,7 +808,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
    *
    * `ALTER SYSTEM SET` is the only write that round-trips through
    * `getConfigValues()`: SESSION (`SET LOCAL`) is per-transaction and the
-   * `disc_config` table (DATABASE scope) is not applied to pooled
+   * per-database value (DATABASE scope) reaches only new
    * connections, so neither is visible on the next read. After writing we
    * `pg_reload_conf()` so SIGHUP-class settings take effect immediately,
    * then re-read. Restart-class settings (e.g. `shared_buffers`,

@@ -48,6 +48,34 @@ async function autoConfValue(pool: ConnectionPool, pgName: string): Promise<stri
   return result.rows.at(-1)?.setting as string | undefined;
 }
 
+/*** The current database's own value for a setting (`ALTER DATABASE … SET`), or undefined when none is set. ***/
+async function databaseValue(pool: ConnectionPool, pgName: string): Promise<string | undefined> {
+  const result = await pool.query(
+    "SELECT s FROM pg_db_role_setting, unnest(setconfig) AS s " +
+      "WHERE setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()) AND setrole = 0"
+  );
+  const entry = result.rows.map(row => row.s as string).find(s => s.startsWith(`${pgName}=`));
+  return entry?.slice(pgName.length + 1);
+}
+
+/*** What a new connection to the database starts with for a setting. ***/
+async function freshShow(pgName: string): Promise<string> {
+  const pool = new ConnectionPool({ cleanupInterval: 0, connectionString: await getTestDsn(), maxConnections: 1, minConnections: 1 });
+  await pool.initialize();
+  try {
+    return (await pool.query(`SHOW ${pgName}`)).rows[0][pgName] as string;
+  } finally {
+    await pool.close();
+  }
+}
+
+/*** Remove the current database's own value for a setting. ***/
+async function resetDatabaseValue(pool: ConnectionPool, pgName: string): Promise<void> {
+  await pool.query(
+    `DO $reset$ BEGIN EXECUTE 'ALTER DATABASE ' || quote_ident(current_database()) || ' RESET ${pgName}'; END $reset$`
+  );
+}
+
 async function setUp(): Promise<{ handler: EdgeQLProtocolHandler; pool: ConnectionPool; }> {
   const dsn = await getTestDsn();
   const pool = new ConnectionPool({ cleanupInterval: 0, connectionString: dsn, maxConnections: 4, minConnections: 1 });
@@ -55,6 +83,7 @@ async function setUp(): Promise<{ handler: EdgeQLProtocolHandler; pool: Connecti
   await resetTestDatabase(pool);
   await pool.query("ALTER SYSTEM RESET default_statistics_target");
   await pool.query("ALTER SYSTEM RESET effective_io_concurrency");
+  await resetDatabaseValue(pool, "default_statistics_target");
 
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -68,6 +97,7 @@ async function setUp(): Promise<{ handler: EdgeQLProtocolHandler; pool: Connecti
 async function tearDown(pool: ConnectionPool): Promise<void> {
   await pool.query("ALTER SYSTEM RESET default_statistics_target");
   await pool.query("ALTER SYSTEM RESET effective_io_concurrency");
+  await resetDatabaseValue(pool, "default_statistics_target");
   await pool.close();
 }
 
@@ -135,6 +165,26 @@ Deno.test({
       assertEquals((await query("configure instance reset default_statistics_target", SERVICE_TOKEN)).status, 200);
       assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
       assertEquals((await query("configure instance set archive_command := 'x'", SERVICE_TOKEN)).status, 400);
+
+      // `configure database` is the current database's own setting (ALTER DATABASE), for an administrator only:
+      // every new connection to it starts with the value.
+      const before = await freshShow("default_statistics_target");
+      assertEquals((await query("configure database set default_statistics_target := 543")).status, 403);
+      assertEquals(await databaseValue(pool, "default_statistics_target"), undefined);
+      const database = await query("configure database set default_statistics_target := 543", SERVICE_TOKEN);
+      assertEquals(database.status, 200, JSON.stringify(database.body));
+      assertEquals(await databaseValue(pool, "default_statistics_target"), "543");
+      assertEquals(await autoConfValue(pool, "default_statistics_target"), undefined);
+      assertEquals(await freshShow("default_statistics_target"), "543");
+      assertEquals((await query("configure database reset default_statistics_target")).status, 403);
+      assertEquals(await databaseValue(pool, "default_statistics_target"), "543");
+      const reset = await query("configure database reset default_statistics_target", SERVICE_TOKEN);
+      assertEquals(reset.status, 200, JSON.stringify(reset.body));
+      assertEquals(await databaseValue(pool, "default_statistics_target"), undefined);
+      assertEquals(await freshShow("default_statistics_target"), before);
+      const unknown = await query("configure database set archive_command := 'x'", SERVICE_TOKEN);
+      assertEquals(unknown.status, 400, JSON.stringify(unknown.body));
+      assertEquals(unknown.body.errors?.[0]?.extensions?.code, "CONFIGURATION_ERROR");
 
       // A WITH block around it changes nothing.
       assertEquals((await query("with x := 1 configure system set effective_io_concurrency := 7")).status, 403);

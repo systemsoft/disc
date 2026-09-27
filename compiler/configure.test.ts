@@ -147,30 +147,48 @@ Deno.test("CONFIGURE compile — SYSTEM RESET compiles to ALTER SYSTEM RESET", (
   assertStringIncludes(sql, "shared_buffers");
 });
 
-Deno.test("CONFIGURE compile — DATABASE SET compiles to disc_config upsert", () => {
-  const sql = compileEdgeQL(
-    "CONFIGURE DATABASE SET query_execution_timeout := 30000"
+// ===========================================================================
+// PHASE 3: Config persistence
+// ===========================================================================
+
+// `configure database` is the current database's own setting: PostgreSQL's
+// per-database value (`ALTER DATABASE <current> SET`), which every new
+// connection to it starts with. The database is named at run time
+// (`current_database()`), so the statement runs through `EXECUTE`.
+Deno.test("CONFIGURE compile — DATABASE SET is ALTER DATABASE SET on the current database", () => {
+  const sql = compileEdgeQL("CONFIGURE DATABASE SET query_execution_timeout := '5s'");
+  assertEquals(
+    sql,
+    "DO $disc_configure$ BEGIN EXECUTE 'ALTER DATABASE ' || quote_ident(current_database()) || ' SET statement_timeout = ''5s'''; END $disc_configure$"
   );
-  assertStringIncludes(sql, "INSERT INTO disc_config");
-  assertStringIncludes(sql, "ON CONFLICT");
-  assertStringIncludes(sql, "'DATABASE'");
 });
 
-// ===========================================================================
-// PHASE 3: Config persistence — disc_config table DDL
-// ===========================================================================
-
-Deno.test("CONFIGURE compile — DATABASE RESET deletes from disc_config", () => {
-  const sql = compileEdgeQL(
-    "CONFIGURE DATABASE RESET query_execution_timeout"
+Deno.test("CONFIGURE compile — DATABASE RESET is ALTER DATABASE RESET on the current database", () => {
+  const sql = compileEdgeQL("CONFIGURE DATABASE RESET default_statistics_target");
+  assertEquals(
+    sql,
+    "DO $disc_configure$ BEGIN EXECUTE 'ALTER DATABASE ' || quote_ident(current_database()) || ' RESET default_statistics_target'; END $disc_configure$"
   );
-  assertStringIncludes(sql, "DELETE FROM disc_config");
-  assertStringIncludes(sql, "'DATABASE'");
+});
+
+Deno.test("CONFIGURE compile — DATABASE takes only known keys", () => {
+  assertThrows(
+    () => compileEdgeQL("CONFIGURE DATABASE SET archive_command := 'x'"),
+    ConfigurationError,
+    "unrecognized configuration parameter 'archive_command'"
+  );
+});
+
+Deno.test("CONFIGURE compile — a DATABASE value cannot end the statement's quoting", () => {
+  assertThrows(
+    () => compileEdgeQL("CONFIGURE DATABASE SET query_execution_timeout := '$disc_configure$; drop table x; --'"),
+    ConfigurationError
+  );
 });
 
 // Gel's `configure instance` is what `configure system` was renamed to (the
 // older name stays as an alias): the server-wide setting, here the backing
-// PostgreSQL's (`ALTER SYSTEM`). There is no `disc_config` table to write.
+// PostgreSQL's (`ALTER SYSTEM`).
 Deno.test("CONFIGURE compile — INSTANCE SET is CONFIGURE SYSTEM's ALTER SYSTEM SET", () => {
   const sql = compileEdgeQL("CONFIGURE INSTANCE SET max_connections := 200");
   assertEquals(sql, compileEdgeQL("CONFIGURE SYSTEM SET max_connections := 200"));

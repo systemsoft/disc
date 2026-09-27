@@ -25,7 +25,7 @@
  *
  * No CONFIGURE-able key in disc is currently a secret — `jwtSecret`,
  * OAuth `clientSecret`, and SMTP credentials live in constructor args
- * today, not in `disc_config`. The mechanism is in place for when
+ * today, not in PostgreSQL settings. The mechanism is in place for when
  * those migrate to runtime-configurable keys.
  */
 

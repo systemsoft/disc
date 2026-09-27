@@ -25,6 +25,9 @@ import * as SQL from "./sql.ts";
 export { buildParameterIndex, buildParameterTypeMap, describeResult, optionalParameterNames, parameterBindOrder } from "./compiler-base.ts";
 export type { CompilerOptions, ResultInfo } from "./compiler-base.ts";
 
+/*** Dollar-quote tag of the block `configure database` compiles to. ***/
+const CONFIGURE_DATABASE_TAG = "$disc_configure$";
+
 /*** One target assigned to a junction-backed multi link, with the link properties set for it. ***/
 interface LinkTarget {
   /**
@@ -2751,9 +2754,9 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   private compileConfigureQuery(
     query: EdgeQLAST.ConfigureQuery
   ): SQL.RawSQLStatement {
-    // The key is written into the SQL as is (`SET LOCAL <key>`, and between
-    // quotes for disc_config); a backtick-quoted one can hold any character,
-    // so it must have the form of a PostgreSQL setting's name.
+    // The key is written into the SQL as is (`SET LOCAL <key>`); a
+    // backtick-quoted one can hold any character, so it must have the form
+    // of a PostgreSQL setting's name.
     if (!/^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$/.test(query.key)) {
       throw new CompilationError(`'${query.key}' is not a configuration parameter name`);
     }
@@ -2784,11 +2787,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           sql: `ALTER SYSTEM RESET ${pgKey}`
         };
       }
-      // DATABASE: delete from config table
-      return {
-        kind: "RawSQLStatement",
-        sql: `DELETE FROM disc_config WHERE key = '${query.key}' AND scope = '${query.scope}'`
-      };
+      return this.alterCurrentDatabase(`RESET ${pgKey}`);
     }
 
     // SET action
@@ -2810,11 +2809,25 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         sql: `ALTER SYSTEM SET ${pgKey} = ${valueSql}`
       };
     }
-    // DATABASE: upsert into config table
+    if (valueSql.includes(CONFIGURE_DATABASE_TAG)) {
+      throw new ConfigurationError(`invalid value for configuration parameter '${query.key}'`);
+    }
+    return this.alterCurrentDatabase(`SET ${pgKey} = ${valueSql}`);
+  }
+
+  /**
+   * `configure database` is the current database's own setting: PostgreSQL's
+   * per-database value, which every new connection to the database starts
+   * with. `ALTER DATABASE` needs the database's name, known only at run
+   * time, so it is built from `current_database()` and run by `EXECUTE`. The
+   * clause (`SET <key> = <value>` or `RESET <key>`) is a string literal in
+   * the block; the caller has made sure it cannot hold the block's tag.
+   */
+  private alterCurrentDatabase(clause: string): SQL.RawSQLStatement {
+    const literal = `' ${clause.replace(/'/g, "''")}'`;
     return {
       kind: "RawSQLStatement",
-      sql:
-        `INSERT INTO disc_config (key, value, scope, updated) VALUES ('${query.key}', to_jsonb(${valueSql}), '${query.scope}', NOW()) ON CONFLICT (key) DO UPDATE SET value = to_jsonb(${valueSql}), updated = NOW()`
+      sql: `DO ${CONFIGURE_DATABASE_TAG} BEGIN EXECUTE 'ALTER DATABASE ' || quote_ident(current_database()) || ${literal}; END ${CONFIGURE_DATABASE_TAG}`
     };
   }
 
@@ -2865,7 +2878,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       case "cfg::describe_settings": {
         // #5988 + #6444: registry of CONFIGURE-able keys with secret flag.
         // Values are not included here — querying current values requires
-        // a SQL roundtrip (SHOW or disc_config select), which a separate
+        // a SQL roundtrip (SHOW), which a separate
         // admin endpoint will handle while applying maskIfSecret().
         json = JSON.stringify(getConfigRegistry());
         break;
