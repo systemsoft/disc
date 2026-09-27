@@ -12,6 +12,7 @@ import { SDLLexer } from "./lexer.ts";
 import { KEYWORDS, Token, TokenType } from "./tokens.ts";
 
 export class SDLParser {
+  private source: string;
   private tokens: Token[];
   private current = 0;
   // Errors collected during a recovery pass. Empty when the parser is
@@ -19,6 +20,7 @@ export class SDLParser {
   private collectedErrors: SyntaxError[] = [];
 
   constructor(source: string) {
+    this.source = source;
     const lexer = new SDLLexer(source);
     this.tokens = lexer.tokenize();
   }
@@ -2108,6 +2110,7 @@ export class SDLParser {
     // For now, parse EdgeQL expressions as simplified PathExpressions
     // This is a temporary solution until full EdgeQL support is implemented
     const tokens: string[] = [];
+    const start = this.peek().offset;
     let parenDepth = 0;
 
     while (!this.isAtEnd()) {
@@ -2134,7 +2137,9 @@ export class SDLParser {
       }
     }
 
-    return { kind: "PathExpression", path: tokens };
+    // The tokens lose their spacing and a string's quotes; keep the source
+    // text so the query can be printed back as EdgeQL (sdlExpressionToEdgeQL).
+    return { kind: "PathExpression", path: tokens, source: this.source.slice(start, this.peek().offset).trim() };
   }
 
   private error(message: string, hint?: string): SyntaxError {

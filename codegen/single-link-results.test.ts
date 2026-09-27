@@ -96,6 +96,34 @@ Deno.test("single link results - TypeScript declares a one-element array, null w
   assertMatch(types, /export interface PostUpdate \{[^}]*\n\s+editor\?: string;\n/);
 });
 
+Deno.test("single link results - a computed link is typed like a stored one", () => {
+  const mgr = new SchemaManager({ dryRun: true });
+  const parsed = mgr.parseSDL(
+    `module default {
+      type User { required name: str; manager: User; }
+      type Comment { required post: Post; created: datetime; }
+      type Post {
+        required author: User;
+        auth := .author;
+        boss := .author.manager;
+        single first_comment := (select .<post[is Comment] order by .created limit 1);
+        multi ordered := (select .<post[is Comment] order by .created);
+      }
+    }`,
+    { validate: false }
+  );
+  if (!parsed.ok)
+    throw parsed.error;
+  const types = content(emitTypeScript(schemaToIR(mgr.modulesToSchema(parsed.value)), config()), "interfaces.ts");
+
+  assertStringIncludes(types, " auth: [User];\n");
+  assertStringIncludes(types, " boss?: [User] | null;\n");
+  assertStringIncludes(types, " first_comment?: [Comment] | null;\n");
+  assertStringIncludes(types, " ordered?: Comment[] | null;\n");
+  // Computed links are read-only.
+  assertMatch(types, /export interface PostInsert \{\n\s+\/\*\*[^\n]*\n\s+author: string;\n\s+\}/);
+});
+
 Deno.test("single link results - Rust declares a Vec, optional when the link is", () => {
   const lib = emitRust(schemaToIR(schema()), config()).map(f => f.content).join("\n");
 

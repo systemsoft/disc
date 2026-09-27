@@ -595,6 +595,15 @@ export function getProperty(
   return type?.properties.get(propName);
 }
 
+/**
+ * True for a computed link whose objects are its `computedExpr`'s
+ * (`auth := .author`, `first := (select .<post[is Comment] … limit 1)`):
+ * no FK column, junction table or reverse-link traversal to read.
+ */
+export function isExpressionLink(link: LinkDef): link is LinkDef & { computedExpr: string; } {
+  return link.computed === true && link.computedExpr !== undefined && !link.columnName && !link.junctionTable && !link.backlink;
+}
+
 export function getLink(
   ctx: CompilationContext,
   typeName: string,

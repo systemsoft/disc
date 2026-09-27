@@ -416,6 +416,89 @@ Deno.test("SchemaManager - modulesToSchema - computed backlink with [is X] round
 });
 
 // ---------------------------------------------------------------------------
+// 6a-3. modulesToSchema -- computed select round-trips as its source text
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - computed select keeps its EdgeQL source", () => {
+  // Regression: the SDL parser keeps a `select …` computed as raw tokens,
+  // which the expression printer joined with `.` — `select.<.post[.is.C.]…`,
+  // with string literals unquoted — so the compiler could not re-parse it.
+  const manager = new SchemaManager({});
+  const parsed = manager.parseSDL(`
+    type P {
+      required title: str;
+      single fc := (select .<post[is C] filter .body != 'x' order by .created limit 1);
+    }
+    type C {
+      required post: P;
+      body: str;
+      created: datetime;
+    }
+  `);
+  assertEquals(parsed.ok, true, parsed.ok ? "" : parsed.error.message);
+  if (!parsed.ok) {
+    return;
+  }
+  const fc = manager.modulesToSchema(parsed.value).types.get("P")?.links.get("fc");
+  assertEquals(fc?.computedExpr, "(select .<post[is C] filter .body != 'x' order by .created limit 1)");
+});
+
+// ---------------------------------------------------------------------------
+// 6a-4. modulesToSchema -- an object-valued computed is a computed link
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - object-valued computeds become computed links", () => {
+  // Gel models `auth := .author` as a computed link to the target type, with
+  // the cardinality the expression infers (or `multi` declared). Classifying
+  // it as a property typed `auto` made `auth: { name }` read a column
+  // `auth` that does not exist, and codegen typed it `unknown`.
+  const manager = new SchemaManager({});
+  const parsed = manager.parseSDL(`
+    type U {
+      required name: str;
+      best_friend: U;
+    }
+    type P {
+      required author: U;
+      editor: U;
+      auth := .author;
+      ed := .editor;
+      bf := .author.best_friend;
+      single fc := (select .<post[is C] order by .created limit 1);
+      multi mc := (select .<post[is C] order by .created);
+      cs := .<post[is C];
+      title_upper := str_upper(.author.name);
+    }
+    type C {
+      required post: P;
+      body: str;
+      created: datetime;
+    }
+  `);
+  assertEquals(parsed.ok, true, parsed.ok ? "" : parsed.error.message);
+  if (!parsed.ok) {
+    return;
+  }
+  const post = manager.modulesToSchema(parsed.value).types.get("P");
+  assert(post !== undefined);
+  const shape = (name: string) => {
+    const link = post.links.get(name);
+    return link && { computed: link.computed, multi: link.multi, required: link.required, target: link.target };
+  };
+  assertEquals(shape("auth"), { computed: true, multi: false, required: true, target: "U" });
+  assertEquals(shape("ed"), { computed: true, multi: false, required: false, target: "U" });
+  assertEquals(shape("bf"), { computed: true, multi: false, required: false, target: "U" });
+  assertEquals(shape("fc"), { computed: true, multi: false, required: false, target: "C" });
+  assertEquals(shape("mc"), { computed: true, multi: true, required: false, target: "C" });
+  assertEquals(shape("cs"), { computed: true, multi: true, required: false, target: "C" });
+  assertEquals(post.links.get("auth")?.columnName, undefined);
+  assertEquals(post.links.get("auth")?.computedExpr, ".author");
+  for (const name of ["auth", "ed", "bf", "fc", "mc"]) {
+    assertEquals(post.properties.has(name), false, `${name} is a link, not a property`);
+  }
+  // A scalar-valued computed stays a property.
+  assertEquals(post.properties.get("title_upper")?.computed, true);
+});
+
+// ---------------------------------------------------------------------------
 // 6b. modulesToSchema -- camelCase property name → snake_case columnName
 // ---------------------------------------------------------------------------
 Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_case columnName", () => {

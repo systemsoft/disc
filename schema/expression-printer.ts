@@ -77,6 +77,10 @@ function formatPath(path: PathExpression): string {
   if (path.path.length === 0) {
     return "";
   }
+  // A query (`select …`): its source, parenthesized to parse as one expression.
+  if (path.source !== undefined) {
+    return `(${path.source})`;
+  }
   // `global name` → ["global", "name"] (see schema/parser.ts `parsePrimaryExpression`).
   if (path.path[0] === "global" && path.path.length === 2) {
     return `global ${path.path[1]}`;

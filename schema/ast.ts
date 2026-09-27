@@ -298,6 +298,8 @@ export interface Literal extends SDLNode {
 export interface PathExpression extends SDLNode {
   kind: "PathExpression";
   path: string[];
+  /*** A query (`select …`) kept as tokens in `path`: its EdgeQL source text. ***/
+  source?: string;
 }
 
 export interface BinaryOp extends SDLNode {

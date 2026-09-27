@@ -20,6 +20,7 @@
  */
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { backlinkIntersectionName, locationOf } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
@@ -72,6 +73,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
    * property, or a tuple field.
    */
   protected resolvePath(path: EdgeQLAST.Path): ResolvedPath | null {
+    path = this.spliceExpressionLinks(path);
     if (path.steps.length === 0 || path.steps.some(step => step.type === "link_property")) {
       return null;
     }
@@ -100,6 +102,42 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
       typeDef = hop.target;
     }
     return { hops, multi, start: origin.start, startType: origin.startType, typeDef };
+  }
+
+  /**
+   * `path` with each step through a computed link whose expression is a
+   * relative path (`auth := .author`, `bf := .author.best_friend`) replaced
+   * by that path's steps, so `.auth.name` compiles as `.author.name`. Other
+   * computed links (`(select …)`) stay as they are.
+   */
+  protected spliceExpressionLinks(path: EdgeQLAST.Path): EdgeQLAST.Path {
+    const origin = this.pathOrigin(path);
+    if (!origin) {
+      return path;
+    }
+    const steps = this.spliceSteps(origin.startType, origin.steps);
+    return steps === origin.steps ? path : { ...path, steps: [...path.steps.slice(0, path.steps.length - origin.steps.length), ...steps] };
+  }
+
+  private spliceSteps(start: Context.TypeDef, steps: EdgeQLAST.PathStep[]): EdgeQLAST.PathStep[] {
+    const out: EdgeQLAST.PathStep[] = [];
+    let typeDef: Context.TypeDef | undefined = start;
+    for (const step of steps) {
+      const link: Context.LinkDef | undefined = step.type === "property" ? typeDef?.links.get(step.name) : undefined;
+      const expr = link && Context.isExpressionLink(link) ? new EdgeQLParser(link.computedExpr).parseExpressionOnly() : undefined;
+      if (typeDef && expr?.kind === "Path" && !expr.rooted) {
+        out.push(...this.spliceSteps(typeDef, expr.steps));
+      } else {
+        out.push(step);
+      }
+      const next: string | null | undefined = step.type === "type_intersection" ?
+        step.name :
+        step.type === "backlink" ?
+        backlinkIntersectionName(step.filter) :
+        link?.target;
+      typeDef = next ? Context.resolveTypeName(this.ctx, next) : undefined;
+    }
+    return out.length === steps.length && out.every((step, index) => step === steps[index]) ? steps : out;
   }
 
   /*** True when `path` reaches objects through at least one link, or from a type or a binding (not a property, not just the current row). ***/

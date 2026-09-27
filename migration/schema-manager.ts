@@ -57,6 +57,8 @@ import {
   qualifySharedEnumReferences,
   SDLConverter
 } from "../schema/converter.ts";
+import type * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
@@ -163,6 +165,68 @@ function extractBacklinkInfo(
     return null;
   }
   return { forwardLink: p[1].slice(1), target: m[1] };
+}
+
+/**
+ * The objects a computed's expression yields, as the computed link Gel infers
+ * for it, or null when it yields no objects of a known type (a scalar
+ * computed stays a property):
+ *
+ *   .author, .author.best_friend        → author's target; multi if a hop is
+ *   .<post[is Comment]                  → Comment, multi
+ *   (select <one of the above> … limit 1) → single
+ *   <any of the above> { shape }
+ *
+ * Required when every hop is a required single link and nothing narrows it.
+ */
+function inferComputedLink(
+  expr: EdgeQLAST.Expression,
+  source: TypeDef,
+  resolveType: (name: string) => TypeDef | undefined
+): { multi: boolean; required: boolean; target: string; } | null {
+  if (expr.kind === "ShapeExpr") {
+    return inferComputedLink(expr.expr, source, resolveType);
+  }
+  if (expr.kind === "Subquery") {
+    const query = expr.query;
+    const inner = query.kind === "SelectQuery" ? inferComputedLink(query.expr, source, resolveType) : null;
+    if (query.kind !== "SelectQuery" || !inner) {
+      return null;
+    }
+    const atMostOne = query.limit?.kind === "Literal" && Number(query.limit.value) <= 1;
+    return {
+      multi: inner.multi && !atMostOne,
+      required: inner.required && !query.filter && !query.offset && !query.limit,
+      target: inner.target
+    };
+  }
+  if (expr.kind !== "Path" || expr.rooted || expr.steps.length === 0) {
+    return null;
+  }
+  let type = source;
+  let multi = false;
+  let required = true;
+  for (const step of expr.steps) {
+    let next: TypeDef | undefined;
+    if (step.type === "type_intersection") {
+      next = resolveType(step.name);
+      required = false;
+    } else if (step.type === "backlink") {
+      next = step.filter?.kind === "TypeName" ? resolveType(step.filter.name.parts.join("::")) : undefined;
+      multi = true;
+      required = false;
+    } else if (step.type === "link" || step.type === "property") {
+      const link = type.links.get(step.name);
+      next = link ? resolveType(link.target) : undefined;
+      multi = multi || (link?.multi ?? false);
+      required = required && (link?.required ?? false);
+    }
+    if (!next) {
+      return null;
+    }
+    type = next;
+  }
+  return { multi, required, target: type.name };
 }
 
 /**
@@ -1237,6 +1301,42 @@ export class SchemaManager {
         }
         // else: forward link is a single FK; keep `backlink` so the link-shape
         // compiler resolves `target.<backlink>.columnName`.
+      }
+    }
+
+    // (c) A computed that yields objects (`auth := .author`, `first :=
+    // (select .<post[is Comment] … limit 1)`) is a computed link to their
+    // type, not a property: selected with a sub-shape, filtered through, and
+    // typed by codegen like a stored link. It has no storage; the compiler
+    // inlines `computedExpr`. Repeated until nothing changes, since one may
+    // go through another (`x := .auth.best_friend`).
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const typeDef of types.values()) {
+        for (const [name, property] of typeDef.properties) {
+          if (!property.computed || !property.computedExpr || property.edgeqlType !== "auto") {
+            continue;
+          }
+          const inferred = inferComputedLink(
+            new EdgeQLParser(property.computedExpr).parseExpressionOnly(),
+            typeDef,
+            target => resolveLinkTarget(target, typeDef.module)
+          );
+          if (!inferred) {
+            continue;
+          }
+          typeDef.properties.delete(name);
+          typeDef.links.set(name, {
+            annotations: property.annotations,
+            computed: true,
+            computedExpr: property.computedExpr,
+            multi: property.multi || inferred.multi,
+            name,
+            required: inferred.required,
+            target: inferred.target
+          });
+          changed = true;
+        }
       }
     }
 

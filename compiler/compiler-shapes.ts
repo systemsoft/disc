@@ -1457,6 +1457,64 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   }
 
   /**
+   * A computed link read like a stored one (see `Context.isExpressionLink`):
+   * a select of its expression's objects, with `shape` (else their ids).
+   * With a shape, a single link is a one-element array or null when empty,
+   * a multi link an array; without, a single link is the id or null, a multi
+   * link the ids (null when empty), as compileLinkReference answers.
+   */
+  private compileExpressionLink(
+    link: Context.LinkDef & { computedExpr: string; },
+    shape?: EdgeQLAST.Shape,
+    orderBy?: EdgeQLAST.OrderByClause[],
+    filter?: EdgeQLAST.Expression
+  ): SQL.SQLExpression {
+    const idShape = EdgeQLAST.createShape([EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("id"))]);
+    const query = this.expressionLinkQuery(link, new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape ?? idShape, orderBy, filter);
+    const row = SQL.createColumnReference("v", "__agg");
+    let value: SQL.SQLExpression = SQL.createFunctionCall("jsonb_agg", [
+      shape ? row : SQL.createBinaryExpression("->", row, SQL.createLiteral("string", "id"))
+    ]);
+    if (shape && link.multi) {
+      value = SQL.createFunctionCall("COALESCE", [value, { kind: "RawSQLExpression", sql: "'[]'::jsonb" }]);
+    } else if (!shape && !link.multi) {
+      value = SQL.createBinaryExpression("->", value, SQL.createLiteral("number", 0));
+    }
+    return SQL.createSubqueryExpression(SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias: "__agg", columnAliases: ["v"], kind: "TableReference", name: "", subquery: this.compileSelectQuery(query) }]),
+      select: SQL.createSelectClause([SQL.createSelectItem(value)])
+    }));
+  }
+
+  /*** `select <expr> { shape } filter … order by …` for a computed link's expression; a `(select …)` takes the shape, filter and order by itself. ***/
+  private expressionLinkQuery(
+    link: Context.LinkDef,
+    expr: EdgeQLAST.Expression,
+    shape: EdgeQLAST.Shape,
+    orderBy?: EdgeQLAST.OrderByClause[],
+    filter?: EdgeQLAST.Expression
+  ): EdgeQLAST.SelectQuery {
+    if (expr.kind === "ShapeExpr") {
+      return this.expressionLinkQuery(link, expr.expr, shape, orderBy, filter);
+    }
+    if (expr.kind !== "Subquery" || expr.query.kind !== "SelectQuery") {
+      return { distinct: false, expr, filter, kind: "SelectQuery", orderBy, shape };
+    }
+    const query = expr.query;
+    if ((filter || orderBy) && (query.limit || query.offset)) {
+      throw new CompilationError(
+        `Cannot filter or order the computed link '${link.name}' in a shape: its expression already applies a limit or offset`
+      );
+    }
+    return {
+      ...query,
+      filter: query.filter && filter ? EdgeQLAST.createBinaryOp("AND", query.filter, filter) : query.filter ?? filter,
+      orderBy: orderBy ?? query.orderBy,
+      shape
+    };
+  }
+
+  /**
    * Compile a polymorphic shape element: [IS Type].property
    *
    * Generates:
@@ -1573,6 +1631,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     link: Context.LinkDef,
     parentAlias: string
   ): SQL.SQLExpression {
+    if (Context.isExpressionLink(link)) {
+      return this.compileExpressionLink(link);
+    }
     // A link to an object the select policy hides is empty, not its id.
     const target = Context.resolveTypeName(this.ctx, link.target);
     if (link.columnName) {
@@ -1652,6 +1713,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     orderBy?: EdgeQLAST.OrderByClause[],
     filter?: EdgeQLAST.Expression
   ): SQL.SQLExpression {
+    if (Context.isExpressionLink(link)) {
+      return this.compileExpressionLink(link, shape, orderBy, filter);
+    }
     // Generate a subquery for the linked type with the given shape.
     // Use `resolveTypeName` (not `getTypeDef`) so a link target like
     // "default::Merchant" still resolves when the type is stored under
@@ -1944,6 +2008,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
+    path = this.spliceExpressionLinks(path);
     // `x.name`, where `x` is a `for` variable over objects or a bound subject
     // (`Item.name`, `Order.items.name` in a select of `Order.items`): the
     // rest of the path read from the current row, as `.name` is from a
