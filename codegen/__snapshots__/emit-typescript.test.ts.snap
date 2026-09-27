@@ -178,6 +178,8 @@ export interface UserSelect {
   "*"?: boolean;
   filter?: UserFilter;
   order_by?: string | string[];
+  limit?: number;
+  offset?: number;
   id?: boolean;
   name?: boolean;
   email?: boolean;
@@ -243,6 +245,8 @@ export interface PostSelect {
   "*"?: boolean;
   filter?: PostFilter;
   order_by?: string | string[];
+  limit?: number;
+  offset?: number;
   id?: boolean;
   title?: boolean;
   body?: boolean;
@@ -291,6 +295,7 @@ export class UserQueryBuilder {
       createdAt: "<datetime>",
       active: "<bool>",
       age: "<int32>",
+      postCount: "<int32>",
     },
     links: {
       posts: () => PostQueryBuilder._typeInfo,
@@ -682,6 +687,8 @@ export namespace \$default {
     "*"?: boolean;
     filter?: MerchantFilter;
     order_by?: string | string[];
+    limit?: number;
+    offset?: number;
     id?: boolean;
     name?: boolean;
     status?: boolean;
@@ -764,6 +771,8 @@ export namespace api {
     "*"?: boolean;
     filter?: ApiKeyFilter;
     order_by?: string | string[];
+    limit?: number;
+    offset?: number;
     id?: boolean;
     key?: boolean;
     active?: boolean;
@@ -852,6 +861,8 @@ export namespace payment {
     "*"?: boolean;
     filter?: PaymentFilter;
     order_by?: string | string[];
+    limit?: number;
+    offset?: number;
     id?: boolean;
     amount?: boolean;
     currency?: boolean;
@@ -1514,6 +1525,8 @@ export interface PersonSelect {
   "*"?: boolean;
   filter?: PersonFilter;
   order_by?: string | string[];
+  limit?: number;
+  offset?: number;
   id?: boolean;
   name?: boolean;
 }
@@ -1606,6 +1619,8 @@ export interface PlaceSelect {
   "*"?: boolean;
   filter?: PlaceFilter;
   order_by?: string | string[];
+  limit?: number;
+  offset?: number;
   id?: boolean;
   name?: boolean;
   kind?: boolean;
@@ -2019,6 +2034,8 @@ export namespace \$default {
     "*"?: boolean;
     filter?: PersonFilter;
     order_by?: string | string[];
+    limit?: number;
+    offset?: number;
     id?: boolean;
   }
 
@@ -2079,6 +2096,8 @@ export namespace \$default {
     "*"?: boolean;
     filter?: PetFilter;
     order_by?: string | string[];
+    limit?: number;
+    offset?: number;
     id?: boolean;
     owner?: boolean | PersonSelect;
     friends?: boolean | PersonSelect;

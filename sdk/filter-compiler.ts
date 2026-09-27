@@ -202,12 +202,13 @@ function compileSelectShape(
 ): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(select)) {
-    // `filter` and `order_by` inside a link's select object are consumed by the
-    // parent link (they narrow and order that link's set, emitted as
-    // `link: { ... } filter ... order by ...`), so they're not fields of this
-    // shape. At the top level they have no parent link and are simply ignored —
-    // top-level narrowing and ordering use the sibling filter keys/`order_by`.
-    if (key === "filter" || key === "order_by") {
+    // `filter`, `order_by`, `offset` and `limit` inside a link's select object
+    // are consumed by the parent link (they narrow, order and cap that link's
+    // set, emitted as `link: { ... } filter ... order by ... offset ... limit
+    // ...`), so they're not fields of this shape. At the top level they have no
+    // parent link and are simply ignored — top-level narrowing, ordering and
+    // paging use the sibling filter keys/`order_by`/`offset`/`limit`.
+    if (key === "filter" || key === "order_by" || key === "offset" || key === "limit") {
       continue;
     }
     if (key === "*") {
@@ -257,7 +258,7 @@ function compileSelectShape(
       const inner = shaped === "{  }" ? "{ * }" : shaped;
 
       // Trailing modifiers on the linked set, emitted in EdgeQL clause order:
-      // `link: { ... } filter … order by .field [desc]`.
+      // `link: { ... } filter … order by .field [desc] offset n limit n`.
       const modifiers: string[] = [];
 
       // Narrow the linked set: the predicate reads against the *target* type,
@@ -283,6 +284,12 @@ function compileSelectShape(
 
       if (linkSelect.order_by !== undefined) {
         modifiers.push(compileOrderBy(linkSelect.order_by as string | string[]));
+      }
+      if (linkSelect.offset !== undefined) {
+        modifiers.push(`offset ${validateNonNegativeInt(linkSelect.offset, "offset")}`);
+      }
+      if (linkSelect.limit !== undefined) {
+        modifiers.push(`limit ${validateNonNegativeInt(linkSelect.limit, "limit")}`);
       }
 
       const suffix = modifiers.length > 0 ? ` ${modifiers.join(" ")}` : "";

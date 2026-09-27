@@ -549,7 +549,8 @@ Deno.test("SchemaManager - parseSDL - computed pointers in every Gel SDL form", 
   // A path to a property is typed as that property, with the path's cardinality.
   assertEquals(property("t1"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
   assertEquals(property("t2"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
-  assertEquals(property("t3"), { computedExpr: "({.title, .title ++ '!'})", edgeqlType: "auto", multi: true, required: false });
+  // Any other expression is typed as Gel infers it: a set literal of required strs is a required multi str.
+  assertEquals(property("t3"), { computedExpr: "({.title, .title ++ '!'})", edgeqlType: "str", multi: true, required: true });
   assertEquals(property("bodies"), { computedExpr: ".<post[is C].body", edgeqlType: "str", multi: true, required: false });
   assertEquals(property("names"), { computedExpr: ".<post[is C].post.author.name", edgeqlType: "str", multi: true, required: false });
 });

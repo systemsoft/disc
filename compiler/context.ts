@@ -237,6 +237,12 @@ export interface PropertyDef {
    * rather than emitting a column reference to a non-existent column.
    */
   computedExpr?: string;
+  /**
+   * A computed declared `single`: its cardinality is at most one whatever
+   * the expression's inference (detectComputedPointerErrors rejects one
+   * whose expression may yield several).
+   */
+  single?: boolean;
   /** Constraints applied to this property (e.g., exclusive, max_length) */
   constraints?: PropertyConstraint[];
   /** Rewrite rules for insert/update operations */
@@ -263,6 +269,8 @@ export interface LinkDef {
    * junction/`backlink` fields above carry the resolved traversal.
    */
   computedExpr?: string;
+  /*** A computed declared `single` (see `PropertyDef.single`). ***/
+  single?: boolean;
   /** Annotations (e.g., description) from SDL */
   annotations?: Record<string, string>;
   /**

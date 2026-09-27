@@ -52,6 +52,32 @@ export function backlinkIntersectionName(
 }
 
 /**
+ * True when a select of `typeDef`'s objects keeps at most one, as Gel
+ * infers it: `limit 1`, or a filter requiring `.id` or an exclusive
+ * property to equal one value.
+ */
+export function selectKeepsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
+  if (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) {
+    return true;
+  }
+  const conjuncts = (expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] =>
+    expr.kind === "BinaryOp" && expr.op === "AND" ? [...conjuncts(expr.left), ...conjuncts(expr.right)] : [expr];
+  const isUnique = (expr: EdgeQLAST.Expression): boolean => {
+    if (expr.kind !== "Path" || expr.rooted || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+      return false;
+    }
+    const name = expr.steps[0].name;
+    return name === "id" || (typeDef.properties.get(name)?.constraints?.some(constraint => constraint.name === "exclusive") ?? false);
+  };
+  const isOneValue = (expr: EdgeQLAST.Expression): boolean =>
+    ["GlobalRef", "Identifier", "Literal", "Parameter"].includes(expr.kind) || (expr.kind === "TypeCast" && isOneValue(expr.expr));
+  return query.filter !== undefined && conjuncts(query.filter).some(condition =>
+    condition.kind === "BinaryOp" && condition.op === "=" &&
+    ((isUnique(condition.left) && isOneValue(condition.right)) || (isUnique(condition.right) && isOneValue(condition.left)))
+  );
+}
+
+/**
  * Render a TypeName AST node back to its EdgeQL textual form, including
  * any generic subtypes — e.g. `array<str>`, `tuple<str, int64>`,
  * `array<array<int>>`. Used to build the lookup key for the PG type map.

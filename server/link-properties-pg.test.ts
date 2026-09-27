@@ -25,6 +25,7 @@ const RUN_PG = canRunPgTests();
 const SDL = `module default {
   type LpUser {
     required name: str;
+    programs := .<members[is LpProgram];
   };
   type LpProgram {
     required name: str;
@@ -34,6 +35,7 @@ const SDL = `module default {
         default := 1;
       };
     };
+    staff := .members;
     multi link owners -> LpUser {
       required property level: str {
         constraint one_of("full", "limited");
@@ -148,6 +150,28 @@ Deno.test({
         assertEquals(await members("p1", `{ name, @r := @role ++ "!" } order by .name`), [
           { name: "a", "@r": "admin!" },
           { name: "b", "@r": "member!" }
+        ]);
+
+        // A sub-shape with a limit or offset reads, filters and orders by
+        // link properties too: on the stored link, a computed link to it and
+        // a backlink over its junction (as Gel 7.1 answers).
+        assertEquals(await members("p1", `{ name, @role } order by @role limit 1`), [{ name: "a", "@role": "admin" }]);
+        assertEquals(await members("p1", `{ name, @role, @weight } filter @weight = 1 order by @role desc offset 1`), [
+          { name: "a", "@role": "admin", "@weight": 1 }
+        ]);
+        assertEquals((await rows(`select LpProgram { staff: { name, @role } order by @role desc limit 1 } filter .name = "p1"`))[0].staff, [
+          { name: "b", "@role": "member" }
+        ]);
+        assertEquals(
+          (await rows(`select LpProgram { staff: { name, @role } filter @role != "x" order by @role desc offset 1 limit 1 } filter .name = "p1"`))[0].staff,
+          [
+            { name: "a", "@role": "admin" }
+          ]
+        );
+        assertEquals(await rows(`select LpUser { name, programs: { name, @role } order by @role offset 0 limit 1 } order by .name`), [
+          { name: "a", programs: [{ name: "p1", "@role": "admin" }] },
+          { name: "b", programs: [{ name: "p1", "@role": "member" }] },
+          { name: "c", programs: [{ name: "p2", "@role": null }] }
         ]);
 
         // `+=` on an already-linked target updates the link properties it sets.

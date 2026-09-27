@@ -133,6 +133,8 @@ export interface PropertyDeclaration extends SDLNode {
   type: TypeRef;
   required?: boolean;
   multi?: boolean;
+  /*** Declared `single` (a computed pointer only: Gel rejects it on an expression that may yield several). ***/
+  single?: boolean;
   abstract?: boolean;
   overloaded?: boolean;
   readonly?: boolean;

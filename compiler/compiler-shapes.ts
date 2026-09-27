@@ -19,7 +19,8 @@ import {
   flattenSetElements,
   isMutationQuery,
   locationOf,
-  renderEdgeQLTypeName
+  renderEdgeQLTypeName,
+  selectKeepsAtMostOne
 } from "./compiler-base.ts";
 import { expressionLinkSelect, PathCompilerLayer } from "./compiler-paths.ts";
 import * as Context from "./context.ts";
@@ -1609,7 +1610,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const linkName = element.name.name;
         const link = Context.getLink(this.ctx, typeName, linkName);
         if (link) {
-          value = this.compileLinkWithShape(link, element.shape, tableAlias, element);
+          value = this.compileLinkWithShape(this.aliasedLink(typeName, link), element.shape, tableAlias, element);
         } else {
           // Try as a property reference
           const property = Context.getProperty(this.ctx, typeName, linkName);
@@ -1761,30 +1762,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     return typeDef?.kind === "object" ? typeDef : undefined;
   }
 
-  /**
-   * True when a select of `typeDef`'s objects keeps at most one, as Gel
-   * infers it: `limit 1`, or a filter requiring `.id` or an exclusive
-   * property to equal one value.
-   */
+  /*** True when a select of `typeDef`'s objects keeps at most one (see `selectKeepsAtMostOne`). ***/
   protected selectsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
-    if (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) {
-      return true;
-    }
-    const conjuncts = (expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] =>
-      expr.kind === "BinaryOp" && expr.op === "AND" ? [...conjuncts(expr.left), ...conjuncts(expr.right)] : [expr];
-    const isUnique = (expr: EdgeQLAST.Expression): boolean => {
-      if (expr.kind !== "Path" || expr.rooted || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
-        return false;
-      }
-      const name = expr.steps[0].name;
-      return name === "id" || (typeDef.properties.get(name)?.constraints?.some(constraint => constraint.name === "exclusive") ?? false);
-    };
-    const isOneValue = (expr: EdgeQLAST.Expression): boolean =>
-      ["GlobalRef", "Identifier", "Literal", "Parameter"].includes(expr.kind) || (expr.kind === "TypeCast" && isOneValue(expr.expr));
-    return query.filter !== undefined && conjuncts(query.filter).some(condition =>
-      condition.kind === "BinaryOp" && condition.op === "=" &&
-      ((isUnique(condition.left) && isOneValue(condition.right)) || (isUnique(condition.right) && isOneValue(condition.left)))
-    );
+    return selectKeepsAtMostOne(query, typeDef);
   }
 
   /*** A select's rows as one JSON array, in the select's order (`[]` for none). ***/
@@ -1810,17 +1790,43 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   }
 
   /**
+   * The stored link a computed link of `typeName` names (`staff :=
+   * .members`), whose junction row its sub-shape's `@prop` reads, as in Gel;
+   * else `link`.
+   */
+  private aliasedLink(typeName: string, link: Context.LinkDef): Context.LinkDef {
+    if (!Context.isExpressionLink(link)) {
+      return link;
+    }
+    const expr = new EdgeQLParser(link.computedExpr).parseExpressionOnly();
+    const step = expr.kind === "Path" && !expr.rooted && expr.steps.length === 1 ? expr.steps[0] : undefined;
+    const stored = step?.type === "property" ? Context.getLink(this.ctx, typeName, step.name) : undefined;
+    return stored && !Context.isExpressionLink(stored) && stored.multi === link.multi ? stored : link;
+  }
+
+  /**
    * A computed link read like a stored one (see `Context.isExpressionLink`):
    * a select of its expression's objects, with `shape` (else their ids) and
-   * the sub-shape's clauses.
+   * the sub-shape's clauses. `assert_single(x)` is a select of `x`'s
+   * objects that fails on more than one.
    */
   private compileExpressionLink(
     link: Context.LinkDef & { computedExpr: string; },
     shape?: EdgeQLAST.Shape,
     clauses: ShapeClauses = {}
   ): SQL.SQLExpression {
-    const query = expressionLinkSelect(new EdgeQLParser(link.computedExpr).parseExpressionOnly(), shape);
+    const expr = new EdgeQLParser(link.computedExpr).parseExpressionOnly();
+    const asserted = expr.kind === "FunctionCall" && expr.args.length === 1 &&
+      expr.name.parts.join("::").replace(/^std::/, "") === "assert_single";
+    const query = expressionLinkSelect(asserted ? expr.args[0].value : expr, shape);
     const { filter, limit, offset, orderBy } = clauses;
+    if (asserted) {
+      const rows = this.compileSelectQuery({
+        ...query,
+        filter: query.filter && filter ? EdgeQLAST.createBinaryOp("AND", query.filter, filter) : query.filter ?? filter
+      });
+      return this.compileObjectsAsLink((this.assertSingle(rows) as SQL.SubqueryExpression).query, false, shape !== undefined);
+    }
     if (!filter && !orderBy && !offset && !limit) {
       return this.compileLinkRows(link, query, shape !== undefined);
     }
@@ -2178,8 +2184,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
     const { filter, limit, offset, orderBy } = clauses;
     // An offset or limit keeps some of the link's objects: a select of the
-    // link (`select .posts { … } filter … order by … limit …`).
-    if (offset || limit) {
+    // link (`select .posts { … } filter … order by … limit …`). A
+    // junction-backed link keeps its join below, so `@prop` reads its row.
+    if ((offset || limit) && !link.junctionTable) {
       const self: EdgeQLAST.Path = { kind: "Path", steps: [{ kind: "PathStep", name: link.name, type: "property" }] };
       return this.compileLinkRows(link, { distinct: false, expr: self, filter, kind: "SelectQuery", limit, offset, orderBy, shape }, true);
     }
@@ -2338,6 +2345,19 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const whereCondition = filterCondition ?
       SQL.createBinaryExpression("AND", joinCondition, filterCondition) :
       joinCondition;
+
+    // An offset or limit keeps some of the joined rows, in the sub-shape's order.
+    if (offset || limit) {
+      const rows = SQL.createSelectStatement({
+        select: SQL.createSelectClause([SQL.createSelectItem(jsonObject)]),
+        from: fromClause,
+        where: SQL.createWhereClause(whereCondition),
+        orderBy: aggOrderBy ? { kind: "OrderByClause", items: aggOrderBy } : undefined,
+        limit: limit ? { kind: "LimitClause", count: this.compileExpression(limit) } : undefined,
+        offset: offset ? { kind: "OffsetClause", count: this.compileExpression(offset) } : undefined
+      });
+      return this.compileObjectsAsLink(rows, link.multi, true);
+    }
 
     const subquery: SQL.SelectStatement = SQL.createSelectStatement({
       select: SQL.createSelectClause([SQL.createSelectItem(jsonAgg)]),

@@ -231,6 +231,16 @@ Deno.test({
         await filter({ select: { name: true, posts: { filter: not({ tags: { name: "t2" } }), title: true } } }),
         [{ name: "ann", posts: [{ title: "Hello" }] }, { name: "bob", posts: [] }]
       );
+
+      // Its `order_by`, `offset` and `limit` keep that many of them, in order.
+      assertEquals(
+        await filter({ select: { name: true, posts: { limit: 1, order_by: "-title", title: true } } }),
+        [{ name: "ann", posts: [{ title: "World" }] }, { name: "bob", posts: [] }]
+      );
+      assertEquals(
+        await filter({ name: "ann", select: { posts: { offset: 1, order_by: "-title", title: true } } }),
+        [{ posts: [{ title: "Hello" }] }]
+      );
     });
   }
 });

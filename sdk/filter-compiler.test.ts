@@ -321,6 +321,38 @@ Deno.test("Stage D — selectShape: link `order_by` coexists with top-level orde
   assertEquals(result.orderBy, "order by .amount desc");
 });
 
+Deno.test("Stage D — selectShape: limit / offset on a link sub-shape cap that link", () => {
+  const result = compileFilter(
+    "Payment",
+    { select: { id: true, merchant: { email: true, limit: 2, offset: 1, order_by: ["-name"] } } },
+    paymentInfo
+  );
+  assertEquals(
+    result.selectShape,
+    "{ id, merchant: { email } order by .name desc offset 1 limit 2 }"
+  );
+});
+
+Deno.test("Stage D — selectShape: limit / offset at the top level of select are ignored", () => {
+  // Top-level result paging uses the sibling `limit` / `offset`.
+  const result = compileFilter(
+    "Payment",
+    { select: { id: true, limit: 1, offset: 2 } },
+    paymentInfo
+  );
+  assertEquals(result.selectShape, "{ id }");
+  assertEquals(result.limit, null);
+  assertEquals(result.offset, null);
+});
+
+Deno.test("Stage D — selectShape: a link sub-shape's limit must be a non-negative integer", () => {
+  assertThrows(
+    () => compileFilter("Payment", { select: { merchant: { limit: -1 } } }, paymentInfo),
+    Error,
+    "limit must be a non-negative integer"
+  );
+});
+
 Deno.test("Stage D — selectShape: link as `true` pulls all fields (uses *)", () => {
   const result = compileFilter(
     "Payment",

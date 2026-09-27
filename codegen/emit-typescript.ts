@@ -673,12 +673,15 @@ class TypeScriptEmitter {
     content += `${indent}export interface ${tsTypeName}Select {\n`;
 
     content += `${indent}  "*"?: boolean;\n`;
-    // `filter` / `order_by` narrow and order the *linked set* this Select
-    // shapes. Both are consumed by the parent link key; at the top level they
-    // have no parent link and are ignored (root narrowing/ordering use the
-    // Filter object's own fields and its sibling `order_by`).
+    // `filter` / `order_by` / `offset` / `limit` narrow, order and cap the
+    // *linked set* this Select shapes. They are consumed by the parent link
+    // key; at the top level they have no parent link and are ignored (root
+    // narrowing/ordering/paging use the Filter object's own fields and its
+    // sibling `order_by` / `offset` / `limit`).
     content += `${indent}  filter?: ${tsTypeName}Filter;\n`;
     content += `${indent}  order_by?: string | string[];\n`;
+    content += `${indent}  limit?: number;\n`;
+    content += `${indent}  offset?: number;\n`;
 
     for (const field of obj.fields) {
       if (field.isLink)
@@ -901,7 +904,10 @@ class TypeScriptEmitter {
             .join(", ");
           typeInfoComputedEntries.push(`      ${field.name}: { ${casts} }`);
         }
-        continue;
+        // A computed of an inferred type is revived like a stored property
+        // (`n_posts := count(…)` is a `bigint`); one of unknown type as is.
+        if (field.sourceType === "auto")
+          continue;
       }
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(valueType(field));
       typeInfoCastEntries.push(`      ${field.name}: "${cast}"`);
@@ -979,8 +985,9 @@ class TypeScriptEmitter {
       content += `,\n    linkProperties: { ${typeInfoLinkProperties.join(", ")} }`;
 
     // Multi properties and multi links: the filter compiler tests any element
-    // of them with `any(<comparison>)`.
-    const typeInfoMulti = obj.fields.filter(field => !field.isComputed && isMulti(field.cardinality)).map(field => field.name);
+    // of them with `any(<comparison>)`, and `reviveTyped` revives each
+    // element of a multi property (a computed one too).
+    const typeInfoMulti = obj.fields.filter(field => (!field.isComputed || !field.isLink) && isMulti(field.cardinality)).map(field => field.name);
     if (typeInfoMulti.length > 0)
       content += `,\n    multi: ${JSON.stringify(typeInfoMulti).replaceAll(",", ", ")}`;
 

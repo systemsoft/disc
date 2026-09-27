@@ -457,9 +457,9 @@ export class SchemaValidator {
     }
 
     // A computed may be declared `required` (Gel: `required single link
-    // x := .author`) when its expression is never empty; that needs the
-    // schema's types, so it is checked after conversion
-    // (detectComputedPointerErrors).
+    // x := .author`) when its expression is never empty, and `single` when it
+    // never yields several; that needs the schema's types, so it is checked
+    // after conversion (detectComputedPointerErrors).
 
     // A colon-form pointer's target decides whether it is a link: whether
     // `multi x: T` is a multi scalar or a multi link, and whether it may

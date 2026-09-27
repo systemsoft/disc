@@ -615,11 +615,12 @@ export class SDLParser {
     type: AST.TypeRef,
     qualifiers: any
   ): AST.PropertyDeclaration {
+    const { single: _single, ...stored } = qualifiers;
     const property: AST.PropertyDeclaration = {
       kind: "PropertyDeclaration",
       name,
       type,
-      ...qualifiers
+      ...stored
     };
 
     if (this.match(TokenType.LBRACE)) {
@@ -750,11 +751,12 @@ export class SDLParser {
     qualifiers: any,
     extending?: AST.TypeRef[]
   ): AST.LinkDeclaration {
+    const { single: _single, ...stored } = qualifiers;
     const link: AST.LinkDeclaration = {
       kind: "LinkDeclaration",
       name,
       target,
-      ...qualifiers
+      ...stored
     };
 
     if (extending && extending.length > 0) {
@@ -1353,6 +1355,7 @@ export class SDLParser {
   private parsePointerQualifiers(): {
     required?: boolean;
     multi?: boolean;
+    single?: boolean;
     abstract?: boolean;
     overloaded?: boolean;
   } {
@@ -1378,10 +1381,12 @@ export class SDLParser {
         // Don't set qualifiers.required — absence is already optional.
       } else if (
         // `single` is the default cardinality (the cardinality opposite of
-        // `multi`). Same reasoning: accept as a no-op for explicit-style SDL.
+        // `multi`): a no-op on a stored pointer, but on a computed one it is
+        // checked against the expression's (detectComputedPointerErrors).
         this.check(TokenType.IDENT) && this.peek().value === "single"
       ) {
         this.advance();
+        qualifiers.single = true;
       } else {
         break;
       }

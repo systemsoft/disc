@@ -9,9 +9,11 @@
 
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
+import { selectKeepsAtMostOne } from "../compiler/compiler-base.ts";
 import {
   AbstractAnnotationDef,
   AliasDef,
+  FunctionDef,
   GlobalDef,
   IndexDef,
   LinkDef,
@@ -46,6 +48,7 @@ import { enumPgTypeNames, Module, qualifySharedEnumReferences, SDLConverter } fr
 import type * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { sdlExpressionToEdgeQL } from "../schema/expression-printer.ts";
+import { inferComputedValues, type ComputedValues } from "./computed-values.ts";
 import { scalarChecksOf } from "./scalar-constraints.ts";
 
 /**
@@ -137,7 +140,10 @@ function extractBacklinkInfo(
  *
  *   .author, .author.best_friend        → author's target; multi if a hop is
  *   .<post[is Comment]                  → Comment, multi
+ *   Comment                             → every Comment, multi
  *   (select <one of the above> … limit 1) → single
+ *   (select Comment filter .id = …)     → single (so is an exclusive property)
+ *   assert_single(<one of the above>)   → single
  *   <any of the above> { shape }
  *
  * Required when every hop is a required single link and nothing narrows it.
@@ -150,13 +156,24 @@ function inferComputedLink(
   if (expr.kind === "ShapeExpr") {
     return inferComputedLink(expr.expr, source, resolveType);
   }
+  if (expr.kind === "TypeName") {
+    // The source type's own name stands for its current object, not a set of them.
+    const type = resolveType(expr.name.parts.join("::"));
+    return type?.kind === "object" && type !== source ? { multi: true, required: false, target: type.name } : null;
+  }
+  if (expr.kind === "FunctionCall" && expr.args.length === 1 && expr.name.parts.join("::").replace(/^std::/, "") === "assert_single") {
+    const inner = inferComputedLink(expr.args[0].value, source, resolveType);
+    return inner && { ...inner, multi: false };
+  }
   if (expr.kind === "Subquery") {
     const query = expr.query;
     const inner = query.kind === "SelectQuery" ? inferComputedLink(query.expr, source, resolveType) : null;
     if (query.kind !== "SelectQuery" || !inner) {
       return null;
     }
-    const atMostOne = query.limit?.kind === "Literal" && Number(query.limit.value) <= 1;
+    const target = query.expr.kind === "TypeName" ? resolveType(inner.target) : undefined;
+    const atMostOne = (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) ||
+      (target !== undefined && selectKeepsAtMostOne(query, target));
     return {
       multi: inner.multi && !atMostOne,
       required: inner.required && !query.filter && !query.offset && !query.limit,
@@ -226,6 +243,28 @@ function inferComputedProperty(
   };
 }
 
+/**
+ * The values a computed property's expression yields (inferComputedValues),
+ * a path in it read as inferComputedProperty types a property (or, to
+ * objects, as inferComputedLink does, of no scalar type).
+ */
+function inferComputedPropertyValues(
+  expr: EdgeQLAST.Expression,
+  source: TypeDef,
+  resolveType: (name: string) => TypeDef | undefined,
+  functions: Map<string, FunctionDef>
+): ComputedValues | null {
+  return inferComputedValues(expr, path => {
+    const property = inferComputedProperty(path, source, resolveType);
+    if (property) {
+      const { edgeqlType, ...values } = property;
+      return { ...values, type: edgeqlType };
+    }
+    const link = inferComputedLink(path, source, resolveType);
+    return link && { multi: link.multi, required: link.required, type: null };
+  }, functions);
+}
+
 /*** True when a computed's expression carries a shape (`.<post[is C] { body }`, `(select … { … } …)`). ***/
 function hasShape(expr: EdgeQLAST.Expression): boolean {
   return expr.kind === "ShapeExpr" ||
@@ -234,13 +273,15 @@ function hasShape(expr: EdgeQLAST.Expression): boolean {
 
 /**
  * What Gel rejects in a schema's computed pointers, as the error message, or
- * null: a shape in a computed link's expression, and `required` on a computed
- * whose expression may be empty. (A computed is required when it is declared
- * so or its expression is never empty — see modulesToSchema — so a required
- * one whose expression may be empty was declared required.)
+ * null: a shape in a computed link's expression, `required` on a computed
+ * whose expression may be empty, and `single` on one whose expression may
+ * yield several. (A computed is required when it is declared so or its
+ * expression is never empty — see modulesToSchema — so a required one whose
+ * expression may be empty was declared required.)
  */
 export function detectComputedPointerErrors(schema: Schema): string | null {
   const errors: string[] = [];
+  const functions = getBuiltinFunctions();
   for (const typeDef of schema.types.values()) {
     const resolve = (target: string): TypeDef | undefined =>
       schema.types.get(target) ??
@@ -260,9 +301,12 @@ export function detectComputedPointerErrors(schema: Schema): string | null {
         errors.push(`${where}: including a shape on schema-defined computed links is not yet supported`);
         continue;
       }
-      const inferred = kind === "link" ? inferComputedLink(expr, typeDef, resolve) : inferComputedProperty(expr, typeDef, resolve);
+      const inferred = kind === "link" ? inferComputedLink(expr, typeDef, resolve) : inferComputedPropertyValues(expr, typeDef, resolve, functions);
       if (pointer.required && inferred && !inferred.required) {
         errors.push(`possibly an empty set returned by an expression for ${where} explicitly declared as 'required'`);
+      }
+      if (pointer.single && inferred?.multi) {
+        errors.push(`possibly more than one element returned by an expression for ${where} explicitly declared as 'single'`);
       }
     }
   }
@@ -809,6 +853,8 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
               // Declared `required` (which detectComputedPointerErrors rejects: a backlink may be empty).
               required: propDecl.required ?? false,
               multi: true,
+              // Declared `single` (which detectComputedPointerErrors rejects: a backlink may be several).
+              ...(propDecl.single ? { single: true } : {}),
               computed: true,
               computedExpr: sdlExpressionToEdgeQL(propDecl.computed),
               backlink: bl.forwardLink
@@ -884,6 +930,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
           hasDefault: propDecl.default !== undefined || (!propDecl.multi && isSequenceType(sdlTypeName)),
           computed: propDecl.computed !== undefined,
           computedExpr,
+          ...(propDecl.single ? { single: true } : {}),
           constraints,
           rewrites,
           annotations: propAnnotations
@@ -1225,10 +1272,13 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
   // type, not a property: selected with a sub-shape, filtered through, and
   // typed by codegen like a stored link. It has no storage; the compiler
   // inlines `computedExpr`. A path to a property (`t := .title`, `bodies :=
-  // .<post[is Comment].body`) is typed as that property. Repeated until
-  // nothing changes, since one may go through another (`x :=
-  // .auth.best_friend`). Declared `multi` / `required` stand
-  // (detectComputedPointerErrors rejects `required` on one that may be empty).
+  // .<post[is Comment].body`) is typed as that property, and any other
+  // expression as inferComputedValues types it (`count(…)` is a required
+  // int64). Repeated until nothing changes, since one may go through another
+  // (`x := .auth.best_friend`). Declared `multi` / `required` / `single`
+  // stand (detectComputedPointerErrors rejects `required` on one that may be
+  // empty, `single` on one that may be several).
+  const builtins = getBuiltinFunctions();
   for (let changed = true; changed;) {
     changed = false;
     for (const typeDef of types.values()) {
@@ -1240,14 +1290,17 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         const resolve = (target: string) => resolveLinkTarget(target, typeDef.module);
         const inferred = inferComputedLink(expr, typeDef, resolve);
         if (!inferred) {
-          const values = inferComputedProperty(expr, typeDef, resolve);
-          if (values) {
-            typeDef.properties.set(name, {
-              ...property,
-              ...values,
-              multi: property.multi || values.multi,
-              required: property.required || values.required
-            });
+          const values = inferComputedPropertyValues(expr, typeDef, resolve, builtins);
+          // Its cardinality even when its type can't be told (it stays `auto`).
+          const next: PropertyDef | null = values && {
+            ...property,
+            ...(values.type ? { edgeqlType: values.type } : {}),
+            ...(values.baseType ? { baseType: values.baseType } : {}),
+            multi: !property.single && (property.multi || values.multi),
+            required: property.required || values.required
+          };
+          if (next && (next.edgeqlType !== property.edgeqlType || next.multi !== property.multi || next.required !== property.required)) {
+            typeDef.properties.set(name, next);
             changed = true;
           }
           continue;
@@ -1257,9 +1310,10 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
           annotations: property.annotations,
           computed: true,
           computedExpr: property.computedExpr,
-          multi: property.multi || inferred.multi,
+          multi: !property.single && (property.multi || inferred.multi),
           name,
           required: property.required || inferred.required,
+          ...(property.single ? { single: true } : {}),
           target: inferred.target
         });
         changed = true;

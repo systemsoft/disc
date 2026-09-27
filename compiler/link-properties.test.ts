@@ -4,8 +4,9 @@
 /**
  * Link properties compile against the link's junction table:
  *
- * - `@prop` in a link's sub-shape (and in its `filter` / `order by`) reads the
- *   junction column, keyed `"@prop"` in the result;
+ * - `@prop` in a link's sub-shape (and in its `filter` / `order by`, with or
+ *   without an `offset` / `limit`) reads the junction column, keyed
+ *   `"@prop"` in the result;
  * - `.link@prop <op> x` filters the source with EXISTS over the junction
  *   (true when any link matches);
  * - `link := (select T …) { @prop := v }` in an insert/update writes the column
@@ -103,6 +104,15 @@ Deno.test("link properties - sub-shape filter and order by on a link property", 
 
   assertStringIncludes(sql, "AND (program_members.role = 'admin')");
   assertStringIncludes(sql, "ORDER BY program_members.role DESC");
+});
+
+Deno.test("link properties - a sub-shape with offset / limit reads, filters and orders by them on the junction row", () => {
+  const sql = compile(`select Program { members: { name, @role } filter @role != "x" order by @role offset 1 limit 2 }`);
+
+  assertStringIncludes(sql, "'@role', program_members.role");
+  assertStringIncludes(sql, "AND (program_members.role != 'x')");
+  assertStringIncludes(sql, "ORDER BY program_members.role ASC");
+  assertStringIncludes(sql, "LIMIT 2 OFFSET 1");
 });
 
 Deno.test("link properties - `.link@prop` filter is EXISTS over the junction", () => {
