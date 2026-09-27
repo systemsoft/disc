@@ -12,10 +12,12 @@
  *   `select Item.name filter Item.id in …` is the current item, and so is
  *   `Item` in `select Item { n := count(Item) }` (1). `detached Item` is
  *   every item again.
- * - A select of a path through links (`select Cart.items`) binds the path;
- *   its start named in the filter (`filter Cart.code = 'o1'`) is the object
- *   each element is reached from (EXISTS). Named in the shape or order by,
- *   or a step between, it is a compile error.
+ * - A select of a path through links (`select Cart.items`) binds the path.
+ *   Its start (`Cart.code`) or a step between named in the filter, order by
+ *   or shape is Gel's InvalidReferenceError, "reference to 'Cart.code'
+ *   changes the interpretation of 'Cart' elsewhere in the query" (Gel 7.1,
+ *   with and without `future simple_scoping`); `detached Cart` and a
+ *   backlink (`.<items[is Cart]`) are how Gel names them.
  * - Any other type is the set of its objects: `count(Item)` counts every
  *   item (not the outer rows), `x in Item` reads the ids of every item, and
  *   a computed `x := (select Item { name })` is an array.
@@ -28,7 +30,7 @@
 
 import { assertEquals, assertMatch, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { CompilationError } from "../lib/errors.ts";
+import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
@@ -149,22 +151,47 @@ Deno.test("update and delete: the type named in the filter and set is the update
   assertStringIncludes(compile("delete Item filter Item.name = 'a'"), "DELETE FROM item WHERE item.name = 'a'");
 });
 
-Deno.test("select of a path through links: the path is bound, its start is the object each element is reached from", () => {
+Deno.test("select of a path through links: the path is bound in the filter, order by and shape", () => {
   assertMatch(
     compile("select Cart.items.name filter Cart.items.price > 1"),
     /^SELECT item_(\d+)\.name FROM item AS item_\1 WHERE .* AND \(item_\1\.price > 1\)$/
   );
-  const sql = compile("select Cart.items { name } filter Cart.code = 'o1'");
   assertMatch(
-    sql,
-    /AND \(EXISTS \(SELECT 1 FROM cart AS cart_(\d+) WHERE \(item_(\d+)\.id IN \(SELECT __j_items_\d+\.target_id FROM cart_items AS __j_items_\d+ WHERE __j_items_\d+\.source_id = cart_\1\.id\)\) AND \(cart_\1\.code = 'o1'\)\)\)$/
+    compile("select Cart.items { name, n := Cart.items.name } order by Cart.items.name"),
+    /'n', item_(\d+)\.name\) .* ORDER BY item_\1\.name ASC NULLS FIRST$/
   );
 });
 
-Deno.test("select of a path through links: its start in the shape or order by is a compile error with its location", () => {
-  assertThrows(() => compile("select Cart.items { name } order by Cart.code"), CompilationError, "Naming 'Cart' in the order by");
+Deno.test("select of a path through links: its start or a step between named in the filter, order by or shape is Gel's error", () => {
+  const message = "reference to 'Cart.code' changes the interpretation of 'Cart' elsewhere in the query";
+  assertThrows(() => compile("select Cart.items { name } filter Cart.code = 'o1'"), InvalidReferenceError, message);
+  assertEquals(errorLocation("select Cart.items { name } filter Cart.code = 'o1'"), [1, 35]);
+  assertThrows(() => compile("select Cart.items.name filter Cart.code = 'o1'"), InvalidReferenceError, message);
+  assertThrows(() => compile("select Cart.items { name } order by Cart.code"), InvalidReferenceError, message);
   assertEquals(errorLocation("select Cart.items { name } order by Cart.code"), [1, 37]);
-  assertThrows(() => compile("select Cart.items { name, c := Cart.code }"), CompilationError, "Naming 'Cart' in the shape");
+  assertThrows(() => compile("select Cart.items { name, c := Cart.code }"), InvalidReferenceError, message);
+  assertEquals(errorLocation("select Cart.items { name, c := Cart.code }"), [1, 32]);
+  // The start alone, inside a nested select, or from a `with` binding.
+  assertThrows(
+    () => compile("select Cart.items { name, c := count(Cart) }"),
+    InvalidReferenceError,
+    "reference to 'Cart' changes the interpretation of 'Cart' elsewhere in the query"
+  );
+  assertThrows(() => compile("select Cart.items { name, c := (select Cart.code) }"), InvalidReferenceError, message);
+  assertThrows(() => compile("select Cart.items { name } filter exists (select Cart filter .code = 'o1')"), InvalidReferenceError, "reference to 'Cart'");
+  assertThrows(
+    () => compile("with o := Cart select o.items.name filter o.code = 'o1'"),
+    InvalidReferenceError,
+    "reference to 'o.code' changes the interpretation of 'o' elsewhere in the query"
+  );
+  // `detached` is every cart again; a backlink reaches the carts of each item.
+  assertMatch(
+    compile("select Cart.items { name, c := count(detached Cart) }"),
+    /'c', \(SELECT COUNT\(\*\) FROM \(SELECT jsonb_build_object\('id', cart_\d+\.id\) FROM cart AS cart_\d+\) AS __set\)/
+  );
+  assertStringIncludes(compile("select Cart.items { name, c := .<items[is Cart].code }"), "'c', ");
+  // A `for` variable is one cart: naming it is not a change of interpretation.
+  assertStringIncludes(compile("for o in Cart union (select o.items { name, c := o.code } filter o.code = 'o1')"), "'c', for_iter_");
 });
 
 // ── membership in a type or a path's set ─────────────────────────────────

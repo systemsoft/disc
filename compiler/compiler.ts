@@ -2591,7 +2591,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     this.ctx.currentScope.aliases.set(POLICY_ROWS, { alias: this.policySubject, table: typeDef.tableName, type: typeDef.name });
     this.compilingPolicy = true;
     try {
-      return this.renderPolicySql(this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly()));
+      // A condition keeps the objects it holds for, as a filter does.
+      return this.renderPolicySql(this.compileFilter(new EdgeQLParser(edgeql).parseExpressionOnly()));
     } finally {
       outer.aliasCounter = this.ctx.aliasCounter;
       this.ctx = outer;

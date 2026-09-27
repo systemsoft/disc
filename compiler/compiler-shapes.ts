@@ -202,76 +202,37 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   /**
    * The filter of `query`, compiled after its subject. When the subject is a
-   * path through links from a type or a `with` binding and the filter names
-   * where it starts (`select Order.items filter Order.code = 'o1'`), the
-   * start is, as in Gel's path scoping, the object each element is reached
-   * from: the element is kept when some such object passes the filter.
-   *
-   *   select Order.items filter Order.code = 'o1'
-   *   → … WHERE <item_1 is an item of some order> AND EXISTS (SELECT 1 FROM "order" AS order_3
-   *        WHERE item_1.id IN (<ids of order_3.items>) AND order_3.code = 'o1')
-   *
-   * Naming the start in the shape or the order by, or naming a step between
-   * the start and the selected objects (`Order.items` of
-   * `select Order.items.tags`) anywhere, is not supported yet: a compile
-   * error rather than a filter over every order.
+   * path through links from a type or a `with` binding
+   * (`select Order.items`), the path is bound in the filter, order by and
+   * shape; naming where it starts (`Order`, `Order.code`) or a step between
+   * (`Order.items` of `select Order.items.tags`) there is Gel's
+   * InvalidReferenceError, "reference to 'Order.code' changes the
+   * interpretation of 'Order' elsewhere in the query" (Gel 7.1, with and
+   * without `future simple_scoping`): the start would be bound to each
+   * element's source, which one path to distinct objects does not have.
+   * `detached Order` is every order again, and a backlink
+   * (`.<items[is Order]`) the orders of each element.
    */
   protected compileSubjectFilter(query: EdgeQLAST.SelectQuery): SQL.SQLExpression | undefined {
     const { expr, filter } = query;
     // Where the path starts, as written: not the subject it has just bound.
     const resolved = expr.kind === "Path" && expr.rooted ? this.withDetached(() => this.resolvePath(expr)) : null;
     const steps = expr.kind === "Path" && resolved ? (resolved.property ? expr.steps.slice(0, -1) : expr.steps) : [];
-    if (!resolved || resolved.hops.length === 0 || resolved.start.kind === "row" || steps.slice(1).some(step => step.type !== "property")) {
-      return filter ? this.compileFilter(filter) : undefined;
-    }
-
-    const prefix = (length: number): string => steps.slice(0, length).map(step => step.name).join(".");
-    const root = prefix(1);
-    const names = new Set(steps.map((_, index) => prefix(index + 1)));
-    const clauses: [unknown, string][] = [[query.shape, "shape"], [query.orderBy, "order by"], [filter, "filter"]];
-    for (const [node, clause] of clauses) {
-      const unsupported = namedPaths(node, names).find(named => named.name !== prefix(steps.length) && (clause !== "filter" || named.name !== root));
-      if (unsupported) {
-        throw new CompilationError(
-          `Naming '${unsupported.name}' in the ${clause} of a select of '${renderPath(expr as EdgeQLAST.Path)}' ` +
-            `(a step before the selected objects) is not supported yet; select from it instead ` +
-            `(\`select ${root} { … } filter …\`, or a \`for\` over it)`,
-          locationOf(unsupported.node) ?? locationOf((unsupported.node as Partial<EdgeQLAST.Path>).steps?.[0])
+    if (resolved && resolved.hops.length > 0 && resolved.start.kind !== "row" && steps.slice(1).every(step => step.type === "property")) {
+      const prefix = (length: number): string => steps.slice(0, length).map(step => step.name).join(".");
+      const names = new Set(steps.map((_, index) => prefix(index + 1)));
+      const named = namedPaths([query.shape, query.orderBy, filter], names).find(({ name }) => name !== prefix(steps.length));
+      if (named) {
+        const reference = named.node.kind === "Path" ? renderPath(named.node as EdgeQLAST.Path) : named.name;
+        throw new InvalidReferenceError(
+          `reference to '${reference}' changes the interpretation of '${named.name}' elsewhere in the query ` +
+            `(a select of '${renderPath(expr as EdgeQLAST.Path)}'): reach each element's sources with a backlink ` +
+            `(\`.<link[is Type]\`), all of them with \`detached ${named.name}\`, or select from them (\`for x in ${prefix(1)} union …\`)`,
+          locationOf(named.node) ?? locationOf((named.node as Partial<EdgeQLAST.Path>).steps?.[0])
         );
       }
     }
-    if (!filter || !namedPaths(filter, names).some(named => named.name === root)) {
-      return filter ? this.compileFilter(filter) : undefined;
-    }
-
-    const start = resolved.start;
-    const alias = this.scopeVariable(prefix(steps.length))!.row!.alias;
-    if (start.kind === "binding") {
-      start.cte.referenced = true;
-    }
-    const table = start.kind === "binding" ? start.cte.cteName : resolved.startType.tableName;
-    const row: Context.TableAlias = { alias: Context.generateAlias(this.ctx, table), table, type: resolved.startType.name };
-    const variables = this.ctx.currentScope.variables;
-    const outer = variables.get(root);
-    this.bindSubject([root], row);
-    try {
-      const reaches = this.pathReaches(resolved, row, alias);
-      return {
-        kind: "UnaryExpression",
-        operand: SQL.createSubqueryExpression(SQL.createSelectStatement({
-          from: SQL.createFromClause([SQL.createTableReference(table, row.alias)]),
-          select: SQL.createSelectClause([SQL.createSelectItem(SQL.createLiteral("number", 1))]),
-          where: SQL.createWhereClause(SQL.createBinaryExpression("AND", reaches, this.compileFilter(filter)))
-        })),
-        operator: "EXISTS"
-      };
-    } finally {
-      if (outer) {
-        variables.set(root, outer);
-      } else {
-        variables.delete(root);
-      }
-    }
+    return filter ? this.compileFilter(filter) : undefined;
   }
 
   /**
@@ -1345,6 +1306,15 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     const singleton = expr.kind === "SetExpr" && flattenSetElements(expr).length === 1;
     if (!singleton && this.setQuery(expr)) {
       return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", orderBy: element.orderBy };
+    }
+    // So is a select of one (`b := (select .nicks = 'a')`), unless it keeps at most one element.
+    if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && !expr.query.shape) {
+      const inner = expr.query.expr;
+      const keepsOne = (inner.kind === "SetExpr" && flattenSetElements(inner).length === 1) ||
+        (expr.query.limit?.kind === "Literal" && Number(expr.query.limit.value) <= 1);
+      if (!keepsOne && this.setQuery(inner)) {
+        return expr.query;
+      }
     }
     // A type's objects (`x := Item`, `x := Item { name }`, `x := (select Item { name } filter …)`)
     // are an array too, unless the select keeps at most one object.

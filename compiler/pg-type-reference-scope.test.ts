@@ -11,6 +11,8 @@
  *   by and shape: `select ScopeItem.name filter ScopeItem.id in …` keeps the
  *   matching items, `update ScopeItem filter ScopeItem.name = 'a'` updates
  *   one item.
+ * - A select of a path through links binds the path; naming its start there
+ *   is Gel's "changes the interpretation" error.
  * - A computed select of several objects is an array.
  * - `in` a type's objects or a path's set, and multi-step paths from `with`
  *   bindings, `for` variables and mutation results in filters.
@@ -192,19 +194,34 @@ Deno.test({
 });
 
 Deno.test({
-  name: "PG select of a path through links: its start named in the filter is the object each element is reached from",
+  name: "PG select of a path through links: the path is bound; naming its start is Gel's error",
   ignore: !canRunPgTests(),
   fn: async ({ step }) => {
-    await withHandler(async ({ fail, values }) => {
-      await step("filter", async () => {
-        assertEquals(await values("select ScopeOrder.items.name filter ScopeOrder.code = 'o1'"), ["a", "b"]);
-        assertEquals(await values("select ScopeOrder.items.name filter ScopeOrder.code = 'o2'"), []);
+    await withHandler(async ({ fail, run, values }) => {
+      await step("the path in the filter, order by and shape is the current element", async () => {
         assertEquals(await values("select ScopeOrder.items.name filter ScopeOrder.items.price > 1"), ["b"]);
-        assertEquals(await values("with o := ScopeOrder select o.items.name filter o.code = 'o1'"), ["a", "b"]);
+        assertEquals(await run("select ScopeOrder.items { name, n := ScopeOrder.items.price } order by ScopeOrder.items.name desc"), [
+          { n: 2, name: "b" },
+          { n: 1, name: "a" }
+        ]);
       });
-      await step("the start in the shape or order by is an error, not every order", async () => {
-        assertStringIncludes(await fail("select ScopeOrder.items { name } order by ScopeOrder.code"), "Naming 'ScopeOrder' in the order by");
-        assertStringIncludes(await fail("select ScopeOrder.items { name, c := ScopeOrder.code }"), "Naming 'ScopeOrder' in the shape");
+      await step("the start in the filter, order by or shape is an error, as in Gel", async () => {
+        const message = "reference to 'ScopeOrder.code' changes the interpretation of 'ScopeOrder' elsewhere in the query";
+        assertStringIncludes(await fail("select ScopeOrder.items.name filter ScopeOrder.code = 'o1'"), message);
+        assertStringIncludes(await fail("select ScopeOrder.items { name } order by ScopeOrder.code"), message);
+        assertStringIncludes(await fail("select ScopeOrder.items { name, c := ScopeOrder.code }"), message);
+        assertStringIncludes(await fail("with o := ScopeOrder select o.items.name filter o.code = 'o1'"), "reference to 'o.code'");
+      });
+      await step("a backlink reaches each element's sources, detached every object", async () => {
+        assertEquals(await run("select ScopeOrder.items { name, o := .<items[is ScopeOrder].code } order by .name"), [
+          { name: "a", o: ["o1"] },
+          { name: "b", o: ["o1"] }
+        ]);
+        assertEquals(await run("select ScopeOrder.items { name, c := count(detached ScopeOrder) } order by .name"), [
+          { c: 2, name: "a" },
+          { c: 2, name: "b" }
+        ]);
+        assertEquals(await values("for o in ScopeOrder union (select o.items.name filter o.code = 'o1')"), ["a", "b"]);
       });
     });
   }

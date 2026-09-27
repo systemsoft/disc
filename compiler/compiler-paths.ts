@@ -175,15 +175,6 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
   }
 
   /**
-   * The condition that `resolved`, a path from a type or a `with` binding,
-   * reaches the object `alias` from the object `row` of its start:
-   * `alias.id IN (<ids of the path from row>)`.
-   */
-  protected pathReaches(resolved: ResolvedPath, row: Context.TableAlias, alias: string): SQL.SQLExpression {
-    return this.idIn(SQL.createColumnReference("id", alias), this.compilePathIds({ ...resolved, start: { kind: "row", row } }));
-  }
-
-  /**
    * The select of the ids or values the right operand of `in` stands for,
    * when it is a set with no one SQL value: a type's objects (`x in Item`),
    * or a path to several objects or values (`x in o.items`,

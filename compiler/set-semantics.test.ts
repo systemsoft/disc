@@ -22,6 +22,12 @@
  *   array. A filter over a set is true when any element is (Gel's
  *   `EXISTS (SELECT FROM <set> WHERE <value>)`); an order by over a set is an
  *   error, as in Gel.
+ * - So is a comparison of a multi property, multi link path or backlink
+ *   (`.nicks = 'a'`, `.posts.title = x`): one boolean per element (Gel:
+ *   `select User { b := .nicks = 'a1' }` is `[true, false]`). In a filter's
+ *   condition (through `and`, `or`, `not`) it tests any element in place
+ *   (`'a' = ANY(nicks)`, EXISTS over the link), the SQL the SDK's filters
+ *   compile to.
  *
  * Real-PG coverage: `compiler/pg-set-semantics.test.ts`.
  */
@@ -36,8 +42,12 @@ import type { Schema } from "./context.ts";
 
 const SDL = `
 module default {
+  type Tag {
+    required name: str;
+  }
   type Post {
     required title: str;
+    multi tags: Tag;
   }
   type User {
     required name: str;
@@ -227,7 +237,7 @@ Deno.test("filter over a set: true when any element is true (Gel: EXISTS over th
     compile("select User { name } filter .name = 'ann' and {1, 2} = .visits"),
     /WHERE EXISTS \(SELECT 1 FROM .* WHERE .*\(\(user_\d+\.name = 'ann'\) AND \(__arg_\d+\.value\)\)\)$/
   );
-  // A comparison with a multi path already tests any element: unchanged.
+  // A comparison with a multi path tests any element in place (see "comparison of a multi path in a filter").
   assertMatch(compile("select User { name } filter .nicks = 'a'"), /WHERE 'a' = ANY\(user_\d+\.nicks\)$/);
   assertMatch(compile("select User { name } filter .name in {'a', 'b'}"), /WHERE user_\d+\.name IN \('a', 'b'\)$/);
 });
@@ -258,4 +268,68 @@ Deno.test("a set as one value inside another expression is a compile error with 
   assertThrows(() => compile("update User filter .name = 'x' set { name := {'a', 'b'} }"), CompilationError, "set of several elements");
   // A set test over a set literal still reads its rows.
   assertStringIncludes(compile("select enumerate({'a', 'b'})"), "ROW_NUMBER() OVER ()");
+});
+
+// ── comparisons of multi paths ───────────────────────────────────────────
+
+/*** A shape element `name` compiled to the array of the rows of `SELECT <select> FROM …`. ***/
+const ELEMENTS = (name: string, select: string): RegExp =>
+  new RegExp(`'${name}', \\(SELECT COALESCE\\(jsonb_agg\\(__agg\\.v\\), '\\[\\]'::jsonb\\) FROM \\(SELECT ${select} FROM `);
+
+Deno.test("comparison of a multi path in a shape element: one boolean per element (Gel), an array", () => {
+  const perElement = (edgeql: string, select: string): void => {
+    const sql = compile(edgeql);
+    assertMatch(sql, ELEMENTS("b", select), edgeql);
+    assertEquals(sql.includes("= ANY(") || sql.includes("EXISTS"), false, edgeql);
+  };
+  perElement("select User { b := .nicks = 'a1' }", "__arg_\\d+\\.value = 'a1'");
+  assertMatch(compile("select User { b := .nicks = 'a1' }"), /FROM \(SELECT unnest\(user_\d+\.nicks\) AS nicks\) AS __arg_\d+\(value\)/);
+  perElement("select User { b := 'a1' = .nicks }", "'a1' = __arg_\\d+\\.value");
+  perElement("select User { b := .nicks in {'a1'} }", "__arg_\\d+\\.value IN \\('a1'\\)");
+  perElement("select User { b := .nicks like 'a%' }", "__arg_\\d+\\.value LIKE 'a%'");
+  // Multi links, several hops, and a backlink.
+  perElement("select User { b := .posts.title = 'p1' }", "__arg_\\d+\\.value = 'p1'");
+  perElement("select User { b := .posts.tags.name = 't1' }", "__arg_\\d+\\.value = 't1'");
+  perElement("select Post { b := .<posts[is User].name = 'ann' }", "__arg_\\d+\\.value = 'ann'");
+  // `in` a multi path is one boolean: its right operand is a whole set.
+  assertStringIncludes(compile("select User { b := 'a1' in .nicks }"), "'b', 'a1' = ANY(user_1.nicks)");
+});
+
+Deno.test("comparison of a multi path selected, in a for body or as a function's argument: one element per element", () => {
+  assertMatch(compile("select User { b := (select .nicks = 'a1') }"), ELEMENTS("b", "__arg_\\d+\\.value = 'a1'"));
+  assertMatch(compile("for u in User union (u.nicks = 'a1')"), /LATERAL \(SELECT __arg_\d+\.value = 'a1' FROM /);
+  assertMatch(compile("select User { c := count(.nicks = 'a1') }"), /'c', \(SELECT COUNT\(\*\) FROM \(SELECT __arg_\d+\.value = 'a1' FROM /);
+  assertMatch(compile("select User { c := count(.posts.title = 'p1') }"), /'c', \(SELECT COUNT\(\*\) FROM \(SELECT __arg_\d+\.value = 'p1' FROM /);
+  // `exists` of the comparison: whether it has elements.
+  assertMatch(compile("select User { e := exists (.nicks = 'a1') }"), /'e', EXISTS \(SELECT __arg_\d+\.value = 'a1' FROM /);
+});
+
+Deno.test("comparison of a multi path in an order by or inside another expression is a compile error, as other sets", () => {
+  assertThrows(() => compile("select User { name } order by .nicks = 'a1'"), CompilationError, "order by");
+  assertEquals(errorLocation("select User { name } order by .nicks = 'a1'"), [1, 32]);
+  assertThrows(() => compile("select User { name } order by .posts.title = 'p1'"), CompilationError, "more than one element");
+  assertThrows(() => compile("select User { b := [.nicks = 'a1'] }"), CompilationError, "'=' of a set is a set");
+  assertEquals(errorLocation("select User { b := [.nicks = 'a1'] }"), [1, 22]);
+  assertThrows(() => compile("select User { b := [.posts.title = 'p1'] }"), CompilationError, "'=' of a set is a set");
+});
+
+Deno.test("comparison of a multi path in a filter: true when any element matches, compiled in place", () => {
+  assertMatch(compile("select User { name } filter .nicks = 'a1'"), /WHERE 'a1' = ANY\(user_\d+\.nicks\)$/);
+  assertMatch(compile("select User { name } filter 'a1' = .nicks"), /WHERE 'a1' = ANY\(user_\d+\.nicks\)$/);
+  assertMatch(compile("select User { name } filter .posts.title = 'p1'"), /WHERE EXISTS \(SELECT 1 FROM "user_posts" .*"__t_posts"\."title" = 'p1'\)$/);
+  assertMatch(
+    compile("select User { name } filter .posts.tags.name = 't1'"),
+    /WHERE EXISTS \(SELECT 1 FROM "post" "__h0_posts" .*"__h1_tags"\."name" = 't1'\)\)$/
+  );
+  assertMatch(
+    compile("select Post { title } filter .<posts[is User].name = 'ann'"),
+    /WHERE EXISTS \(SELECT 1 FROM "user_posts" "__blj_posts" .*"__bl_posts"\."name" = 'ann'\)$/
+  );
+  // Through `and`, `or` and `not` (the SDK's filters).
+  const combined = compile("select User { name } filter not (.nicks = 'a1') and .posts.title = 'x' or .posts.tags.name = 't'");
+  assertStringIncludes(combined, "WHERE ((NOT 'a1' = ANY(user_1.nicks)) AND (EXISTS (SELECT 1 FROM \"user_posts\"");
+  assertEquals(combined.includes("__arg_"), false);
+  // An update's and a delete's filter too.
+  assertMatch(compile("update User filter .nicks = 'a1' set { visits := 1 }"), /WHERE 'a1' = ANY\(/);
+  assertMatch(compile("delete User filter .posts.title = 'p1'"), /WHERE EXISTS \(SELECT 1 FROM "user_posts"/);
 });

@@ -12,8 +12,12 @@
  * - operators and casts over sets (`{1, 2} + {10, 20}`, `User.name ++ '!'`),
  *   selected, as shape elements, as for bodies and in filters
  *
+ * - comparisons of multi paths: one boolean per element selected, as shape
+ *   elements and function arguments; any element in a filter
+ *
  * Seed: users ann (visits 3, nicks {a1, a2}, tags [x, y], best Hello, posts
- * {Hello, World}) and bob (nothing optional set).
+ * {Hello, World}) and bob (nothing optional set); post Hello has tags {t1},
+ * World {t1, t2}.
  *
  * Requires PostgreSQL: set DISC_PG_TEST_URL or DISC_PG_AUTO=1.
  */
@@ -27,8 +31,12 @@ import type * as ServerTypes from "../server/types.ts";
 import { canRunPgTests, getTestDsn, makePool, resetTestDatabase } from "../tests/pg-test-harness.ts";
 
 const SDL = `module default {
+  type SetTag {
+    required name: str;
+  };
   type SetPost {
     required title: str;
+    multi tags: SetTag;
   };
   type SetUser {
     required name: str;
@@ -83,8 +91,10 @@ async function withHandler(fn: (run: Run, values: Run) => Promise<void>): Promis
         .sort()
         .map(value => JSON.parse(value));
 
-    await run("insert SetPost { title := 'Hello' }");
-    await run("insert SetPost { title := 'World' }");
+    await run("insert SetTag { name := 't1' }");
+    await run("insert SetTag { name := 't2' }");
+    await run("insert SetPost { title := 'Hello', tags := (select SetTag filter .name = 't1') }");
+    await run("insert SetPost { title := 'World', tags := (select SetTag) }");
     await run(
       "insert SetUser { name := 'ann', visits := 3, tags := ['x', 'y'], nicks := {'a1', 'a2'}, " +
         "best := (select SetPost filter .title = 'Hello' limit 1), posts := (select SetPost) }"
@@ -257,6 +267,37 @@ Deno.test({
       // A mutation's filter too.
       await run("update SetUser filter .name ++ {'x', 'y'} = 'boby' set { visits := 7 }");
       assertEquals(await names(".visits = 7"), ["bob"]);
+    });
+  }
+});
+
+Deno.test({
+  name: "PG comparisons of multi paths: one boolean per element (Gel), any element in a filter",
+  ignore: !canRunPgTests(),
+  fn: async () => {
+    await withHandler(async (run, values) => {
+      /*** Each row's `b`, sorted (a set has no order). ***/
+      const elements = async (query: string): Promise<unknown[]> => ((await run(query)) as { b: boolean[]; }[]).map(row => [...row.b].sort());
+      assertEquals(await elements("select SetUser { b := .nicks = 'a1' } order by .name"), [[false, true], []]);
+      assertEquals(await elements("select SetUser { b := 'a1' = .nicks } order by .name"), [[false, true], []]);
+      assertEquals(await elements("select SetUser { b := .nicks in {'a1'} } order by .name"), [[false, true], []]);
+      assertEquals(await elements("select SetUser { b := .posts.title = 'Hello' } order by .name"), [[false, true], []]);
+      // A path's objects are distinct: t1, the tag of both posts, is one element.
+      assertEquals(await elements("select SetUser { b := .posts.tags.name = 't2' } order by .name"), [[false, true], []]);
+      assertEquals(await elements("select SetPost { b := .<posts[is SetUser].name = 'ann' } order by .title"), [[true], [true]]);
+      assertEquals(await elements("select SetUser { b := (select .nicks = 'a1') } order by .name"), [[false, true], []]);
+      // `in` a multi path is one boolean.
+      assertEquals(await run("select SetUser { b := 'a1' in .nicks } order by .name"), [{ b: true }, { b: false }]);
+      assertEquals(await run("select SetUser { c := count(.nicks = 'a1') } order by .name"), [{ c: 2 }, { c: 0 }]);
+      assertEquals(await values("select SetUser.nicks = 'a1'"), [false, true]);
+      assertEquals(await values("for u in SetUser union (u.posts.title = 'World')"), [false, true]);
+
+      const names = async (filter: string): Promise<unknown[]> =>
+        ((await run(`select SetUser { name } filter ${filter} order by .name`)) as { name: string; }[]).map(user => user.name);
+      assertEquals(await names(".nicks = 'a1'"), ["ann"]);
+      assertEquals(await names(".posts.title = 'World' and .nicks = 'a2'"), ["ann"]);
+      assertEquals(await names(".posts.tags.name = 't2'"), ["ann"]);
+      assertEquals(await names(".posts.title = 'Nope' or .name = 'bob'"), ["bob"]);
     });
   }
 });

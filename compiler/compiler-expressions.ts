@@ -93,6 +93,8 @@ function widestIntSqlType(types: (string | null)[]): string {
 export abstract class ExpressionCompilerLayer extends CompilerBase {
   /*** Set literals that are the right operand of `in`, the one place a set literal compiles to one SQL expression. ***/
   private readonly membershipSets = new WeakSet<EdgeQLAST.SetExpr>();
+  /*** Comparisons of a multi path a filter's condition is made of (see `markAnyElementComparisons`), compiled as "any element matches". ***/
+  private readonly anyElementComparisons = new WeakSet<EdgeQLAST.BinaryOp>();
   /*** Inside `detached`: subjects bound in scopes before this index of the scope stack are hidden (see `scopeVariable`). ***/
   private detachedFrom = -1;
 
@@ -251,6 +253,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // Handle IS / IS NOT for polymorphic type checking
     if (binOp.op === "IS" || binOp.op === "IS NOT") {
       return this.compileIsTypeCheck(binOp);
+    }
+
+    // A comparison of a multi path outside a filter's condition is one
+    // boolean per element, compiled where a select, a shape element, a `for`
+    // body or a function reads them (elementWiseSets): as one value inside
+    // another expression it is a compile error, like any other set.
+    if (!this.anyElementComparisons.has(binOp) && this.isAnyElementComparison(binOp)) {
+      this.assertNotOverSet(binOp, `'${binOp.op}'`);
     }
 
     // A multi scalar property is an array column; comparing it tests its
@@ -737,14 +747,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * For an element-wise expression (`elementWiseOperands`) with at least one
    * set operand: the set each operand stands for, null for a value. Else
    * null. A comparison of a multi path of the current object with one value
-   * (`.nicks = 'a'`, `.posts.title = x`) is not one: it keeps its compilation
-   * as a test of whether any element matches (`isAnyElementComparison`). Nor
-   * is an operator over a `with` binding of objects (`.program = prog`),
-   * which compiles to the binding's ids.
+   * (`.nicks = 'a'`, `.posts.title = x`) in a filter's condition is not one:
+   * it keeps its compilation as a test of whether any element matches
+   * (`markAnyElementComparisons`). Nor is an operator over a `with` binding
+   * of objects (`.program = prog`), which compiles to the binding's ids.
    */
   protected elementWiseSets(expr: EdgeQLAST.Expression): (EdgeQLAST.Subquery | null)[] | null {
     const operands = this.elementWiseOperands(expr);
-    if (!operands || (expr.kind === "BinaryOp" && this.isAnyElementComparison(expr))) {
+    if (!operands || (expr.kind === "BinaryOp" && this.anyElementComparisons.has(expr))) {
       return null;
     }
     const sets = operands.map(operand => expr.kind !== "FunctionCall" && this.isObjectBinding(operand) ? null : this.setArgument(operand));
@@ -761,8 +771,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
-   * True for a comparison compileBinaryOp answers as "any element matches"
-   * (compileMultiPropertyComparison, compileMultiLinkComparison,
+   * True for a comparison compileBinaryOp can answer as "any element
+   * matches" (compileMultiPropertyComparison, compileMultiLinkComparison,
    * compileMultiHopComparison): a multi property or multi link path of the
    * current object compared with one value.
    */
@@ -866,9 +876,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
   }
 
-  /*** Where `expr` is in the source: its own span, or its first operand's (an operator, a cast and a set literal's elements carry none). ***/
+  /*** Where `expr` is in the source: its own span, its first step's (a path), or its first operand's (an operator, a cast and a set literal's elements carry none). ***/
   private expressionLocation(expr: EdgeQLAST.Expression): ErrorContext | undefined {
-    return locationOf(expr) ?? this.elementWiseOperands(expr)?.map(operand => this.expressionLocation(operand)).find(Boolean);
+    return locationOf(expr) ?? (expr.kind === "Path" ? locationOf(expr.steps[0]) : undefined) ??
+      this.elementWiseOperands(expr)?.map(operand => this.expressionLocation(operand)).find(Boolean);
   }
 
   /*** The EdgeQL type of each element of a set operand, when known: a path's property type, a numeric expression's type. ***/
@@ -880,9 +891,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * A filter: true when any element of its value is true. A filter over a
    * set (`filter {1, 2} = .n`, `filter .name ++ {'a', 'b'} = x`) compiles, as
    * in Gel (edb/pgsql/compiler/clauses.py, compile_filter_clause), to
-   * `EXISTS (SELECT FROM <set> WHERE <value>)`.
+   * `EXISTS (SELECT FROM <set> WHERE <value>)`. A comparison of a multi path
+   * in its condition tests any element in place (`markAnyElementComparisons`).
    */
   protected compileFilter(filter: EdgeQLAST.Expression): SQL.SQLExpression {
+    this.markAnyElementComparisons(filter);
     const sets = this.elementWiseSets(filter);
     if (!sets) {
       return this.compileExpression(filter);
@@ -897,6 +910,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       })),
       operator: "EXISTS"
     };
+  }
+
+  /**
+   * Mark the comparisons of a multi path (`isAnyElementComparison`) that a
+   * filter's condition is made of through `and`, `or` and `not`, which
+   * compile as "any element matches" (`'a' = ANY(nicks)`, EXISTS over a
+   * multi link) instead of one boolean per element. For one comparison that
+   * is Gel's filter (true when any element is); the SDK's filters are these
+   * conditions. Anywhere else (a shape element, a select, a function's
+   * argument) the comparison is one boolean per element, as in Gel.
+   */
+  private markAnyElementComparisons(expr: EdgeQLAST.Expression): void {
+    if (expr.kind === "BinaryOp" && (expr.op === "AND" || expr.op === "OR")) {
+      this.markAnyElementComparisons(expr.left);
+      this.markAnyElementComparisons(expr.right);
+    } else if (expr.kind === "UnaryOp" && expr.op === "NOT") {
+      this.markAnyElementComparisons(expr.operand);
+    } else if (expr.kind === "BinaryOp" && this.isAnyElementComparison(expr)) {
+      this.anyElementComparisons.add(expr);
+    }
   }
 
   /*** An order by key. A set has no one value to order by; Gel rejects it too. ***/
