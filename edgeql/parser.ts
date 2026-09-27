@@ -1389,11 +1389,11 @@ export class EdgeQLParser {
           };
         } else if (
           (expr.kind === "TupleExpr" || expr.kind === "NamedTuple" ||
-            expr.kind === "TupleAccessExpr" ||
+            expr.kind === "TupleAccessExpr" || expr.kind === "IndexExpression" ||
             (expr.kind === "TypeCast" && expr.type.name.parts.at(-1) === "tuple")) &&
           (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT))
         ) {
-          // Named tuple field access (e.g., (name := 'foo').name)
+          // Named tuple field access (e.g., (name := 'foo').name, [(n := 1)][0].n)
           const fieldName = this.parseIdentifier().name;
           expr = {
             kind: "TupleAccessExpr",

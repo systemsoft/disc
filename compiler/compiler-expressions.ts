@@ -22,7 +22,8 @@ import {
   flattenSetElements,
   locationOf,
   renderEdgeQLTypeName,
-  tupleTypeElements
+  tupleTypeElements,
+  unitedTupleType
 } from "./compiler-base.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
@@ -627,8 +628,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileExpression(binOp.left);
     }
 
-    const left = this.compileExpression(binOp.left);
-    const right = this.compileExpression(binOp.right);
+    let left = this.compileExpression(binOp.left);
+    let right = this.compileExpression(binOp.right);
+
+    // Arrays of tuples joined are of their tuples' united type (`[(a := 1)] ++ [(2,)]` is `[(1,), (2,)]`).
+    const tupleArrays = binOp.op === "++" ? [this.staticTupleArrayType(binOp.left), this.staticTupleArrayType(binOp.right)] : [];
+    if (tupleArrays.length === 2 && tupleArrays[0] && tupleArrays[1]) {
+      const united = unitedTupleType([tupleArrays[0], tupleArrays[1]]);
+      left = this.asTupleArrayType(left, tupleArrays[0], united);
+      right = this.asTupleArrayType(right, tupleArrays[1], united);
+    }
 
     if (binOp.op === "AND" || binOp.op === "OR") {
       return this.compileLogical(binOp, left, right);
@@ -895,8 +904,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * `<optional …>` parameter, a path or `with` name that may be empty, a
    * global, an aggregate of an empty set, a built-in function whose answer can
    * be empty (`json_get` of a path that isn't there, `array_get` past the end,
-   * …), and a built-in function, operator or cast of such a value. Anything
-   * else is taken as a value.
+   * …), and a built-in function, operator, cast, index, slice or tuple
+   * element of such a value. Anything else is taken as a value.
    */
   protected outputMayBeEmpty(expr: EdgeQLAST.Expression): boolean {
     switch (expr.kind) {
@@ -938,6 +947,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           return this.outputMayBeEmpty(expr.left);
         }
         return this.outputMayBeEmpty(expr.left) || this.outputMayBeEmpty(expr.right);
+      // An index, a slice or a tuple's element of an empty operand.
+      case "IndexExpression":
+      case "SliceExpression":
+      case "TupleAccessExpr":
+        return this.elementWiseOperands(expr)!.some(operand => this.outputMayBeEmpty(operand));
       default:
         return false;
     }
@@ -1043,6 +1057,70 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
+   * The jsonb tuple `sql` of type `from` as a tuple of type `to`, its union
+   * with other tuples (`unitedTupleType`): rebuilt with `to`'s names, or none,
+   * where they differ from `from`'s; else `sql` as it is. An empty tuple
+   * (NULL) stays NULL.
+   *
+   *   (a := 1) as tuple<int64> → CASE WHEN t IS NULL THEN NULL ELSE jsonb_build_array(t -> 'a') END
+   */
+  protected asTupleType(sql: SQL.SQLExpression, from: string, to: string): SQL.SQLExpression {
+    const fromElements = tupleTypeElements(from) ?? [];
+    const toElements = tupleTypeElements(to) ?? [];
+    if (tupleNames(from) === tupleNames(to) || fromElements.length !== toElements.length) {
+      return sql;
+    }
+    const values = toElements.map((element, index) => {
+      const value = SQL.createJsonbAccess(sql, "->", tupleElementKey(fromElements[index], index));
+      return tupleTypeElements(element.type) && tupleTypeElements(fromElements[index].type) ?
+        this.asTupleType(value, fromElements[index].type, element.type) :
+        value;
+    });
+    return unlessNullTuple(
+      sql,
+      toElements.every(element => element.name !== undefined) ?
+        SQL.createJsonBuildObject(toElements.map((element, index) => SQL.createJsonField(element.name!, values[index]))) :
+        SQL.createFunctionCall("jsonb_build_array", values)
+    );
+  }
+
+  /*** The jsonb array of tuples `sql` of element type `from` with each tuple `asTupleType` `to`, in order; `sql` as it is when their names agree. ***/
+  private asTupleArrayType(sql: SQL.SQLExpression, from: string, to: string): SQL.SQLExpression {
+    if (tupleNames(from) === tupleNames(to)) {
+      return sql;
+    }
+    const tuple = this.renderSqlExpr(this.asTupleType(SQL.createColumnReference("v", "e"), from, to));
+    return unlessNullTuple(sql, {
+      kind: "RawSQLExpression",
+      sql: `(SELECT COALESCE(jsonb_agg(${tuple} ORDER BY e.ord), '[]'::jsonb) FROM jsonb_array_elements(${
+        this.renderSqlExpr(sql)
+      }) WITH ORDINALITY AS e(v, ord))`
+    });
+  }
+
+  /**
+   * The rows of tuples of type `from` that `statement` selects (one column),
+   * each `asTupleType` `to`, for a branch of a union of tuples; `statement`
+   * as it is when their names agree.
+   */
+  protected asTupleTypeRows(statement: SQL.SQLStatement, from: string, to: string): SQL.SQLStatement {
+    if (tupleNames(from) === tupleNames(to)) {
+      return statement;
+    }
+    const alias = Context.generateAlias(this.ctx, "tuple");
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([{ alias, columnAliases: ["value"], kind: "TableReference", name: "", subquery: statement }]),
+      select: SQL.createSelectClause([SQL.createSelectItem(this.asTupleType(SQL.createColumnReference("value", alias), from, to))])
+    });
+  }
+
+  /*** The united tuple type (`unitedTupleType`) of the tuples `exprs` evaluate to, when each one's type is known (`staticTupleType`); else null. ***/
+  protected unitedStaticTupleType(exprs: EdgeQLAST.Expression[]): string | null {
+    const types = exprs.map(expr => this.staticTupleType(expr));
+    return types.length > 0 && types.every(type => type !== null) ? unitedTupleType(types as string[]) : null;
+  }
+
+  /**
    * The jsonb array of tuples `sql` as a key to order or compare by: a
    * PostgreSQL array of each tuple's `tupleSortKey`, in order, which sorts
    * tuple by tuple (a jsonb array sorts by length first). An empty set (NULL)
@@ -1064,13 +1142,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    */
   protected staticTupleArrayType(expr: EdgeQLAST.Expression): string | null {
     if (expr.kind === "ArrayExpr") {
-      return expr.elements.map(element => this.staticTupleType(element)).find(type => type !== null) ?? null;
+      return this.unitedStaticTupleType(expr.elements) ??
+        expr.elements.map(element => this.staticTupleType(element)).find(type => type !== null) ?? null;
     }
     if (expr.kind === "FunctionCall" && expr.args.length === 1 && Context.lookupFunction(this.ctx.schema, expr.name.parts)?.name === "array_agg") {
       return this.staticTupleType(expr.args[0].value);
     }
     if (expr.kind === "BinaryOp" && expr.op === "++") {
-      return this.staticTupleArrayType(expr.left) ?? this.staticTupleArrayType(expr.right);
+      const left = this.staticTupleArrayType(expr.left);
+      const right = this.staticTupleArrayType(expr.right);
+      return left && right ? unitedTupleType([left, right]) : left ?? right;
     }
     if (expr.kind === "SliceExpression") {
       return this.staticTupleArrayType(expr.expr);
@@ -1155,7 +1236,16 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
       type = variable?.staticType ?? null;
     } else if (expr.kind === "SetExpr") {
-      return flattenSetElements(expr).map(element => this.staticTupleType(element)).find(found => found !== null) ?? null;
+      const elements = flattenSetElements(expr);
+      return this.unitedStaticTupleType(elements) ?? elements.map(element => this.staticTupleType(element)).find(found => found !== null) ?? null;
+    } else if (expr.kind === "BinaryOp" && expr.op === "UNION") {
+      return this.unitedStaticTupleType([expr.left, expr.right]);
+    } else if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && !expr.query.shape) {
+      return this.staticTupleType(expr.query.expr);
+    } else if (expr.kind === "IndexExpression") {
+      return this.staticTupleArrayType(expr.expr);
+    } else if (expr.kind === "TupleAccessExpr") {
+      type = this.tupleAccessElement(expr)?.element.type ?? null;
     }
     return type !== null && tupleTypeElements(type) ? type : null;
   }
@@ -1351,6 +1441,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "SetExpr":
         // The elements' common type (`{1, 2.5}` is float64).
         return this.commonNumericType(flattenSetElements(expr).map(element => this.staticNumericType(element)));
+      case "TupleAccessExpr": {
+        // A tuple's scalar element (`(a := 1).a`).
+        const type = this.tupleAccessElement(expr)?.element.type ?? null;
+        return type !== null && type !== "json" && !tupleTypeElements(type) ? type : null;
+      }
       default:
         return null;
     }
@@ -1783,6 +1878,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         }
         return expr.args.map(arg => arg.value);
       }
+      case "IndexExpression":
+        return [expr.expr, expr.index];
+      case "SliceExpression":
+        return [expr.expr, ...(expr.start ? [expr.start] : []), ...(expr.end ? [expr.end] : [])];
+      case "TupleAccessExpr":
+        return [expr.tuple];
       default:
         return null;
     }
@@ -1799,6 +1900,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         return { ...expr, expr: operands[0] };
       case "FunctionCall":
         return { ...expr, args: expr.args.map((arg, index) => ({ ...arg, value: operands[index] })) };
+      case "IndexExpression":
+        return { ...expr, expr: operands[0], index: operands[1] };
+      case "SliceExpression":
+        return { ...expr, end: expr.end ? operands.at(-1) : undefined, expr: operands[0], start: expr.start ? operands[1] : undefined };
+      case "TupleAccessExpr":
+        return { ...expr, tuple: operands[0] };
       default:
         return expr;
     }
@@ -1992,13 +2099,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       this.elementWiseOperands(expr)?.map(operand => this.expressionLocation(operand)).find(Boolean);
   }
 
-  /*** The EdgeQL type of each element of a set operand, when known: a path's property type, a numeric expression's type. ***/
+  /*** The EdgeQL type of each element of a set operand, when known: a path's property type, a numeric expression's type, a tuple's type. ***/
   private elementType(expr: EdgeQLAST.Expression): string | undefined {
     if (expr.kind === "Path") {
       const property = this.pathProperty(expr);
       return property ? Context.propertyBaseType(property) : undefined;
     }
-    return this.staticNumericType(expr) ?? undefined;
+    return this.staticNumericType(expr) ?? this.staticTupleType(expr) ?? undefined;
   }
 
   /**
@@ -2258,8 +2365,15 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     // Compile left and right operands as queries
-    const leftStmt = this.compileSetOperand(binOp.left);
-    const rightStmt = this.compileSetOperand(binOp.right);
+    let leftStmt = this.compileSetOperand(binOp.left);
+    let rightStmt = this.compileSetOperand(binOp.right);
+
+    // A union of tuples is of their united type (`(a := 1) union (b := 2)` is `{(1,), (2,)}`).
+    const united = binOp.op === "UNION" ? this.unitedStaticTupleType([binOp.left, binOp.right]) : null;
+    if (united) {
+      leftStmt = this.asTupleTypeRows(leftStmt, this.staticTupleType(binOp.left)!, united);
+      rightStmt = this.asTupleTypeRows(rightStmt, this.staticTupleType(binOp.right)!, united);
+    }
 
     return SQL.setOperation(sqlOp, [leftStmt, rightStmt]);
   }
@@ -4688,9 +4802,13 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         `Array literal has mixed element types: ${[...literalKinds].sort().join(", ")}. Arrays must be homogeneous.`
       );
     }
-    const elements = arrayExpr.elements.map(el => this.compileExpression(el));
     // An array of tuples is a jsonb array, as its parameter form and its
-    // column are, so all three mix (`++`, `=`, `len`, `[0]`, …).
+    // column are, so all three mix (`++`, `=`, `len`, `[0]`, …); its tuples
+    // are of their united type (`[(a := 1), (2,)]` is `[(1,), (2,)]`).
+    const united = this.unitedStaticTupleType(arrayExpr.elements);
+    const elements = arrayExpr.elements.map(el =>
+      united ? this.asTupleType(this.compileExpression(el), this.staticTupleType(el)!, united) : this.compileExpression(el)
+    );
     return SQL.createFunctionCall(this.staticTupleArrayType(arrayExpr) ? "jsonb_build_array" : "ARRAY", elements);
   }
 
@@ -4749,6 +4867,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileExpression(element);
     }
     const tupleExpr = this.compileExpression(access.tuple);
+    const known = this.tupleAccessElement(access);
+    if (known) {
+      return this.tupleElementValue(tupleExpr, known.element, known.index);
+    }
 
     if (access.accessType === "index" && access.index !== undefined) {
       // Numeric index access: tuple_expr -> N
@@ -4767,6 +4889,33 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     throw new CompilationError("Invalid tuple access expression");
+  }
+
+  /*** The element, and its position, `access` reads of a tuple whose type is known (`staticTupleType`); null otherwise. ***/
+  private tupleAccessElement(access: EdgeQLAST.TupleAccessExpr): { element: { name?: string; type: string; }; index: number; } | null {
+    const typeName = this.staticTupleType(access.tuple);
+    const elements = typeName ? tupleTypeElements(typeName) ?? [] : [];
+    const index = access.accessType === "index" ? access.index ?? -1 : elements.findIndex(element => element.name === access.fieldName);
+    return index >= 0 && index < elements.length ? { element: elements[index], index } : null;
+  }
+
+  /**
+   * Element `index` of the jsonb tuple `sql` as a value of its own type, as
+   * Gel answers it: a tuple, an array or a json element as its jsonb, `str`
+   * (or an enum) as text, `bytes` from the base64 the tuple holds, any other
+   * scalar cast to its type (`(a := 1).a` → `CAST(t ->> 'a' AS bigint)`).
+   */
+  private tupleElementValue(sql: SQL.SQLExpression, element: { name?: string; type: string; }, index: number): SQL.SQLExpression {
+    const key = tupleElementKey(element, index);
+    const pgType = edgeqlTypeToPgType(element.type, this.ctx.schema.scalars);
+    if (tupleTypeElements(element.type) || element.type.startsWith("array<") || pgType === "jsonb") {
+      return SQL.createJsonbAccess(sql, "->", key);
+    }
+    const text = SQL.createJsonbAccess(sql, "->>", key);
+    if (pgType === "bytea") {
+      return SQL.createFunctionCall("decode", [text, SQL.createLiteral("string", "base64")]);
+    }
+    return pgType === "text" || pgType === element.type ? text : SQL.createCastExpression(text, pgType);
   }
 
   /**
@@ -4883,12 +5032,6 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const base = this.compileExpression(indexExpr.expr);
     const idx = this.compileExpression(indexExpr.index);
 
-    // An array of tuples is a jsonb array (see `compileArrayExpr`), whose `->`
-    // counts a negative index from the end, as Gel does.
-    if (this.staticTupleArrayType(indexExpr.expr)) {
-      return SQL.createJsonbAccess(base, "->", indexExpr.index.kind === "Literal" ? idx : SQL.createCastExpression(idx, "integer"));
-    }
-
     // String key access → jsonb -> 'key'
     if (
       indexExpr.index.kind === "Literal" &&
@@ -4907,68 +5050,31 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return SQL.createJsonbAccess(base, "->", idx);
     }
 
-    // Default: array indexing with negative index support
-    // EdgeQL uses 0-based indexing; PG uses 1-based
-    // Negative indices count from end: -1 = last element
-    const baseStr = this.renderSqlExpr(base);
-    const idxStr = this.renderSqlExpr(idx);
-    return {
-      kind: "RawSQLExpression" as const,
-      sql: `(${baseStr})[CASE WHEN ${idxStr} < 0 THEN CARDINALITY(${baseStr}) + ${idxStr} + 1 ELSE ${idxStr} + 1 END]`
-    };
+    // An array (an array of tuples is a jsonb array, see `compileArrayExpr`),
+    // a `str` or `bytes`: Gel's 0-based index, a negative one counting from
+    // the end, else Gel's out of bounds error (lib/stdlib-sql.ts).
+    return SQL.createFunctionCall("disc_index", [base, idx]);
   }
 
   private compileSliceExpression(
     sliceExpr: EdgeQLAST.SliceExpression
   ): SQL.SQLExpression {
     const base = this.compileExpression(sliceExpr.expr);
-    const baseStr = this.renderSqlExpr(base);
 
     if (this.staticTupleArrayType(sliceExpr.expr)) {
       return this.tupleArraySlice(base, sliceExpr);
     }
 
-    const hasStart = sliceExpr.start !== undefined;
-    const hasEnd = sliceExpr.end !== undefined;
-
-    if (!hasStart && !hasEnd) {
+    if (!sliceExpr.start && !sliceExpr.end) {
       // [:] — identity
       return base;
     }
 
-    if (hasStart && hasEnd) {
-      // [a:b] → SUBSTRING(expr FROM a+1 FOR b-a)
-      const startStr = this.renderSqlExpr(
-        this.compileExpression(sliceExpr.start!)
-      );
-      const endStr = this.renderSqlExpr(
-        this.compileExpression(sliceExpr.end!)
-      );
-      return {
-        kind: "RawSQLExpression" as const,
-        sql: `SUBSTRING(${baseStr} FROM ${startStr} + 1 FOR ${endStr} - ${startStr})`
-      };
-    }
-
-    if (hasStart) {
-      // [a:] → SUBSTRING(expr FROM a+1)
-      const startStr = this.renderSqlExpr(
-        this.compileExpression(sliceExpr.start!)
-      );
-      return {
-        kind: "RawSQLExpression" as const,
-        sql: `SUBSTRING(${baseStr} FROM ${startStr} + 1)`
-      };
-    }
-
-    // [:b] → SUBSTRING(expr FROM 1 FOR b)
-    const endStr = this.renderSqlExpr(
-      this.compileExpression(sliceExpr.end!)
-    );
-    return {
-      kind: "RawSQLExpression" as const,
-      sql: `SUBSTRING(${baseStr} FROM 1 FOR ${endStr})`
-    };
+    // An array, a `str` or `bytes`, sliced with Gel's bounds (lib/stdlib-sql.ts):
+    // [a:b] → disc_slice(expr, a, b), [a:] → disc_slice(expr, a), [:b] → disc_slice(expr, 0, b).
+    const start = sliceExpr.start ? this.compileExpression(sliceExpr.start) : SQL.createLiteral("number", 0);
+    const end = sliceExpr.end ? [this.compileExpression(sliceExpr.end)] : [];
+    return SQL.createFunctionCall("disc_slice", [base, start, ...end]);
   }
 
   /**

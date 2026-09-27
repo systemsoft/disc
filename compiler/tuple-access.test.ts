@@ -98,7 +98,7 @@ Deno.test("Tuple Access - Parse named field access .age", () => {
 // Compiler Tests: Numeric Index Access
 // =========================================================================
 
-Deno.test("Tuple Access - Compile .0 on tuple produces jsonb_build_array -> 0", () => {
+Deno.test("Tuple Access - Compile .0 on tuple reads element 0 as its type", () => {
   const sql = compileEdgeQL("SELECT (1, 2, 3).0");
 
   assertEquals(
@@ -107,9 +107,9 @@ Deno.test("Tuple Access - Compile .0 on tuple produces jsonb_build_array -> 0", 
     "SQL should contain jsonb_build_array("
   );
   assertEquals(
-    sql.includes("-> 0"),
+    sql.includes("->> 0 AS bigint)"),
     true,
-    "SQL should contain -> 0 for index access"
+    "SQL should cast ->> 0 to bigint for index access"
   );
 });
 
@@ -122,9 +122,9 @@ Deno.test("Tuple Access - Compile .2 on tuple for third element", () => {
     "SQL should contain jsonb_build_array("
   );
   assertEquals(
-    sql.includes("-> 2"),
+    sql.includes("->> 2 AS bigint)"),
     true,
-    "SQL should contain -> 2 for third element access"
+    "SQL should cast ->> 2 to bigint for third element access"
   );
 });
 
@@ -162,6 +162,13 @@ Deno.test("Tuple Access - Named tuple .age access produces ->> 'age'", () => {
   );
 });
 
+Deno.test("Tuple Access - a named element reads as its type, a str element as text", () => {
+  assertEquals(compileEdgeQL("SELECT (a := 1).a").includes("CAST((jsonb_build_object('a', 1)) ->> 'a' AS bigint)"), true);
+  assertEquals(compileEdgeQL("SELECT (a := 1, b := 'x').b").includes("(jsonb_build_object('a', 1, 'b', 'x')) ->> 'b'"), true);
+  // By position, a named tuple's element is read by its name.
+  assertEquals(compileEdgeQL("SELECT (a := 1, b := 'x').1").includes("->> 'b'"), true);
+});
+
 // =========================================================================
 // Integration Tests: Tuple Access in SELECT
 // =========================================================================
@@ -180,9 +187,9 @@ Deno.test("Tuple Access - Tuple access in SELECT expression", () => {
     "SQL should contain the full jsonb_build_array call"
   );
   assertEquals(
-    sql.includes("-> 1"),
+    sql.includes("->> 1 AS bigint)"),
     true,
-    "SQL should contain -> 1 for second element access"
+    "SQL should cast ->> 1 to bigint for second element access"
   );
 });
 

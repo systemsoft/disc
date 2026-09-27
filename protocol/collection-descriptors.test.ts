@@ -71,6 +71,31 @@ Deno.test("selected arrays and tuples are described by their collection type", (
   ]);
 });
 
+Deno.test("indexes, slices, tuple elements and united tuples are described by Gel's types", () => {
+  const { AT_LEAST_ONE, MANY, ONE } = Cardinality;
+  const cases: [string, string, number][] = [
+    ["select [10, 20, 30][1:3]", "array<int64>", ONE],
+    ["select [10, 20, 30][0]", "int64", ONE],
+    ["select 'hello'[1:-1]", "str", ONE],
+    ["select 'abc'[1]", "str", ONE],
+    ["select b'abc'[1:]", "bytes", ONE],
+    ["select Item.tags[0]", "str", MANY],
+    ["select (a := 1).a", "int64", ONE],
+    ["select (1, 'x').1", "str", ONE],
+    ["select [(n := 1)][0].n", "int64", ONE],
+    ["select Item.named.1", "str", MANY],
+    // Gel unites tuples of different names as unnamed ones.
+    ["select [(a := 1)] ++ [(2,)]", "array<tuple<int64>>", ONE],
+    ["select [(a := 1)] ++ [(a := 2)]", "array<tuple<a: int64>>", ONE],
+    ["select [(a := 1), (b := 2)]", "array<tuple<int64>>", ONE],
+    ["select {(a := 1), (2,)}", "tuple<int64>", AT_LEAST_ONE],
+    ["select (a := 1) union (a := 2)", "tuple<a: int64>", AT_LEAST_ONE]
+  ];
+  for (const [query, type, cardinality] of cases) {
+    assertEquals(described(query), { cardinality, isScalar: true, type }, query);
+  }
+});
+
 /*** A descriptor block split into its descriptors, decoded into readable form. ***/
 function descriptors(block: Uint8Array): unknown[] {
   const out: unknown[] = [];

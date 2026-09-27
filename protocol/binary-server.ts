@@ -17,6 +17,7 @@
  *   - Error code mapping (Disc errors -> Gel protocol error codes)
  */
 
+import { tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
 import type { Schema } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -513,6 +514,23 @@ function inferScalarType(
       const type = (e as AST.TypeCast).type;
       return type?.name?.parts?.length ? builtinScalarType(typeNameString(type), bound.scope) : null;
     }
+    case "IndexExpression":
+    case "SliceExpression": {
+      // An array's element, a `str`'s character, a `bytes`' byte, a json's
+      // element; a slice is of its operand's type.
+      const base = inferScalarType((e as AST.IndexExpression | AST.SliceExpression).expr, bound.scope);
+      const element = /^array<(.+)>$/.exec(base ?? "")?.[1];
+      if (base === "str" || base === "bytes" || base === "json") {
+        return base;
+      }
+      return e.kind === "SliceExpression" ? (element ? base : null) : element ?? null;
+    }
+    case "TupleAccessExpr": {
+      const access = e as AST.TupleAccessExpr;
+      const elements = tupleTypeElements(inferScalarType(access.tuple, bound.scope) ?? "") ?? [];
+      const index = access.accessType === "index" ? access.index ?? -1 : elements.findIndex(el => el.name === access.fieldName);
+      return elements[index]?.type ?? null;
+    }
     case "UnaryOp": {
       const unary = e as AST.UnaryOp;
       if (unary.op === "EXISTS" || unary.op === "NOT") {
@@ -555,6 +573,10 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
     return unifyScalarTypes([left, right]);
   }
   if (op.op === "++") {
+    const elements = [left, right].map(type => /^array<(.+)>$/.exec(type)?.[1]);
+    if (elements[0] && elements[1]) {
+      return `array<${unifyScalarTypes([elements[0], elements[1]])}>`;
+    }
     return left === right && (left === "str" || left === "bytes") ?
       left :
       null;
@@ -1149,6 +1171,17 @@ function expressionCardinality(
       return productCardinality((e as AST.ArrayExpr | AST.TupleExpr).elements.map(el => expressionCardinality(el, bound.scope)));
     case "NamedTuple":
       return productCardinality((e as AST.NamedTuple).elements.map(el => expressionCardinality(el.value, bound.scope)));
+    case "IndexExpression":
+    case "SliceExpression": {
+      // One element or slice per combination of its operands.
+      const access = e as AST.IndexExpression | AST.SliceExpression;
+      const operands = access.kind === "IndexExpression" ? [access.expr, access.index] : [access.expr, access.start, access.end];
+      return productCardinality(
+        operands.filter((operand): operand is AST.Expression => operand !== undefined).map(operand => expressionCardinality(operand, bound.scope))
+      );
+    }
+    case "TupleAccessExpr":
+      return expressionCardinality((e as AST.TupleAccessExpr).tuple, bound.scope);
     case "Literal":
       return Cardinality.ONE;
     case "Parameter":
@@ -1375,6 +1408,10 @@ const NUMERIC_TYPES = [...INT_TYPES, ...FLOAT_TYPES, ...DECIMAL_TYPES];
 function unifyScalarTypes(types: string[]): string {
   if (types.every(t => t === types[0])) {
     return types[0];
+  }
+  // Tuples of different names are unnamed (`unitedTupleType`).
+  if (types.every(t => tupleTypeElements(t))) {
+    return unitedTupleType(types);
   }
   const ints = types.filter(t => INT_TYPES.includes(t));
   const floats = types.filter(t => FLOAT_TYPES.includes(t));

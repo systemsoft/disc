@@ -349,6 +349,97 @@ const STDLIB_SQL = [
      );
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,
 
+  // disc_index(val, idx) — `val[idx]` of an array, a `str` or `bytes`
+  // (compiler `compileIndexExpression`): the element (a character, a byte) at
+  // Gel's 0-based `idx`, a negative one counting from the end, else Gel's
+  // out of bounds error, raised as SQLSTATE 2202E (array_subscript_error, an
+  // InvalidValueError). The jsonb form is an array of tuples, which Disc
+  // holds as a jsonb array. `array_get` answers nothing instead; it does not
+  // use these.
+  `CREATE OR REPLACE FUNCTION disc_index(val anyarray, idx bigint) RETURNS anyelement AS $$
+     DECLARE
+       n bigint := coalesce(array_length(val, 1), 0);
+       i bigint := CASE WHEN idx < 0 THEN idx + n ELSE idx END;
+     BEGIN
+       IF i < 0 OR i >= n THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('array index %s is out of bounds', idx);
+       END IF;
+       RETURN val[(i + 1)::integer];
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_index(val jsonb, idx bigint) RETURNS jsonb AS $$
+     DECLARE
+       n bigint := jsonb_array_length(val);
+       i bigint := CASE WHEN idx < 0 THEN idx + n ELSE idx END;
+     BEGIN
+       IF i < 0 OR i >= n THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('array index %s is out of bounds', idx);
+       END IF;
+       RETURN val -> i::integer;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_index(val text, idx bigint) RETURNS text AS $$
+     DECLARE
+       n bigint := char_length(val);
+       i bigint := CASE WHEN idx < 0 THEN idx + n ELSE idx END;
+     BEGIN
+       IF i < 0 OR i >= n THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('string index %s is out of bounds', idx);
+       END IF;
+       RETURN substr(val, (i + 1)::integer, 1);
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_index(val bytea, idx bigint) RETURNS bytea AS $$
+     DECLARE
+       n bigint := length(val);
+       i bigint := CASE WHEN idx < 0 THEN idx + n ELSE idx END;
+     BEGIN
+       IF i < 0 OR i >= n THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('byte string index %s is out of bounds', idx);
+       END IF;
+       RETURN substr(val, (i + 1)::integer, 1);
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  // disc_slice(val, start_at[, end_at]) — `val[start_at:end_at]` of an array,
+  // a `str` or `bytes` (compiler `compileSliceExpression`): the elements from
+  // Gel's 0-based `start_at` up to, not including, `end_at` (the end when
+  // omitted), a negative bound counting from the end, a bound past either end
+  // clamped to it (`disc_slice_bound`, a PostgreSQL position before the
+  // element). An empty bound is an empty slice (STRICT).
+  `CREATE OR REPLACE FUNCTION disc_slice_bound(bound bigint, n bigint) RETURNS integer AS $$
+     SELECT greatest(0, least(n, CASE WHEN bound < 0 THEN bound + n ELSE bound END))::integer;
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val anyarray, start_at bigint, end_at bigint) RETURNS anyarray AS $$
+     SELECT val[disc_slice_bound(start_at, coalesce(array_length(val, 1), 0)) + 1 : disc_slice_bound(end_at, coalesce(array_length(val, 1), 0))];
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val anyarray, start_at bigint) RETURNS anyarray AS $$
+     SELECT disc_slice(val, start_at, coalesce(array_length(val, 1), 0));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val text, start_at bigint, end_at bigint) RETURNS text AS $$
+     SELECT substr(val, disc_slice_bound(start_at, char_length(val)) + 1,
+       greatest(0, disc_slice_bound(end_at, char_length(val)) - disc_slice_bound(start_at, char_length(val))));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val text, start_at bigint) RETURNS text AS $$
+     SELECT disc_slice(val, start_at, char_length(val));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val bytea, start_at bigint, end_at bigint) RETURNS bytea AS $$
+     SELECT substr(val, disc_slice_bound(start_at, length(val)) + 1,
+       greatest(0, disc_slice_bound(end_at, length(val)) - disc_slice_bound(start_at, length(val))));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_slice(val bytea, start_at bigint) RETURNS bytea AS $$
+     SELECT disc_slice(val, start_at, length(val));
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+
   `CREATE OR REPLACE FUNCTION std_md5(msg bytea) RETURNS bytea AS $$
      SELECT decode(md5(msg), 'hex');
    $$ LANGUAGE SQL IMMUTABLE STRICT;`,

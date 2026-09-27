@@ -202,7 +202,7 @@ Deno.test("array<tuple> expressions - literals are jsonb arrays wherever they ap
   }
   assertStringIncludes(compileEdgeQL(`select len(<array<tuple<int64, str>>>$p)`, schema), "jsonb_array_length(CAST($1 AS jsonb))");
   assertStringIncludes(compileEdgeQL(`select array_unpack(<array<tuple<int64, str>>>$p)`, schema), "jsonb_array_elements(CAST($1 AS jsonb))");
-  assertStringIncludes(compileEdgeQL(`select (<array<tuple<int64, str>>>$p)[0]`, schema), "CAST($1 AS jsonb) -> 0");
+  assertStringIncludes(compileEdgeQL(`select (<array<tuple<int64, str>>>$p)[0]`, schema), "disc_index(CAST($1 AS jsonb), 0)");
   assertStringIncludes(compileEdgeQL(`select array_agg((1, 'a'))`, schema), "to_jsonb(");
 });
 

@@ -197,34 +197,34 @@ Deno.test("indexing-slicing - [IS Type] still produces Path with type_intersecti
 });
 
 // =========================================================================
-// Compiler: Array indexing
+// Parser: an element's field
 // =========================================================================
 
-Deno.test("indexing-slicing - positive array index compiles to CASE WHEN ... ELSE ... END", () => {
-  const sql = compileEdgeQL("SELECT [10, 20, 30][0]");
-
-  assertStringIncludes(sql, "CASE WHEN");
-  assertStringIncludes(sql, "CARDINALITY(");
-  assertStringIncludes(sql, "END");
+Deno.test("indexing-slicing - a field after an index is a tuple element access", () => {
+  for (const [query, base] of [["SELECT [(n := 1)][0].n", "IndexExpression"], ["SELECT ([(a := (b := 5))][0]).a.b", "TupleAccessExpr"]]) {
+    const ast = parseEdgeQL(query);
+    assertEquals(ast.kind, "SelectQuery");
+    if (ast.kind === "SelectQuery" && ast.expr.kind === "TupleAccessExpr") {
+      assertEquals(ast.expr.accessType, "name");
+      assertEquals(ast.expr.tuple.kind, base);
+    } else {
+      throw new Error(`${query}: expected a TupleAccessExpr`);
+    }
+  }
 });
 
-Deno.test("indexing-slicing - negative array index uses CARDINALITY for end-relative access", () => {
-  const sql = compileEdgeQL("SELECT [10, 20, 30][-1]");
+// =========================================================================
+// Compiler: Array, str and bytes indexing (disc_index, lib/stdlib-sql.ts)
+// =========================================================================
 
-  assertStringIncludes(sql, "CASE WHEN");
-  assertStringIncludes(sql, "CARDINALITY(");
-  assertStringIncludes(sql, "-1");
-  assertStringIncludes(sql, "+ 1");
+Deno.test("indexing-slicing - an array index is disc_index, which takes Gel's 0-based index and raises out of bounds", () => {
+  assertStringIncludes(compileEdgeQL("SELECT [10, 20, 30][0]"), "disc_index(ARRAY[10, 20, 30], 0)");
+  assertStringIncludes(compileEdgeQL("SELECT [10, 20, 30][-1]"), "disc_index(ARRAY[10, 20, 30], -1)");
 });
 
-Deno.test("indexing-slicing - array index in SELECT context produces valid SQL", () => {
-  const sql = compileEdgeQL("SELECT [1, 2, 3][1]");
-
-  assertStringIncludes(sql, "SELECT");
-  assertStringIncludes(sql, "ARRAY[");
-  assertStringIncludes(sql, "CASE WHEN");
-  assertStringIncludes(sql, "ELSE");
-  assertStringIncludes(sql, "+ 1");
+Deno.test("indexing-slicing - str and bytes indexes are disc_index too", () => {
+  assertStringIncludes(compileEdgeQL("SELECT 'abc'[1]"), "disc_index('abc', 1)");
+  assertStringIncludes(compileEdgeQL("SELECT (<bytes>$b)[-1]"), "disc_index(CAST($1 AS bytea), -1)");
 });
 
 // =========================================================================
@@ -246,41 +246,26 @@ Deno.test("indexing-slicing - json type cast with integer index compiles to json
 });
 
 // =========================================================================
-// Compiler: String slicing
+// Compiler: Array, str and bytes slicing (disc_slice, lib/stdlib-sql.ts)
 // =========================================================================
 
-Deno.test("indexing-slicing - slice [1:3] compiles to SUBSTRING FROM start+1 FOR end-start", () => {
-  const sql = compileEdgeQL("SELECT 'hello'[1:3]");
-
-  assertStringIncludes(sql, "SUBSTRING(");
-  assertStringIncludes(sql, "FROM");
-  assertStringIncludes(sql, "FOR");
-  assertStringIncludes(sql, "+ 1");
-  assertStringIncludes(sql, "- 1");
+Deno.test("indexing-slicing - slice [1:3] is disc_slice with both bounds", () => {
+  assertStringIncludes(compileEdgeQL("SELECT 'hello'[1:3]"), "disc_slice('hello', 1, 3)");
+  assertStringIncludes(compileEdgeQL("SELECT [10, 20, 30][1:-1]"), "disc_slice(ARRAY[10, 20, 30], 1, -1)");
 });
 
-Deno.test("indexing-slicing - slice [2:] compiles to SUBSTRING FROM start+1 without FOR", () => {
-  const sql = compileEdgeQL("SELECT 'hello'[2:]");
-
-  assertStringIncludes(sql, "SUBSTRING(");
-  assertStringIncludes(sql, "FROM");
-  assertStringIncludes(sql, "2 + 1");
-  assertEquals(sql.includes(" FOR "), false);
+Deno.test("indexing-slicing - slice [2:] is disc_slice to the end", () => {
+  assertStringIncludes(compileEdgeQL("SELECT 'hello'[2:]"), "disc_slice('hello', 2)");
 });
 
-Deno.test("indexing-slicing - slice [:3] compiles to SUBSTRING FROM 1 FOR end", () => {
-  const sql = compileEdgeQL("SELECT 'hello'[:3]");
-
-  assertStringIncludes(sql, "SUBSTRING(");
-  assertStringIncludes(sql, "FROM 1 FOR");
-  assertStringIncludes(sql, "3");
+Deno.test("indexing-slicing - slice [:3] is disc_slice from 0", () => {
+  assertStringIncludes(compileEdgeQL("SELECT 'hello'[:3]"), "disc_slice('hello', 0, 3)");
 });
 
 Deno.test("indexing-slicing - slice [:] passes through the base expression unchanged", () => {
   const sql = compileEdgeQL("SELECT 'hello'[:]");
 
-  // The identity slice produces no SUBSTRING wrapper
-  assertEquals(sql.includes("SUBSTRING"), false);
+  assertEquals(sql.includes("disc_slice"), false);
   assertStringIncludes(sql, "'hello'");
 });
 
@@ -288,10 +273,6 @@ Deno.test("indexing-slicing - slice [:] passes through the base expression uncha
 // Compiler: Chained indexing
 // =========================================================================
 
-Deno.test("indexing-slicing - chained index expr[0:3][0] produces nested CASE inside SUBSTRING", () => {
-  const sql = compileEdgeQL("SELECT 'hello'[0:3][0]");
-
-  // The outer index wraps the SUBSTRING result in a CASE WHEN expression
-  assertStringIncludes(sql, "CASE WHEN");
-  assertStringIncludes(sql, "SUBSTRING(");
+Deno.test("indexing-slicing - chained index expr[0:3][0] indexes the slice", () => {
+  assertStringIncludes(compileEdgeQL("SELECT 'hello'[0:3][0]"), "disc_index(disc_slice('hello', 0, 3), 0)");
 });

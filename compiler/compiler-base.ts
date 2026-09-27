@@ -125,6 +125,31 @@ export function tupleTypeElements(typeName: string): { name?: string; type: stri
 }
 
 /**
+ * The tuple type Gel gives a union of tuples of these types (a set literal's
+ * or `union`'s tuples, an array literal's, the arrays `++` joins): their
+ * elements named as they are when every type names them alike, else unnamed,
+ * at each depth. Types of different lengths are left to the first.
+ *
+ *   tuple<a: int64>, tuple<int64>                  → tuple<int64>
+ *   tuple<a: tuple<b: int64>>, tuple<a: tuple<int64>> → tuple<a: tuple<int64>>
+ */
+export function unitedTupleType(types: string[]): string {
+  const elements = types.map(type => tupleTypeElements(type) ?? []);
+  const first = elements[0];
+  if (elements.some(each => each.length !== first.length)) {
+    return types[0];
+  }
+  const named = first.every(element => element.name !== undefined) &&
+    elements.every(each => each.every((element, index) => element.name === first[index].name));
+  const united = first.map((element, index) => {
+    const column = elements.map(each => each[index].type);
+    const type = column.every(each => tupleTypeElements(each)) ? unitedTupleType(column) : element.type;
+    return named ? `${element.name}: ${type}` : type;
+  });
+  return `tuple<${united.join(", ")}>`;
+}
+
+/**
  * The `nulls` placement for an EdgeQL order key: `empty first|last` is SQL
  * `NULLS FIRST|LAST`, since the empty set compiles to NULL. Without the
  * clause Gel sorts empty first for `asc` and last for `desc` (the reverse of

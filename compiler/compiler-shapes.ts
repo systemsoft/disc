@@ -20,7 +20,8 @@ import {
   isMutationQuery,
   locationOf,
   renderEdgeQLTypeName,
-  selectKeepsAtMostOne
+  selectKeepsAtMostOne,
+  tupleTypeElements
 } from "./compiler-base.ts";
 import { expressionLinkSelect, PathCompilerLayer } from "./compiler-paths.ts";
 import * as Context from "./context.ts";
@@ -813,7 +814,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     }
 
     if (expr.kind === "Path") {
-      return this.compilePathExpression(expr, shape);
+      // `select Rec.t.a`: the element of each tuple the path reaches.
+      const elements = shape ? null : this.tupleElementsOfPath(expr);
+      return elements ? this.compileSelectExpression(elements) : this.compilePathExpression(expr, shape);
     }
 
     if (expr.kind === "SetExpr") {
@@ -938,10 +941,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     // written as the statement writes its value (a zero date duration `P0D`,
     // an empty element no row).
     const output = set === this.outputExpression;
+    // A set of tuples is of their united type (`{(a := 1), (2,)}` is `{(1,), (2,)}`).
+    const united = shape ? null : this.unitedStaticTupleType(elements);
     const branches: SQL.SQLStatement[] = elements.map(element => {
       this.outputExpression = output ? element : this.outputExpression;
       try {
-        return this.compileSetLiteralElement(element, shape);
+        const branch = this.compileSetLiteralElement(element, shape);
+        return united ? this.asTupleTypeRows(branch, this.staticTupleType(element)!, united) : branch;
       } finally {
         this.outputExpression = output ? set : this.outputExpression;
       }
@@ -2497,6 +2503,31 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       selectItems = shape ? this.compileShape(shape, typeName, source.alias) : this.compileImplicitShape(resolved.typeDef, source.alias);
     }
     return { fromClause: SQL.createFromClause(source.from), selectItems, where };
+  }
+
+  /**
+   * `path` as the elements it names of the tuples the path before them
+   * reaches, when that ends in a tuple property (`Rec.t.a` is `(Rec.t).a`,
+   * an element-wise `TupleAccessExpr` over the path's set); null otherwise.
+   */
+  private tupleElementsOfPath(path: EdgeQLAST.Path): EdgeQLAST.Expression | null {
+    for (let end = path.steps.length - 1; end > 0; end--) {
+      const prefix: EdgeQLAST.Path = { ...path, steps: path.steps.slice(0, end) };
+      const property = this.resolvePath(prefix)?.property;
+      const type = property && Context.propertyBaseType(property);
+      if (!type || !tupleTypeElements(type)) {
+        continue;
+      }
+      const fields = path.steps.slice(end);
+      if (fields.some(step => step.type !== "property")) {
+        return null;
+      }
+      return fields.reduce<EdgeQLAST.Expression>(
+        (tuple, step) => ({ accessType: "name", fieldName: step.name, kind: "TupleAccessExpr", span: step.span, tuple }),
+        prefix
+      );
+    }
+    return null;
   }
 
   protected compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
