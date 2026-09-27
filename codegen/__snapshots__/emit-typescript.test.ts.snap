@@ -699,7 +699,7 @@ export namespace payment {
     /** Unique identifier */
     id: string;
     /** decimal (required) */
-    amount: number;
+    amount: string;
     /** str (required) */
     currency: string;
     /** str */
@@ -709,7 +709,7 @@ export namespace payment {
   }
 
   export interface PaymentInsert {
-    amount: number;
+    amount: string;
     currency: string;
     status?: string;
     /** UUID of the linked Merchant */
@@ -717,7 +717,7 @@ export namespace payment {
   }
 
   export interface PaymentUpdate {
-    amount?: number;
+    amount?: string;
     currency?: string;
     status?: string;
     /** UUID of the linked Merchant */
@@ -726,7 +726,7 @@ export namespace payment {
 
   export interface PaymentFilterVars {
     id?: string;
-    amount?: number;
+    amount?: string;
     currency?: string;
     status?: string;
     [key: string]: unknown;
@@ -734,7 +734,7 @@ export namespace payment {
 
   export interface PaymentFilter {
     id?: string | Op<string>;
-    amount?: number | OrdOp<number>;
+    amount?: string | OrdOp<string>;
     currency?: string | StrOp;
     status?: string | StrOp;
     merchant?: \$default.MerchantFilter;

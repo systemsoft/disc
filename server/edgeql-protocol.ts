@@ -16,6 +16,7 @@ import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { sha256Hex } from "../lib/crypto.ts";
 import { DatabaseExecutionError, postgresErrorFields, QueryError, QueryTimeoutError, ValidationError } from "../lib/errors.ts";
+import { hasRawJson, unwrapExactNumbers } from "../lib/exact-json.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
 import { DISC_VERSION } from "../lib/version.ts";
@@ -751,7 +752,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Driver values with no JSON form (int64 → bigint) get their wire
         // representation here, where rows become response data, so every
         // response shape below — and every cache hit — is covered.
-        const rows = normalizeRows(result.rows);
+        const rows = normalizeRows(result.rows, result.columnTypes);
 
         // The response shape is decided by the compiler from the query, never
         // from words in the SQL text: a mutation with a link subselect, a
@@ -888,6 +889,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const pgType = typeMap.get(i + 1);
       if (pgType === "jsonb" && value !== undefined) {
         return JSON.stringify(value);
+      }
+      // An exact JSON number (see parseExactJson) binds as its digits, which
+      // PostgreSQL reads into numeric / int8 without rounding.
+      if (hasRawJson(value)) {
+        return unwrapExactNumbers(value);
       }
       // `bytes` travels as base64 in JSON. Bound as that string, PostgreSQL
       // would store the base64 text's ASCII characters and report success.

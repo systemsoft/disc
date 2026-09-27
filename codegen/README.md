@@ -366,21 +366,24 @@ Re-exports everything from `types.ts`, `queries.ts`, and `client.ts`.
 
 EdgeQL types are mapped to TypeScript types:
 
-| EdgeQL Type               | TypeScript Type | Nullable             |
-| ------------------------- | --------------- | -------------------- |
-| `str`                     | `string`        | `string \| null`     |
-| `bool`                    | `boolean`       | `boolean \| null`    |
-| `int16`, `int32`, `int64` | `number`        | `number \| null`     |
-| `float32`, `float64`      | `number`        | `number \| null`     |
-| `decimal`                 | `number`        | `number \| null`     |
-| `uuid`                    | `string`        | `string \| null`     |
-| `datetime`                | `Date`          | `Date \| null`       |
-| `duration`                | `string`        | `string \| null`     |
-| `bytes`                   | `Uint8Array`    | `Uint8Array \| null` |
-| `json`                    | `unknown`       | `unknown \| null`    |
-| `cal::local_datetime`     | `Date`          | `Date \| null`       |
-| `cal::local_date`         | `string`        | `string \| null`     |
-| `cal::local_time`         | `string`        | `string \| null`     |
+| EdgeQL Type           | TypeScript Type | Nullable             |
+| --------------------- | --------------- | -------------------- |
+| `str`                 | `string`        | `string \| null`     |
+| `bool`                | `boolean`       | `boolean \| null`    |
+| `int16`, `int32`      | `number`        | `number \| null`     |
+| `int64`, `bigint`     | `bigint`        | `bigint \| null`     |
+| `float32`, `float64`  | `number`        | `number \| null`     |
+| `decimal`             | `string`        | `string \| null`     |
+| `uuid`                | `string`        | `string \| null`     |
+| `datetime`            | `Date`          | `Date \| null`       |
+| `duration`            | `string`        | `string \| null`     |
+| `bytes`               | `Uint8Array`    | `Uint8Array \| null` |
+| `json`                | `unknown`       | `unknown \| null`    |
+| `cal::local_datetime` | `Date`          | `Date \| null`       |
+| `cal::local_date`     | `string`        | `string \| null`     |
+| `cal::local_time`     | `string`        | `string \| null`     |
+
+`bigint` and `decimal` keep every digit: the server sends them as exact JSON numbers and the query builders' `reviveTyped` returns a `bigint` field as a `bigint` and a `decimal` field as a string of its digits. An `int64` field is left as the SDK reads it (a number, or a numeric string past 2^53) — see `sdk/codecs.ts`.
 
 SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 

@@ -1962,14 +1962,35 @@ Deno.test("SQL Compiler - order by empty first/last emits NULLS FIRST/LAST for e
   );
 });
 
-Deno.test("SQL Compiler - order by without empty first/last emits no NULLS clause", () => {
-  const sql = compileEdgeQL("select User { name } order by .name desc then .email");
+// Gel's default (edb/pgsql/codegen.py visit_SortBy): empty sorts first for
+// asc and last for desc — the reverse of PostgreSQL's NULLS placement.
+Deno.test("SQL Compiler - order by without empty first/last defaults to empty first asc, empty last desc", () => {
+  const sql = compileEdgeQL("select User { name } order by .age desc then .active");
+  assertEquals(
+    /age DESC NULLS LAST, user_\d+\.active ASC NULLS FIRST/.test(sql),
+    true,
+    `expected Gel's default NULLS placement: ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - order by a required property emits no NULLS clause (never empty)", () => {
+  const sql = compileEdgeQL("select User { name } order by .name desc then .id");
   assertEquals(sql.includes("NULLS"), false, `unexpected NULLS: ${sql}`);
+});
+
+Deno.test("SQL Compiler - link sub-shape order by defaults to empty first", () => {
+  const sql = compileEdgeQL("select Post { author: { name } order by .age }");
+  assertEquals(/ORDER BY users_\d+\.age ASC NULLS FIRST\)/.test(sql), true, `expected NULLS FIRST: ${sql}`);
+});
+
+Deno.test("SQL Compiler - window order by defaults to empty last for desc", () => {
+  const sql = compileEdgeQL("select User { name, r := row_number() over (order by .age desc) }");
+  assertEquals(/OVER \(ORDER BY user_\d+\.age DESC NULLS LAST\)/.test(sql), true, `expected NULLS LAST: ${sql}`);
 });
 
 Deno.test("SQL Compiler - link sub-shape order by empty last reaches jsonb_agg ORDER BY", () => {
   const sql = compileEdgeQL("select User { posts: { title } order by .title desc empty last }");
-  assertEquals(sql.includes("ORDER BY posts.title DESC NULLS LAST)"), true, `expected NULLS LAST: ${sql}`);
+  assertEquals(/ORDER BY posts_\d+\.title DESC NULLS LAST\)/.test(sql), true, `expected NULLS LAST: ${sql}`);
 });
 
 // --- Link sub-shape ordering (jsonb_agg ORDER BY) ---
@@ -1980,7 +2001,7 @@ Deno.test("SQL Compiler - link sub-shape order by emits jsonb_agg ORDER BY", () 
   );
   assertEquals(sql.includes("jsonb_agg("), true, `expected jsonb_agg: ${sql}`);
   assertEquals(
-    sql.includes("ORDER BY posts.title DESC"),
+    /ORDER BY posts_\d+\.title DESC/.test(sql),
     true,
     `expected ordered jsonb_agg: ${sql}`
   );
@@ -1992,7 +2013,7 @@ Deno.test("SQL Compiler - link sub-shape multi-key order by joins with comma", (
   );
   // Two keys inside the same jsonb_agg ORDER BY.
   assertEquals(
-    sql.includes("ORDER BY posts.title ASC, posts.body ASC"),
+    /ORDER BY posts_\d+\.title ASC, posts_\d+\.body ASC/.test(sql),
     true,
     `expected two-key ordering: ${sql}`
   );
@@ -2013,7 +2034,7 @@ Deno.test("SQL Compiler - link sub-shape filter ANDs onto the join condition", (
   assertEquals(sql.includes("jsonb_agg("), true, `expected jsonb_agg: ${sql}`);
   // The link's own join predicate survives, with the sub-shape filter ANDed on.
   assertEquals(
-    /\(posts\.author_id = \w+\.id\) AND \(posts\.title = 'hi'\)/.test(sql),
+    /\(posts_\d+\.author_id = \w+\.id\) AND \(posts_\d+\.title = 'hi'\)/.test(sql),
     true,
     `expected join AND sub-filter: ${sql}`
   );
@@ -2038,12 +2059,12 @@ Deno.test("SQL Compiler - link sub-shape filter combines with order by", () => {
     "SELECT User { posts: { title } filter .title = 'hi' order by .title desc }"
   );
   assertEquals(
-    sql.includes("posts.title = 'hi'"),
+    /posts_\d+\.title = 'hi'/.test(sql),
     true,
     `expected sub-filter: ${sql}`
   );
   assertEquals(
-    sql.includes("ORDER BY posts.title DESC"),
+    /ORDER BY posts_\d+\.title DESC/.test(sql),
     true,
     `expected ordered jsonb_agg: ${sql}`
   );
@@ -2060,7 +2081,7 @@ Deno.test("SQL Compiler - link sub-shape filter round-trips the SDK's emitted fo
   );
   // Sub-shape parameter is met first, so it takes the lower PG position.
   assertEquals(
-    sql.includes("posts.title = CAST($1 AS text)"),
+    /posts_\d+\.title = CAST\(\$1 AS text\)/.test(sql),
     true,
     `expected sub-shape param as $1: ${sql}`
   );
@@ -2070,7 +2091,7 @@ Deno.test("SQL Compiler - link sub-shape filter round-trips the SDK's emitted fo
     `expected where param as $2: ${sql}`
   );
   assertEquals(
-    sql.includes("ORDER BY posts.title DESC"),
+    /ORDER BY posts_\d+\.title DESC/.test(sql),
     true,
     `expected ordered jsonb_agg: ${sql}`
   );
@@ -2081,7 +2102,7 @@ Deno.test("SQL Compiler - link sub-shape filter accepts and/or predicates", () =
     "SELECT User { posts: { title } filter .title = 'hi' and .body = 'yo' }"
   );
   assertEquals(
-    sql.includes("((posts.title = 'hi') AND (posts.body = 'yo'))"),
+    /\(\(posts_\d+\.title = 'hi'\) AND \(posts_\d+\.body = 'yo'\)\)/.test(sql),
     true,
     `expected conjunction: ${sql}`
   );

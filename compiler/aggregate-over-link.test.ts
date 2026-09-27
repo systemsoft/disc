@@ -65,14 +65,14 @@ Deno.test("aggregate - count(backlink) counts target rows by FK", () => {
   const sql = compile(`select Author { c := count(.<author[is Post]) }`);
   // The old behavior wrapped a jsonb_agg subquery in COUNT() → always 1.
   assertEquals(/jsonb_agg/i.test(sql), false, sql);
-  assertStringIncludes(sql, `SELECT COUNT(*) FROM "post"`);
-  assertStringIncludes(sql, `"post"."author_id" =`);
+  assertStringIncludes(sql, `SELECT COUNT(*) FROM "post" "__bl_author"`);
+  assertStringIncludes(sql, `"__bl_author"."author_id" =`);
 });
 
 Deno.test("aggregate - sum(backlink.prop) sums the target column, coalesced to 0", () => {
   const sql = compile(`select Author { s := sum(.<author[is Post].size) }`);
-  assertStringIncludes(sql, `COALESCE(SUM("post"."size"), 0)`);
-  assertStringIncludes(sql, `FROM "post" WHERE "post"."author_id" =`);
+  assertStringIncludes(sql, `COALESCE(SUM("__bl_author"."size"), 0)`);
+  assertStringIncludes(sql, `FROM "post" "__bl_author" WHERE "__bl_author"."author_id" =`);
 });
 
 Deno.test("aggregate - count over a scalar property is unaffected (generic mapping)", () => {
@@ -144,8 +144,8 @@ Deno.test("computed backlink - selectable as a shape (junction-based)", () => {
 
 Deno.test("computed backlink - selectable as a shape (FK-based)", () => {
   const sql = blCompile(`select Channel { videos: { title } }`);
-  assertStringIncludes(sql, "FROM video");
-  assertStringIncludes(sql, "video.channel_id = channel_1.id");
+  assertStringIncludes(sql, "FROM video AS video_2");
+  assertStringIncludes(sql, "video_2.channel_id = channel_1.id");
 });
 
 Deno.test("computed backlink - countable via the short name", () => {
@@ -153,6 +153,6 @@ Deno.test("computed backlink - countable via the short name", () => {
   assertStringIncludes(j, `SELECT COUNT(*) FROM "customer_subscriptions"`);
   assertStringIncludes(j, `"customer_subscriptions"."target_id" = "channel_1"."id"`);
   const f = blCompile(`select Channel { c := count(.videos) }`);
-  assertStringIncludes(f, `SELECT COUNT(*) FROM "video"`);
-  assertStringIncludes(f, `"video"."channel_id" = "channel_1"."id"`);
+  assertStringIncludes(f, `SELECT COUNT(*) FROM "video" "__bl_videos"`);
+  assertStringIncludes(f, `"__bl_videos"."channel_id" = "channel_1"."id"`);
 });

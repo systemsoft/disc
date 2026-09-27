@@ -298,7 +298,9 @@ export class SchemaValidator {
     // Validate base types
     if (type.extending) {
       for (const baseType of type.extending) {
-        this.validateTypeRef(baseType);
+        // `sequence` is only valid here: each scalar extending it has its own counter.
+        if (baseType.name.parts.join("::") !== "sequence")
+          this.validateTypeRef(baseType);
       }
     }
 
@@ -946,6 +948,13 @@ export class SchemaValidator {
 
     if (builtinTypes.includes(typeName)) {
       return; // Built-in type is valid
+    }
+
+    if (typeName === "sequence") {
+      this.addError(
+        `Type 'sequence' cannot be used directly; declare a scalar type extending it (scalar type TicketNo extending sequence;)`
+      );
+      return;
     }
 
     // Accept abstract polymorphic types (anytype, anyscalar, anyenum, etc.)

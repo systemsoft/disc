@@ -73,7 +73,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
           kind: "OrderByItem" as const,
           expression: this.compileExpression(item.expr),
           direction: item.direction || "ASC" as "ASC" | "DESC",
-          ...compileEmptyOrder(item)
+          ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
         }));
         orderByClause = { kind: "OrderByClause", items };
       }
@@ -658,7 +658,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         }
         const pgType = property.multi && !property.computed ?
           this.multiPropertyArrayType(property) :
-          edgeqlTypeToPgType(property.edgeqlType ?? property.type);
+          edgeqlTypeToPgType(property.edgeqlType ?? property.type, this.ctx.schema.scalars);
         cols.set(colName, pgType);
         continue;
       }
@@ -932,7 +932,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     let pgType: string | undefined;
 
     if (expr.kind === "TypeCast") {
-      pgType = edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type));
+      pgType = edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type), this.ctx.schema.scalars);
     } else if (expr.kind === "Literal") {
       pgType = expr.type === "bytes" ? "bytea" : undefined;
     } else if (expr.kind === "FunctionCall") {
@@ -1221,22 +1221,25 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       const reverseLink = targetTypeDef.links.get(link.backlink);
       const fkColumn = reverseLink?.columnName ||
         `${propNameToColumnName(link.name)}_id`;
+      // Own alias, so a link back to the parent's own type correlates to the
+      // parent row rather than to this subquery's.
+      const targetAlias = Context.generateAlias(this.ctx, targetTypeDef.tableName);
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([
           SQL.createSelectItem(
             SQL.createFunctionCall("jsonb_agg", [
-              SQL.createColumnReference("id", targetTypeDef.tableName)
+              SQL.createColumnReference("id", targetAlias)
             ])
           )
         ]),
         from: SQL.createFromClause([
-          SQL.createTableReference(targetTypeDef.tableName)
+          SQL.createTableReference(targetTypeDef.tableName, targetAlias)
         ]),
         where: SQL.createWhereClause(
           SQL.createBinaryExpression(
             "=",
-            SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
+            SQL.createColumnReference(fkColumn, targetAlias),
             SQL.createColumnReference("id", parentAlias)
           )
         )
@@ -1279,13 +1282,16 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
     // turned a computed prop into a nonexistent `<table>.<name>` column).
     // Push a scope aliasing the linked type to this subquery's table so a
     // computed property's backlink/aggregate expressions correlate here, not
-    // to the outer query.
+    // to the outer query. The table gets its own alias: under the bare table
+    // name, a link to the parent's own type (`manager: Person` inside a
+    // `Person` update or sub-shape) would capture the parent's reference.
+    const targetAlias = Context.generateAlias(this.ctx, targetTypeDef.tableName);
     Context.pushScope(this.ctx);
     this.ctx.currentScope.aliases.set(
       targetTypeDef.name.replace(/::/g, "_").toLowerCase(),
       {
         table: targetTypeDef.tableName,
-        alias: targetTypeDef.tableName,
+        alias: targetAlias,
         type: targetTypeDef.name
       }
     );
@@ -1309,7 +1315,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         const field = this.compileShapeElement(
           element,
           targetTypeDef.name,
-          targetTypeDef.tableName
+          targetAlias
         );
         if (field) {
           jsonFields.push(field);
@@ -1323,7 +1329,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
           kind: "OrderByItem" as const,
           expression: this.compileExpression(item.expr),
           direction: item.direction || "ASC" as "ASC" | "DESC",
-          ...compileEmptyOrder(item)
+          ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
         }));
       }
     } finally {
@@ -1345,11 +1351,11 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // Forward link: parent.link_column = target.id
       joinCondition = SQL.createBinaryExpression(
         "=",
-        SQL.createColumnReference("id", targetTypeDef.tableName),
+        SQL.createColumnReference("id", targetAlias),
         SQL.createColumnReference(link.columnName, parentAlias)
       );
       fromClause = SQL.createFromClause([
-        SQL.createTableReference(targetTypeDef.tableName)
+        SQL.createTableReference(targetTypeDef.tableName, targetAlias)
       ]);
     } else if (link.junctionTable) {
       // Many-to-many via junction table:
@@ -1369,11 +1375,12 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       const joinExpr = SQL.createBinaryExpression(
         "=",
         SQL.createColumnReference(tgtCol, jt),
-        SQL.createColumnReference("id", targetTypeDef.tableName)
+        SQL.createColumnReference("id", targetAlias)
       );
 
       const targetTableRef = SQL.createTableReference(
-        targetTypeDef.tableName
+        targetTypeDef.tableName,
+        targetAlias
       );
       targetTableRef.joins = [{
         kind: "JoinClause",
@@ -1391,11 +1398,11 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         `${link.name.toLowerCase()}_id`;
       joinCondition = SQL.createBinaryExpression(
         "=",
-        SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
+        SQL.createColumnReference(fkColumn, targetAlias),
         SQL.createColumnReference("id", parentAlias)
       );
       fromClause = SQL.createFromClause([
-        SQL.createTableReference(targetTypeDef.tableName)
+        SQL.createTableReference(targetTypeDef.tableName, targetAlias)
       ]);
     }
 
@@ -1578,7 +1585,11 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // `.author.email`. Find the link on the active table alias's type,
       // then either short-circuit to the FK column (when the second step
       // is `id`) or emit a correlated subquery against the target table.
-      const linked = this.compileLinkedPath(firstStep.name, secondStep.name);
+      // A backlink step (`.<author[is Post].title`) is not the forward link
+      // of the same name, which a self-linked type also has.
+      const linked = firstStep.type === "property" ?
+        this.compileLinkedPath(firstStep.name, secondStep.name) :
+        null;
       if (linked) {
         return linked;
       }
@@ -1652,7 +1663,7 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
    *
    * - Start with the source alias's FK column to the first link's target.
    * - For each intermediate link step, wrap with a correlated subquery
-   *   `(SELECT "<next_fk>" FROM "<current_target>" WHERE "id" = <inner>)`
+   *   `(SELECT "h"."<next_fk>" FROM "<current_target>" "h" WHERE "h"."id" = <inner>)`
    *   so the chain extends one hop deeper.
    * - The final step is either `id` (FK shortcut — no extra wrapping
    *   needed; the existing chain already evaluates to the target's id)
@@ -1725,13 +1736,17 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       );
     }
 
+    // The backlinked rows get their own alias: when the link points back at
+    // its own type, the bare table name would capture the current row's.
+    const rowAlias = `__bl_${backlinkName}`;
+
     if (link.columnName && !link.junctionTable) {
       // Single-FK backlink. Emit a correlated subquery materializing matches
       // as JSON, defaulting to `[]` so a row with no requirements still
       // produces a parseable JSON array instead of NULL.
-      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${targetType.tableName}"."id")), '[]'::jsonb) ` +
-        `FROM "${targetType.tableName}" ` +
-        `WHERE "${targetType.tableName}"."${link.columnName}" = "${currentAlias.alias}"."id")`;
+      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${rowAlias}"."id")), '[]'::jsonb) ` +
+        `FROM "${targetType.tableName}" "${rowAlias}" ` +
+        `WHERE "${rowAlias}"."${link.columnName}" = "${currentAlias.alias}"."id")`;
       return { kind: "RawSQLExpression", sql };
     }
 
@@ -1742,9 +1757,9 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       // current scope's id, then projecting the source-side target rows.
       const srcCol = link.junctionSourceColumn ?? "source_id";
       const tgtCol = link.junctionTargetColumn ?? "target_id";
-      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${targetType.tableName}"."id")), '[]'::jsonb) ` +
-        `FROM "${targetType.tableName}" ` +
-        `JOIN "${link.junctionTable}" ON "${link.junctionTable}"."${srcCol}" = "${targetType.tableName}"."id" ` +
+      const sql = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', "${rowAlias}"."id")), '[]'::jsonb) ` +
+        `FROM "${targetType.tableName}" "${rowAlias}" ` +
+        `JOIN "${link.junctionTable}" ON "${link.junctionTable}"."${srcCol}" = "${rowAlias}"."id" ` +
         `WHERE "${link.junctionTable}"."${tgtCol}" = "${currentAlias.alias}"."id")`;
       return { kind: "RawSQLExpression", sql };
     }
@@ -1787,14 +1802,18 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
       }
 
       // Walk intermediate link steps (everything except first link and
-      // the terminal property/id step).
+      // the terminal property/id step). Each hop's table gets its own alias
+      // (`__l<hop>_<link>`): under the bare table name, a link to the source's
+      // own type would capture the source alias (`"person"."manager_id"`
+      // inside `FROM "person"` reads the inner row).
       for (let i = 1; i < stepNames.length - 1; i++) {
         const link = currentTargetType.links.get(stepNames[i]);
         if (!link || link.multi || link.junctionTable || !link.columnName) {
           return null;
         }
-        currentSql = `(SELECT "${link.columnName}" FROM "${currentTargetType.tableName}" ` +
-          `WHERE "id" = ${currentSql})`;
+        const hopAlias = `__l${i - 1}_${stepNames[i - 1]}`;
+        currentSql = `(SELECT "${hopAlias}"."${link.columnName}" FROM "${currentTargetType.tableName}" "${hopAlias}" ` +
+          `WHERE "${hopAlias}"."id" = ${currentSql})`;
         const next = Context.resolveTypeName(this.ctx, link.target);
         if (!next) {
           return null;
@@ -1815,8 +1834,10 @@ export abstract class ShapeCompilerLayer extends ExpressionCompilerLayer {
         return null;
       }
 
-      const sql = `(SELECT "${targetProp.columnName}" FROM "${currentTargetType.tableName}" ` +
-        `WHERE "id" = ${currentSql})`;
+      const lastLink = stepNames.length - 2;
+      const hopAlias = `__l${lastLink}_${stepNames[lastLink]}`;
+      const sql = `(SELECT "${hopAlias}"."${targetProp.columnName}" FROM "${currentTargetType.tableName}" "${hopAlias}" ` +
+        `WHERE "${hopAlias}"."id" = ${currentSql})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;

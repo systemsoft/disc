@@ -5,7 +5,7 @@
  * DiscClient — Core HTTP client for Disc database
  */
 
-import { jsonReplacer, reviveResponse } from "./codecs.ts";
+import { jsonReplacer, parseResponseJson, reviveResponse } from "./codecs.ts";
 import {
   createQueryError,
   DiscAuthError,
@@ -230,8 +230,9 @@ export class DiscClient {
    * type safety, run `disc codegen`.
    *
    * **Serialization (P1-29)**: server responses come back as JSON, so
-   * `datetime` arrives as ISO-8601 strings, `int64` / `bigint` as numeric
-   * strings, and `bytes` as base64. Pass `{ revive: true }` to auto-convert
+   * `datetime` arrives as ISO-8601 strings, an `int64` / `bigint` / `decimal`
+   * a JS number cannot hold exactly as a numeric string with every digit, and
+   * `bytes` as base64. Pass `{ revive: true }` to auto-convert
    * `Date` and `bigint` (conservative — only ISO-8601 with a time component
    * and numbers outside `Number.MAX_SAFE_INTEGER`), or import per-field
    * helpers from `disc/sdk/codecs.ts` (`parseDateTime`, `parseInt64`,
@@ -284,7 +285,7 @@ export class DiscClient {
       body
     });
 
-    return await response.json() as QueryResponse<T>;
+    return parseResponseJson(await response.text()) as QueryResponse<T>;
   }
 
   /** Check server health status */

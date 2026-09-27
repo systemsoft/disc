@@ -25,6 +25,7 @@
  *   std::decimal      → PostgreSQL numeric wire format
  */
 
+import { unwrapRawJson } from "../lib/exact-json.ts";
 import { decodeBigInt, decodeDecimal, encodeBigInt, encodeDecimal } from "./type-codec.ts";
 import { uuidToBytes } from "./types.ts";
 
@@ -89,8 +90,11 @@ function encodeInt32(value: unknown): Uint8Array {
 }
 
 function encodeInt64(value: unknown): Uint8Array {
+  // A string of digits (a shape's int64 past 2^53) is read exactly, not through a double.
   const n = typeof value === "bigint" ?
     value :
+    typeof value === "string" && /^-?\d+$/.test(value) ?
+    BigInt(value) :
     BigInt(Math.trunc(Number(value)));
   const buf = new Uint8Array(8);
   new DataView(buf.buffer).setBigInt64(0, n, false);
@@ -301,7 +305,8 @@ export function encodeScalar(eqlType: string, value: unknown): Uint8Array {
   if (!enc) {
     throw new Error(`no scalar encoder for type "${eqlType}"`);
   }
-  return enc(value);
+  // A shape's int64, bigint or decimal past what a double holds is its JSON text.
+  return enc(unwrapRawJson(value));
 }
 
 /** Decode raw bytes for `eqlType` to a JS value. */

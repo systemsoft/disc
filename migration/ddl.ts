@@ -10,6 +10,7 @@ import {
   isReservedPgKeyword,
   linkColumnName,
   propNameToColumnName,
+  sequenceName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
 import * as Types from "./types.ts";
@@ -66,6 +67,12 @@ export class DDLGenerator {
    * fallback. Populated via {@link setScalarBaseTypes}.
    */
   private scalarBaseTypes = new Map<string, string>();
+  /**
+   * The PostgreSQL sequence of each sequence scalar (`scalar type TicketNo
+   * extending sequence`), so a property of one defaults to its next value.
+   * Populated via {@link setSequenceScalars}.
+   */
+  private sequenceScalars = new Map<string, string>();
 
   /**
    * Tell the generator which scalar names are enum-typed so column
@@ -86,6 +93,11 @@ export class DDLGenerator {
   /*** Tell the generator the type each non-enum scalar extends (from `SchemaDiffer.scalarBaseTypes`). ***/
   setScalarBaseTypes(bases: Map<string, string>): void {
     this.scalarBaseTypes = new Map(bases);
+  }
+
+  /*** Tell the generator the sequence of each sequence scalar (from `SchemaDiffer.sequenceScalarNames`). ***/
+  setSequenceScalars(sequences: Map<string, string>): void {
+    this.sequenceScalars = new Map(sequences);
   }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
@@ -202,6 +214,9 @@ export class DDLGenerator {
         ];
       case "CreateScalar": {
         const op = operation as Types.CreateScalarOperation;
+        if (op.baseType === "sequence") {
+          return [`DROP SEQUENCE IF EXISTS ${this.escapeIdentifier(sequenceName(op.module, op.scalarName))};`];
+        }
         if (op.baseType !== "enum") {
           return [
             `-- Rollback: scalar ${op.module}::${op.scalarName} was compile-time only`
@@ -214,6 +229,12 @@ export class DDLGenerator {
       }
       case "DropScalar": {
         const op = operation as Types.DropScalarOperation;
+        if (op.baseType === "sequence") {
+          return [
+            `-- Rollback: sequence of ${op.module}::${op.scalarName} recreated; its counter restarts at 1`,
+            `CREATE SEQUENCE IF NOT EXISTS ${this.escapeIdentifier(sequenceName(op.module, op.scalarName))};`
+          ];
+        }
         return [
           `-- MANUAL ROLLBACK REQUIRED: enum type ${op.module}::${op.scalarName} was dropped — original values lost`,
           `-- Restore from backup or recreate the CREATE TYPE statement manually.`
@@ -500,6 +521,10 @@ END $$;`;
   private generateCreateScalar(
     operation: Types.CreateScalarOperation
   ): string[] {
+    // A sequence scalar's counter: every property of the scalar draws from it.
+    if (operation.baseType === "sequence") {
+      return [`CREATE SEQUENCE ${this.escapeIdentifier(sequenceName(operation.module, operation.scalarName))};`];
+    }
     if (operation.baseType !== "enum") {
       // Non-enum scalars are compile-time only today (Disc maps them to
       // the underlying PG type at column emission). No DDL needed.
@@ -519,6 +544,9 @@ END $$;`;
   private generateDropScalar(
     operation: Types.DropScalarOperation
   ): string[] {
+    if (operation.baseType === "sequence") {
+      return [`DROP SEQUENCE IF EXISTS ${this.escapeIdentifier(sequenceName(operation.module, operation.scalarName))};`];
+    }
     const typeName = this.scalarTypeName(operation);
     return [
       `-- WARNING: DROP TYPE removes the enum and is destructive if any column still references it`,
@@ -638,14 +666,7 @@ END $$;`,
         nullable: !property.multi && !property.required,
         primaryKey: false,
         unique: property.constraints.includes("exclusive"),
-        // `default !== undefined` rather than truthy — `default := 0`,
-        // `default := false`, and `default := ""` are valid SDL defaults
-        // that the truthy form would silently drop.
-        default: property.multi ?
-          EMPTY_ARRAY :
-          property.default !== undefined ?
-          this.formatDefaultValue(property.default, property.type) :
-          undefined
+        default: this.propertyColumnDefault(property)
       });
     }
 
@@ -952,11 +973,8 @@ END $$;`,
 
     const columnType = this.propertyColumnType(property);
     const nullable = property.required || property.multi ? "NOT NULL" : "NULL";
-    const defaultClause = property.multi ?
-      ` DEFAULT ${EMPTY_ARRAY}` :
-      property.default !== undefined ?
-      ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` :
-      "";
+    const columnDefault = this.propertyColumnDefault(property);
+    const defaultClause = columnDefault === undefined ? "" : ` DEFAULT ${columnDefault}`;
 
     const columnName = propNameToColumnName(property.name);
     const statements = [
@@ -1918,6 +1936,24 @@ END $$;`,
     }));
   }
 
+  /**
+   * The DEFAULT of a stored property's column: the empty array for a multi
+   * property, else its declared default, else — for a property of a sequence
+   * scalar — the next value of the scalar's sequence. `default !== undefined`
+   * rather than truthy: `default := 0`, `default := false` and `default := ""`
+   * are valid SDL defaults that the truthy form would silently drop.
+   */
+  private propertyColumnDefault(property: Types.PropertyDefinition): string | undefined {
+    if (property.multi)
+      return EMPTY_ARRAY;
+
+    if (property.default !== undefined)
+      return this.formatDefaultValue(property.default, property.type);
+
+    const sequence = this.sequenceScalars.get(property.type);
+    return sequence === undefined ? undefined : `nextval('${sequence}')`;
+  }
+
   /*** The column type of a stored property as the DDL emits it (public for the TEXT-column backfill). ***/
   propertyColumnType(property: Types.PropertyDefinition): string {
     const pgType = this.mapEdgeQLTypeToPostgreSQL(property.type);
@@ -1945,6 +1981,7 @@ END $$;`,
       "cal::local_datetime": "TIMESTAMP WITHOUT TIME ZONE",
       "cal::relative_duration": "INTERVAL",
       "cal::date_duration": "INTERVAL",
+      sequence: "BIGINT",
       // Array types
       "array<str>": "TEXT[]",
       "array<int16>": "SMALLINT[]",
@@ -1960,6 +1997,7 @@ END $$;`,
       "array<bytes>": "BYTEA[]",
       "array<bigint>": "NUMERIC[]",
       "array<decimal>": "NUMERIC[]",
+      "array<sequence>": "BIGINT[]",
       "array<cal::local_date>": "DATE[]",
       "array<cal::local_time>": "TIME WITHOUT TIME ZONE[]",
       "array<cal::local_datetime>": "TIMESTAMP WITHOUT TIME ZONE[]",

@@ -54,7 +54,16 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for primitive types", () => {
 Deno.test("Types - mapEdgeQLTypeToTypeScript for numeric types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("int32", true, false), "number");
   assertEquals(Types.mapEdgeQLTypeToTypeScript("float64", false, false), "number | null");
-  assertEquals(Types.mapEdgeQLTypeToTypeScript("decimal", true, true), "number[]");
+});
+
+Deno.test("Types - arbitrary-precision types map to TS types that keep every digit", () => {
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("decimal", true, false), "string");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("decimal", false, false), "string | null");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("decimal", true, true), "string[]");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("array<decimal>", true, false), "string[]");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("bigint", true, false), "bigint");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("bigint", false, true), "bigint[] | null");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("array<bigint>", true, false), "bigint[]");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for datetime types", () => {

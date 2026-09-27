@@ -79,6 +79,16 @@ export function enumTypeName(module: string, name: string, qualified: boolean): 
   return fitIdentifier(`disc_enum_${module.replaceAll("::", "__")}__${name}`.toLowerCase());
 }
 
+/**
+ * The PostgreSQL sequence of the sequence scalar `module::name` (`scalar type
+ * TicketNo extending sequence`): `disc_seq_<name>` in the default module,
+ * `disc_seq_<module>__<name>` in any other, so same-named scalars of two
+ * modules keep separate counters.
+ */
+export function sequenceName(module: string, name: string): string {
+  return fitIdentifier((module === "default" ? `disc_seq_${name}` : `disc_seq_${module.replaceAll("::", "__")}__${name}`).toLowerCase());
+}
+
 /** PostgreSQL truncates identifiers to `NAMEDATALEN - 1` bytes, silently. */
 export const PG_MAX_IDENTIFIER_BYTES = 63;
 

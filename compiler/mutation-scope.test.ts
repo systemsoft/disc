@@ -191,7 +191,10 @@ Deno.test("mutation scope - property names map to column names in filter and set
 Deno.test("mutation scope - update: a path beyond the link's id is a correlated subselect", async () => {
   const sql = await sqlOf("update GitRef filter .program.name = <str>$name set { target := 'x' }");
 
-  assertStringIncludes(sql, `(SELECT "name" FROM "program" WHERE "id" = "git_ref"."program_id") = CAST($1 AS text)`);
+  assertStringIncludes(
+    sql,
+    `(SELECT "__l0_program"."name" FROM "program" "__l0_program" WHERE "__l0_program"."id" = "git_ref"."program_id") = CAST($1 AS text)`
+  );
   assert(!/\bWITH\b/i.test(sql), sql);
 });
 
@@ -200,7 +203,7 @@ Deno.test("mutation scope - delete: a three-step path walks the link chain", asy
 
   assertStringIncludes(
     sql,
-    `(SELECT "name" FROM "crew" WHERE "id" = (SELECT "crew_id" FROM "program" WHERE "id" = "git_ref"."program_id"))`
+    `(SELECT "__l1_crew"."name" FROM "crew" "__l1_crew" WHERE "__l1_crew"."id" = (SELECT "__l0_program"."crew_id" FROM "program" "__l0_program" WHERE "__l0_program"."id" = "git_ref"."program_id"))`
   );
 });
 

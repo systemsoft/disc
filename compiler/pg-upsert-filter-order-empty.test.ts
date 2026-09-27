@@ -40,9 +40,12 @@ const SDL = `module default {
     label -> str;
     rank -> int64;
   }
+  type EmptyOrderList {
+    multi items -> EmptyOrderItem;
+  }
 }`;
 
-const TABLES = ["upsert_maint", "upsert_program", "empty_order_item"];
+const TABLES = ["upsert_maint", "upsert_program", "empty_order_list_items", "empty_order_list", "empty_order_item"];
 const PROGRAM_ID = "01234567-89ab-7cde-8f01-23456789abcd";
 const OLD_TIMESTAMP = "2020-01-01T00:00:00Z";
 
@@ -164,6 +167,48 @@ Deno.test({
       // Multi-key: the second key's empty placement applies within ties.
       assertEquals(await labels(".rank desc then .label empty first"), ["2:null", "2:a", "1:null", "1:b"]);
       assertEquals(await labels(".rank then .label desc empty last"), ["1:b", "1:null", "2:a", "2:null"]);
+    })
+});
+
+Deno.test({
+  name: "PG order by: without empty first/last, empty sorts first asc and last desc (Gel's default)",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      await pool.query(
+        `INSERT INTO empty_order_item (id, label, rank) VALUES
+          ('01234567-89ab-7cde-8f01-000000000001', 'b', 1),
+          ('01234567-89ab-7cde-8f01-000000000002', NULL, 2),
+          ('01234567-89ab-7cde-8f01-000000000003', 'a', 3)`
+      );
+      await pool.query("INSERT INTO empty_order_list (id) VALUES ('01234567-89ab-7cde-8f01-0000000000f0')");
+      await pool.query(
+        `INSERT INTO empty_order_list_items (source_id, target_id)
+         SELECT '01234567-89ab-7cde-8f01-0000000000f0', id FROM empty_order_item`
+      );
+
+      async function rows(edgeql: string): Promise<Record<string, unknown>[]> {
+        const result = await pool.query(compileEdgeQL(edgeql, schema));
+        return result.rows.map(row => (row.jsonb_build_object ?? row) as Record<string, unknown>);
+      }
+
+      // Top-level select, both directions and a later key.
+      const asc = await rows("select EmptyOrderItem { label } order by .label");
+      assertEquals(asc.map(row => row.label), [null, "a", "b"]);
+      const desc = await rows("select EmptyOrderItem { label } order by .label desc");
+      assertEquals(desc.map(row => row.label), ["b", "a", null]);
+      const later = await rows("select EmptyOrderItem { label } order by .rank * 0 then .label");
+      assertEquals(later.map(row => row.label), [null, "a", "b"]);
+
+      // Link sub-shape ordering inside jsonb_agg.
+      const list = await rows("select EmptyOrderList { items: { label } order by .label desc }");
+      assertEquals((list[0].items as { label: string | null; }[]).map(item => item.label), ["b", "a", null]);
+      const listAsc = await rows("select EmptyOrderList { items: { label } order by .label }");
+      assertEquals((listAsc[0].items as { label: string | null; }[]).map(item => item.label), [null, "a", "b"]);
+
+      // Window `over (order by …)`.
+      const ranked = await rows("select EmptyOrderItem { label, n := row_number() over (order by .label) } order by .rank");
+      assertEquals(ranked.map(row => [row.label, Number(row.n)]), [["b", 3], [null, 1], ["a", 2]]);
     })
 });
 

@@ -5,7 +5,7 @@
  * Transaction — Execute multiple queries atomically
  */
 
-import { jsonReplacer, reviveResponse } from "./codecs.ts";
+import { jsonReplacer, parseResponseJson, reviveResponse } from "./codecs.ts";
 import { createQueryError, DiscTransactionError } from "./errors.ts";
 import type {
   QueryOptions,
@@ -62,7 +62,7 @@ export class Transaction {
         headers: { "X-Transaction-ID": this.id }
       });
 
-      result = await response.json() as QueryResponse<T>;
+      result = parseResponseJson(await response.text()) as QueryResponse<T>;
 
       if (result.errors && result.errors.length > 0) {
         throw createQueryError(result.errors);

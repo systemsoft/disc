@@ -11,6 +11,7 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
+import { parseExactJson } from "../lib/exact-json.ts";
 import {
   canonicalScalarName,
   decodeScalar,
@@ -75,6 +76,19 @@ Deno.test("decimal - numeric wire format round-trips with its scale", () => {
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "1.50")), "1.50");
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "-2.5000000000000000")), "-2.5000000000000000");
   assertEquals(decodeScalar("decimal", encodeScalar("decimal", "12345.6789")), "12345.6789");
+});
+
+Deno.test("int64, bigint and decimal - a shape's jsonb number keeps every digit", () => {
+  // A shaped row is parsed from jsonb text; a number a double cannot hold arrives as JSON.rawJSON.
+  const row = parseExactJson(`{"big":12345678901234567890,"dec":0.1000000000000000055511151231257827,"i64":9007199254740993,"small":7}`) as Record<
+    string,
+    unknown
+  >;
+  assertEquals(decodeScalar("bigint", encodeScalar("bigint", row.big)), 12345678901234567890n);
+  assertEquals(decodeScalar("decimal", encodeScalar("decimal", row.dec)), "0.1000000000000000055511151231257827");
+  assertEquals(decodeScalar("int64", encodeScalar("int64", row.i64)), 9007199254740993n);
+  assertEquals(decodeScalar("int64", encodeScalar("int64", row.small)), 7n);
+  assertEquals(decodeScalar("bigint", encodeScalar("bigint", row.small)), 7n);
 });
 
 Deno.test("uuid - encode is 16 raw bytes", () => {

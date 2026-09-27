@@ -43,6 +43,11 @@ Deno.test("numeric literals: 1.5n is a numeric decimal, keeping its scale", () =
   assertStringIncludes(compileEdgeQL("select 1.50n"), "CAST(1.50 AS numeric)");
 });
 
+Deno.test("numeric literals: an int64 past 2^53 keeps every digit", () => {
+  assertStringIncludes(compileEdgeQL("select 9007199254740993"), "SELECT 9007199254740993");
+  assertStringIncludes(compileEdgeQL("select 9223372036854775807"), "SELECT 9223372036854775807");
+});
+
 Deno.test("numeric literals: bigint and decimal literals divide as decimals", () => {
   assertStringIncludes(compileEdgeQL("select 10n / 4n"), "CAST(10 AS numeric) / CAST(4 AS numeric)");
   assertStringIncludes(compileEdgeQL("select 10n // 4n"), "FLOOR(CAST(10 AS numeric) / CAST(4 AS numeric))");

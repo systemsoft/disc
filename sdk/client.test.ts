@@ -141,6 +141,40 @@ Deno.test("client - query revives the bytes paths it is given", async () => {
   }
 });
 
+const PRECISE_BODY = `{"data":[{"big":12345678901234567890,"dec":0.1000000000000000055511151231257827,"i64":9007199254740993,"n":1.5}]}`;
+
+Deno.test("client - query keeps every digit of bigint, decimal and int64 numbers", async () => {
+  const restore = mockFetch(() => new Response(PRECISE_BODY));
+  try {
+    const client = new DiscClient();
+    assertEquals(await client.query("select Item { big, dec, i64, n }"), [{
+      big: "12345678901234567890",
+      dec: "0.1000000000000000055511151231257827",
+      i64: "9007199254740993",
+      n: 1.5
+    }]);
+    assertEquals(await client.query("select Item { big, dec, i64, n }", undefined, { revive: true }), [{
+      big: 12345678901234567890n,
+      dec: "0.1000000000000000055511151231257827",
+      i64: 9007199254740993n,
+      n: 1.5
+    }]);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client - a transaction's query keeps every digit too", async () => {
+  const { restore } = transactionServer({ "/query": () => new Response(PRECISE_BODY), "/transaction/commit": OK });
+  try {
+    const client = new DiscClient();
+    const rows = await client.transaction(tx => tx.query("select Item { big, dec, i64, n }"));
+    assertEquals(rows, [{ big: "12345678901234567890", dec: "0.1000000000000000055511151231257827", i64: "9007199254740993", n: 1.5 }]);
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("client - resolves baseUrl from disc.toml [server] port", () => {
   const tmp = Deno.makeTempDirSync();
   const cwd = Deno.cwd();

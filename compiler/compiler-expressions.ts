@@ -656,6 +656,25 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
+   * True when `expr` is `.prop` naming a required, single, stored property of
+   * a type in scope (the same alias lookup as `compilePathInExpression`), so
+   * it is never empty — e.g. an order key that needs no NULLS placement.
+   */
+  protected isNeverEmpty(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind !== "Path" || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
+      return false;
+    }
+    const name = expr.steps[0].name;
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const property = Context.resolveTypeName(this.ctx, ta.type)?.properties.get(name);
+      if (property) {
+        return property.required && !property.multi && !property.computed;
+      }
+    }
+    return false;
+  }
+
+  /**
    * The array column behind `.prop` when it names a stored multi scalar
    * property of a type in scope (the same alias lookup as
    * `compilePathInExpression`), else null.
@@ -1375,7 +1394,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         kind: "OrderByItem" as const,
         expression: this.compileExpression(item.expr),
         direction: item.direction || "ASC" as "ASC" | "DESC",
-        ...compileEmptyOrder(item)
+        ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
       }));
     }
 
@@ -1478,7 +1497,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   protected isJsonExpression(expr: EdgeQLAST.Expression): boolean {
     switch (expr.kind) {
       case "TypeCast":
-        return edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type)) === "jsonb" && !expr.type.subtypes?.length;
+        return edgeqlTypeToPgType(renderEdgeQLTypeName(expr.type), this.ctx.schema.scalars) === "jsonb" && !expr.type.subtypes?.length;
       case "IndexExpression":
         return (expr.index.kind === "Literal" && expr.index.type === "string") || this.isJsonExpression(expr.expr);
       case "FunctionCall":
@@ -1574,7 +1593,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return expr;
     }
 
-    const pgType = edgeqlTypeToPgType(typeName);
+    const pgType = edgeqlTypeToPgType(typeName, this.ctx.schema.scalars);
 
     // `<Progam><uuid>$p`: the object-cast shape with a name that is neither a
     // schema type nor a known scalar. Without this it reaches Postgres as
@@ -1670,8 +1689,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         if (!targetTd || !fkCol) {
           return null;
         }
-        const sql = `(SELECT COUNT(*) FROM "${targetTd.tableName}" ` +
-          `WHERE "${targetTd.tableName}"."${fkCol}" = "${parent.alias}"."id")`;
+        const rowAlias = `__bl_${first.name}`;
+        const sql = `(SELECT COUNT(*) FROM "${targetTd.tableName}" "${rowAlias}" ` +
+          `WHERE "${rowAlias}"."${fkCol}" = "${parent.alias}"."id")`;
         return { kind: "RawSQLExpression", sql };
       }
       return null;
@@ -1697,17 +1717,20 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
 
     // Build the FROM + correlation for "target rows that link back to parent".
+    // The target rows get their own alias: when the link points back at the
+    // parent's own type, the bare table name would capture the parent's.
+    const rowAlias = `__bl_${first.name}`;
     let fromSql: string;
     let correlation: string;
     if (fwd.columnName && !fwd.junctionTable) {
-      fromSql = `"${targetType.tableName}"`;
-      correlation = `"${targetType.tableName}"."${fwd.columnName}" = "${parent.alias}"."id"`;
+      fromSql = `"${targetType.tableName}" "${rowAlias}"`;
+      correlation = `"${rowAlias}"."${fwd.columnName}" = "${parent.alias}"."id"`;
     } else if (fwd.junctionTable) {
       const srcCol = fwd.junctionSourceColumn ?? "source_id";
       const tgtCol = fwd.junctionTargetColumn ?? "target_id";
-      fromSql = `"${targetType.tableName}" ` +
+      fromSql = `"${targetType.tableName}" "${rowAlias}" ` +
         `JOIN "${fwd.junctionTable}" ON "${fwd.junctionTable}"."${srcCol}" = ` +
-        `"${targetType.tableName}"."id"`;
+        `"${rowAlias}"."id"`;
       correlation = `"${fwd.junctionTable}"."${tgtCol}" = "${parent.alias}"."id"`;
     } else {
       return null;
@@ -1724,7 +1747,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       if (!prop?.columnName) {
         return null;
       }
-      const col = `"${targetType.tableName}"."${prop.columnName}"`;
+      const col = `"${rowAlias}"."${prop.columnName}"`;
       // `sum` of an empty set is 0 in EdgeQL; SQL SUM() yields NULL, so
       // coalesce. min/max/avg/count over an empty set stay NULL/0 as-is.
       aggExpr = funcName === "sum" ?
@@ -1801,6 +1824,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return false;
     }
     const [first] = expr.steps;
+    // A backlink (`.<author[is Post]`) is a set of the rows linking here.
+    if (first.type === "backlink") {
+      return backlinkIntersectionName(first.filter) !== null;
+    }
     if (first.type !== "property") {
       return false;
     }
@@ -1834,6 +1861,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     rhsExpr: EdgeQLAST.Expression
   ): SQL.SQLExpression | null {
     const [firstStep, secondStep] = path.steps;
+    if (firstStep.type === "backlink" && secondStep.type === "property") {
+      return this.compileBacklinkComparison(firstStep, secondStep.name, op, rhsExpr);
+    }
     if (firstStep.type !== "property" || secondStep.type !== "property") {
       return null;
     }
@@ -1909,6 +1939,48 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return { kind: "RawSQLExpression", sql };
     }
     return null;
+  }
+
+  /**
+   * `.<link[is T].field <op> rhs`: EXISTS over the `T` rows whose `link`
+   * points at the current row — through `T`'s FK column, or its junction
+   * table when `link` is multi. Null when the backlink doesn't resolve.
+   */
+  private compileBacklinkComparison(
+    step: EdgeQLAST.PathStep,
+    field: string,
+    op: string,
+    rhsExpr: EdgeQLAST.Expression
+  ): SQL.SQLExpression | null {
+    const intersection = backlinkIntersectionName(step.filter);
+    const sourceType = intersection ? Context.resolveTypeName(this.ctx, intersection) : undefined;
+    const forward = sourceType?.links.get(step.name);
+    const current = this.ctx.currentScope.aliases.values().next().value;
+    if (!sourceType || !forward || !current) {
+      return null;
+    }
+    const column = field === "id" ? "id" : sourceType.properties.get(field)?.columnName;
+    if (!column) {
+      return null;
+    }
+
+    const rowAlias = `__bl_${step.name}`;
+    const predicate = this.renderInnerPredicate(`"${rowAlias}"."${column}"`, op, rhsExpr);
+    if (forward.junctionTable) {
+      const jAlias = `__blj_${step.name}`;
+      const srcCol = forward.junctionSourceColumn ?? "source_id";
+      const tgtCol = forward.junctionTargetColumn ?? "target_id";
+      const sql = `EXISTS (SELECT 1 FROM "${forward.junctionTable}" "${jAlias}" ` +
+        `INNER JOIN "${sourceType.tableName}" "${rowAlias}" ON "${rowAlias}"."id" = "${jAlias}"."${srcCol}" ` +
+        `WHERE "${jAlias}"."${tgtCol}" = "${current.alias}"."id" AND ${predicate})`;
+      return { kind: "RawSQLExpression", sql };
+    }
+    if (!forward.columnName) {
+      return null;
+    }
+    const sql = `EXISTS (SELECT 1 FROM "${sourceType.tableName}" "${rowAlias}" ` +
+      `WHERE "${rowAlias}"."${forward.columnName}" = "${current.alias}"."id" AND ${predicate})`;
+    return { kind: "RawSQLExpression", sql };
   }
 
   /**

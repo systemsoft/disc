@@ -498,7 +498,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Execute the SQL using the pool
         const result = await pool.query(sql, this.prepareParameters(variables));
         // Same wire representation as the full handler (a driver bigint is not JSON).
-        const rows = normalizeRows(result.rows);
+        const rows = normalizeRows(result.rows, result.columnTypes);
 
         // Same rule as the full handler: the response shape is decided from
         // the query, not from the SQL text. A select answers with its row set;

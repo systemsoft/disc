@@ -59,8 +59,14 @@ const SCALAR_KINDS: ReadonlySet<string> = new Set<ScalarKind>([
   "memory"
 ]);
 
-/** Resolves a (possibly bare) type name to its definition, if known. */
-type NameResolver = (name: string) => TypeDef | undefined;
+/**
+ * Resolves a (possibly bare) type name to its definition, if known, and a
+ * user scalar (`scalar type Count extending int64`) to the built-in it extends.
+ */
+interface NameResolver {
+  scalarBase(name: string): string | undefined;
+  type(name: string): TypeDef | undefined;
+}
 
 /** Transform a compiler Schema into the codegen IR. */
 export function schemaToIR(schema: Schema): CodegenIR {
@@ -384,7 +390,12 @@ function typeRefOf(raw: string, resolve: NameResolver): TypeRef {
   if (scalar)
     return { kind: "scalar", scalar };
 
-  const def = resolve(s);
+  // A sequence scalar's values are int64s.
+  const base = resolve.scalarBase(s);
+  if (base)
+    return typeRefOf(base === "sequence" ? "int64" : base, resolve);
+
+  const def = resolve.type(s);
   if (def?.kind === "enum") {
     return { kind: "enum", name: { module: def.module ?? "default", name: def.name } };
   }
@@ -457,7 +468,7 @@ function scalarKindOf(s: string): ScalarKind | null {
 
 /** Resolve a (bare or qualified) type name to a QualifiedName. */
 function resolveQualified(name: string, resolve: NameResolver): QualifiedName {
-  const def = resolve(name);
+  const def = resolve.type(name);
   if (def)
     return { module: def.module ?? "default", name: def.name };
   if (name.includes("::")) {
@@ -474,10 +485,13 @@ function makeResolver(schema: Schema): NameResolver {
     if (!byBare.has(def.name))
       byBare.set(def.name, def);
   }
-  return (name: string) => {
-    if (schema.types.has(name))
-      return schema.types.get(name);
-    const bare = name.includes("::") ? name.split("::").pop()! : name;
-    return byBare.get(bare);
+  return {
+    scalarBase: (name: string) => schema.scalars?.get(name) ?? schema.scalars?.get(name.replace(/^default::/, "")),
+    type: (name: string) => {
+      if (schema.types.has(name))
+        return schema.types.get(name);
+      const bare = name.includes("::") ? name.split("::").pop()! : name;
+      return byBare.get(bare);
+    }
   };
 }

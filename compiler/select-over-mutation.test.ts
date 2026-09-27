@@ -216,7 +216,8 @@ Deno.test("select over mutation - a nested link in the shape is resolved from th
   const parts = cteParts(sql);
 
   assert(
-    /'program', \( SELECT jsonb_agg\(jsonb_build_object\('name', program\.name\)\) FROM program WHERE program\.id = m_\d+\.program_id \)/.test(parts.outer),
+    /'program', \( SELECT jsonb_agg\(jsonb_build_object\('name', program_\d+\.name\)\) FROM program AS program_\d+ WHERE program_\d+\.id = m_\d+\.program_id \)/
+      .test(parts.outer),
     parts.outer
   );
   assert(!parts.outer.includes("git_ref"), parts.outer);

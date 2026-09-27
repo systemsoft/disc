@@ -17,6 +17,7 @@ export {
   parseBytes,
   parseDateTime,
   parseInt64,
+  parseResponseJson,
   reviveResponse,
   reviveTyped
 } from "./codecs.ts";

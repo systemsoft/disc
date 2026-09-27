@@ -245,7 +245,7 @@ export type Expression =
 export interface Literal extends EdgeQLNode {
   kind: "Literal";
   type: "string" | "integer" | "float" | "bigint" | "decimal" | "boolean" | "bytes" | "uuid" | "empty";
-  /*** A bigint (`10n`) or decimal (`1.5n`) keeps its digits as text, so none are lost. ***/
+  /*** A bigint (`10n`), a decimal (`1.5n`) or an integer past 2^53 keeps its digits as text, so none are lost. ***/
   value: string | number | boolean | null;
 }
 

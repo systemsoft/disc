@@ -212,6 +212,8 @@ export interface DropScalarOperation extends MigrationOperation {
   module: string;
   /** PostgreSQL enum type; absent on operations recorded before same-named enums (then `disc_enum_<name>`) */
   pgTypeName?: string;
+  /** The base of the dropped scalar ("enum", "sequence", "int64", …); absent on operations recorded before sequences */
+  baseType?: string;
 }
 
 /**

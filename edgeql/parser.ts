@@ -6,6 +6,7 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
+import { stripStdModule } from "../lib/std-types.ts";
 import * as AST from "./ast.ts";
 import { EdgeQLLexer } from "./lexer.ts";
 import { KEYWORDS, RESERVED_KEYWORDS, Token, TokenType } from "./tokens.ts";
@@ -1474,7 +1475,9 @@ export class EdgeQLParser {
 
     if (this.check(TokenType.INTEGER)) {
       const value = this.advance().value;
-      return AST.createLiteral("integer", parseInt(value));
+      const parsed = parseInt(value);
+      // An int64 past 2^53 keeps its digits as text; a number would round it.
+      return AST.createLiteral("integer", Number.isSafeInteger(parsed) ? parsed : value);
     }
 
     if (this.check(TokenType.FLOAT)) {
@@ -2016,7 +2019,8 @@ export class EdgeQLParser {
       parts.push(this.parseIdentifier().name);
     }
 
-    const typeName = AST.createTypeName(parts);
+    // `std::int64` is `int64`: the compiler's type maps know the bare names only.
+    const typeName = AST.createTypeName(stripStdModule(parts));
 
     // Generic type arguments: e.g., array<str>, tuple<str, int64>. We
     // recurse via parseTypeName so nested generics (array<array<str>>)

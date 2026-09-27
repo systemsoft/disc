@@ -114,8 +114,8 @@ Deno.test("bytes shape - a <bytes> parameter echoed in a shape is encoded and ke
 });
 
 Deno.test("bytes shape - bytes inside a nested link shape, single and multi", async () => {
-  assertStringIncludes(await sqlOf("select Holder { obj: { content } }"), `jsonb_agg(jsonb_build_object('content', ${base64("git_object.content")}))`);
-  assertStringIncludes(await sqlOf("select Holder { objs: { object_id, content } }"), `'content', ${base64("git_object.content")}`);
+  assertStringIncludes(await sqlOf("select Holder { obj: { content } }"), `jsonb_agg(jsonb_build_object('content', ${base64("git_object_2.content")}))`);
+  assertStringIncludes(await sqlOf("select Holder { objs: { object_id, content } }"), `'content', ${base64("git_object_2.content")}`);
 });
 
 Deno.test("bytes shape - a shape over a mutation CTE, both spellings, and over a select binding", async () => {

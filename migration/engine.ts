@@ -202,10 +202,12 @@ export class MigrationEngine {
    * Tell the DDL generator the column type of each scalar `schema` declares:
    * an enum's PG enum type, and for a non-enum scalar (`scalar type Count
    * extending int64`) the type it extends — either would otherwise be TEXT.
+   * A sequence scalar's properties also default to its sequence's next value.
    */
   private primeScalarTypes(schema: Module[]): void {
     this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(schema));
     this.ddlGenerator.setScalarBaseTypes(this.differ.scalarBaseTypes(schema));
+    this.ddlGenerator.setSequenceScalars(this.differ.sequenceScalarNames(schema));
   }
 
   /**

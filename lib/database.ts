@@ -7,11 +7,25 @@
 
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { logger } from "../postgres/logger.ts";
+import { parseExactJson } from "./exact-json.ts";
 
 export interface QueryResult {
+  /**
+   * PostgreSQL type OID of each result column, by column name. Tells a
+   * `numeric` column (which the driver decodes as its text) from a `text` one.
+   */
+  columnTypes?: Record<string, number>;
   rows: Record<string, any>[];
   rowCount: number;
 }
+
+/*** `json`/`jsonb` values (and arrays of them) keep numbers a double cannot hold, so a shape's `bigint`, `decimal` or large `int64` keeps all its digits. ***/
+const CLIENT_CONTROLS = {
+  decoders: {
+    json: parseExactJson,
+    jsonb: parseExactJson
+  }
+};
 
 export interface DatabaseConfig {
   connectionString?: string;
@@ -171,7 +185,8 @@ export class DatabaseConnection {
           password: parsed.password,
           database: parsed.database,
           host_type: "socket" as const,
-          applicationName
+          applicationName,
+          controls: CLIENT_CONTROLS
         };
       }
 
@@ -186,6 +201,7 @@ export class DatabaseConnection {
         password: parsed.password,
         database: parsed.database,
         applicationName,
+        controls: CLIENT_CONTROLS,
         ...(tls ? { tls } : {})
       };
     }
@@ -196,7 +212,8 @@ export class DatabaseConnection {
       user: this.config.user || "postgres",
       password: this.config.password || "",
       database: this.config.database || "postgres",
-      applicationName
+      applicationName,
+      controls: CLIENT_CONTROLS
     };
   }
 
@@ -230,7 +247,9 @@ export class DatabaseConnection {
 
     try {
       const result = await this.client.queryObject(sql, params);
+      const columns = result.rowDescription?.columns ?? [];
       return {
+        columnTypes: Object.fromEntries(columns.map(column => [column.name, column.typeOid])),
         rows: result.rows as Record<string, any>[],
         rowCount: result.rowCount || 0
       };

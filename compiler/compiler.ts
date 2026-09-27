@@ -1366,7 +1366,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
               direction: item.direction || "ASC",
               expression: this.compileExpression(item.expr),
               kind: "OrderByItem" as const,
-              ...compileEmptyOrder(item)
+              ...compileEmptyOrder(item, this.isNeverEmpty(item.expr))
             }))
           } :
           undefined,

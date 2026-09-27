@@ -82,6 +82,13 @@ export interface Schema {
   aliases?: Map<string, AliasDef>;
   globals?: Map<string, GlobalDef>;
   abstractAnnotations?: Map<string, AbstractAnnotationDef>;
+  /**
+   * Each user scalar that is not an enum (`scalar type Count extending
+   * int64`), mapped to the built-in type it ultimately extends (`int64`;
+   * `sequence` for a sequence scalar). Keyed qualified (`module::Name`) and
+   * bare (the default module's when scalars share a name).
+   */
+  scalars?: Map<string, string>;
 }
 
 export interface TriggerDef {

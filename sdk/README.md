@@ -122,7 +122,7 @@ your SDL, run `disc codegen`.
 
 ### Serialization
 
-Server responses are JSON, so several EdgeQL types arrive as strings: `datetime` as ISO-8601, `int64` / `bigint` as numeric strings, and `bytes` as base64. Pass `options.revive` to convert them back:
+Server responses are JSON, so several EdgeQL types arrive as strings: `datetime` as ISO-8601, `bytes` as base64, and an `int64` / `bigint` / `decimal` with more digits than a JS number holds exactly as a numeric string (the server sends it as an exact JSON number, as Gel does; the SDK reads it without rounding). Pass `options.revive` to convert them back:
 
 ```typescript
 // Revive Date and bigint automatically
@@ -136,7 +136,7 @@ const rows = await client.query("select Post { created }", undefined, {
 });
 ```
 
-Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so name the fields instead: `{ revive: { bytes: ["content", "obj.content"] } }` (dot paths relative to a result row; arrays are transparent). Generated query builders revive `bytes` fields on their own.
+Revival is deliberately conservative: only ISO-8601 strings with a time component become `Date`, and only numeric strings outside `Number.MAX_SAFE_INTEGER` become `bigint`. `bytes` is never auto-revived -- base64 collides with ordinary text too often -- so name the fields instead: `{ revive: { bytes: ["content", "obj.content"] } }` (dot paths relative to a result row; arrays are transparent). Generated query builders revive `bytes` fields on their own, and return `bigint` fields as `bigint` and `decimal` fields as strings.
 
 `revive` runs _before_ `validate`, so validators see real `Date` and `bigint` values.
 

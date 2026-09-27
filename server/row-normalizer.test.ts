@@ -8,15 +8,17 @@
  * a bare `insert`/`update` (`RETURNING *`), `select count(…)` or any other
  * unshaped int64 column turned a successful statement into an HTTP 500.
  *
- * The wire form is the one the shape path and the SDK already use for int64: a
- * JSON number while it is exact, a numeric string beyond 2^53 (which is exactly
- * what `reviveResponse` turns back into a `bigint`).
+ * The wire form is Gel's, the one a shape's `jsonb_build_object` yields: a JSON
+ * number with every digit. Past 2^53 it is written raw (`JSON.rawJSON`), never
+ * rounded; the SDK reads it back as a numeric string, which `reviveResponse`
+ * turns into a `bigint`. `numeric` columns (`bigint`, `decimal`), which the
+ * driver decodes as text, are written the same way.
  */
 
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { encodeBase64 } from "@std/encoding/base64";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { parseBytes, reviveResponse } from "../sdk/codecs.ts";
+import { parseBytes, parseResponseJson, reviveResponse } from "../sdk/codecs.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { normalizeRows } from "./row-normalizer.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
@@ -28,23 +30,44 @@ Deno.test("normalizeRows - an int64 that a JSON number holds exactly becomes a n
   assertEquals(normalizeRows([{ size: BigInt(Number.MIN_SAFE_INTEGER) }]), [{ size: Number.MIN_SAFE_INTEGER }]);
 });
 
-Deno.test("normalizeRows - an int64 above Number.MAX_SAFE_INTEGER becomes a numeric string, never a rounded number", () => {
-  assertEquals(normalizeRows([{ size: 9007199254740993n }]), [{ size: "9007199254740993" }]);
-  assertEquals(normalizeRows([{ size: 9007199254740992n }]), [{ size: "9007199254740992" }]);
-  assertEquals(normalizeRows([{ size: -9007199254740993n }]), [{ size: "-9007199254740993" }]);
-  assertEquals(normalizeRows([{ size: 9223372036854775807n }]), [{ size: "9223372036854775807" }]);
+Deno.test("normalizeRows - an int64 above Number.MAX_SAFE_INTEGER is written as an exact JSON number, never a rounded one", () => {
+  assertEquals(JSON.stringify(normalizeRows([{ size: 9007199254740993n }])), `[{"size":9007199254740993}]`);
+  assertEquals(JSON.stringify(normalizeRows([{ size: 9007199254740992n }])), `[{"size":9007199254740992}]`);
+  assertEquals(JSON.stringify(normalizeRows([{ size: -9007199254740993n }])), `[{"size":-9007199254740993}]`);
+  assertEquals(JSON.stringify(normalizeRows([{ size: 9223372036854775807n }])), `[{"size":9223372036854775807}]`);
 });
 
-Deno.test("normalizeRows - the large form is the one the SDK reviver turns back into the same bigint", () => {
-  const wire = JSON.parse(JSON.stringify(normalizeRows([{ big: 9007199254740993n, small: 42n }])));
+Deno.test("normalizeRows - the large form is the one the SDK reads and revives back into the same bigint", () => {
+  const wire = parseResponseJson(JSON.stringify(normalizeRows([{ big: 9007199254740993n, small: 42n }])));
+  assertEquals(wire, [{ big: "9007199254740993", small: 42 }]);
   assertEquals(reviveResponse(wire), [{ big: 9007199254740993n, small: 42 }]);
 });
 
 Deno.test("normalizeRows - int8[] columns are converted element-wise", () => {
-  assertEquals(normalizeRows([{ sizes: [1n, 9007199254740993n, null], nested: [[2n], [3n]] }]), [{
-    nested: [[2], [3]],
-    sizes: [1, "9007199254740993", null]
-  }]);
+  assertEquals(
+    JSON.stringify(normalizeRows([{ nested: [[2n], [3n]], sizes: [1n, 9007199254740993n, null] }])),
+    `[{"nested":[[2],[3]],"sizes":[1,9007199254740993,null]}]`
+  );
+});
+
+Deno.test("normalizeRows - numeric columns (bigint, decimal) are written as exact JSON numbers", () => {
+  const rows = [{
+    big: "12345678901234567890",
+    dec: "0.1000000000000000055511151231257827",
+    decs: ["1.50", null, "-7"],
+    nan: "NaN",
+    text: "12345678901234567890"
+  }];
+  const columnTypes = { big: 1700, dec: 1700, decs: 1231, nan: 1700, text: 25 };
+
+  assertEquals(
+    JSON.stringify(normalizeRows(rows, columnTypes)),
+    `[{"big":12345678901234567890,"dec":0.1000000000000000055511151231257827,"decs":[1.50,null,-7],"nan":"NaN","text":"12345678901234567890"}]`
+  );
+});
+
+Deno.test("normalizeRows - without column types, text stays text", () => {
+  assertEquals(normalizeRows([{ big: "12345678901234567890" }]), [{ big: "12345678901234567890" }]);
 });
 
 Deno.test("normalizeRows - everything else passes through untouched", () => {
@@ -135,6 +158,32 @@ Deno.test("SimpleEdgeQLProtocolHandler - a bigint in a driver row is JSON-serial
 
     const wire = JSON.parse(JSON.stringify(response)).data;
     assertEquals((Array.isArray(wire) ? wire[0] : wire).size, 42, query);
+  }
+});
+
+/*** A pool whose every query returns one driver-shaped row carrying a `numeric` value, which the driver decodes as text. ***/
+function makeNumericPool(): ConnectionPool {
+  return {
+    close: () => Promise.resolve(),
+    initialize: () => Promise.resolve(),
+    query: () =>
+      Promise.resolve({
+        columnTypes: { big: 1700, id: 2950 },
+        rowCount: 1,
+        rows: [{ big: "12345678901234567890", id: "01234567-89ab-cdef-0123-456789abcdef" }]
+      })
+  } as unknown as ConnectionPool;
+}
+
+Deno.test("Both protocol handlers - a numeric column in a driver row leaves as an exact JSON number", async () => {
+  for (
+    const handler of [new EdgeQLProtocolHandler({ connectionPool: makeNumericPool() }), new SimpleEdgeQLProtocolHandler({ connectionPool: makeNumericPool() })]
+  ) {
+    for (const query of QUERIES.slice(0, 2)) {
+      const response = await handler.handleRequest({ query }, makeContext());
+      assertEquals(response.errors, undefined, query);
+      assertEquals(JSON.stringify(response.data).includes(`"big":12345678901234567890`), true, `${handler.constructor.name}: ${query}`);
+    }
   }
 });
 

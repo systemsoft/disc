@@ -8,8 +8,12 @@
  * primitive equivalent — `Date`, `bigint`, byte arrays — arrive as strings:
  *
  *   - `datetime` / `local_datetime` → ISO-8601 string
- *   - `int64` / `bigint`            → numeric string (precision > 2^53)
+ *   - `int64` / `bigint` / `decimal` → numeric string (precision > 2^53)
  *   - `bytes`                       → base64 string
+ *
+ * On the wire, `int64`, `bigint` and `decimal` are JSON numbers with every
+ * digit (as in Gel). `parseResponseJson` reads one that a double cannot hold
+ * exactly as its digits, a numeric string; every other number stays a number.
  *
  * Without revival, these survive as strings forever, which is the right
  * default (silent type coercion is worse than visible strings). When
@@ -47,6 +51,11 @@ const NUMERIC_STRING_REGEX = /^-?\d+$/;
 
 const HEX_BYTES_REGEX = /^\\x((?:[0-9a-fA-F]{2})*)$/;
 
+/*** A JSON number (RFC 8259): sign, integer part, fraction, exponent. ***/
+const JSON_NUMBER_REGEX = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
+
+type SourceReviver = (key: string, value: unknown, context?: { source?: string; }) => unknown;
+
 /*** Bytes per `btoa` call in `encodeBytes`. A multiple of 3, so no chunk but the last ends in padding. ***/
 const ENCODE_CHUNK_BYTES = 32766;
 
@@ -75,6 +84,53 @@ export function parseInt64(value: string): bigint | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A number's value as `<sign><significant digits>e<exponent>`, so `1.50`,
+ * `1.5` and `15e-1` compare equal. `null` when `text` is not a JSON number.
+ */
+function canonicalNumber(text: string): string | null {
+  const match = JSON_NUMBER_REGEX.exec(text);
+  if (!match) {
+    return null;
+  }
+  const [, sign, whole, fraction = "", exponent = "0"] = match;
+  const digits = (whole + fraction).replace(/^0+/, "");
+  const significant = digits.replace(/0+$/, "");
+  if (significant === "") {
+    return "0";
+  }
+  const power = Number(exponent) - fraction.length + digits.length - significant.length;
+  return `${sign}${significant}e${power}`;
+}
+
+/*** Whether the double `value`, parsed from the JSON number `source`, holds it exactly. ***/
+function isExactNumber(source: string, value: number): boolean {
+  if (NUMERIC_STRING_REGEX.test(source)) {
+    return Number.isSafeInteger(value);
+  }
+  const canonical = canonicalNumber(source);
+  return canonical !== null && canonical === canonicalNumber(String(value));
+}
+
+/**
+ * Parse a Disc response body. Like `JSON.parse`, except a number a double
+ * cannot hold exactly (`int64` past 2^53, a large `bigint`, a `decimal` with
+ * more digits than a double) becomes its digits as a string instead of a
+ * rounded number — the form `parseInt64` and `reviveResponse` read.
+ *
+ * Needs `JSON.parse` source text access (the reviver's third argument; Deno,
+ * Node 21+, current browsers). Where it is missing, numbers parse as usual.
+ */
+export function parseResponseJson(text: string): unknown {
+  const reviver: SourceReviver = (_key, value, context) => {
+    if (typeof value === "number" && context?.source !== undefined && !isExactNumber(context.source, value)) {
+      return context.source;
+    }
+    return value;
+  };
+  return (JSON.parse as (text: string, reviver: SourceReviver) => unknown)(text, reviver);
 }
 
 /**
@@ -179,11 +235,12 @@ export function reviveResponse<T = unknown>(
 
 /**
  * Revive a typed query builder's result from its `TypeInfo`: every field cast
- * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, recursing through
- * `links`. A single link arrives as a one-element array of rows today, a multi
- * link as a longer one; a plain object works too. Returns a new structure —
- * input is not mutated. Other wire strings (datetime, big int64) are left to
- * `reviveResponse`, as before.
+ * `<bytes>` (or `<array<bytes>>`) becomes a `Uint8Array`, every `<bigint>` a
+ * `bigint` and every `<decimal>` a string of its digits (the TS types codegen
+ * declares for them), recursing through `links`. A single link arrives as a
+ * one-element array of rows today, a multi link as a longer one; a plain
+ * object works too. Returns a new structure — input is not mutated. Other wire
+ * strings (datetime, big int64) are left to `reviveResponse`, as before.
  */
 export function reviveTyped<T>(data: T, typeInfo: TypeInfo): T {
   return reviveTypedValue(data, typeInfo) as T;
@@ -202,6 +259,10 @@ function reviveTypedValue(value: unknown, typeInfo: TypeInfo): unknown {
     const link = typeInfo.links[key];
     if (cast === "<bytes>" || cast === "<array<bytes>>") {
       out[key] = reviveBytes(field);
+    } else if (cast === "<bigint>" || cast === "<array<bigint>>") {
+      out[key] = reviveBigint(field);
+    } else if (cast === "<decimal>" || cast === "<array<decimal>>") {
+      out[key] = reviveDecimal(field);
     } else if (link) {
       out[key] = reviveTypedValue(field, link());
     } else {
@@ -217,6 +278,25 @@ function reviveBytes(value: unknown): unknown {
     return parseBytes(value) ?? value;
   }
   return Array.isArray(value) ? value.map(reviveBytes) : value;
+}
+
+/*** A bigint wire value — a number, or a numeric string past 2^53 — as a `bigint`; arrays element-wise. Anything else is returned as is. ***/
+function reviveBigint(value: unknown): unknown {
+  if (typeof value === "number" && Number.isSafeInteger(value)) {
+    return BigInt(value);
+  }
+  if (typeof value === "string") {
+    return parseInt64(value) ?? value;
+  }
+  return Array.isArray(value) ? value.map(reviveBigint) : value;
+}
+
+/*** A decimal wire value as a string of its digits (a number holds them exactly, so it prints them); arrays element-wise. ***/
+function reviveDecimal(value: unknown): unknown {
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return Array.isArray(value) ? value.map(reviveDecimal) : value;
 }
 
 function reviveBytesAt(value: unknown, path: string[]): unknown {

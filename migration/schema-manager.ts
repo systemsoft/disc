@@ -239,6 +239,40 @@ function sdlTypeToSqlType(sdlType: string): string {
 }
 
 /**
+ * Each non-enum user scalar in `modules`, mapped to the built-in type it
+ * ultimately extends (`Cents` → `Money` → `decimal`), for `Schema.scalars`.
+ * Keyed qualified and bare (the default module's when scalars share a name).
+ */
+function userScalarBaseTypes(modules: Module[]): Map<string, string> {
+  const scalars = new Map<string, { base: string; module: string; }>();
+
+  for (const module of modules) {
+    for (const item of module.items) {
+      const base = item.kind === "ScalarTypeDeclaration" ? (item as ScalarTypeDeclaration).extending?.[0] : undefined;
+
+      if (!base || base.name.parts[0] === "enum")
+        continue;
+
+      const name = (item as ScalarTypeDeclaration).name.value;
+      const scalar = { base: typeRefToSdlString(base), module: module.name };
+      scalars.set(`${module.name}::${name}`, scalar);
+
+      if (module.name === "default" || !scalars.has(name))
+        scalars.set(name, scalar);
+    }
+  }
+
+  // A bare base names a scalar of the same module before one elsewhere.
+  const builtinOf = (key: string, seen: Set<string>): string => {
+    const { base, module } = scalars.get(key)!;
+    const next = scalars.has(`${module}::${base}`) ? `${module}::${base}` : base;
+    return scalars.has(next) && !seen.has(next) ? builtinOf(next, seen.add(next)) : base;
+  };
+
+  return new Map([...scalars.keys()].map(key => [key, builtinOf(key, new Set([key]))]));
+}
+
+/**
  * Build a full SDL type string from a TypeRef, including type parameters.
  * For example: range<int32>, multirange<cal::local_date>
  */
@@ -588,6 +622,11 @@ export class SchemaManager {
       }
     }
 
+    const scalars = userScalarBaseTypes(modules);
+    // A property of a sequence scalar gets its value from the scalar's
+    // sequence when an insert leaves it out (see `migration/ddl.ts`).
+    const isSequenceType = (edgeqlType: string): boolean => (scalars.get(edgeqlType) ?? scalars.get(edgeqlType.replace(/^default::/, ""))) === "sequence";
+
     for (const module of modules) {
       for (const item of module.items) {
         // Handle alias declarations
@@ -826,7 +865,7 @@ export class SchemaManager {
             columnName: propNameToColumnName(propName),
             edgeqlType: sdlTypeName,
             readonly: propDecl.readonly ?? false,
-            hasDefault: propDecl.default !== undefined,
+            hasDefault: propDecl.default !== undefined || (!propDecl.multi && isSequenceType(sdlTypeName)),
             computed: propDecl.computed !== undefined,
             computedExpr,
             constraints,
@@ -908,7 +947,7 @@ export class SchemaManager {
               columnName: propNameToColumnName(linkName),
               edgeqlType: fullTypeName,
               readonly: linkDecl.readonly ?? false,
-              hasDefault: linkDecl.default !== undefined,
+              hasDefault: linkDecl.default !== undefined || (!isMulti && isSequenceType(fullTypeName)),
               computed: linkDecl.computed !== undefined,
               constraints: linkConstraints,
               annotations: linkAnnotations
@@ -1164,6 +1203,9 @@ export class SchemaManager {
     }
     if (abstractAnnotations.size > 0) {
       schema.abstractAnnotations = abstractAnnotations;
+    }
+    if (scalars.size > 0) {
+      schema.scalars = scalars;
     }
     return schema;
   }

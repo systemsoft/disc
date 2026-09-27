@@ -11,6 +11,7 @@ import {
   fitIdentifier,
   linkColumnName,
   propNameToColumnName,
+  sequenceName,
   typeNameToTableName
 } from "../lib/identifiers.ts";
 import * as AST from "../schema/ast.ts";
@@ -185,7 +186,8 @@ export class SchemaDiffer {
           kind: "DropScalar",
           scalarName: scalarDef.decl.name.value,
           module: scalarDef.module,
-          ...pgTypeName(oldEnumTypes, scalarName)
+          ...pgTypeName(oldEnumTypes, scalarName),
+          baseType: this.scalarBaseType(scalarDef.decl)
         };
         operations.push(op);
       }
@@ -474,6 +476,27 @@ export class SchemaDiffer {
       }
     }
     return bases;
+  }
+
+  /**
+   * Every sequence scalar declared in `schema` (`scalar type TicketNo
+   * extending sequence`), mapped to its PostgreSQL sequence. Used to prime
+   * `DDLGenerator.setSequenceScalars(...)` so a property of such a scalar
+   * defaults to the sequence's next value. Keyed like `enumScalarNames`.
+   */
+  sequenceScalarNames(schema: Module[]): Map<string, string> {
+    const sequences = new Map<string, string>();
+    for (const [qualifiedName, { decl, module }] of this.extractScalars(schema)) {
+      if (this.scalarBaseType(decl) !== "sequence") {
+        continue;
+      }
+      const bareName = decl.name.value;
+      sequences.set(qualifiedName, sequenceName(module, bareName));
+      if (module === "default" || !sequences.has(bareName)) {
+        sequences.set(bareName, sequenceName(module, bareName));
+      }
+    }
+    return sequences;
   }
 
   private extractTypes(modules: Module[]): Map<string, AST.TypeDeclaration> {

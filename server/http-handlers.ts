@@ -27,6 +27,7 @@ import { DISC_VERSION } from "../lib/version.ts";
 import { dispatchRest } from "./rest/router.ts";
 import { getLogger } from "../lib/logger.ts";
 import { sha256Equal, sha256Hex } from "../lib/crypto.ts";
+import { parseExactJson } from "../lib/exact-json.ts";
 import { postgresErrorFields, TransactionAbortedError } from "../lib/errors.ts";
 import { handleGetMigrations } from "./migrations-endpoint.ts";
 
@@ -276,7 +277,8 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       let queryRequest: Types.QueryRequest;
 
       try {
-        queryRequest = JSON.parse(body);
+        // Exact: a bigint / decimal / int64 variable sent as a JSON number keeps every digit.
+        queryRequest = parseExactJson(body) as Types.QueryRequest;
       } catch {
         return this.create_error_response("Invalid JSON", 400, request);
       }

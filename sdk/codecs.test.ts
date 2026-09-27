@@ -13,6 +13,7 @@ import {
   parseBytes,
   parseDateTime,
   parseInt64,
+  parseResponseJson,
   reviveResponse,
   reviveTyped
 } from "./codecs.ts";
@@ -152,6 +153,32 @@ Deno.test("jsonReplacer - bigint still goes out as a numeric string", () => {
   assertEquals(JSON.stringify({ n: 9007199254740993n }, jsonReplacer), "{\"n\":\"9007199254740993\"}");
 });
 
+// ── parseResponseJson ────────────────────────────────────────────────
+
+Deno.test("parseResponseJson - a number a double cannot hold keeps its digits as a string", () => {
+  assertEquals(
+    parseResponseJson(
+      `{"data":[{"big":12345678901234567890,"dec":0.1000000000000000055511151231257827,"i64":9007199254740993,"list":[-12345678901234567890]}]}`
+    ),
+    { data: [{ big: "12345678901234567890", dec: "0.1000000000000000055511151231257827", i64: "9007199254740993", list: ["-12345678901234567890"] }] }
+  );
+});
+
+Deno.test("parseResponseJson - exact numbers stay numbers", () => {
+  assertEquals(parseResponseJson(`{"a":1,"b":0.5,"c":1.50,"d":-9007199254740991,"e":1e-7,"f":"x"}`), {
+    a: 1,
+    b: 0.5,
+    c: 1.5,
+    d: -9007199254740991,
+    e: 1e-7,
+    f: "x"
+  });
+});
+
+Deno.test("parseResponseJson - a large integer revives to the same bigint", () => {
+  assertEquals(reviveResponse(parseResponseJson(`[{"big":12345678901234567890,"small":42}]`)), [{ big: 12345678901234567890n, small: 42 }]);
+});
+
 // ── reviveTyped ──────────────────────────────────────────────────────
 
 const PROGRAM_INFO: TypeInfo = { casts: { name: "<str>" }, links: {} };
@@ -196,6 +223,28 @@ Deno.test("reviveTyped - recurses through links, as a one-element array or a pla
   };
   assertEquals(plain.parent.content, new Uint8Array([1]));
   assertEquals(plain.program.name, "AQ==");
+});
+
+const PRECISE_INFO: TypeInfo = {
+  casts: { big: "<bigint>", bigs: "<array<bigint>>", dec: "<decimal>", decs: "<array<decimal>>", size: "<int64>" },
+  links: {}
+};
+
+Deno.test("reviveTyped - <bigint> fields become bigint, from a number or a numeric string", () => {
+  assertEquals(reviveTyped(wire({ big: 7 }), PRECISE_INFO), { big: 7n });
+  assertEquals(reviveTyped(wire({ big: "12345678901234567890" }), PRECISE_INFO), { big: 12345678901234567890n });
+  assertEquals(reviveTyped(wire({ big: null }), PRECISE_INFO), { big: null });
+  assertEquals(reviveTyped(wire({ bigs: ["12345678901234567890", 1, null] }), PRECISE_INFO), { bigs: [12345678901234567890n, 1n, null] });
+});
+
+Deno.test("reviveTyped - <decimal> fields become strings with every digit", () => {
+  assertEquals(reviveTyped(wire({ dec: 0.5 }), PRECISE_INFO), { dec: "0.5" });
+  assertEquals(reviveTyped(wire({ dec: "0.1000000000000000055511151231257827" }), PRECISE_INFO), { dec: "0.1000000000000000055511151231257827" });
+  assertEquals(reviveTyped(wire({ decs: [1.25, "-7", null] }), PRECISE_INFO), { decs: ["1.25", "-7", null] });
+});
+
+Deno.test("reviveTyped - <int64> is left as the wire gave it", () => {
+  assertEquals(reviveTyped(wire({ size: 4 }), PRECISE_INFO), { size: 4 });
 });
 
 Deno.test("reviveTyped - accepts the hex form an older server sends", () => {

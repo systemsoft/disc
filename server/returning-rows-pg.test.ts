@@ -7,7 +7,8 @@
  * A bare `insert`/`update` returns `RETURNING *` rows, and `select count(…)`
  * an unshaped row; deno-postgres decodes their `int8` columns as `bigint`,
  * which `JSON.stringify` rejects. The statement ran, then the response failed
- * with HTTP 500 — a client that retries on 500 would write twice.
+ * with HTTP 500 — a client that retries on 500 would write twice. The wire form
+ * is a JSON number, exact past 2^53.
  *
  * Every case runs twice with the same query text, so the second run is a
  * compiled-query cache hit.
@@ -15,7 +16,7 @@
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
@@ -35,6 +36,7 @@ const INSERT_OBJECT = `insert GitObject {
 interface Reply {
   body: { data?: unknown; errors?: { message: string; }[]; extensions?: { cacheHit?: boolean; }; };
   status: number;
+  text: string;
 }
 
 Deno.test({
@@ -73,7 +75,8 @@ Deno.test({
         headers: { "Content-Type": "application/json" },
         method: "POST"
       });
-      return { body: await response.json(), status: response.status };
+      const text = await response.text();
+      return { body: JSON.parse(text), status: response.status, text };
     }
 
     try {
@@ -89,10 +92,10 @@ Deno.test({
       const stored = await pool.query("SELECT count(*)::int AS n FROM git_object WHERE program_id = $1", [PROGRAM_ID]);
       assertEquals((stored.rows[0] as { n: number; }).n, 2);
 
-      // Beyond 2^53 the value is a numeric string, exact to the last digit.
+      // Beyond 2^53 the value is a JSON number exact to the last digit (as in Gel), never rounded.
       const large = await post(INSERT_OBJECT, { oid: "c".repeat(40), p: PROGRAM_ID, size: "9007199254740993" });
-      assertEquals(large.status, 200, JSON.stringify(large.body));
-      assertEquals((large.body.data as Record<string, unknown>).size, "9007199254740993");
+      assertEquals(large.status, 200, large.text);
+      assertStringIncludes(large.text, `"size":9007199254740993`);
 
       // Bare update.
       for (const round of ["cache miss", "cache hit"]) {

@@ -189,10 +189,12 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     typescriptType: "number"
   },
   {
-    arrayType: "number[]",
+    arrayType: "string[]",
+    /*** A `decimal` can hold more digits than a JS `number`; its digits as a string lose none.
+         `reviveTyped` turns the wire value into that string. ***/
     edgeqlType: "decimal",
-    nullableType: "number | null",
-    typescriptType: "number"
+    nullableType: "string | null",
+    typescriptType: "string"
   },
   {
     arrayType: "string[]",

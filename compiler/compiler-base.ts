@@ -15,6 +15,7 @@ import {
   AccessSQLInjector
 } from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import { normalizeStdTypeName } from "../lib/std-types.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import * as Context from "./context.ts";
 import * as SQL from "./sql.ts";
@@ -51,16 +52,22 @@ export function renderEdgeQLTypeName(type: EdgeQLAST.TypeName): string {
 /**
  * The `nulls` placement for an EdgeQL order key: `empty first|last` is SQL
  * `NULLS FIRST|LAST`, since the empty set compiles to NULL. Without the
- * clause the key keeps PG's default placement.
+ * clause Gel sorts empty first for `asc` and last for `desc` (the reverse of
+ * PG's default), so that placement is spelled out — unless the key can never
+ * be empty, where it changes nothing and leaving it off keeps the key usable
+ * by a default btree index (as Gel does for required exclusive properties).
  */
-export function compileEmptyOrder(item: EdgeQLAST.OrderByClause): Pick<SQL.OrderByItem, "nulls"> {
+export function compileEmptyOrder(item: EdgeQLAST.OrderByClause, neverEmpty = false): Pick<SQL.OrderByItem, "nulls"> {
   if (item.emptyOrder === "EMPTY FIRST") {
     return { nulls: "FIRST" };
   }
   if (item.emptyOrder === "EMPTY LAST") {
     return { nulls: "LAST" };
   }
-  return {};
+  if (neverEmpty) {
+    return {};
+  }
+  return { nulls: item.direction === "DESC" ? "LAST" : "FIRST" };
 }
 
 /**
@@ -71,8 +78,13 @@ export function flattenSetElements(set: EdgeQLAST.SetExpr): EdgeQLAST.Expression
   return set.elements.flatMap(element => element.kind === "SetExpr" ? flattenSetElements(element) : [element]);
 }
 
-/** Maps EdgeQL type names to PostgreSQL type names */
-export function edgeqlTypeToPgType(edgeqlType: string): string {
+/**
+ * Maps EdgeQL type names to PostgreSQL type names. Agrees with the column
+ * types of `migration/ddl.ts` (`mapEdgeQLTypeToPostgreSQL`), so a value cast
+ * to a property's type has its column's type. `scalars` (`Schema.scalars`)
+ * resolves a user scalar to the built-in type it extends.
+ */
+export function edgeqlTypeToPgType(edgeqlType: string, scalars?: Map<string, string>): string {
   const typeMap: Record<string, string> = {
     str: "text",
     int16: "smallint",
@@ -89,20 +101,6 @@ export function edgeqlTypeToPgType(edgeqlType: string): string {
     bigint: "numeric",
     decimal: "numeric",
     sequence: "bigint",
-    "std::str": "text",
-    "std::int16": "smallint",
-    "std::int32": "integer",
-    "std::int64": "bigint",
-    "std::float32": "real",
-    "std::float64": "double precision",
-    "std::bool": "boolean",
-    "std::bytes": "bytea",
-    "std::datetime": "timestamptz",
-    "std::duration": "interval",
-    "std::json": "jsonb",
-    "std::uuid": "uuid",
-    "std::bigint": "numeric",
-    "std::decimal": "numeric",
     "cal::local_date": "date",
     "cal::local_time": "time without time zone",
     "cal::local_datetime": "timestamp without time zone",
@@ -118,16 +116,21 @@ export function edgeqlTypeToPgType(edgeqlType: string): string {
     "array<bool>": "boolean[]",
     "array<uuid>": "uuid[]",
     "array<datetime>": "timestamptz[]",
+    "array<duration>": "interval[]",
     "array<json>": "jsonb[]",
     "array<bytes>": "bytea[]",
     "array<bigint>": "numeric[]",
     "array<decimal>": "numeric[]",
+    "array<sequence>": "bigint[]",
     "array<cal::local_date>": "date[]",
     "array<cal::local_time>": "time without time zone[]",
     "array<cal::local_datetime>": "timestamp without time zone[]",
+    "array<cal::relative_duration>": "interval[]",
+    "array<cal::date_duration>": "interval[]",
     // Range types
     "range<int32>": "int4range",
     "range<int64>": "int8range",
+    "range<float32>": "numrange",
     "range<float64>": "numrange",
     "range<decimal>": "numrange",
     "range<datetime>": "tstzrange",
@@ -136,26 +139,41 @@ export function edgeqlTypeToPgType(edgeqlType: string): string {
     // Multirange types
     "multirange<int32>": "int4multirange",
     "multirange<int64>": "int8multirange",
+    "multirange<float32>": "nummultirange",
     "multirange<float64>": "nummultirange",
     "multirange<decimal>": "nummultirange",
     "multirange<datetime>": "tstzmultirange",
     "multirange<cal::local_date>": "datemultirange",
     "multirange<cal::local_datetime>": "tsmultirange"
   };
-  if (typeMap[edgeqlType]) {
-    return typeMap[edgeqlType];
+  const name = normalizeStdTypeName(edgeqlType);
+  if (typeMap[name]) {
+    return typeMap[name];
   }
 
   // Tuple types map to jsonb (PostgreSQL has no native tuple type)
-  if (edgeqlType.startsWith("tuple<")) {
+  if (name.startsWith("tuple<")) {
     return "jsonb";
   }
 
   // Arrays of non-scalar elements (e.g. array<tuple<...>>) have no native PG
   // array representation — only the scalar `array<T>` forms above do. Store
   // them as jsonb, matching how the tuple element itself is stored.
-  if (edgeqlType.startsWith("array<tuple<")) {
+  if (name.startsWith("array<tuple<")) {
     return "jsonb";
+  }
+
+  // A user scalar (`scalar type Count extending int64`) is its base type;
+  // `array<Count>` an array of it.
+  const scalarBase = (scalar: string): string | undefined => scalars?.get(scalar) ?? scalars?.get(scalar.replace(/^default::/, ""));
+  const base = scalarBase(name);
+  if (base) {
+    return edgeqlTypeToPgType(base);
+  }
+
+  const elementBase = scalarBase(/^array<(.+)>$/.exec(name)?.[1] ?? "");
+  if (elementBase) {
+    return edgeqlTypeToPgType(`array<${elementBase}>`);
   }
 
   return edgeqlType;

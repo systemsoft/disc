@@ -6,6 +6,7 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
+import { stripStdModule } from "../lib/std-types.ts";
 import * as AST from "./ast.ts";
 import { SDLLexer } from "./lexer.ts";
 import { KEYWORDS, Token, TokenType } from "./tokens.ts";
@@ -1424,7 +1425,8 @@ export class SDLParser {
   }
 
   private parseTypeRef(): AST.TypeRef {
-    const name = this.parseQualifiedName();
+    // `std::int64` is `int64`: downstream code knows the bare names only.
+    const name = AST.createQualifiedName(stripStdModule(this.parseQualifiedName().parts));
 
     let array = false;
     const optional = false;

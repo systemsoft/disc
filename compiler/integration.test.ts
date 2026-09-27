@@ -224,10 +224,10 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
   assertStringIncludes(normalized, "'posts'");
   assertStringIncludes(
     normalized,
-    "jsonb_agg(jsonb_build_object('title', posts.title, 'createdAt', posts.createdAt))"
+    "jsonb_agg(jsonb_build_object('title', posts_2.title, 'createdAt', posts_2.createdAt))"
   );
   assertStringIncludes(normalized, "FROM posts");
-  assertStringIncludes(normalized, "posts.author_id =");
+  assertStringIncludes(normalized, "posts_2.author_id =");
   assertStringIncludes(normalized, "FROM users AS");
 });
 
@@ -341,8 +341,8 @@ Deno.test("EdgeQL to SQL - SELECT with computed backlink + type intersection", a
   // Correlated subquery against the target table, filtered by the FK column
   // that points back to the current type.
   assertStringIncludes(normalized, "'requirements'");
-  assertStringIncludes(normalized, "FROM payment_requirements");
-  assertStringIncludes(normalized, "payment_requirements.options_id = paymentoption_1.id");
+  assertStringIncludes(normalized, "FROM payment_requirements AS payment_requirements_2");
+  assertStringIncludes(normalized, "payment_requirements_2.options_id = paymentoption_1.id");
   assertStringIncludes(normalized, "jsonb_agg");
 });
 
