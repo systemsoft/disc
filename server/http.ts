@@ -103,7 +103,7 @@ export class HttpServer extends HttpRouteHandlers {
         return authResult;
       }
       const caller = authResult;
-      // Only `/query` and `/transaction/*` honor the service credential;
+      // Only `/query`, `/config` and `/transaction/*` honor the service credential;
       // every other route sees its verified user or nobody.
       const authedContext = caller.auth; // AuthContext | null
 
@@ -221,7 +221,7 @@ export class HttpServer extends HttpRouteHandlers {
           return await this.handle_migrations(request);
         case "/config":
           if (request.method === "POST") {
-            return await this.handle_config_write(request);
+            return await this.handle_config_write(request, caller);
           }
           return await handleGetConfig({
             defaultHeaders: () => this.get_default_headers("application/json"),
@@ -367,10 +367,21 @@ export class HttpServer extends HttpRouteHandlers {
 
   /**
    * Handle `POST /config` — persist a single setting via `ALTER SYSTEM`.
+   * Only an administrator may (as for `configure system` on `/query`).
    * Refused in read-only mode (mirrors the query path's write gate) and
    * when the protocol handler exposes no writer (dry-run / no pool).
    */
-  private async handle_config_write(request: Request): Promise<Response> {
+  private async handle_config_write(
+    request: Request,
+    caller: ResolvedCaller
+  ): Promise<Response> {
+    if (!this.isAdminCaller(caller)) {
+      return this.create_error_response(
+        "cannot execute configuration commands: only an administrator may change the configuration",
+        403,
+        request
+      );
+    }
     if (this.config.readOnly) {
       return this.create_error_response(
         "the server is currently in read-only mode; configuration cannot be changed",

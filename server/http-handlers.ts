@@ -55,6 +55,8 @@ const log = getLogger("http");
  */
 const PRE_EXECUTION_ERROR_CODES: ReadonlySet<string> = new Set([
   "COMPILATION_ERROR",
+  "CONFIGURATION_ERROR",
+  "DISABLED_CAPABILITY",
   "PARSE_ERROR",
   "QUERY_TOO_LARGE",
   "READ_ONLY_MODE",
@@ -90,7 +92,7 @@ export const SERVICE_USER_ID = "service";
 export abstract class HttpRouteHandlers extends HttpServerBase {
   /**
    * Resolve the caller of a request. The service credential is checked
-   * first, and only for the routes that honor it (`/query`,
+   * first, and only for the routes that honor it (`/query`, `/config`,
    * `/transaction/*`): a matching `Authorization: Bearer <token>` is the
    * service and no JWT is looked at. Anything else — a mismatch, another
    * scheme, a cookie, another route — goes through the auth middleware
@@ -102,7 +104,7 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
     pathname: string
   ): Promise<ResolvedCaller> {
     if (
-      (pathname === "/query" || pathname.startsWith("/transaction/")) &&
+      (pathname === "/query" || pathname === "/config" || pathname.startsWith("/transaction/")) &&
       await this.presentsServiceToken(request)
     ) {
       return { auth: null, service: true };
@@ -133,6 +135,16 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
     }
 
     return await sha256Equal(configured, header.slice(7));
+  }
+
+  /**
+   * Whether the caller administers the server: the service credential, or a
+   * verified user with the `admin` role or the `superuser` role that
+   * `disc admin create-superuser` grants.
+   */
+  protected isAdminCaller(caller: ResolvedCaller): boolean {
+    const roles = caller.auth?.roles ?? [];
+    return caller.service || roles.includes("admin") || roles.includes("superuser");
   }
 
   /** User id a caller's transactions are pinned to; the service uses a constant. */
@@ -431,6 +443,7 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
       const context: Types.QueryContext = {
         session: connection.session,
         auth: authContext,
+        admin: this.isAdminCaller(caller),
         requestId,
         startedAt: new Date(),
         clientInfo: this.parse_client_info(request),
@@ -518,8 +531,10 @@ export abstract class HttpRouteHandlers extends HttpServerBase {
         this.stats.failed_requests++;
         const errorHeaders = this.get_default_headers("application/json");
         await this.apply_schema_drift_headers(request, errorHeaders);
-        // An access policy violation is a refusal, not a malformed request.
-        const forbidden = response.errors?.some(e => e.extensions?.code === "ACCESS_POLICY_ERROR");
+        // An access policy violation, or a query the caller may not run
+        // (a non-administrator's persistent CONFIGURE), is a refusal, not a
+        // malformed request.
+        const forbidden = response.errors?.some(e => e.extensions?.code === "ACCESS_POLICY_ERROR" || e.extensions?.code === "DISABLED_CAPABILITY");
         return new Response(JSON.stringify(response), {
           status: forbidden ? 403 : 400,
           headers: errorHeaders

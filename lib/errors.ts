@@ -97,6 +97,26 @@ export class InvalidValueError extends CompilationError {
   }
 }
 
+/**
+ * A CONFIGURE names a key Disc doesn't accept, or at a scope it can't take
+ * (Gel's `ConfigurationError`): `configure session set archive_command := …`.
+ */
+export class ConfigurationError extends CompilationError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
+/**
+ * The caller may not run this kind of query (Gel's
+ * `DisabledCapabilityError`): persistent CONFIGURE by a non-administrator.
+ */
+export class DisabledCapabilityError extends DiscError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
 export class ValidationError extends DiscError {
   constructor(message: string, context?: ErrorContext) {
     super(message, context);

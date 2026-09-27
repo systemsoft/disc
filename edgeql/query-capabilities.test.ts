@@ -9,7 +9,7 @@
 import { assertEquals } from "@std/assert";
 import type { Query } from "./ast.ts";
 import { EdgeQLParser } from "./parser.ts";
-import { isWriteQuery } from "./query-capabilities.ts";
+import { containsPersistentConfigure, isWriteQuery } from "./query-capabilities.ts";
 
 function parse(q: string): Query {
   return new EdgeQLParser(q).parse();
@@ -51,21 +51,21 @@ Deno.test("isWriteQuery - DELETE is a write", () => {
 
 Deno.test("isWriteQuery - CONFIGURE SESSION is a read (session-local)", () => {
   assertEquals(
-    isWriteQuery(parse("CONFIGURE SESSION SET foo := 1")),
+    isWriteQuery(parse("CONFIGURE SESSION SET query_execution_timeout := 1")),
     false
   );
 });
 
 Deno.test("isWriteQuery - CONFIGURE DATABASE is a write", () => {
   assertEquals(
-    isWriteQuery(parse("CONFIGURE DATABASE SET foo := 1")),
+    isWriteQuery(parse("CONFIGURE DATABASE SET query_execution_timeout := 1")),
     true
   );
 });
 
 Deno.test("isWriteQuery - CONFIGURE INSTANCE is a write", () => {
   assertEquals(
-    isWriteQuery(parse("CONFIGURE INSTANCE SET foo := 1")),
+    isWriteQuery(parse("CONFIGURE INSTANCE SET query_execution_timeout := 1")),
     true
   );
 });
@@ -159,4 +159,43 @@ Deno.test("isWriteQuery - unknown kind defaults to write (fail closed)", () => {
   // Forge an AST with an unrecognized kind to lock in fail-closed semantics.
   const fakeAst = { kind: "BogusQuery" } as unknown as Query;
   assertEquals(isWriteQuery(fakeAst), true);
+});
+
+// Persistent configuration: only an administrator may run it, wherever it sits in the query.
+
+Deno.test("containsPersistentConfigure - CONFIGURE DATABASE / INSTANCE / SYSTEM, SET or RESET", () => {
+  for (
+    const query of [
+      "CONFIGURE DATABASE SET query_execution_timeout := 1",
+      "CONFIGURE INSTANCE RESET query_execution_timeout",
+      "CONFIGURE SYSTEM SET shared_buffers := '1GB'",
+      "CONFIGURE SYSTEM RESET shared_buffers"
+    ]
+  ) {
+    assertEquals(containsPersistentConfigure(parse(query)), true, query);
+  }
+});
+
+Deno.test("containsPersistentConfigure - CONFIGURE SESSION and ordinary queries are not", () => {
+  for (
+    const query of [
+      "CONFIGURE SESSION SET query_execution_timeout := 1",
+      "CONFIGURE SESSION RESET lock_timeout",
+      "SELECT 1",
+      "INSERT User { name := 'alice' }",
+      "SET GLOBAL current_user := <uuid>$id"
+    ]
+  ) {
+    assertEquals(containsPersistentConfigure(parse(query)), false, query);
+  }
+});
+
+Deno.test("containsPersistentConfigure - a CONFIGURE under a WITH block is found", () => {
+  // `with x := 1 configure system set …` compiles to `ALTER SYSTEM SET …`.
+  assertEquals(containsPersistentConfigure(parse("WITH x := 1 CONFIGURE SYSTEM SET work_mem := '1GB'")), true);
+});
+
+Deno.test("isWriteQuery - a persistent CONFIGURE under a WITH block is a write", () => {
+  assertEquals(isWriteQuery(parse("WITH x := 1 CONFIGURE SYSTEM SET work_mem := '1GB'")), true);
+  assertEquals(isWriteQuery(parse("WITH x := 1 CONFIGURE SESSION SET lock_timeout := '1s'")), false);
 });

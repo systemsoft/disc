@@ -47,8 +47,10 @@ import { uuidToBytes } from "./types.ts";
 
 import {
   CompilationError,
+  ConfigurationError,
   ConnectionError,
   DatabaseExecutionError,
+  DisabledCapabilityError,
   DiscError,
   InvalidReferenceError,
   InvalidValueError,
@@ -1618,6 +1620,7 @@ export const GEL_ERROR_CODES = {
   InternalServerError: 0x01000000,
   UnsupportedFeatureError: 0x02000000,
   ProtocolError: 0x03000000,
+  DisabledCapabilityError: 0x03040200,
   QueryError: 0x04000000,
   InvalidSyntaxError: 0x04010000,
   EdgeQLSyntaxError: 0x04010100,
@@ -1647,6 +1650,7 @@ export const GEL_ERROR_CODES = {
   TransactionError: 0x05030000,
   TransactionSerializationError: 0x05030101,
   TransactionDeadlockError: 0x05030102,
+  ConfigurationError: 0x06000000,
   AccessError: 0x07000000,
   AuthenticationError: 0x07010000,
   AvailabilityError: 0x08000000,
@@ -1718,6 +1722,8 @@ function sqlStateToGelCode(sqlState: string): number | undefined {
  * - SchemaError -> SchemaDefinitionError
  * - InvalidReferenceError -> InvalidReferenceError
  * - InvalidValueError -> InvalidValueError
+ * - ConfigurationError -> ConfigurationError
+ * - DisabledCapabilityError -> DisabledCapabilityError
  * - CompilationError, QueryError -> QueryError
  * - ValidationError -> InvalidValueError
  * - DatabaseExecutionError -> its `cause`'s code (a compile error the
@@ -1742,6 +1748,12 @@ export function mapErrorToGelCode(error: Error): number {
   }
   if (error instanceof InvalidValueError) {
     return GEL_ERROR_CODES.InvalidValueError;
+  }
+  if (error instanceof ConfigurationError) {
+    return GEL_ERROR_CODES.ConfigurationError;
+  }
+  if (error instanceof DisabledCapabilityError) {
+    return GEL_ERROR_CODES.DisabledCapabilityError;
   }
   if (error instanceof CompilationError) {
     return GEL_ERROR_CODES.QueryError;
@@ -1802,8 +1814,19 @@ export interface BinaryExecutionResult {
  */
 export type BinaryQueryExecutor = (
   commandText: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  caller: BinaryCaller
 ) => Promise<BinaryExecutionResult>;
+
+/**
+ * Who a binary connection is. `admin` when it authenticated with the
+ * server's password (`DISC_BINARY_PASSWORD`) — the listener's only
+ * credential, as Gel's server password is its superuser's. With no
+ * password configured anyone can connect, so no connection is an admin.
+ */
+export interface BinaryCaller {
+  admin: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Session state
@@ -1958,6 +1981,8 @@ export class BinaryConnection {
     | "ready"
     | "closed" = "handshake";
   private transactionState: number = TransactionState.NOT_IN_TRANSACTION;
+  /*** Set once the client proved it knows the server's password (see BinaryCaller). ***/
+  private passwordAuthenticated = false;
   private scramState?: ScramServerState;
   private scramStoredKey?: Uint8Array;
   private scramServerKey?: Uint8Array;
@@ -2275,6 +2300,7 @@ export class BinaryConnection {
         this.close();
         return;
       }
+      this.passwordAuthenticated = true;
 
       // Send AuthenticationSASLFinal with server signature
       const encoder = new TextEncoder();
@@ -2485,7 +2511,7 @@ export class BinaryConnection {
 
       let rows: Record<string, unknown>[] = [];
       if (this.executor) {
-        const result = await this.executor(msg.commandText, args);
+        const result = await this.executor(msg.commandText, args, { admin: this.passwordAuthenticated });
         rows = result.rows;
         // Prefer the executor's status (it knows whether INSERT had a
         // RETURNING clause, etc.) over the heuristic prefix detection.

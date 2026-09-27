@@ -15,7 +15,7 @@
 
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { CompilationError, DiscError } from "../lib/errors.ts";
+import { CompilationError, ConfigurationError, DiscError } from "../lib/errors.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
@@ -185,6 +185,9 @@ Deno.test("sql quoting: a configure key that isn't a configuration parameter's n
   ) {
     assertThrows(() => compile(query), CompilationError, "configuration parameter", query);
   }
-  assertEquals(compile("configure session set custom_setting := 1").startsWith("SET LOCAL custom_setting"), true);
-  assertEquals(compile("configure session set query.timeout := 1").startsWith("SET LOCAL query.timeout"), true);
+  // A key of the right form is then looked up: only a known one reaches the SQL.
+  assertEquals(compile("configure session set lock_timeout := 1").startsWith("SET LOCAL lock_timeout"), true);
+  for (const query of ["configure session set custom_setting := 1", "configure session set query.timeout := 1"]) {
+    assertThrows(() => compile(query), ConfigurationError, "unrecognized configuration parameter", query);
+  }
 });

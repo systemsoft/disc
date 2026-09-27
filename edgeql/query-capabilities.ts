@@ -22,7 +22,8 @@ import type { ConfigureQuery, EdgeQLNode, ExplainQuery, Query } from "./ast.ts";
  *
  * Writes:
  *   - INSERT / UPDATE / DELETE
- *   - CONFIGURE DATABASE / INSTANCE / SYSTEM (persistent config)
+ *   - CONFIGURE DATABASE / INSTANCE / SYSTEM (persistent config), also
+ *     under a `with` block (`with x := 1 configure system set …`)
  *   - any query with an INSERT / UPDATE / DELETE nested anywhere inside it:
  *     a `with` binding (`with u := (update …) select u`), a `select (…)`
  *     operand, a `for … union (…)` body, a subquery in a filter or shape
@@ -56,7 +57,7 @@ export function isWriteQuery(ast: Query): boolean {
     case "SelectQuery":
     case "GroupQuery":
     case "SetGlobalQuery":
-      return containsMutation(ast);
+      return containsMutation(ast) || containsPersistentConfigure(ast);
 
     case "DescribeType":
     case "DescribeSchema":
@@ -100,6 +101,29 @@ function containsMutation(node: unknown): boolean {
  */
 function isPersistentConfigure(ast: ConfigureQuery): boolean {
   return ast.scope !== "SESSION";
+}
+
+/**
+ * Whether the query runs a `CONFIGURE DATABASE | INSTANCE | SYSTEM`
+ * anywhere in it — the statement itself or one under a `with` block
+ * (`with x := 1 configure system set …`). Only an administrator may run
+ * one (Gel's PERSISTENT_CONFIG capability). A generic walk, like
+ * `containsMutation`, so a new place a CONFIGURE can sit is covered.
+ */
+export function containsPersistentConfigure(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+
+  if (Array.isArray(node)) {
+    return node.some(containsPersistentConfigure);
+  }
+
+  if ((node as { kind?: unknown; }).kind === "ConfigureQuery" && isPersistentConfigure(node as ConfigureQuery)) {
+    return true;
+  }
+
+  return Object.values(node).some(containsPersistentConfigure);
 }
 
 /**

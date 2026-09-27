@@ -18,8 +18,10 @@ import { assertEquals } from "@std/assert";
 import { createTestSchema } from "../compiler/context.ts";
 import {
   CompilationError,
+  ConfigurationError,
   ConnectionError,
   DatabaseExecutionError,
+  DisabledCapabilityError,
   InternalError,
   InvalidReferenceError,
   InvalidValueError,
@@ -236,6 +238,21 @@ Deno.test("query-execution - mapErrorToGelCode: InvalidValueError -> InvalidValu
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.InvalidValueError);
 });
 
+Deno.test("query-execution - mapErrorToGelCode: ConfigurationError -> ConfigurationError", () => {
+  const err = new ConfigurationError("unrecognized configuration parameter 'foo'");
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.ConfigurationError);
+  // A compile error the binary path wraps keeps its class.
+  assertEquals(
+    mapErrorToGelCode(new DatabaseExecutionError(err.message, "configure session set foo := 1", err)),
+    GEL_ERROR_CODES.ConfigurationError
+  );
+});
+
+Deno.test("query-execution - mapErrorToGelCode: DisabledCapabilityError -> DisabledCapabilityError", () => {
+  const err = new DisabledCapabilityError("cannot execute configuration commands: the caller is not an administrator");
+  assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.DisabledCapabilityError);
+});
+
 Deno.test("query-execution - mapErrorToGelCode: QueryError -> QueryError", () => {
   const err = new QueryError("query failed");
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.QueryError);
@@ -251,6 +268,7 @@ Deno.test("query-execution - GEL_ERROR_CODES match Gel's edb/api/errors.txt", ()
   assertEquals(GEL_ERROR_CODES.InternalServerError, 0x01000000);
   assertEquals(GEL_ERROR_CODES.UnsupportedFeatureError, 0x02000000);
   assertEquals(GEL_ERROR_CODES.ProtocolError, 0x03000000);
+  assertEquals(GEL_ERROR_CODES.DisabledCapabilityError, 0x03040200);
   assertEquals(GEL_ERROR_CODES.QueryError, 0x04000000);
   assertEquals(GEL_ERROR_CODES.InvalidSyntaxError, 0x04010000);
   assertEquals(GEL_ERROR_CODES.EdgeQLSyntaxError, 0x04010100);
@@ -280,6 +298,7 @@ Deno.test("query-execution - GEL_ERROR_CODES match Gel's edb/api/errors.txt", ()
   assertEquals(GEL_ERROR_CODES.TransactionError, 0x05030000);
   assertEquals(GEL_ERROR_CODES.TransactionSerializationError, 0x05030101);
   assertEquals(GEL_ERROR_CODES.TransactionDeadlockError, 0x05030102);
+  assertEquals(GEL_ERROR_CODES.ConfigurationError, 0x06000000);
   assertEquals(GEL_ERROR_CODES.AccessError, 0x07000000);
   assertEquals(GEL_ERROR_CODES.AuthenticationError, 0x07010000);
   assertEquals(GEL_ERROR_CODES.AvailabilityError, 0x08000000);

@@ -13,6 +13,7 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { assertThrows } from "@std/assert/throws";
 import type { ConfigureQuery } from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { ConfigurationError } from "../lib/errors.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
@@ -113,10 +114,10 @@ Deno.test("CONFIGURE parser — invalid scope throws", () => {
 // ===========================================================================
 
 Deno.test("CONFIGURE compile — SESSION SET compiles to SET LOCAL", () => {
-  const sql = compileEdgeQL("CONFIGURE SESSION SET work_mem := '256MB'");
+  const sql = compileEdgeQL("CONFIGURE SESSION SET lock_timeout := '5s'");
   assertStringIncludes(sql, "SET LOCAL");
-  assertStringIncludes(sql, "work_mem");
-  assertStringIncludes(sql, "'256MB'");
+  assertStringIncludes(sql, "lock_timeout");
+  assertStringIncludes(sql, "'5s'");
 });
 
 Deno.test("CONFIGURE compile — SESSION SET maps known key", () => {
@@ -135,9 +136,9 @@ Deno.test("CONFIGURE compile — SYSTEM SET compiles to ALTER SYSTEM SET", () =>
 });
 
 Deno.test("CONFIGURE compile — SESSION RESET compiles to RESET", () => {
-  const sql = compileEdgeQL("CONFIGURE SESSION RESET work_mem");
+  const sql = compileEdgeQL("CONFIGURE SESSION RESET lock_timeout");
   assertStringIncludes(sql, "RESET");
-  assertStringIncludes(sql, "work_mem");
+  assertStringIncludes(sql, "lock_timeout");
 });
 
 Deno.test("CONFIGURE compile — SYSTEM RESET compiles to ALTER SYSTEM RESET", () => {
@@ -183,11 +184,10 @@ Deno.test("CONFIGURE compile — INSTANCE RESET deletes from disc_config", () =>
   assertStringIncludes(sql, "'INSTANCE'");
 });
 
-Deno.test("CONFIGURE compile — unknown key passes through unchanged", () => {
-  const sql = compileEdgeQL(
-    "CONFIGURE SESSION SET custom_setting := 42"
+Deno.test("CONFIGURE compile — unknown key is rejected, not passed to PostgreSQL", () => {
+  assertThrows(
+    () => compileEdgeQL("CONFIGURE SESSION SET custom_setting := 42"),
+    ConfigurationError,
+    "unrecognized configuration parameter 'custom_setting'"
   );
-  assertStringIncludes(sql, "SET LOCAL");
-  assertStringIncludes(sql, "custom_setting");
-  assertStringIncludes(sql, "42");
 });

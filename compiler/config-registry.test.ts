@@ -11,8 +11,9 @@
  * from the registry, so adding a key is one entry rather than two.
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { ConfigurationError } from "../lib/errors.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import {
@@ -59,25 +60,46 @@ Deno.test("config-registry - lookupConfigKey returns undefined for unknown key",
   assertEquals(lookupConfigKey("nope_not_a_real_key"), undefined);
 });
 
-Deno.test("config-registry - getConfigRegistry covers prior CONFIGURE_KEY_MAP entries", () => {
-  const names = new Set(getConfigRegistry().map(d => d.name));
-  // Every key from the prior flat map must still be present —
-  // existing CONFIGURE statements would otherwise stop compiling.
-  const priorKeys = [
-    "query_execution_timeout",
-    "listen_addresses",
-    "shared_buffers",
-    "work_mem",
-    "maintenance_work_mem",
+Deno.test("config-registry - the registry is the CONFIGURE allowlist", () => {
+  // Every key CONFIGURE accepts: Gel's documented keys that map to a
+  // PostgreSQL setting, plus the PostgreSQL-named keys Disc already had
+  // (less `listen_addresses` and `log_min_duration_statement`, see below).
+  // Adding a key here opens it to CONFIGURE — review it for safety first.
+  const names = getConfigRegistry().map(d => d.name).sort();
+  assertEquals(names, [
+    "default_statistics_target",
     "effective_cache_size",
-    "max_connections",
-    "log_min_duration_statement",
+    "effective_io_concurrency",
     "idle_in_transaction_session_timeout",
-    "lock_timeout"
-  ];
-  for (const k of priorKeys) {
-    assertEquals(names.has(k), true, `missing prior key: ${k}`);
-  }
+    "lock_timeout",
+    "maintenance_work_mem",
+    "max_connections",
+    "query_execution_timeout",
+    "query_work_mem",
+    "session_idle_transaction_timeout",
+    "shared_buffers",
+    "work_mem"
+  ]);
+});
+
+Deno.test("config-registry - Gel's keys map to the PostgreSQL settings Gel backs them with", () => {
+  assertEquals(lookupConfigKey("session_idle_transaction_timeout")?.pgName, "idle_in_transaction_session_timeout");
+  assertEquals(lookupConfigKey("query_work_mem")?.pgName, "work_mem");
+  assertEquals(lookupConfigKey("effective_io_concurrency")?.pgName, "effective_io_concurrency");
+  assertEquals(lookupConfigKey("default_statistics_target")?.pgName, "default_statistics_target");
+});
+
+Deno.test("config-registry - only the timeouts may be configured per session", () => {
+  const session = getConfigRegistry()
+    .filter(d => d.defaultScope === "session")
+    .map(d => d.name)
+    .sort();
+  assertEquals(session, [
+    "idle_in_transaction_session_timeout",
+    "lock_timeout",
+    "query_execution_timeout",
+    "session_idle_transaction_timeout"
+  ]);
 });
 
 Deno.test("config-registry - all current keys are non-secret (Postgres tuning knobs)", () => {
@@ -130,9 +152,14 @@ Deno.test("config-registry - maskIfSecret returns null for explicitly secret key
 // CONFIGURE compilation regression — derived map must still work
 // =========================================================================
 
-Deno.test("config-registry - CONFIGURE SESSION SET work_mem still compiles via registry", () => {
-  const sql = compileEdgeQL("CONFIGURE SESSION SET work_mem := '256MB'");
-  assertEquals(sql.includes("SET LOCAL work_mem"), true);
+Deno.test("config-registry - CONFIGURE SYSTEM SET work_mem still compiles via registry", () => {
+  const sql = compileEdgeQL("CONFIGURE SYSTEM SET work_mem := '256MB'");
+  assertEquals(sql.includes("ALTER SYSTEM SET work_mem"), true);
+});
+
+Deno.test("config-registry - CONFIGURE maps Gel's query_work_mem to work_mem", () => {
+  const sql = compileEdgeQL("CONFIGURE SYSTEM SET query_work_mem := '64MB'");
+  assertEquals(sql, "ALTER SYSTEM SET work_mem = '64MB'");
 });
 
 Deno.test("config-registry - CONFIGURE renames query_execution_timeout to statement_timeout", () => {
@@ -142,12 +169,69 @@ Deno.test("config-registry - CONFIGURE renames query_execution_timeout to statem
   assertEquals(sql.includes("statement_timeout"), true);
 });
 
-Deno.test("config-registry - CONFIGURE unknown key passes through unchanged (no registry entry)", () => {
-  // Pre-existing behavior: unknown EdgeQL keys map to themselves at the
-  // PG layer. The registry shouldn't tighten this — userland custom
-  // settings (like `myapp.feature_flag`) need to round-trip.
-  const sql = compileEdgeQL("CONFIGURE SESSION SET custom_setting := 42");
-  assertEquals(sql.includes("custom_setting"), true);
+Deno.test("config-registry - CONFIGURE rejects a key the registry doesn't list (Gel's ConfigurationError)", () => {
+  // Unknown keys used to pass straight to PostgreSQL (`SET LOCAL <key>`,
+  // `ALTER SYSTEM SET <key>`), which reached every PostgreSQL setting.
+  for (
+    const query of [
+      "CONFIGURE SESSION SET custom_setting := 42",
+      "CONFIGURE SESSION RESET custom_setting",
+      "CONFIGURE SYSTEM SET myapp.feature_flag := 'on'",
+      "CONFIGURE DATABASE SET custom_setting := 42",
+      "CONFIGURE INSTANCE RESET custom_setting"
+    ]
+  ) {
+    assertThrows(() => compileEdgeQL(query), ConfigurationError, "unrecognized configuration parameter", query);
+  }
+});
+
+Deno.test("config-registry - CONFIGURE never reaches a dangerous PostgreSQL setting", () => {
+  // Secrets, file paths, code loading, logging, networking, replication and
+  // superuser-only settings — none is in the registry, at any scope.
+  const dangerous = [
+    "archive_command",
+    "data_directory",
+    "dynamic_library_path",
+    "hba_file",
+    "listen_addresses",
+    "local_preload_libraries",
+    "log_directory",
+    "log_min_duration_statement",
+    "log_statement",
+    "password_encryption",
+    "port",
+    "restore_command",
+    "session_preload_libraries",
+    "session_replication_role",
+    "shared_preload_libraries",
+    "ssl",
+    "ssl_cert_file",
+    "ssl_key_file",
+    "ssl_passphrase_command"
+  ];
+  for (const key of dangerous) {
+    assertEquals(lookupConfigKey(key), undefined, key);
+    for (const scope of ["SESSION", "DATABASE", "INSTANCE", "SYSTEM"]) {
+      const query = `CONFIGURE ${scope} SET ${key} := 'x'`;
+      assertThrows(() => compileEdgeQL(query), ConfigurationError, "unrecognized configuration parameter", query);
+    }
+  }
+});
+
+Deno.test("config-registry - CONFIGURE SESSION rejects a system-level key (as Gel does)", () => {
+  for (const query of ["CONFIGURE SESSION SET work_mem := '1GB'", "CONFIGURE SESSION RESET shared_buffers"]) {
+    assertThrows(() => compileEdgeQL(query), ConfigurationError, "is a system-level configuration parameter", query);
+  }
+  // A system-level key is still accepted at a persistent scope.
+  assertEquals(compileEdgeQL("CONFIGURE SYSTEM RESET work_mem"), "ALTER SYSTEM RESET work_mem");
+});
+
+Deno.test("config-registry - CONFIGURE SESSION accepts a session-level key", () => {
+  assertEquals(
+    compileEdgeQL("CONFIGURE SESSION SET session_idle_transaction_timeout := '5s'"),
+    "SET LOCAL idle_in_transaction_session_timeout = '5s'"
+  );
+  assertEquals(compileEdgeQL("CONFIGURE SESSION RESET lock_timeout"), "RESET lock_timeout");
 });
 
 // =========================================================================

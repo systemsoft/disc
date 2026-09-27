@@ -575,7 +575,8 @@ export class DiscServer {
         const handler = this.protocolHandler as {
           executeBinaryQuery?: (
             commandText: string,
-            args: Record<string, unknown>
+            args: Record<string, unknown>,
+            caller: { admin: boolean; }
           ) => Promise<{
             rows: Record<string, unknown>[];
             status: string;

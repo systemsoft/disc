@@ -327,6 +327,14 @@ export interface AuthContext {
 export interface QueryContext {
   session: SessionContext;
   auth: AuthContext;
+  /**
+   * The caller administers the server: the service credential, or a user
+   * with the `admin` or `superuser` role. Only an administrator may run a
+   * persistent CONFIGURE (`configure system | database | instance`). Set
+   * by the HTTP layer from the verified caller, never from the request
+   * body; absent (the WebSocket, subscriptions, REST) means not one.
+   */
+  admin?: boolean;
   requestId: string;
   startedAt: Date;
   /**

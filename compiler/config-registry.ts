@@ -11,6 +11,18 @@
  *   - admin/UI surfaces know which keys carry secrets and must mask
  *     their values (`secret: true`)
  *
+ * It is also the CONFIGURE allowlist: the compiler rejects any other key
+ * with Gel's ConfigurationError, so no statement reaches a PostgreSQL
+ * setting not listed here. The keys are Gel's documented ones that map to a
+ * PostgreSQL setting (`query_execution_timeout`, `session_idle_transaction_
+ * timeout`, `query_work_mem`, `shared_buffers`, `effective_cache_size`,
+ * `effective_io_concurrency`, `default_statistics_target`) plus the
+ * PostgreSQL-named tuning keys Disc already took. Nothing that holds a
+ * secret, names a file or command, loads code, controls logging,
+ * networking or replication, or is superuser-only in PostgreSQL belongs
+ * here: persistent CONFIGURE is admin-only, but session CONFIGURE is open
+ * to every caller.
+ *
  * No CONFIGURE-able key in disc is currently a secret — `jwtSecret`,
  * OAuth `clientSecret`, and SMTP credentials live in constructor args
  * today, not in `disc_config`. The mechanism is in place for when
@@ -33,7 +45,12 @@ export interface ConfigKeyDef {
   pgName: string;
   /** Type hint for UI rendering and value validation */
   edgeqlType: ConfigType;
-  /** Default scope this setting is typically applied at (informational only — compiler honors user-specified scope) */
+  /**
+   * `"session"`: any caller may set it for their own session (`configure
+   * session`), and an administrator persistently. Any other value is a
+   * system-level key (Gel's `cfg::system`): persistent scopes only, so
+   * `configure session` of it is a ConfigurationError.
+   */
   defaultScope: ConfigScope;
   /** When true, value is masked in introspection output and admin views */
   secret: boolean;
@@ -58,12 +75,12 @@ export const CONFIG_REGISTRY: ConfigKeyDef[] = [
     description: "Abort any statement that takes longer than this (ms)."
   },
   {
-    name: "listen_addresses",
-    pgName: "listen_addresses",
-    edgeqlType: "str",
-    defaultScope: "system",
+    name: "session_idle_transaction_timeout",
+    pgName: "idle_in_transaction_session_timeout",
+    edgeqlType: "duration",
+    defaultScope: "session",
     secret: false,
-    description: "Network interfaces PostgreSQL listens on."
+    description: "Terminate sessions idle in a transaction longer than this (ms)."
   },
   {
     name: "shared_buffers",
@@ -74,10 +91,18 @@ export const CONFIG_REGISTRY: ConfigKeyDef[] = [
     description: "Memory dedicated to shared buffer cache."
   },
   {
+    name: "query_work_mem",
+    pgName: "work_mem",
+    edgeqlType: "memory",
+    defaultScope: "system",
+    secret: false,
+    description: "Memory available for query operations like sorts and hashes."
+  },
+  {
     name: "work_mem",
     pgName: "work_mem",
     edgeqlType: "memory",
-    defaultScope: "session",
+    defaultScope: "system",
     secret: false,
     description: "Memory available for query operations like sorts and hashes."
   },
@@ -85,7 +110,7 @@ export const CONFIG_REGISTRY: ConfigKeyDef[] = [
     name: "maintenance_work_mem",
     pgName: "maintenance_work_mem",
     edgeqlType: "memory",
-    defaultScope: "session",
+    defaultScope: "system",
     secret: false,
     description: "Memory available for maintenance operations like VACUUM."
   },
@@ -98,20 +123,28 @@ export const CONFIG_REGISTRY: ConfigKeyDef[] = [
     description: "Planner's estimate of disk cache available to PostgreSQL."
   },
   {
+    name: "effective_io_concurrency",
+    pgName: "effective_io_concurrency",
+    edgeqlType: "int",
+    defaultScope: "system",
+    secret: false,
+    description: "Number of concurrent disk I/O operations PostgreSQL may issue."
+  },
+  {
+    name: "default_statistics_target",
+    pgName: "default_statistics_target",
+    edgeqlType: "int",
+    defaultScope: "system",
+    secret: false,
+    description: "Default statistics target for planner statistics on table columns."
+  },
+  {
     name: "max_connections",
     pgName: "max_connections",
     edgeqlType: "int",
     defaultScope: "system",
     secret: false,
     description: "Maximum number of concurrent client connections."
-  },
-  {
-    name: "log_min_duration_statement",
-    pgName: "log_min_duration_statement",
-    edgeqlType: "duration",
-    defaultScope: "session",
-    secret: false,
-    description: "Log statements that exceed this duration (ms)."
   },
   {
     name: "idle_in_transaction_session_timeout",

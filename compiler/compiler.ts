@@ -11,7 +11,7 @@
 import { BUILTIN_ACCESS_GLOBALS } from "../access/evaluator.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
+import { CompilationError, ConfigurationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
 import { buildParameterIndex, compileEmptyOrder, flattenSetElements, isMutationQuery, locationOf, POLICY_ROWS } from "./compiler-base.ts";
@@ -2755,7 +2755,18 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (!/^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$/.test(query.key)) {
       throw new CompilationError(`'${query.key}' is not a configuration parameter name`);
     }
-    const pgKey = lookupConfigKey(query.key)?.pgName ?? query.key;
+    // Only the registry's keys: anything else would reach an arbitrary
+    // PostgreSQL setting. A system-level key has no per-session value.
+    const def = lookupConfigKey(query.key);
+    if (!def) {
+      throw new ConfigurationError(`unrecognized configuration parameter '${query.key}'`);
+    }
+    if (query.scope === "SESSION" && def.defaultScope !== "session") {
+      throw new ConfigurationError(
+        `'${query.key}' is a system-level configuration parameter; use "CONFIGURE SYSTEM"`
+      );
+    }
+    const pgKey = def.pgName;
 
     if (query.action === "RESET") {
       if (query.scope === "SESSION") {

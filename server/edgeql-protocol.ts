@@ -12,10 +12,18 @@ import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
-import { isWriteQuery } from "../edgeql/query-capabilities.ts";
+import { containsPersistentConfigure, isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { sha256Hex } from "../lib/crypto.ts";
-import { DatabaseExecutionError, postgresErrorFields, QueryError, QueryTimeoutError, ValidationError } from "../lib/errors.ts";
+import {
+  ConfigurationError,
+  DatabaseExecutionError,
+  DisabledCapabilityError,
+  postgresErrorFields,
+  QueryError,
+  QueryTimeoutError,
+  ValidationError
+} from "../lib/errors.ts";
 import { hasRawJson, unwrapExactNumbers } from "../lib/exact-json.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
@@ -66,11 +74,29 @@ interface CachedCompilation {
   /*** Variables cast `<optional T>`: they may be left out of a request. From the query AST, like
        `parameterNames`. ***/
   optionalParameters: string[];
+  /*** The query runs a persistent CONFIGURE, which only an administrator may: the gate runs on every
+       request, a cache hit included (the first caller may have been an administrator). ***/
+  persistentConfig: boolean;
   /*** What the response is made of (row set or bare-mutation shape, and the mutated type a
        `RETURNING *` row maps through). From the query AST, so it is kept for cache hits too. ***/
   resultInfo: Compiler.ResultInfo;
   sqlAST: SQL.SQLStatement;
   sqlString: string;
+}
+
+/*** Why a non-administrator's persistent CONFIGURE is refused, in the form of Gel's capability errors. ***/
+const PERSISTENT_CONFIG_REFUSED = "cannot execute configuration commands: only an administrator may configure " +
+  "the system or a database (the service token, a user with the admin or superuser role, or a binary " +
+  "connection authenticated with DISC_BINARY_PASSWORD)";
+
+/*** The response refusing a non-administrator's persistent CONFIGURE (Gel's DisabledCapabilityError; 403 over HTTP). ***/
+function persistentConfigRefused(): Types.QueryResponse {
+  return {
+    errors: [{
+      message: PERSISTENT_CONFIG_REFUSED,
+      extensions: { code: "DISABLED_CAPABILITY" }
+    }]
+  };
 }
 
 /*** Longest string value written to the debug log in full; longer ones are cut to this many characters. ***/
@@ -254,6 +280,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       if (cached) {
         cacheHit = true;
+        if (cached.persistentConfig && !context.admin) {
+          return persistentConfigRefused();
+        }
         parameterNames = cached.parameterNames;
         optionalParameters = cached.optionalParameters;
         resultInfo = cached.resultInfo;
@@ -306,6 +335,13 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           };
         }
 
+        // Persistent configuration is for administrators (Gel's
+        // PERSISTENT_CONFIG capability); the transport says who is one.
+        const persistentConfig = containsPersistentConfigure(ast);
+        if (persistentConfig && !context.admin) {
+          return persistentConfigRefused();
+        }
+
         // Set access context before compilation (affects generated SQL).
         // When `context.bypassAccessPolicies` is set, the AccessContext
         // carries `bypass: true` so the compiler short-circuits
@@ -340,7 +376,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             errors: [{
               message: compileResult.error.message,
               extensions: {
-                code: "COMPILATION_ERROR",
+                code: compileResult.error instanceof ConfigurationError ? "CONFIGURATION_ERROR" : "COMPILATION_ERROR",
                 phase: "compilation"
               }
             }]
@@ -357,6 +393,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         this.compilationCache.set(compilationKey, {
           optionalParameters,
           parameterNames,
+          persistentConfig,
           resultInfo,
           sqlAST: sqlStatement,
           sqlString
@@ -1109,7 +1146,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    */
   async executeBinaryQuery(
     commandText: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    caller: { admin: boolean; } = { admin: false }
   ): Promise<{ rows: Record<string, unknown>[]; status: string; }> {
     const parser = new EdgeQL.EdgeQLParser(commandText);
     const ast = parser.parse();
@@ -1117,6 +1155,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Same read-only gate as handleRequest (gh/geldata#5524).
     if (this.options.readOnly && isWriteQuery(ast)) {
       throw new QueryError("the server is currently in read-only mode; this query would write to the database");
+    }
+    // Same administrator gate as handleRequest. The binary listener says
+    // whether the connection authenticated with its password.
+    if (!caller.admin && containsPersistentConfigure(ast)) {
+      throw new DisabledCapabilityError(PERSISTENT_CONFIG_REFUSED);
     }
 
     const parameterIndex = Compiler.buildParameterIndex(ast);

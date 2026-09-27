@@ -11,7 +11,13 @@
 
 import { assert, assertEquals } from "@std/assert";
 import { BufferReader, BufferWriter } from "../protocol/buffer.ts";
-import { Cardinality, InputLanguage, OutputFormat } from "../protocol/enums.ts";
+import {
+  Cardinality,
+  InputLanguage,
+  OutputFormat,
+  PROTOCOL_MAJOR_VERSION,
+  PROTOCOL_MINOR_VERSION
+} from "../protocol/enums.ts";
 import {
   decodeServerMessage,
   encodeClientMessage,
@@ -19,6 +25,7 @@ import {
   type ServerMessage
 } from "../protocol/messages.ts";
 import { decodeWireValue, encodeWireValue } from "../protocol/collection-codecs.ts";
+import { buildClientFinalMessage, buildClientFirstMessage } from "../protocol/scram.ts";
 import { UUID_TO_TYPE } from "../protocol/typedesc.ts";
 
 const ZERO_UUID = new Uint8Array(16);
@@ -188,7 +195,54 @@ export class Client {
     }
   }
 
-  async query(commandText: string, args: [string, string | string[]][] = []): Promise<Answer> {
+  /**
+   * Handshake, then authenticate with SCRAM-SHA-256 when the server has a
+   * password (`DISC_BINARY_PASSWORD`), up to the first ReadyForCommand.
+   * Throws on an authentication error.
+   */
+  async connect(password?: string): Promise<void> {
+    await this.send({
+      extensions: [],
+      kind: "ClientHandshake",
+      majorVersion: PROTOCOL_MAJOR_VERSION,
+      minorVersion: PROTOCOL_MINOR_VERSION,
+      params: [{ name: "user", value: "admin" }, { name: "database", value: "main" }]
+    });
+    if (password === undefined) {
+      await this.readUntilReady();
+      return;
+    }
+
+    assertEquals((await this.read()).kind, "ServerHandshake");
+    assertEquals((await this.read()).kind, "AuthenticationRequiredSASL");
+    const clientNonce = crypto.randomUUID();
+    const first = buildClientFirstMessage("admin", clientNonce);
+    await this.send({ kind: "AuthenticationSASLInitialResponse", method: "SCRAM-SHA-256", saslData: first.message });
+    const cont = await this.read();
+    assert(cont.kind === "AuthenticationSASLContinue", `expected SASL continue, got ${cont.kind}`);
+    const serverFirst = new TextDecoder().decode(cont.saslData);
+    const final = await buildClientFinalMessage(password, clientNonce, first.clientFirstMessageBare, serverFirst);
+    await this.send({ kind: "AuthenticationSASLResponse", saslData: final });
+    const messages = await this.readUntilReady();
+    const error = messages.find(m => m.kind === "ErrorResponse");
+    assert(!error, `authentication failed: ${error?.kind === "ErrorResponse" ? error.message : ""}`);
+  }
+
+  /*** Parse + Execute a command; the first ErrorResponse either answers, or undefined when it ran. ***/
+  async run(commandText: string): Promise<(ServerMessage & { kind: "ErrorResponse"; }) | undefined> {
+    const parsed = await this.parse(commandText);
+    const parseError = parsed.find(m => m.kind === "ErrorResponse");
+    if (parseError?.kind === "ErrorResponse") {
+      return parseError;
+    }
+    const cdd = parsed.find(m => m.kind === "CommandDataDescription");
+    assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
+    const executed = await this.execute(commandText, cdd, []);
+    const error = executed.find(m => m.kind === "ErrorResponse");
+    return error?.kind === "ErrorResponse" ? error : undefined;
+  }
+
+  private async parse(commandText: string): Promise<ServerMessage[]> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,
       annotations: [],
@@ -203,10 +257,14 @@ export class Client {
       stateTypedescId: ZERO_UUID
     });
     await this.send({ kind: "Sync" });
-    const parsed = await this.readUntilReady();
-    const cdd = parsed.find(m => m.kind === "CommandDataDescription");
-    assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
+    return await this.readUntilReady();
+  }
 
+  private async execute(
+    commandText: string,
+    cdd: ServerMessage & { kind: "CommandDataDescription"; },
+    args: [string, string | string[]][]
+  ): Promise<ServerMessage[]> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,
       annotations: [],
@@ -224,7 +282,15 @@ export class Client {
       stateTypedescId: ZERO_UUID
     });
     await this.send({ kind: "Sync" });
-    const executed = await this.readUntilReady();
+    return await this.readUntilReady();
+  }
+
+  async query(commandText: string, args: [string, string | string[]][] = []): Promise<Answer> {
+    const parsed = await this.parse(commandText);
+    const cdd = parsed.find(m => m.kind === "CommandDataDescription");
+    assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
+
+    const executed = await this.execute(commandText, cdd, args);
     const error = executed.find(m => m.kind === "ErrorResponse");
     assert(!error, `query failed: ${error?.kind === "ErrorResponse" ? error.message : ""}`);
 
