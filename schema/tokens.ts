@@ -65,6 +65,7 @@ export enum TokenType {
   STAR = "STAR", // *
   SLASH = "SLASH", // /
   PERCENT = "PERCENT", // %
+  CARET = "CARET", // ^
   PLUSPLUS = "PLUSPLUS", // ++
   LESS = "LESS", // <
   GREATER = "GREATER", // >

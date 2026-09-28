@@ -36,6 +36,15 @@ function isUuidTypeName(typeName: string): boolean {
 /*** Numeric EdgeQL types by how `/`, `//` and `%` treat them (Disc stores bigint as numeric). ***/
 const DECIMAL_TYPES = new Set(["bigint", "decimal"]);
 const FLOAT_TYPES = new Set(["float32", "float64"]);
+
+/*** The type of `a ^ b` in Gel: decimal when an operand is a decimal or bigint, float32 when both are float32 or int16, else float64 (an operand of unknown type is taken as an int). ***/
+export function powerType(left: string | null, right: string | null): string {
+  const types = [left, right];
+  if (types.some(type => type !== null && DECIMAL_TYPES.has(type))) {
+    return "decimal";
+  }
+  return types.every(type => type === "float32" || type === "int16") ? "float32" : "float64";
+}
 const INT_SQL_TYPES = new Map([
   ["int16", { sql: "smallint", width: 16 }],
   ["int32", { sql: "integer", width: 32 }],
@@ -383,6 +392,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   ): SQL.SQLExpression;
   protected abstract isSetPath(expr: EdgeQLAST.Expression): boolean;
   protected abstract isObjectPath(path: EdgeQLAST.Path): boolean;
+  protected abstract objectPathType(path: EdgeQLAST.Path): Context.TypeDef | undefined;
   protected abstract membershipSelect(expr: EdgeQLAST.Expression): SQL.SelectStatement | null;
   protected abstract pathProperty(path: EdgeQLAST.Path): Context.PropertyDef | undefined;
   protected abstract compileGlobalRef(
@@ -685,6 +695,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return this.compileDivision(binOp, left, right);
     }
 
+    if (binOp.op === "^") {
+      return this.compilePower(binOp, left, right);
+    }
+
     // `datetime - datetime` is a duration, which holds no days (`disc_datetime_sub`, lib/stdlib-sql.ts).
     if (binOp.op === "-" && [binOp.left, binOp.right].every(operand => isStdType(this.staticScalarType(operand), "datetime"))) {
       return SQL.createFunctionCall("disc_datetime_sub", [left, right]);
@@ -720,6 +734,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
         break;
       case "LIKE":
       case "ILIKE":
+      case "NOT LIKE":
+      case "NOT ILIKE":
         sqlOp = binOp.op;
         break;
       // Range operators — same syntax in PG
@@ -735,9 +751,6 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "<<":
       case ">>":
         sqlOp = binOp.op;
-        break;
-      case "^":
-        sqlOp = "#"; // PG uses # for bitwise XOR
         break;
       // Regex operators — same syntax in PG
       case "~":
@@ -1505,6 +1518,23 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
+   * `a ^ b`, Gel's power (PostgreSQL's `^` is one too, of double precision or
+   * numeric operands): a decimal when either operand is a decimal or bigint,
+   * a float32 when both are float32 or int16, else a float64 — ints raise to
+   * a float64 (`2 ^ 3` is 8.0), as in Gel (see `powerType`). Zero to a
+   * negative power and a negative number to a non-integer one fail with the
+   * same messages as in Gel.
+   *
+   *   2 ^ 3        → CAST(2 AS double precision) ^ 3
+   *   2.5n ^ 2     → CAST(2.5 AS numeric) ^ 2
+   */
+  private compilePower(binOp: EdgeQLAST.BinaryOp, left: SQL.SQLExpression, right: SQL.SQLExpression): SQL.SQLExpression {
+    const type = powerType(this.staticNumericType(binOp.left), this.staticNumericType(binOp.right));
+    const power = SQL.createBinaryExpression("^", SQL.createCastExpression(left, type === "decimal" ? "numeric" : "double precision"), right);
+    return type === "float32" ? SQL.createCastExpression(power, "real") : power;
+  }
+
+  /**
    * The EdgeQL scalar type of a numeric operand when it is known without
    * running the query: a literal (`7` is int64, `7.0` float64, `7n` bigint,
    * `7.5n` decimal), a cast, a property of a type in scope (the same lookup
@@ -1543,6 +1573,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       case "UnaryOp":
         return expr.op === "-" || expr.op === "+" ? this.staticNumericType(expr.operand) : null;
       case "BinaryOp": {
+        if (expr.op === "^") {
+          return powerType(this.staticNumericType(expr.left), this.staticNumericType(expr.right));
+        }
         if (!["+", "-", "*", "/", "//", "%"].includes(expr.op)) {
           return null;
         }
@@ -1958,9 +1991,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const value = variable && !variable.sqlOverride && !variable.row ? variable.expression : expr;
     // An element-wise operator, cast or call over a set (`{1, 2} + 1`,
     // `str_upper({'a', 'b'})`) is a set too.
+    // So is a set operation (`.name union 'x'`).
     const isSet = value.kind === "SetExpr" ?
       value.elements.length > 0 :
       (value.kind === "FunctionCall" && SET_RETURNING_FUNCTIONS.has(Context.lookupFunction(this.ctx.schema, value.name.parts)?.name ?? "")) ||
+      (value.kind === "BinaryOp" && this.isSetOperator(value.op)) ||
       this.elementWiseSets(value) !== null;
     return isSet ? { kind: "Subquery", query: { distinct: false, expr: value, kind: "SelectQuery", span: expr.span } } : null;
   }
@@ -1997,6 +2032,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           expr.right.name :
           undefined;
         if ((expr.op === "IS" || expr.op === "IS NOT") && isType !== undefined && this.isScalarTypeName(isType)) {
+          return [expr.left];
+        }
+        // So is `x is <object type>` over a path to objects whose types answer it (`.teams is Team`).
+        if ((expr.op === "IS" || expr.op === "IS NOT") && isType !== undefined && this.staticObjectIsCheck(expr.left, isType) !== null) {
           return [expr.left];
         }
         if (this.isSetOperator(expr.op) || expr.op === "??" || expr.op === "IS" || expr.op === "IS NOT") {
@@ -2400,6 +2439,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       return scalarCheck;
     }
 
+    const matches = this.staticObjectIsCheck(binOp.left, typeName);
+    if (matches !== null) {
+      const result = SQL.createLiteral("boolean", matches !== isNot);
+      return this.mayBeEmpty(binOp.left) ?
+        SQL.createCaseExpression([SQL.createWhenClause(SQL.isNotNull(this.compileExpression(binOp.left)), result)]) :
+        result;
+    }
+
     // Resolve the type in the schema
     const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
@@ -2440,6 +2487,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       kind: "RawSQLExpression" as const,
       sql: `__type__ ${inOp} (${typeList})`
     };
+  }
+
+  /**
+   * `x is T` for an object type `T` when `x` is a path to objects (or an
+   * element of one) whose type answers it for every object: true when that
+   * type is `T` or extends it, false when it has no subtypes and is not;
+   * else (or when `x` is no such path) null.
+   */
+  private staticObjectIsCheck(operand: EdgeQLAST.Expression, typeName: string): boolean | null {
+    const variable = operand.kind === "Identifier" ? this.scopeVariable(operand.name) : undefined;
+    const expr = variable?.element ? variable.expression : operand;
+    const target = Context.resolveTypeName(this.ctx, typeName);
+    const actual = expr.kind === "Path" && target?.kind === "object" ? this.objectPathType(expr)?.name : undefined;
+    if (!target || !actual) {
+      return null;
+    }
+    if (actual === target.name || Context.getAllSubtypes(this.ctx.schema, target.name).includes(actual)) {
+      return true;
+    }
+    return Context.getAllSubtypes(this.ctx.schema, actual).length === 0 ? false : null;
   }
 
   /**
@@ -2526,6 +2593,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     if (expr.kind === "BinaryOp" && this.isSetOperator(expr.op)) {
       return this.compileSetOperation(expr);
+    }
+    // A set (`{'a', 'b'} except 'a'`, `.posts.title union …`) is the rows of its select.
+    const set = this.setArgument(expr);
+    if (set) {
+      return this.compileQuery(set.query);
     }
     // Fallback: wrap expression in a SELECT
     const compiled = this.compileExpression(expr);

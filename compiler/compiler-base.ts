@@ -1218,6 +1218,8 @@ export abstract class CompilerBase {
       ">=",
       "LIKE",
       "ILIKE",
+      "NOT LIKE",
+      "NOT ILIKE",
       "IN",
       "NOT IN"
     ]

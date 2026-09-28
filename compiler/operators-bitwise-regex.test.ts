@@ -5,7 +5,7 @@
 /**
  * Stage 37: Operators — Bitwise, Regex & EXPLAIN
  *
- * Phase 1: Bitwise operators: & (AND), | (OR), ^ (XOR), << (LSHIFT), >> (RSHIFT), ~ (BITNOT)
+ * Phase 1: Bitwise operators: & (AND), | (OR), << (LSHIFT), >> (RSHIFT), ~ (BITNOT); `^` is Gel's power
  * Phase 2: Regex operators: ~ (match), !~ (not match), ~* (imatch), !~* (not imatch)
  * Phase 3: EXPLAIN queries
  */
@@ -103,11 +103,10 @@ Deno.test("Bitwise — a | b compiles to |", () => {
   assertStringIncludes(sql, "10");
 });
 
-Deno.test("Bitwise — a ^ b compiles to # (PG XOR)", () => {
+Deno.test("a ^ b is Gel's power, not a bitwise xor (#)", () => {
   const sql = compileEdgeQL("SELECT 5 ^ 3");
-  assertStringIncludes(sql, "#");
-  assertStringIncludes(sql, "5");
-  assertStringIncludes(sql, "3");
+  assertStringIncludes(sql, "^ 3");
+  assertEquals(sql.includes("#"), false, sql);
 });
 
 Deno.test("Bitwise — a << b compiles to <<", () => {

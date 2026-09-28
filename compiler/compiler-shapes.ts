@@ -1457,6 +1457,13 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // A set (`bodies := .<post[is Comment].body`, `{.a, .b}`) is its values
       // as an array, as the same computed written in the shape is.
       const pathSelect = this.shapePathSelect({ computable: true, expr, kind: "ShapeElement" });
+      // One that yields at most one value (`{'a', 'b'} intersect 'a'`) is that value.
+      if (pathSelect && !property.multi && expr.kind === "BinaryOp" && this.isSetOperator(expr.op)) {
+        return SQL.createSubqueryExpression(SQL.createSelectStatement({
+          from: SQL.createFromClause([{ alias: "__one", columnAliases: ["v"], kind: "TableReference", name: "", subquery: this.compileSetOperation(expr) }]),
+          select: SQL.createSelectClause([SQL.createSelectItem(SQL.createColumnReference("v", "__one"))])
+        }));
+      }
       if (pathSelect) {
         return this.compileJsonArray(pathSelect);
       }
@@ -1616,7 +1623,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         const linkName = element.name.name;
         const link = Context.getLink(this.ctx, typeName, linkName);
         if (link) {
-          value = this.compileLinkWithShape(this.aliasedLink(typeName, link), element.shape, tableAlias, element);
+          value = this.compileLinkWithShape(this.aliasedLink(typeName, link, element.shape), element.shape, tableAlias, element);
         } else {
           // Try as a property reference
           const property = Context.getProperty(this.ctx, typeName, linkName);
@@ -1745,6 +1752,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (expr.kind !== "Path") {
       return null;
     }
+    if (this.linkPropertyLink(expr)) {
+      return { distinct: false, expr, filter: element.filter, kind: "SelectQuery", limit: element.limit, offset: element.offset, orderBy: element.orderBy };
+    }
     const resolved = this.resolvePath(expr);
     const loneBacklink = resolved?.start.kind === "row" && resolved.hops.length === 1 && resolved.hops[0].kind === "backlink" &&
       !resolved.property;
@@ -1800,14 +1810,24 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    * .members`), whose junction row its sub-shape's `@prop` reads, as in Gel;
    * else `link`.
    */
-  private aliasedLink(typeName: string, link: Context.LinkDef): Context.LinkDef {
+  private aliasedLink(typeName: string, link: Context.LinkDef, shape?: EdgeQLAST.Shape): Context.LinkDef {
     if (!Context.isExpressionLink(link)) {
       return link;
     }
     const expr = new EdgeQLParser(link.computedExpr).parseExpressionOnly();
     const step = expr.kind === "Path" && !expr.rooted && expr.steps.length === 1 ? expr.steps[0] : undefined;
     const stored = step?.type === "property" ? Context.getLink(this.ctx, typeName, step.name) : undefined;
-    return stored && !Context.isExpressionLink(stored) && stored.multi === link.multi ? stored : link;
+    if (stored && !Context.isExpressionLink(stored) && stored.multi === link.multi) {
+      return stored;
+    }
+    // Any other computed link (`team_roles := .teams.members`) has no link
+    // properties of its own, as in Gel: not even its last link's.
+    const linkProperty = shape?.elements.find(element => element.linkProperty && !element.computable);
+    if (linkProperty) {
+      const owner = typeName.includes("::") ? typeName : `default::${typeName}`;
+      throw new InvalidReferenceError(`link '${link.name}' of object type '${owner}' has no property '${linkProperty.name?.name}'`);
+    }
+    return link;
   }
 
   /**
@@ -2456,6 +2476,16 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           return { selectItems, fromClause, where };
         }
       }
+    }
+
+    // A path to a link property (`.teams.members@role`): its values, one per link.
+    const linkPropertyValues = shape ? null : this.linkPropertyValues(path);
+    if (linkPropertyValues) {
+      const alias = Context.generateAlias(this.ctx, "__lp");
+      return {
+        fromClause: SQL.createFromClause([{ alias, columnAliases: ["v"], kind: "TableReference", name: "", subquery: linkPropertyValues }]),
+        selectItems: [SQL.createSelectItem(SQL.createColumnReference("v", alias))]
+      };
     }
 
     const resolved = this.resolvePath(path);

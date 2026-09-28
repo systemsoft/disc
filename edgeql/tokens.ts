@@ -148,7 +148,7 @@ export enum TokenType {
   // Bitwise operators
   AMPERSAND = "AMPERSAND", // & (bitwise AND)
   PIPE = "PIPE", // | (bitwise OR)
-  CARET = "CARET", // ^ (bitwise XOR)
+  CARET = "CARET", // ^ (power)
   LSHIFT = "LSHIFT", // <<
   RSHIFT = "RSHIFT", // >>
   TILDE = "TILDE", // ~ (unary bitwise NOT / binary regex match)

@@ -1365,6 +1365,63 @@ Deno.test("SDL Parser - named tuple expression in computed", () => {
   ]);
 });
 
+// A computed's expression is EdgeQL's: whatever the EdgeQL expression parser
+// accepts, kept as written (`computedSource`), which is what it compiles from.
+Deno.test("SDL Parser - a computed takes any EdgeQL expression, kept as written", () => {
+  const expressions = [
+    ".name union 'x'",
+    "{'a', 'b'} except 'a'",
+    "{'a', 'b'} intersect 'a'",
+    ".teams is Team",
+    ".teams is not Member",
+    "len(.name) // 2",
+    "len(.name) ^ 2",
+    "len(.name) % 2",
+    "[.name, .name]",
+    "1n",
+    "b'ab'",
+    "1.5n",
+    "(select .teams order by .name limit 1).name",
+    ".teams.members@role",
+    "count(.teams union .teams)"
+  ];
+  const members = expressions.map((expression, index) => `c${index} := ${expression};`).join("\n      ");
+  const org = new SDLParser(`
+    type Org {
+      required name: str;
+      multi teams: Team;
+      ${members}
+    }
+  `)
+    .parse()
+    .declarations[0] as SDLAST.TypeDeclaration;
+  const sources = org
+    .members
+    .filter((member): member is SDLAST.PropertyDeclaration => member.kind === "PropertyDeclaration" && member.computed !== undefined)
+    .map(member => member.computedSource);
+  assertEquals(sources, expressions);
+});
+
+Deno.test("SDL Parser - a computed's expression the EdgeQL parser rejects is an error at its line", () => {
+  const error = assertThrows(() => new SDLParser(`type T {\n  required name: str;\n  c := .name union;\n}`).parse(), SyntaxError);
+  assertEquals(error.context?.location?.line, 3);
+});
+
+Deno.test("SDL Parser - a function's parameter and return type keep `optional` and `set of`", () => {
+  const [a, b, c] = new SDLParser(`
+    function a(s: str) -> set of str using (str_split(s, ',')[0]);
+    function b(s: optional str) -> optional str using (s);
+    function c(s: str) -> array<str> using ([s, s]);
+  `)
+    .parse()
+    .declarations as SDLAST.FunctionDeclaration[];
+  assertEquals(a.returnTypemod, "setof");
+  assertEquals(b.returnTypemod, "optional");
+  assertEquals(b.parameters[0].typemod, "optional");
+  assertEquals(c.returnTypemod, undefined);
+  assertEquals(c.returnType.name.parts, ["array"]);
+});
+
 Deno.test("SDL Parser - property keyword accepts arrow form", () => {
   const source = `
     type Login {

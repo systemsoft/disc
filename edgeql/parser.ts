@@ -44,6 +44,8 @@ export class EdgeQLParser {
    * select Foo`).
    */
   private boundNames: string[] = [];
+  /*** Each select pathOffExpression made, and the path in it that later steps extend. ***/
+  private pathsOffExpressions = new WeakMap<AST.Expression, AST.Path>();
 
   constructor(source: string) {
     const lexer = new EdgeQLLexer(source);
@@ -67,7 +69,7 @@ export class EdgeQLParser {
    * source of the right-hand side of `name := expr`.
    */
   parseExpressionOnly(): AST.Expression {
-    const expr = this.parseExpression();
+    const expr = this.parseSetExpression();
     if (!this.isAtEnd()) {
       this.consume(TokenType.SEMICOLON, "Expected ';' or end of input");
     }
@@ -936,7 +938,7 @@ export class EdgeQLParser {
           ":=";
         name = ident;
         computable = true;
-        const expr = this.parseExpression();
+        const expr = this.parseSetExpression();
 
         // Check for nested shape
         let shape: AST.Shape | undefined;
@@ -1008,6 +1010,35 @@ export class EdgeQLParser {
 
   private parseExpression(): AST.Expression {
     return this.parseIfElseExpression();
+  }
+
+  /**
+   * An expression that may join sets with Gel's set operators, its loosest:
+   * `union` and `except`, left-associative, and `intersect`, which binds
+   * tighter (`a union b intersect c` is `a union (b intersect c)`). Where a
+   * statement's clauses may precede it, `union` joins statements instead
+   * (see parseQuery); this is for where they cannot: a bare expression, a
+   * parenthesized one, a call's argument, a shape element's value.
+   */
+  private parseSetExpression(): AST.Expression {
+    let expr = this.parseIntersectExpression();
+
+    while (this.check(TokenType.UNION) || this.check(TokenType.EXCEPT)) {
+      const op = this.advance().type === TokenType.UNION ? "UNION" : "EXCEPT";
+      expr = AST.createBinaryOp(op, expr, this.parseIntersectExpression());
+    }
+
+    return expr;
+  }
+
+  private parseIntersectExpression(): AST.Expression {
+    let expr = this.parseExpression();
+
+    while (this.match(TokenType.INTERSECT)) {
+      expr = AST.createBinaryOp("INTERSECT", expr, this.parseExpression());
+    }
+
+    return expr;
   }
 
   private parseIfElseExpression(): AST.Expression {
@@ -1113,6 +1144,11 @@ export class EdgeQLParser {
       } else if (this.match(TokenType.ILIKE)) {
         const right = this.parseInExpression();
         expr = AST.createBinaryOp("ILIKE", expr, right);
+      } else if (this.check(TokenType.NOT) && [TokenType.LIKE, TokenType.ILIKE].includes(this.tokens[this.current + 1]?.type)) {
+        // `not like` / `not ilike`: the negated match.
+        this.advance();
+        const op = this.advance().type === TokenType.LIKE ? "NOT LIKE" : "NOT ILIKE";
+        expr = AST.createBinaryOp(op, expr, this.parseInExpression());
       } else {
         break;
       }
@@ -1265,9 +1301,6 @@ export class EdgeQLParser {
       } else if (this.match(TokenType.PIPE)) {
         const right = this.parseAdditiveExpression();
         expr = AST.createBinaryOp("|", expr, right);
-      } else if (this.match(TokenType.CARET)) {
-        const right = this.parseAdditiveExpression();
-        expr = AST.createBinaryOp("^", expr, right);
       } else if (this.match(TokenType.LSHIFT)) {
         const right = this.parseAdditiveExpression();
         expr = AST.createBinaryOp("<<", expr, right);
@@ -1325,11 +1358,14 @@ export class EdgeQLParser {
   }
 
   private parsePowerExpression(): AST.Expression {
-    let expr = this.parseUnaryExpression();
+    const expr = this.parseUnaryExpression();
 
-    if (this.match(TokenType.POW)) {
-      const right = this.parsePowerExpression(); // Right associative
-      expr = AST.createBinaryOp("**", expr, right);
+    // EdgeQL has no `**` (neither does Gel); PostgreSQL has none either.
+    if (this.check(TokenType.POW)) {
+      const token = this.peek();
+      throw new SyntaxError("'**' is not an operator in EdgeQL; use '^' for exponentiation", {
+        location: { column: token.column, line: token.line, offset: token.offset }
+      });
     }
 
     return expr;
@@ -1366,7 +1402,20 @@ export class EdgeQLParser {
       return AST.createUnaryOp("~", operand);
     }
 
-    return this.parsePostfixExpression();
+    return this.parseCaretPowerExpression();
+  }
+
+  /**
+   * Gel's power operator, `a ^ b`: tighter than unary minus (`-2 ^ 2` is
+   * -(2 ^ 2)) and right-associative (`2 ^ 3 ^ 2` is 2 ^ 9); its exponent may
+   * be negated (`2 ^ -1`).
+   */
+  private parseCaretPowerExpression(): AST.Expression {
+    const base = this.parsePostfixExpression();
+    if (this.match(TokenType.CARET)) {
+      return AST.createBinaryOp("^", base, this.parseUnaryExpression());
+    }
+    return base;
   }
 
   private parsePostfixExpression(): AST.Expression {
@@ -1420,7 +1469,7 @@ export class EdgeQLParser {
             };
             expr = { ...AST.createPath([firstStep, step]), rooted: true };
           } else {
-            throw this.error("Cannot apply path access to this expression");
+            expr = this.pathOffExpression(expr, step);
           }
         }
       } // Backward link
@@ -1459,6 +1508,8 @@ export class EdgeQLParser {
             span: rootSpan
           };
           expr = { ...AST.createPath([rootStep, step]), rooted: true };
+        } else if (this.pathsOffExpressions.has(expr)) {
+          expr = this.pathOffExpression(expr, step);
         } else {
           expr = AST.createPath([step]);
         }
@@ -1577,6 +1628,33 @@ export class EdgeQLParser {
     }
 
     return expr;
+  }
+
+  /**
+   * A path off an expression that is not itself a path — `(select .teams
+   * order by .name limit 1).name`, `assert_single(.teams).name` — as the
+   * select it means, `(with __path_root__ := <expr> select
+   * __path_root__.name)`: the path from each object the expression yields.
+   * A further step (`(…).a.b`) extends the same path.
+   */
+  private pathOffExpression(root: AST.Expression, step: AST.PathStep): AST.Expression {
+    const existing = this.pathsOffExpressions.get(root);
+    if (existing) {
+      existing.steps.push(step);
+      return root;
+    }
+    const name = "__path_root__";
+    const path: AST.Path = { ...AST.createPath([{ kind: "PathStep", name, optional: false, type: "property" }, step]), rooted: true };
+    const select: AST.Subquery = {
+      kind: "Subquery",
+      query: {
+        bindings: [{ kind: "WithBinding", name: AST.createIdentifier(name), value: root }],
+        body: { distinct: false, expr: path, kind: "SelectQuery" },
+        kind: "WithBlock"
+      }
+    };
+    this.pathsOffExpressions.set(select, path);
+    return select;
   }
 
   private parsePathStep(): AST.PathStep {
@@ -1698,7 +1776,7 @@ export class EdgeQLParser {
         }
       }
 
-      const firstExpr = this.parseExpression();
+      const firstExpr = this.parseSetExpression();
 
       // Check if it's a tuple
       if (this.match(TokenType.COMMA)) {
@@ -1708,7 +1786,7 @@ export class EdgeQLParser {
           if (this.check(TokenType.RPAREN)) {
             break; // Allow trailing comma
           }
-          elements.push(this.parseExpression());
+          elements.push(this.parseSetExpression());
         } while (this.match(TokenType.COMMA));
 
         this.consume(TokenType.RPAREN, "Expected ')'");
@@ -1877,7 +1955,7 @@ export class EdgeQLParser {
 
       const name = this.parseIdentifier().name;
       this.consume(TokenType.ASSIGN, "Expected ':=' in named tuple");
-      const value = this.parseExpression();
+      const value = this.parseSetExpression();
 
       elements.push({ kind: "NamedTupleElement", name, value });
     } while (this.match(TokenType.COMMA));
@@ -1908,7 +1986,7 @@ export class EdgeQLParser {
         }
       }
 
-      let value = this.parseExpression();
+      let value = this.parseSetExpression();
 
       // `count(User filter .active)`: an argument may carry a select's
       // clauses, and is then the set that select yields.

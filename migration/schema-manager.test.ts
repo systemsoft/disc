@@ -550,7 +550,8 @@ Deno.test("SchemaManager - parseSDL - computed pointers in every Gel SDL form", 
   assertEquals(property("t1"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
   assertEquals(property("t2"), { computedExpr: ".title", edgeqlType: "str", multi: false, required: true });
   // Any other expression is typed as Gel infers it: a set literal of required strs is a required multi str.
-  assertEquals(property("t3"), { computedExpr: "({.title, .title ++ '!'})", edgeqlType: "str", multi: true, required: true });
+  // Its expression is kept as written.
+  assertEquals(property("t3"), { computedExpr: "{.title, .title ++ '!'}", edgeqlType: "str", multi: true, required: true });
   assertEquals(property("bodies"), { computedExpr: ".<post[is C].body", edgeqlType: "str", multi: true, required: false });
   assertEquals(property("names"), { computedExpr: ".<post[is C].post.author.name", edgeqlType: "str", multi: true, required: false });
 });

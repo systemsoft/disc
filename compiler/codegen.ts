@@ -420,7 +420,9 @@ export class SQLCodeGenerator {
       return `${expr.operator} ${operand}`;
     }
 
-    return `${expr.operator}${operand}`;
+    // A symbol binds tighter than any binary operator in PostgreSQL (`-a ^ b`
+    // is `(-a) ^ b`), so a binary operand keeps its parentheses: `-(a ^ b)`.
+    return expr.operand.kind === "BinaryExpression" ? `${expr.operator}(${operand})` : `${expr.operator}${operand}`;
   }
 
   private generateFunctionCall(expr: SQL.FunctionCall): string {

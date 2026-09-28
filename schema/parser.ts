@@ -5,6 +5,7 @@
  * SDL Parser - Parses SDL tokens into AST
  */
 
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SyntaxError } from "../lib/errors.ts";
 import { stripStdModule } from "../lib/std-types.ts";
 import * as AST from "./ast.ts";
@@ -311,12 +312,13 @@ export class SDLParser {
     this.consume(TokenType.RPAREN, "Expected ')' after parameters");
 
     this.consume(TokenType.ARROW, "Expected '->' after parameters");
+    const returnTypemod = this.parseTypemod();
     const returnType = this.parseTypeRef();
 
     let using: AST.Expression | undefined;
     if (this.match(TokenType.USING)) {
       this.consume(TokenType.LPAREN, "Expected '(' after 'using'");
-      using = this.parseExpression();
+      using = this.parseDelegatedExpression().expression;
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
     }
 
@@ -325,7 +327,22 @@ export class SDLParser {
       "Expected ';' after function declaration"
     );
 
-    return { kind: "FunctionDeclaration", name, parameters, returnType, using };
+    return { kind: "FunctionDeclaration", name, parameters, returnType, ...(returnTypemod ? { returnTypemod } : {}), using };
+  }
+
+  /*** A parameter's or a return type's `optional` or `set of`, consumed; else undefined. ***/
+  private parseTypemod(): "optional" | "setof" | undefined {
+    const word = (offset: number): string | undefined => this.tokens[this.current + offset]?.value.toLowerCase();
+    if (word(0) === "optional") {
+      this.advance();
+      return "optional";
+    }
+    if (word(0) === "set" && word(1) === "of") {
+      this.advance();
+      this.advance();
+      return "setof";
+    }
+    return undefined;
   }
 
   /*** A global declaration after `global`; `leading` holds qualifiers written before `global` (Gel's order). ***/
@@ -565,25 +582,14 @@ export class SDLParser {
    * `name := expr;` after the name of a computed pointer, in any of Gel's
    * forms (`[required] [single | multi] [link | property] name := expr;`). It
    * is typed `auto`: whether it is a link, and its type, is inferred from the
-   * expression (see modulesToSchema). An expression with braces the SDL
-   * expression parser does not cover (a set literal, a shape) is kept as its
-   * source text.
+   * expression (see modulesToSchema). The expression is EdgeQL's: its source
+   * text, which the EdgeQL expression parser must accept, is what it compiles
+   * from (`computedSource`). `computed` is its SDL form, or — for EdgeQL the
+   * SDL expression parser does not cover (`union`, `//`, an array, a shape,
+   * `(select …).name`) — its source text kept whole.
    */
   private parseComputedPointer(name: AST.Identifier, qualifiers: any): AST.PropertyDeclaration {
-    const start = this.current;
-    let computed: AST.Expression;
-    try {
-      computed = this.parseExpression();
-      if (!this.check(TokenType.SEMICOLON)) {
-        throw this.error("Expected ';' after computed property");
-      }
-    } catch (error) {
-      this.current = start;
-      computed = this.parseEdgeQLExpression();
-      if (computed.kind !== "PathExpression" || !computed.source?.includes("{")) {
-        throw error;
-      }
-    }
+    const { expression: computed, source: computedSource } = this.parseDelegatedExpression();
     this.consume(TokenType.SEMICOLON, "Expected ';' after computed property");
 
     return {
@@ -591,8 +597,56 @@ export class SDLParser {
       name,
       type: AST.createTypeRef(AST.createQualifiedName(["auto"])), // Type will be inferred
       computed,
+      computedSource,
       ...qualifiers
     };
+  }
+
+  /**
+   * An EdgeQL expression, up to the `;` or the unmatched `)` that ends it:
+   * its source text, which the EdgeQL expression parser must accept, and its
+   * SDL form — or, for EdgeQL the SDL expression parser does not cover, its
+   * source text kept whole (a PathExpression with `source`).
+   */
+  private parseDelegatedExpression(): { expression: AST.Expression; source: string; } {
+    const start = this.current;
+    const whole = this.parseEdgeQLExpression() as AST.PathExpression;
+    const end = this.current;
+    const source = whole.source ?? "";
+    this.checkEdgeQLExpression(source, this.tokens[start]);
+
+    this.current = start;
+    let expression: AST.Expression = whole;
+    try {
+      const parsed = this.parseExpression();
+      if (this.current === end) {
+        expression = parsed;
+      }
+    } catch {
+      // Not in the SDL expression grammar: kept as its source text.
+    }
+    this.current = end;
+    return { expression, source };
+  }
+
+  /*** Throws when the EdgeQL expression parser rejects `source`, the text of an expression starting at `first`, at the offending token. ***/
+  private checkEdgeQLExpression(source: string, first: Token): void {
+    if (source === "") {
+      throw this.error("Expected an expression");
+    }
+    try {
+      new EdgeQLParser(source).parseExpressionOnly();
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
+      const offset = first.offset + (error.context?.location?.offset ?? 0);
+      const before = this.source.slice(0, offset).split("\n");
+      throw new SyntaxError(error.message, {
+        hint: error.context?.hint,
+        location: { column: before[before.length - 1].length + 1, line: before.length, offset }
+      });
+    }
   }
 
   private parsePropertyDeclaration(qualifiers: any): AST.PropertyDeclaration {
@@ -1330,9 +1384,9 @@ export class SDLParser {
       do {
         const name = this.parseIdentifier();
         this.consume(TokenType.COLON, "Expected ':' after parameter name");
+        const typemod: AST.FunctionParameter["typemod"] = this.parseTypemod();
         const type = this.parseTypeRef();
 
-        let typemod: AST.FunctionParameter["typemod"];
         let defaultValue: AST.Expression | undefined;
 
         if (this.match(TokenType.EQUALS)) {

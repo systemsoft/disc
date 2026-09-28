@@ -163,8 +163,13 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
 
   /*** True when `path` reaches objects through at least one link, or from a type or a binding (not a property, not just the current row). ***/
   protected isObjectPath(path: EdgeQLAST.Path): boolean {
+    return this.objectPathType(path) !== undefined;
+  }
+
+  /*** The type of the objects `path` reaches when it is an object path (see `isObjectPath`), else undefined. ***/
+  protected objectPathType(path: EdgeQLAST.Path): Context.TypeDef | undefined {
     const resolved = this.resolvePath(path);
-    return resolved !== null && !resolved.property && (resolved.hops.length > 0 || resolved.start.kind !== "row");
+    return resolved !== null && !resolved.property && (resolved.hops.length > 0 || resolved.start.kind !== "row") ? resolved.typeDef : undefined;
   }
 
   /**
@@ -177,8 +182,56 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     if (expr.kind !== "Path") {
       return false;
     }
+    if (this.linkPropertyLink(expr)) {
+      return true;
+    }
     const resolved = this.resolvePath(expr);
     return resolved !== null && resolved.multi;
+  }
+
+  /**
+   * For a path to a link property of its last link (`.members@role`,
+   * `.teams.members@role`, `Team.members@role`): that path's objects up to
+   * the link and the link, whose junction rows hold the property. Else null.
+   */
+  protected linkPropertyLink(path: EdgeQLAST.Path): { link: Context.LinkDef; resolved: ResolvedPath; } | null {
+    const last = path.steps[path.steps.length - 1];
+    if (path.steps.length < 2 || last?.type !== "link_property" || path.steps.slice(0, -1).some(step => step.type === "link_property")) {
+      return null;
+    }
+    const resolved = this.resolvePath({ ...path, steps: path.steps.slice(0, -1) });
+    const hop = resolved?.hops[resolved.hops.length - 1];
+    if (!resolved || resolved.property || hop?.kind !== "link" || !hop.link.junctionTable || !hop.link.properties?.has(last.name)) {
+      return null;
+    }
+    return { link: hop.link, resolved };
+  }
+
+  /**
+   * The values of a path to a link property (see `linkPropertyLink`), one per
+   * link from the objects before it — the last link's only, as in Gel — or
+   * null for any other path:
+   *
+   *   .teams.members@role
+   *   → SELECT j.role FROM team_members j WHERE j.source_id IN (<ids of .teams>) AND j.role IS NOT NULL
+   */
+  protected linkPropertyValues(path: EdgeQLAST.Path): SQL.SelectStatement | null {
+    const found = this.linkPropertyLink(path);
+    if (!found) {
+      return null;
+    }
+    const { link, resolved } = found;
+    const ids = this.compilePathIds({ ...resolved, hops: resolved.hops.slice(0, -1) });
+    const alias = Context.generateAlias(this.ctx, `__lp_${link.name}`);
+    const column = SQL.createColumnReference(Context.getLinkProperty(link, path.steps[path.steps.length - 1].name).columnName, alias);
+    const readable = this.readableIdCondition(resolved.typeDef, SQL.createColumnReference(link.junctionTargetColumn ?? "target_id", alias));
+    const conditions = [this.idIn(SQL.createColumnReference(link.junctionSourceColumn ?? "source_id", alias), ids), SQL.isNotNull(column), readable]
+      .filter((condition): condition is SQL.SQLExpression => condition !== undefined && condition !== null);
+    return SQL.createSelectStatement({
+      from: SQL.createFromClause([SQL.createTableReference(link.junctionTable!, alias)]),
+      select: SQL.createSelectClause([SQL.createSelectItem(column)]),
+      where: SQL.createWhereClause(conditions.reduce((all, condition) => SQL.createBinaryExpression("AND", all, condition)))
+    });
   }
 
   /*** The property `path` ends in, when it resolves to a path over objects ending in one. ***/

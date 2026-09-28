@@ -391,6 +391,10 @@ export class SDLLexer {
         this.advance();
         return createToken(TokenType.AT, "@", startLine, startColumn, startPos);
 
+      case "^":
+        this.advance();
+        return createToken(TokenType.CARET, "^", startLine, startColumn, startPos);
+
       default:
         throw new SyntaxError(`Unexpected character '${ch}'`, {
           location: { line: startLine, column: startColumn, offset: startPos }

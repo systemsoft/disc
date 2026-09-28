@@ -16,13 +16,13 @@
  * element-wise operator or function is one value per combination of its
  * operands' (multi when one is, required when all are); a set literal or
  * `union` is several. The type is null when it cannot be told (a
- * polymorphic function over an operand of unknown type, a user function);
+ * polymorphic function over an operand of unknown type);
  * the whole result is null when the cardinality cannot either.
  */
 
 import type * as EdgeQLAST from "../edgeql/ast.ts";
 import { renderEdgeQLTypeName } from "../compiler/compiler-base.ts";
-import { lookupFunction, type FunctionDef } from "../compiler/context.ts";
+import { isBuiltinFunction, lookupFunction, type FunctionDef } from "../compiler/context.ts";
 
 export interface ComputedValues {
   /*** For a user scalar type (a path to a property of one): the built-in it extends. ***/
@@ -62,6 +62,8 @@ const COMPARISONS = new Set([
   "AND",
   "ILIKE",
   "LIKE",
+  "NOT ILIKE",
+  "NOT LIKE",
   "OR",
   "~",
   "~*"
@@ -211,6 +213,16 @@ function inferCall(
   if (!operands) {
     return null;
   }
+  // A function the schema declares (`function f(x: str) -> int64 using (…)`)
+  // is of its declared return type, one value per combination of its
+  // arguments' — none for `-> optional T`, several for `-> set of T`.
+  if (!isBuiltinFunction(funcDef)) {
+    return {
+      multi: operands.card.multi || funcDef.returnTypemod === "setof",
+      required: operands.card.required && funcDef.returnTypemod === undefined,
+      type: funcDef.returnType.replace(/^std::/, "")
+    };
+  }
   let type: string | null = funcDef.returnType;
   if (name === "array_get" || name === "json_get") {
     return { multi: operands.card.multi, required: false, type: name === "json_get" ? "json" : arrayElement(argType) };
@@ -246,8 +258,9 @@ function inferBinary(
     case "UNION":
       return { multi: true, required: left.required || right.required, type: commonType([left.type, right.type]) };
     case "EXCEPT":
-    case "INTERSECT":
       return { multi: left.multi, required: false, type: left.type };
+    case "INTERSECT":
+      return { multi: left.multi && right.multi, required: false, type: left.type };
     case "IN":
     case "NOT IN":
       return { multi: left.multi, required: left.required, type: "bool" };
@@ -280,6 +293,10 @@ function arithmeticType(op: string, left: string | null, right: string | null): 
   const numeric = numericType(left, right);
   if (numeric === null) {
     return null;
+  }
+  // Gel raises int16s to a float32 (`<int16>2 ^ <int16>3`).
+  if (op === "^" && numeric === "int16") {
+    return "float32";
   }
   if (op === "/" || op === "^" || op === "**") {
     return numeric === "bigint" ? "decimal" : INT_WIDTHS[numeric] ? "float64" : numeric;

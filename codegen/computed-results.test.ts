@@ -37,6 +37,9 @@ import { schemaToIR } from "./schema-to-ir.ts";
 const SDL = `
 module default {
   function shout(s: str) -> str using (str_upper(s) ++ '!');
+  function parts(s: str) -> set of str using (str_split(s, ',')[0]);
+  function maybe(s: str) -> optional str using (s if len(s) > 2 else <str>{});
+  function pair(s: str) -> array<str> using ([s, s]);
   type Person {
     required name: str;
     nick: str;
@@ -53,6 +56,14 @@ module default {
     single first_post := (select .<author[is Post] order by .title limit 1);
     single latest := assert_single((select .<author[is Post] order by .created desc limit 1));
     loud := shout(.name);
+    nick_loud := shout(.nick);
+    name_parts := parts(.name);
+    maybe_name := maybe(.name);
+    name_pair := pair(.name);
+    names := .name union .nick;
+    n_half := len(.name) // 2;
+    age_sq := .age ^ 2;
+    not_ann := .name not like 'Ann%';
   }
   type Post {
     required title: str;
@@ -105,8 +116,18 @@ Deno.test("computed results - a non-path computed is typed by its expression, wi
   assertEquals(typeOf("up"), "optional multi str");
   assertEquals(typeOf("last_seen"), "optional single datetime");
   assertEquals(typeOf("counts"), "required single tuple<posts: int64, tags: int64>");
-  // A user function's result type is not inferred.
-  assertEquals(typeOf("loud"), "optional single auto");
+  // A function the schema declares is of its declared return type.
+  assertEquals(typeOf("loud"), "required single str");
+  assertEquals(typeOf("nick_loud"), "optional single str");
+  assertEquals(typeOf("name_parts"), "optional multi str");
+  assertEquals(typeOf("maybe_name"), "optional single str");
+  assertEquals(typeOf("name_pair"), "required single array<str>");
+  // Any EdgeQL expression: set operators, `//`.
+  assertEquals(typeOf("names"), "required multi str");
+  assertEquals(typeOf("n_half"), "required single int64");
+  // `^` is a power: an int64 raised is a float64.
+  assertEquals(typeOf("age_sq"), "optional single float64");
+  assertEquals(typeOf("not_ann"), "required single bool");
 });
 
 Deno.test("computed results - TypeScript declares each computed's type and cardinality", () => {
@@ -122,7 +143,9 @@ Deno.test("computed results - TypeScript declares each computed's type and cardi
   assertStringIncludes(types, " counts: { posts: bigint; tags: bigint };\n");
   assertStringIncludes(types, " first_post?: [Post] | null;\n");
   assertStringIncludes(types, " latest?: [Post] | null;\n");
-  assertStringIncludes(types, " loud?: unknown | null;\n");
+  assertStringIncludes(types, " loud: string;\n");
+  assertStringIncludes(types, " name_parts?: string[] | null;\n");
+  assertStringIncludes(types, " name_pair: string[];\n");
 });
 
 Deno.test("computed results - the query builders revive a typed computed as a stored property", () => {
@@ -130,7 +153,7 @@ Deno.test("computed results - the query builders revive a typed computed as a st
 
   assertStringIncludes(queries, `n_posts: "<int64>"`);
   assertStringIncludes(queries, `last_seen: "<datetime>"`);
-  assertStringIncludes(queries, `multi: ["tags", "up"]`);
+  assertStringIncludes(queries, `multi: ["tags", "up", "name_parts", "names"]`);
 });
 
 Deno.test("computed results - Rust and Go declare each computed's type", () => {

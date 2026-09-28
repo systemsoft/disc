@@ -284,6 +284,8 @@ export interface FunctionDef {
   name: string;
   args: ArgDef[];
   returnType: string;
+  /*** A declared function's `-> optional T` (may be empty) or `-> set of T` (may be several). ***/
+  returnTypemod?: "optional" | "setof";
   sqlName?: string;
   windowOnly?: boolean; // true for functions that REQUIRE an OVER clause (row_number, rank, etc.)
   windowCompatible?: boolean; // true for functions that CAN use an OVER clause (count, sum, etc.)

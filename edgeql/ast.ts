@@ -346,6 +346,8 @@ export type BinaryOperator =
   | "OR"
   | "LIKE"
   | "ILIKE"
+  | "NOT LIKE"
+  | "NOT ILIKE"
   | "IN"
   | "NOT IN"
   | "IS"

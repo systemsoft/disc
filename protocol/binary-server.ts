@@ -18,6 +18,7 @@
  */
 
 import { selectKeepsAtMostOne, tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
+import { powerType } from "../compiler/compiler-expressions.ts";
 import type { Schema, TypeDef } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -476,7 +477,7 @@ const COMPARISON_OPERATORS = new Set([
   "NOT IN",
   "OR"
 ]);
-const NUMERIC_OPERATORS = new Set(["%", "*", "**", "+", "-", "/", "//"]);
+const NUMERIC_OPERATORS = new Set(["%", "*", "+", "-", "/", "//", "^"]);
 
 /**
  * The scalar type of an expression selected on its own (`select 42`,
@@ -632,11 +633,14 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
   ) {
     return null;
   }
+  if (op.op === "^") {
+    return powerType(left, right);
+  }
   if (DECIMAL_TYPES.includes(left) || DECIMAL_TYPES.includes(right)) {
     return decimalOpType(op.op, left, right);
   }
   if (
-    (op.op === "/" || op.op === "**") && INT_TYPES.includes(left) &&
+    op.op === "/" && INT_TYPES.includes(left) &&
     INT_TYPES.includes(right)
   ) {
     return "float64";
@@ -646,14 +650,14 @@ function binaryOpType(op: AST.BinaryOp, scope: WithScope): string | null {
 
 /**
  * The result type of arithmetic with a bigint or decimal operand: ints widen
- * to bigint, and a decimal operand, `/` or `**` makes it decimal. Gel has no
+ * to bigint, and a decimal operand or `/` makes it decimal. Gel has no
  * implicit cast between floats and either, so a float operand gives null.
  */
 function decimalOpType(op: string, left: string, right: string): string | null {
   if (FLOAT_TYPES.includes(left) || FLOAT_TYPES.includes(right)) {
     return null;
   }
-  return left === "decimal" || right === "decimal" || op === "/" || op === "**" ?
+  return left === "decimal" || right === "decimal" || op === "/" ?
     "decimal" :
     "bigint";
 }

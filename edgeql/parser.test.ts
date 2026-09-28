@@ -1514,3 +1514,57 @@ Deno.test("EdgeQL Parser - a named select expression: scalars, distinct, subquer
   const nested = new EdgeQLParser("select (select n := 1 + 1)").parse();
   assertEquals(nested.kind === "SelectQuery" && nested.expr.kind === "Subquery" && nested.expr.query.kind, "WithBlock");
 });
+
+// Gel's set operators join expressions wherever one stands alone: a bare
+// expression (a schema computed's), a parenthesized one, a call's argument,
+// a shape element's value. `intersect` binds tighter than `union`.
+Deno.test("Parser - union, except and intersect in expression position", () => {
+  const union = new EdgeQLParser(".a union .b").parseExpressionOnly();
+  assertEquals(union.kind === "BinaryOp" ? union.op : union.kind, "UNION");
+  const mixed = new EdgeQLParser("{1, 2} union {3} intersect {3}").parseExpressionOnly();
+  assertEquals(mixed.kind === "BinaryOp" && mixed.right.kind === "BinaryOp" ? [mixed.op, mixed.right.op] : mixed.kind, ["UNION", "INTERSECT"]);
+  const except = new EdgeQLParser("{1, 2} except 1 union 3").parseExpressionOnly();
+  assertEquals(except.kind === "BinaryOp" && except.left.kind === "BinaryOp" ? [except.op, except.left.op] : except.kind, ["UNION", "EXCEPT"]);
+  for (const query of ["select count(.a union .b)", "select (.a union .b)", "select Foo { x := .a union .b }"]) {
+    new EdgeQLParser(query).parse();
+  }
+});
+
+Deno.test("Parser - ^ is a power: tighter than unary minus, right-associative, over a negated exponent", () => {
+  const render = (expr: Expression): string =>
+    expr.kind === "BinaryOp" ?
+      `(${render(expr.left)} ${expr.op} ${render(expr.right)})` :
+      expr.kind === "UnaryOp" ?
+      `(${expr.op}${render(expr.operand)})` :
+      expr.kind === "Literal" ?
+      String(expr.value) :
+      expr.kind;
+  assertEquals(render(new EdgeQLParser("-2 ^ 2").parseExpressionOnly()), "(-(2 ^ 2))");
+  assertEquals(render(new EdgeQLParser("2 ^ 3 ^ 2").parseExpressionOnly()), "(2 ^ (3 ^ 2))");
+  assertEquals(render(new EdgeQLParser("2 * 3 ^ 2").parseExpressionOnly()), "(2 * (3 ^ 2))");
+  assertEquals(render(new EdgeQLParser("2 ^ -1").parseExpressionOnly()), "(2 ^ (-1))");
+});
+
+Deno.test("Parser - not like and not ilike", () => {
+  const notLike = new EdgeQLParser("'abc' not like 'a%'").parseExpressionOnly();
+  assertEquals(notLike.kind === "BinaryOp" ? notLike.op : notLike.kind, "NOT LIKE");
+  const notIlike = new EdgeQLParser("'abc' not ilike 'A%' and true").parseExpressionOnly();
+  assertEquals(notIlike.kind === "BinaryOp" && notIlike.left.kind === "BinaryOp" ? [notIlike.op, notIlike.left.op] : notIlike.kind, ["AND", "NOT ILIKE"]);
+  // `not in` and a leading `not` still parse as before.
+  const notIn = new EdgeQLParser("1 not in {2}").parseExpressionOnly();
+  assertEquals(notIn.kind === "BinaryOp" ? notIn.op : notIn.kind, "NOT IN");
+  assertEquals(new EdgeQLParser("not 'a' like 'b'").parseExpressionOnly().kind, "UnaryOp");
+});
+
+Deno.test("Parser - a path off a parenthesized select is the path from its objects", () => {
+  const expr = new EdgeQLParser("(select .teams order by .name limit 1).name.first").parseExpressionOnly();
+  assertEquals(expr.kind, "Subquery");
+  const block = expr.kind === "Subquery" && expr.query.kind === "WithBlock" ? expr.query : undefined;
+  assertEquals(block?.bindings[0].value.kind, "Subquery");
+  const body = block?.body.kind === "SelectQuery" ? block.body.expr : undefined;
+  assertEquals(body?.kind === "Path" ? body.steps.map(step => step.name) : body, ["__path_root__", "name", "first"]);
+});
+
+Deno.test("Parser - `**` is not an EdgeQL operator; exponentiation is `^`", () => {
+  assertThrows(() => new EdgeQLParser("select 2 ** 10").parse(), SyntaxError, "use '^' for exponentiation");
+});

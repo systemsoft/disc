@@ -69,6 +69,8 @@ export interface FunctionDeclaration extends SDLNode {
   name: Identifier;
   parameters: FunctionParameter[];
   returnType: TypeRef;
+  /*** `-> optional T` (may be empty) or `-> set of T` (may be several). ***/
+  returnTypemod?: "optional" | "setof";
   using?: Expression;
   volatility?: "stable" | "volatile" | "immutable";
   overloaded?: boolean;
@@ -139,6 +141,8 @@ export interface PropertyDeclaration extends SDLNode {
   overloaded?: boolean;
   readonly?: boolean;
   computed?: Expression;
+  /*** A computed's expression as written: the EdgeQL it compiles from (`computed` is its SDL form). ***/
+  computedSource?: string;
   default?: Expression;
   constraints?: Constraint[];
   annotations?: Annotation[];

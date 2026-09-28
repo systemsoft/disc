@@ -512,6 +512,8 @@ export class EdgeQLAnalyzer {
       case "OR":
       case "LIKE":
       case "ILIKE":
+      case "NOT LIKE":
+      case "NOT ILIKE":
       case "IN":
       case "NOT IN":
       case "IS":
@@ -527,6 +529,7 @@ export class EdgeQLAnalyzer {
       case "/":
       case "//":
       case "%":
+      case "^":
       case "**":
         // Numeric operations
         if (leftType && this.isNumericType(leftType.name)) {

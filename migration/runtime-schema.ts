@@ -225,6 +225,24 @@ function inferComputedProperty(
     return null;
   }
   const last = expr.steps[expr.steps.length - 1];
+  // A link property of the last link (`.teams.members@role`): one value per link, of any of them.
+  if (last.type === "link_property" && expr.steps.length > 1) {
+    const linkStep = expr.steps[expr.steps.length - 2];
+    const prefix = expr.steps.slice(0, -2);
+    const hops = prefix.length > 0 ? inferComputedLink({ ...expr, steps: prefix }, source, resolveType) : { multi: false, required: true, target: source.name };
+    const owner = hops ? resolveType(hops.target) : undefined;
+    const link = owner?.links.get(linkStep.name);
+    const property = link?.properties?.get(last.name);
+    if (!hops || !link || !property?.edgeqlType) {
+      return null;
+    }
+    return {
+      ...(property.baseType ? { baseType: property.baseType } : {}),
+      edgeqlType: property.edgeqlType,
+      multi: hops.multi || link.multi,
+      required: false
+    };
+  }
   let owner: { multi: boolean; required: boolean; type: TypeDef; } | null = { multi: false, required: true, type: source };
   if (expr.steps.length > 1) {
     const hops = inferComputedLink({ ...expr, steps: expr.steps.slice(0, -1) }, source, resolveType);
@@ -281,7 +299,7 @@ function hasShape(expr: EdgeQLAST.Expression): boolean {
  */
 export function detectComputedPointerErrors(schema: Schema): string | null {
   const errors: string[] = [];
-  const functions = getBuiltinFunctions();
+  const functions = schema.functions;
   for (const typeDef of schema.types.values()) {
     const resolve = (target: string): TypeDef | undefined =>
       schema.types.get(target) ??
@@ -856,7 +874,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
               // Declared `single` (which detectComputedPointerErrors rejects: a backlink may be several).
               ...(propDecl.single ? { single: true } : {}),
               computed: true,
-              computedExpr: sdlExpressionToEdgeQL(propDecl.computed),
+              computedExpr: propDecl.computedSource ?? sdlExpressionToEdgeQL(propDecl.computed),
               backlink: bl.forwardLink
             });
             continue;
@@ -915,7 +933,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         // computed property like `expires := .created + ...` would emit
         // a column reference to a non-existent `expires` column.
         const computedExpr = propDecl.computed ?
-          sdlExpressionToEdgeQL(propDecl.computed) :
+          propDecl.computedSource ?? sdlExpressionToEdgeQL(propDecl.computed) :
           undefined;
 
         properties.set(propName, {
@@ -1267,6 +1285,27 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
     }
   }
 
+  // SDL `function` declarations, so a call to one is a known function. A
+  // function of the default module is called bare; any other by its module.
+  const functions = getBuiltinFunctions();
+  for (const module of modules) {
+    for (const item of module.items) {
+      if (item.kind === "FunctionDeclaration") {
+        const name = module.name === "default" ? item.name.value : `${module.name}::${item.name.value}`;
+        functions.set(name, {
+          args: item.parameters.map(parameter => ({
+            name: parameter.name.value,
+            required: parameter.typemod !== "optional" && !parameter.default,
+            type: parameter.type.name.parts.join("::")
+          })),
+          name,
+          returnType: typeRefToSdlString(item.returnType),
+          ...(item.returnTypemod ? { returnTypemod: item.returnTypemod } : {})
+        });
+      }
+    }
+  }
+
   // (c) A computed that yields objects (`auth := .author`, `first :=
   // (select .<post[is Comment] … limit 1)`) is a computed link to their
   // type, not a property: selected with a sub-shape, filtered through, and
@@ -1278,7 +1317,6 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
   // (`x := .auth.best_friend`). Declared `multi` / `required` / `single`
   // stand (detectComputedPointerErrors rejects `required` on one that may be
   // empty, `single` on one that may be several).
-  const builtins = getBuiltinFunctions();
   for (let changed = true; changed;) {
     changed = false;
     for (const typeDef of types.values()) {
@@ -1290,7 +1328,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         const resolve = (target: string) => resolveLinkTarget(target, typeDef.module);
         const inferred = inferComputedLink(expr, typeDef, resolve);
         if (!inferred) {
-          const values = inferComputedPropertyValues(expr, typeDef, resolve, builtins);
+          const values = inferComputedPropertyValues(expr, typeDef, resolve, functions);
           // Its cardinality even when its type can't be told (it stays `auto`).
           const next: PropertyDef | null = values && {
             ...property,
@@ -1317,26 +1355,6 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
           target: inferred.target
         });
         changed = true;
-      }
-    }
-  }
-
-  // SDL `function` declarations, so a call to one is a known function. A
-  // function of the default module is called bare; any other by its module.
-  const functions = getBuiltinFunctions();
-  for (const module of modules) {
-    for (const item of module.items) {
-      if (item.kind === "FunctionDeclaration") {
-        const name = module.name === "default" ? item.name.value : `${module.name}::${item.name.value}`;
-        functions.set(name, {
-          args: item.parameters.map(parameter => ({
-            name: parameter.name.value,
-            required: parameter.typemod !== "optional" && !parameter.default,
-            type: parameter.type.name.parts.join("::")
-          })),
-          name,
-          returnType: item.returnType.name.parts.join("::")
-        });
       }
     }
   }
