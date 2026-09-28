@@ -647,7 +647,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // (`COALESCE(COALESCE(a, b), c)`), which is equivalent. Scalar operands
     // only — a multi-cardinality LHS (set coalescing) is not supported.
     if (binOp.op === "??") {
-      return SQL.createFunctionCall("COALESCE", [left, right]);
+      return SQL.createFunctionCall("COALESCE", this.asUnitedAlternatives([binOp.left, binOp.right], [left, right]));
     }
 
     if (binOp.op === "/" || binOp.op === "//" || binOp.op === "%") {
@@ -1120,6 +1120,30 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return types.length > 0 && types.every(type => type !== null) ? unitedTupleType(types as string[]) : null;
   }
 
+  /*** The united tuple type of the arrays of tuples `exprs` evaluate to, when each one's is known (`staticTupleArrayType`); else null. ***/
+  private unitedStaticTupleArrayType(exprs: EdgeQLAST.Expression[]): string | null {
+    const types = exprs.map(expr => this.staticTupleArrayType(expr));
+    return types.every(type => type !== null) ? unitedTupleType(types as string[]) : null;
+  }
+
+  /**
+   * `compiled`, the values of the alternatives `exprs` (`??`'s operands,
+   * `if … else`'s branches), as their union's type: tuples, or arrays of
+   * tuples, named differently lose their names, as `union`'s do
+   * (`(a := 1) ?? (b := 2)` is `(1,)`); else `compiled` as it is.
+   */
+  private asUnitedAlternatives(exprs: EdgeQLAST.Expression[], compiled: SQL.SQLExpression[]): SQL.SQLExpression[] {
+    const tuples = this.unitedStaticTupleType(exprs);
+    if (tuples) {
+      return compiled.map((sql, index) => this.asTupleType(sql, this.staticTupleType(exprs[index])!, tuples));
+    }
+    const arrays = this.unitedStaticTupleArrayType(exprs);
+    if (arrays) {
+      return compiled.map((sql, index) => this.asTupleArrayType(sql, this.staticTupleArrayType(exprs[index])!, arrays));
+    }
+    return compiled;
+  }
+
   /**
    * The jsonb array of tuples `sql` as a key to order or compare by: a
    * PostgreSQL array of each tuple's `tupleSortKey`, in order, which sorts
@@ -1156,6 +1180,18 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     if (expr.kind === "SliceExpression") {
       return this.staticTupleArrayType(expr.expr);
     }
+    if (expr.kind === "BinaryOp" && expr.op === "??") {
+      return this.unitedStaticTupleArrayType([expr.left, expr.right]);
+    }
+    // An element of an array of arrays of tuples.
+    if (expr.kind === "IndexExpression") {
+      const element = /^array<(.+)>$/.exec(this.staticNestedArrayType(expr.expr) ?? "")?.[1] ?? "";
+      const tuple = /^array<(.+)>$/.exec(element)?.[1] ?? "";
+      return tupleTypeElements(tuple) ? tuple : null;
+    }
+    if (expr.kind === "IfElse") {
+      return this.unitedStaticTupleArrayType([expr.then, expr.else]);
+    }
     if (expr.kind === "Identifier") {
       const variable = this.scopeVariable(expr.name);
       if (variable && !variable.sqlOverride) {
@@ -1164,6 +1200,58 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     const element = this.staticArrayElementType(expr);
     return element !== null && tupleTypeElements(element) ? element : null;
+  }
+
+  /**
+   * The type of `expr` when it is an array of arrays (`array<array<int64>>`)
+   * known without running the query: a literal with an array element, a
+   * cast's, `array_agg` of arrays, `++`, `??`, `if … else`, a slice or an
+   * index of one, a variable's. Null otherwise. Such an array is a jsonb
+   * array (`edgeqlTypeToPgType`): PostgreSQL has no arrays of arrays of
+   * different lengths.
+   */
+  protected staticNestedArrayType(expr: EdgeQLAST.Expression): string | null {
+    const arrayType = (operand: EdgeQLAST.Expression): string | null => {
+      if (operand.kind === "SetExpr") {
+        return flattenSetElements(operand).map(arrayType).find(type => type !== null) ?? null;
+      }
+      const tuples = this.staticTupleArrayType(operand);
+      const type = tuples ? `array<${tuples}>` : this.staticNestedArrayType(operand) ??
+        (operand.kind === "TypeCast" ? renderEdgeQLTypeName(operand.type) : this.staticScalarType(operand));
+      return type?.startsWith("array<") ? type : null;
+    };
+    switch (expr.kind) {
+      case "ArrayExpr": {
+        const element = expr.elements.map(arrayType).find(type => type !== null);
+        return element ? `array<${element}>` : null;
+      }
+      case "TypeCast": {
+        const type = renderEdgeQLTypeName(expr.type);
+        return type.startsWith("array<array<") ? type : null;
+      }
+      case "FunctionCall": {
+        const element = expr.args.length === 1 && Context.lookupFunction(this.ctx.schema, expr.name.parts)?.name === "array_agg" ?
+          arrayType(expr.args[0].value) :
+          null;
+        return element ? `array<${element}>` : null;
+      }
+      case "BinaryOp":
+        return expr.op === "++" || expr.op === "??" ? this.staticNestedArrayType(expr.left) ?? this.staticNestedArrayType(expr.right) : null;
+      case "IfElse":
+        return this.staticNestedArrayType(expr.then) ?? this.staticNestedArrayType(expr.else);
+      case "SliceExpression":
+        return this.staticNestedArrayType(expr.expr);
+      case "IndexExpression": {
+        const element = /^array<(.+)>$/.exec(this.staticNestedArrayType(expr.expr) ?? "")?.[1] ?? "";
+        return element.startsWith("array<array<") ? element : null;
+      }
+      case "Identifier": {
+        const variable = this.scopeVariable(expr.name);
+        return variable && !variable.sqlOverride ? this.staticNestedArrayType(variable.expression) : null;
+      }
+      default:
+        return null;
+    }
   }
 
   /**
@@ -1238,8 +1326,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     } else if (expr.kind === "SetExpr") {
       const elements = flattenSetElements(expr);
       return this.unitedStaticTupleType(elements) ?? elements.map(element => this.staticTupleType(element)).find(found => found !== null) ?? null;
-    } else if (expr.kind === "BinaryOp" && expr.op === "UNION") {
+    } else if (expr.kind === "BinaryOp" && (expr.op === "UNION" || expr.op === "??")) {
       return this.unitedStaticTupleType([expr.left, expr.right]);
+    } else if (expr.kind === "IfElse") {
+      return this.unitedStaticTupleType([expr.then, expr.else]);
     } else if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery" && !expr.query.shape) {
       return this.staticTupleType(expr.query.expr);
     } else if (expr.kind === "IndexExpression") {
@@ -2645,6 +2735,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       }
     }
 
+    // `array_agg` of arrays: an array of arrays is a jsonb array (see
+    // `compileArrayExpr`), made of the arrays as json.
+    if (functionName === "array_agg" && funcCall.args.length === 1 && this.staticNestedArrayType(funcCall)) {
+      const arg = funcCall.args[0];
+      const asJson: EdgeQLAST.TypeCast = { expr: arg.value, kind: "TypeCast", type: EdgeQLAST.createTypeName(["json"]) };
+      return SQL.createFunctionCall("to_jsonb", [this.compileFunctionCall({ ...funcCall, args: [{ ...arg, value: asJson }] })]);
+    }
+
     // In a policy's condition, `runtime::has_permission('<spec>')` is the Deno
     // process's permission, decided now (see AccessEvaluator.expressionToSQL).
     if (qualifiedName === "runtime::has_permission" && this.compilingPolicy && this.accessEvaluator) {
@@ -2725,8 +2823,11 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
     const args = funcCall.args.map(arg => this.compileExpression(arg.value));
 
-    // An array of tuples is a jsonb array (see `compileArrayExpr`).
-    if (functionName === "array_unpack" && args.length === 1 && this.staticTupleArrayType(funcCall.args[0].value)) {
+    // An array of tuples, or of arrays, is a jsonb array (see `compileArrayExpr`).
+    if (
+      functionName === "array_unpack" && args.length === 1 &&
+      (this.staticTupleArrayType(funcCall.args[0].value) || this.staticNestedArrayType(funcCall.args[0].value))
+    ) {
       return SQL.createFunctionCall("jsonb_array_elements", args);
     }
 
@@ -3015,6 +3116,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
             "array_get() requires exactly 2 arguments"
           );
         }
+        // An array of tuples or of arrays is a jsonb array (see `compileArrayExpr`),
+        // whose `->` counts a negative index from the end and answers NULL past either end.
+        if (this.staticTupleArrayType(funcCall.args[0].value) || this.staticNestedArrayType(funcCall.args[0].value)) {
+          const element = SQL.createJsonbAccess(args[0], "->", SQL.createCastExpression(args[1], "integer"));
+          return this.nestedArrayElement(element, funcCall.args[0].value);
+        }
         return {
           kind: "RawSQLExpression" as const,
           sql: `(${this.renderSqlExpr(args[0])})[${this.renderSqlExpr(args[1])} + 1]`
@@ -3221,7 +3328,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * it; a user scalar is taken as the built-in it extends):
    *
    *   array<T> → CARDINALITY   (PG `LENGTH` has no array form)
-   *   array<tuple<…>> → jsonb_array_length (see `compileArrayExpr`)
+   *   array<tuple<…>>, array<array<…>> → jsonb_array_length (see `compileArrayExpr`)
    *   bytes    → OCTET_LENGTH
    *   str      → LENGTH        (characters, as Gel counts them)
    *
@@ -3230,7 +3337,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * cannot see statically still fails there.
    */
   private lengthFunction(expr: EdgeQLAST.Expression): string {
-    if (this.staticTupleArrayType(expr)) {
+    if (this.staticTupleArrayType(expr) || this.staticNestedArrayType(expr)) {
       return "jsonb_array_length";
     }
     const staticType = expr.kind === "ArrayExpr" ?
@@ -4751,8 +4858,10 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
 
   private compileIfElse(ifElse: EdgeQLAST.IfElse): SQL.CaseExpression {
     const condition = this.compileExpression(ifElse.condition);
-    const thenExpr = this.compileExpression(ifElse.then);
-    const elseExpr = this.compileExpression(ifElse.else);
+    const [thenExpr, elseExpr] = this.asUnitedAlternatives(
+      [ifElse.then, ifElse.else],
+      [this.compileExpression(ifElse.then), this.compileExpression(ifElse.else)]
+    );
 
     // An empty condition makes the result empty (Gel), not the else branch.
     if (this.mayBeEmpty(ifElse.condition)) {
@@ -4804,12 +4913,14 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     }
     // An array of tuples is a jsonb array, as its parameter form and its
     // column are, so all three mix (`++`, `=`, `len`, `[0]`, …); its tuples
-    // are of their united type (`[(a := 1), (2,)]` is `[(1,), (2,)]`).
+    // are of their united type (`[(a := 1), (2,)]` is `[(1,), (2,)]`). So is
+    // an array of arrays (`staticNestedArrayType`), each array a jsonb one.
     const united = this.unitedStaticTupleType(arrayExpr.elements);
     const elements = arrayExpr.elements.map(el =>
       united ? this.asTupleType(this.compileExpression(el), this.staticTupleType(el)!, united) : this.compileExpression(el)
     );
-    return SQL.createFunctionCall(this.staticTupleArrayType(arrayExpr) ? "jsonb_build_array" : "ARRAY", elements);
+    const jsonb = this.staticTupleArrayType(arrayExpr) || this.staticNestedArrayType(arrayExpr);
+    return SQL.createFunctionCall(jsonb ? "jsonb_build_array" : "ARRAY", elements);
   }
 
   /**
@@ -5032,28 +5143,34 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const base = this.compileExpression(indexExpr.expr);
     const idx = this.compileExpression(indexExpr.index);
 
-    // String key access → jsonb -> 'key'
+    // A string key, or a JSON base (a json cast, or a name/subscript/call
+    // known to be json): an array's element, a string's character or an
+    // object's value, else Gel's errors (lib/stdlib-sql.ts).
     if (
-      indexExpr.index.kind === "Literal" &&
-      indexExpr.index.type === "string"
-    ) {
-      return SQL.createJsonbAccess(base, "->", idx);
-    }
-
-    // JSON base (a json cast, or a name/subscript/call known to be json) →
-    // jsonb -> index
-    if (
+      (indexExpr.index.kind === "Literal" && indexExpr.index.type === "string") ||
       (indexExpr.expr.kind === "TypeCast" &&
         indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")) ||
       this.isJsonExpression(indexExpr.expr)
     ) {
-      return SQL.createJsonbAccess(base, "->", idx);
+      return SQL.createFunctionCall("disc_json_index", [base, idx]);
     }
 
     // An array (an array of tuples is a jsonb array, see `compileArrayExpr`),
     // a `str` or `bytes`: Gel's 0-based index, a negative one counting from
     // the end, else Gel's out of bounds error (lib/stdlib-sql.ts).
-    return SQL.createFunctionCall("disc_index", [base, idx]);
+    return this.nestedArrayElement(SQL.createFunctionCall("disc_index", [base, idx]), indexExpr.expr);
+  }
+
+  /**
+   * `element`, a jsonb element of the array of arrays `array`
+   * (`staticNestedArrayType`, a jsonb array), as the PostgreSQL array such an
+   * array is elsewhere; kept jsonb when it is an array of tuples or of arrays
+   * itself. `element` as it is when `array` is no array of arrays.
+   */
+  private nestedArrayElement(element: SQL.SQLExpression, array: EdgeQLAST.Expression): SQL.SQLExpression {
+    const type = /^array<(.+)>$/.exec(this.staticNestedArrayType(array) ?? "")?.[1];
+    const pgType = type ? edgeqlTypeToPgType(type, this.ctx.schema.scalars) : "jsonb";
+    return type && pgType !== "jsonb" ? this.compileCastFromJson(element, pgType, type) : element;
   }
 
   private compileSliceExpression(
@@ -5061,7 +5178,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   ): SQL.SQLExpression {
     const base = this.compileExpression(sliceExpr.expr);
 
-    if (this.staticTupleArrayType(sliceExpr.expr)) {
+    if (this.staticTupleArrayType(sliceExpr.expr) || this.staticNestedArrayType(sliceExpr.expr)) {
       return this.tupleArraySlice(base, sliceExpr);
     }
 

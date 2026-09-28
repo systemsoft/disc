@@ -89,7 +89,11 @@ Deno.test("indexes, slices, tuple elements and united tuples are described by Ge
     ["select [(a := 1)] ++ [(a := 2)]", "array<tuple<a: int64>>", ONE],
     ["select [(a := 1), (b := 2)]", "array<tuple<int64>>", ONE],
     ["select {(a := 1), (2,)}", "tuple<int64>", AT_LEAST_ONE],
-    ["select (a := 1) union (a := 2)", "tuple<a: int64>", AT_LEAST_ONE]
+    ["select (a := 1) union (a := 2)", "tuple<a: int64>", AT_LEAST_ONE],
+    // Arrays of arrays are query values.
+    ["select [[1, 2], [3]]", "array<array<int64>>", ONE],
+    ["select [[1, 2], [3]][0]", "array<int64>", ONE],
+    ["select array_agg([1, 2])", "array<array<int64>>", ONE]
   ];
   for (const [query, type, cardinality] of cases) {
     assertEquals(described(query), { cardinality, isScalar: true, type }, query);

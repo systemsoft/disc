@@ -258,8 +258,10 @@ export function edgeqlTypeToPgType(edgeqlType: string, scalars?: Map<string, str
 
   // Arrays of non-scalar elements (e.g. array<tuple<...>>) have no native PG
   // array representation — only the scalar `array<T>` forms above do. Store
-  // them as jsonb, matching how the tuple element itself is stored.
-  if (name.startsWith("array<tuple<")) {
+  // them as jsonb, matching how the tuple element itself is stored. So is an
+  // array of arrays (a query value only): a PG array's elements are all of
+  // one length.
+  if (name.startsWith("array<tuple<") || name.startsWith("array<array<")) {
     return "jsonb";
   }
 

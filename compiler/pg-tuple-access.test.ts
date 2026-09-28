@@ -126,3 +126,38 @@ Deno.test({
       assertEquals(await values(pool, schema, "select (a := 1) union (a := 2)"), [{ a: 1 }, { a: 2 }]);
     })
 });
+
+Deno.test({
+  name: "PG tuple access: '??' and 'if … else' over tuples of different names are unnamed, as union's are",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select (a := 1) ?? (b := 2)"), [[1]]);
+      assertEquals(await values(pool, schema, "select <tuple<a: int64>>{} ?? (b := 2)"), [[2]]);
+      assertEquals(await values(pool, schema, "select (a := 1) ?? (a := 2)"), [{ a: 1 }]);
+      assertEquals(await values(pool, schema, "select (a := 1) if true else (b := 2)"), [[1]]);
+      assertEquals(await values(pool, schema, "select (a := 1) if false else (b := 2)"), [[2]]);
+      assertEquals(await values(pool, schema, "select (a := 1) if true else (a := 2)"), [{ a: 1 }]);
+      assertEquals(await values(pool, schema, "select [(a := 1)] ?? [(b := 2)]"), [[[1]]]);
+      assertEquals(await values(pool, schema, "select [(a := 1)] if false else [(b := 2)]"), [[[2]]]);
+      assertEquals(await values(pool, schema, "select ((a := 1) ?? (b := 2)).0"), [1]);
+    })
+});
+
+Deno.test({
+  name: "PG tuple access: an element read inside an operator keeps its own precedence",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select 'y' ++ (a := 'x').a"), ["yx"]);
+      assertEquals(await values(pool, schema, "select (a := 'x').a ++ 'y'"), ["xy"]);
+      assertEquals(await values(pool, schema, "select 'y' ++ (a := 'x').a ++ 'z'"), ["yxz"]);
+      assertEquals(await values(pool, schema, "select 1 + (a := 2).a"), [3]);
+      assertEquals(await values(pool, schema, "select (a := 2).a * 3"), [6]);
+      assertEquals(await values(pool, schema, "select 'x' = (a := 'x').a"), [true]);
+      assertEquals(await values(pool, schema, "select 'abc' like (a := 'a%').a"), [true]);
+      assertEquals(await values(pool, schema, "select (a := 'abc').a like 'a%'"), [true]);
+      assertEquals(await values(pool, schema, "select (a := 'x').a in {'x', 'y'}"), [true]);
+      assertEquals(await values(pool, schema, "select to_json('[1]') ++ (a := to_json('[2]')).a"), [[1, 2]]);
+    })
+});

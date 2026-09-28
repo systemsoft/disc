@@ -169,6 +169,18 @@ Deno.test("Tuple Access - a named element reads as its type, a str element as te
   assertEquals(compileEdgeQL("SELECT (a := 1, b := 'x').1").includes("->> 'b'"), true);
 });
 
+Deno.test("Tuple Access - an element read inside an operator binding tighter than ->> is grouped", () => {
+  assertEquals(compileEdgeQL("SELECT 'y' ++ (a := 'x').a").includes("'y' || ((jsonb_build_object('a', 'x')) ->> 'a')"), true);
+  // A comparison binds looser, and needs none.
+  assertEquals(compileEdgeQL("SELECT 'x' = (a := 'x').a").includes("'x' = (jsonb_build_object('a', 'x')) ->> 'a'"), true);
+});
+
+Deno.test("Tuple Access - '??' and 'if … else' over differently named tuples read them by position", () => {
+  assertEquals(compileEdgeQL("SELECT (a := 1) ?? (b := 2)").includes("jsonb_build_array((jsonb_build_object('a', 1)) -> 'a')"), true);
+  assertEquals(compileEdgeQL("SELECT (a := 1) if true else (b := 2)").includes("jsonb_build_array((jsonb_build_object('b', 2)) -> 'b')"), true);
+  assertEquals(compileEdgeQL("SELECT (a := 1) ?? (a := 2)").includes("jsonb_build_array"), false);
+});
+
 // =========================================================================
 // Integration Tests: Tuple Access in SELECT
 // =========================================================================

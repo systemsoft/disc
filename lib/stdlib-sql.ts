@@ -404,6 +404,54 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
 
+  // disc_json_index(val, idx) — `val[idx]` of a json (compiler
+  // `compileIndexExpression`): an array's element or a string's character
+  // (as a json string) at Gel's 0-based `idx`, a negative one counting from
+  // the end, or an object's value at key `idx`; else Gel's errors, "JSON
+  // index 5 is out of bounds", "JSON index 'missing' is out of bounds",
+  // "cannot index JSON number", raised in SQLSTATE class 22 (an
+  // InvalidValueError). `json_get` answers nothing instead; it does not use
+  // these.
+  `CREATE OR REPLACE FUNCTION disc_json_index(val jsonb, idx bigint) RETURNS jsonb AS $$
+     DECLARE
+       kind text := jsonb_typeof(val);
+       n bigint;
+       i bigint;
+     BEGIN
+       IF kind = 'object' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = 'cannot index JSON object by bigint';
+       ELSIF kind NOT IN ('array', 'string') THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = format('cannot index JSON %s', kind),
+           HINT = 'Retrieving an element by an integer index is only available for JSON arrays and strings.';
+       END IF;
+       n := CASE WHEN kind = 'array' THEN jsonb_array_length(val) ELSE char_length(val #>> '{}') END;
+       i := CASE WHEN idx < 0 THEN idx + n ELSE idx END;
+       IF i < 0 OR i >= n THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('JSON index %s is out of bounds', idx);
+       END IF;
+       IF kind = 'array' THEN
+         RETURN val -> i::integer;
+       END IF;
+       RETURN to_jsonb(substr(val #>> '{}', (i + 1)::integer, 1));
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_json_index(val jsonb, idx text) RETURNS jsonb AS $$
+     DECLARE
+       kind text := jsonb_typeof(val);
+     BEGIN
+       IF kind = 'array' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = 'cannot index JSON array by text';
+       ELSIF kind <> 'object' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_parameter_value', MESSAGE = format('cannot index JSON %s', kind),
+           HINT = 'Retrieving an element by a string index is only available for JSON objects.';
+       ELSIF (val -> idx) IS NULL THEN
+         RAISE EXCEPTION USING ERRCODE = 'array_subscript_error', MESSAGE = format('JSON index %s is out of bounds', quote_literal(idx));
+       END IF;
+       RETURN val -> idx;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
   // disc_slice(val, start_at[, end_at]) — `val[start_at:end_at]` of an array,
   // a `str` or `bytes` (compiler `compileSliceExpression`): the elements from
   // Gel's 0-based `start_at` up to, not including, `end_at` (the end when

@@ -9,6 +9,9 @@
 import { isReservedPgKeyword } from "../lib/identifiers.ts";
 import * as SQL from "./sql.ts";
 
+/*** Operators PostgreSQL binds looser than `->`/`->>`: comparisons, `like`, `in`, `is`, `and`, `or`. ***/
+const LOOSER_THAN_JSONB_ACCESS = /^(=|<>|!=|<|>|<=|>=|AND|OR|(NOT )?(I?LIKE|IN|SIMILAR TO|BETWEEN)|IS( NOT)?( DISTINCT FROM)?)$/i;
+
 export class SQLCodeGenerator {
   private indentLevel = 0;
   private readonly indentSize = 2;
@@ -389,7 +392,11 @@ export class SQLCodeGenerator {
       return `(${left}) ${expr.operator} (${right})`;
     }
 
-    return `${left} ${expr.operator} ${right}`;
+    // `->` and `->>` bind like `||` and looser than arithmetic: `'y' || t ->> 'a'`
+    // is `('y' || t) ->> 'a'`, so a jsonb read an operator takes is grouped.
+    const group = (operand: SQL.SQLExpression, sql: string): string =>
+      operand.kind === "JsonbAccessExpression" && !LOOSER_THAN_JSONB_ACCESS.test(expr.operator) ? `(${sql})` : sql;
+    return `${group(expr.left, left)} ${expr.operator} ${group(expr.right, right)}`;
   }
 
   private generateUnaryExpression(expr: SQL.UnaryExpression): string {

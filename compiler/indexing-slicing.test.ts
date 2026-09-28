@@ -227,22 +227,26 @@ Deno.test("indexing-slicing - str and bytes indexes are disc_index too", () => {
   assertStringIncludes(compileEdgeQL("SELECT (<bytes>$b)[-1]"), "disc_index(CAST($1 AS bytea), -1)");
 });
 
+Deno.test("indexing-slicing - an array of arrays is a jsonb array, its element array a PostgreSQL one again", () => {
+  assertStringIncludes(compileEdgeQL("SELECT [[1, 2], [3]]"), "jsonb_build_array(ARRAY[1, 2], ARRAY[3])");
+  const element = compileEdgeQL("SELECT [[1, 2], [3]][0]");
+  assertStringIncludes(element, "disc_index(jsonb_build_array(ARRAY[1, 2], ARRAY[3]), 0)");
+  assertStringIncludes(element, "AS bigint[])");
+  // An element that is an array of arrays itself stays jsonb.
+  assertEquals(compileEdgeQL("SELECT [[[1]], [[2]]][0]").includes("[]"), false);
+});
+
 // =========================================================================
 // Compiler: JSON access
 // =========================================================================
 
-Deno.test("indexing-slicing - string key index compiles to jsonb -> operator", () => {
-  const sql = compileEdgeQL(`SELECT (<json>'{"key":"val"}')['key']`);
-
-  assertStringIncludes(sql, "->");
-  assertStringIncludes(sql, "'key'");
+Deno.test("indexing-slicing - a json string key index is disc_json_index, which raises for a missing key as Gel does", () => {
+  assertStringIncludes(compileEdgeQL(`SELECT (<json>$j)['key']`), "disc_json_index(CAST($1 AS jsonb), 'key')");
 });
 
-Deno.test("indexing-slicing - json type cast with integer index compiles to jsonb -> operator", () => {
-  const sql = compileEdgeQL("SELECT (<json>'[1,2,3]')[0]");
-
-  assertStringIncludes(sql, "->");
-  assertStringIncludes(sql, "0");
+Deno.test("indexing-slicing - a json integer index is disc_json_index, which raises out of bounds as Gel does", () => {
+  assertStringIncludes(compileEdgeQL("SELECT (<json>$j)[0]"), "disc_json_index(CAST($1 AS jsonb), 0)");
+  assertStringIncludes(compileEdgeQL("SELECT (<json>$j)['a'][-1]"), "disc_json_index(disc_json_index(CAST($1 AS jsonb), 'a'), -1)");
 });
 
 // =========================================================================

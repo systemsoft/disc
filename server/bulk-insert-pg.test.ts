@@ -225,12 +225,20 @@ Deno.test({
         );
       });
 
-      await t.step("Q5: a missing parents key is NULL, so the required property rejects the statement", async () => {
+      await t.step("Q5: a missing parents key is Gel's out of bounds error, which rejects the statement", async () => {
         const reply = await post(Q5, { p: OTHER_PROGRAM_ID, rows: [{ commit_time: 1, object_id: oid(50), tree_id: oid(51) }] });
 
         assert(reply.body.errors, "a missing required array should be reported");
-        assert(/null value|not-null/i.test(reply.body.errors[0].message), reply.body.errors[0].message);
+        assert(/JSON index 'parents' is out of bounds/.test(reply.body.errors[0].message), reply.body.errors[0].message);
         assertEquals(await count("git_commit", OTHER_PROGRAM_ID), 0);
+      });
+
+      await t.step("a key present with a JSON null reads as empty, not out of bounds", async () => {
+        const query = "with rows := <json>$rows for item in json_array_unpack(rows) union (select <str>item['x'] ?? 'empty')";
+        const reply = await post(query, { rows: [{ x: null }, { x: "a" }] });
+
+        assertEquals(reply.body.errors, undefined, reply.text);
+        assertEquals(reply.body.data, ["empty", "a"]);
       });
 
       await t.step("array_unpack and range_unpack iterators insert one row per element", async () => {

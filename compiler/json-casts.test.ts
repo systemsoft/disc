@@ -55,7 +55,7 @@ async function compile(edgeql: string): Promise<string> {
 const J = "CAST($1 AS jsonb)";
 
 Deno.test("json cast: <str> of a subscript extracts the text, without JSON quotes", async () => {
-  assertEquals(await compile("select <str>(<json>$j)['k']"), `SELECT (${J} -> 'k') #>> '{}'`);
+  assertEquals(await compile("select <str>(<json>$j)['k']"), `SELECT (disc_json_index(${J}, 'k')) #>> '{}'`);
 });
 
 Deno.test("json cast: <str> of a json cast itself", async () => {
@@ -63,26 +63,26 @@ Deno.test("json cast: <str> of a json cast itself", async () => {
 });
 
 Deno.test("json cast: numeric, bool and uuid cast the extracted text", async () => {
-  assertEquals(await compile("select <int64>(<json>$j)['n']"), `SELECT CAST((${J} -> 'n') #>> '{}' AS bigint)`);
-  assertEquals(await compile("select <float64>(<json>$j)['n']"), `SELECT CAST((${J} -> 'n') #>> '{}' AS double precision)`);
-  assertEquals(await compile("select <bool>(<json>$j)['b']"), `SELECT CAST((${J} -> 'b') #>> '{}' AS boolean)`);
-  assertEquals(await compile("select <uuid>(<json>$j)['id']"), `SELECT CAST((${J} -> 'id') #>> '{}' AS uuid)`);
+  assertEquals(await compile("select <int64>(<json>$j)['n']"), `SELECT CAST((disc_json_index(${J}, 'n')) #>> '{}' AS bigint)`);
+  assertEquals(await compile("select <float64>(<json>$j)['n']"), `SELECT CAST((disc_json_index(${J}, 'n')) #>> '{}' AS double precision)`);
+  assertEquals(await compile("select <bool>(<json>$j)['b']"), `SELECT CAST((disc_json_index(${J}, 'b')) #>> '{}' AS boolean)`);
+  assertEquals(await compile("select <uuid>(<json>$j)['id']"), `SELECT CAST((disc_json_index(${J}, 'id')) #>> '{}' AS uuid)`);
 });
 
 Deno.test("json cast: an enum casts the extracted text", async () => {
   const sql = await compile("select <Level>(<json>$j)['level']");
 
-  assertStringIncludes(sql, `CAST((${J} -> 'level') #>> '{}' AS`);
+  assertStringIncludes(sql, `CAST((disc_json_index(${J}, 'level')) #>> '{}' AS`);
   assert(/AS "?disc_enum_level"?\)/i.test(sql), sql);
 });
 
 Deno.test("json cast: <json> of json stays a plain cast", async () => {
-  assertEquals(await compile("select <json>(<json>$j)['k']"), `SELECT CAST(${J} -> 'k' AS jsonb)`);
+  assertEquals(await compile("select <json>(<json>$j)['k']"), `SELECT CAST(disc_json_index(${J}, 'k') AS jsonb)`);
 });
 
 Deno.test("json cast: <array<str>> rebuilds the array in order; [] gives an empty array, JSON null gives NULL", async () => {
   const sql = await compile("select <array<str>>(<json>$j)['parents']");
-  const operand = `${J} -> 'parents'`;
+  const operand = `disc_json_index(${J}, 'parents')`;
 
   assertEquals(
     sql,
@@ -98,7 +98,7 @@ Deno.test("json cast: <array<int64>> casts the rebuilt array", async () => {
 Deno.test("json cast: <array<json>> keeps the elements as json", async () => {
   const sql = await compile("select <array<json>>(<json>$j)['items']");
 
-  assertStringIncludes(sql, "FROM jsonb_array_elements(CAST($1 AS jsonb) -> 'items')");
+  assertStringIncludes(sql, "FROM jsonb_array_elements(disc_json_index(CAST($1 AS jsonb), 'items'))");
   assertStringIncludes(sql, "AS jsonb[]) END");
 });
 
@@ -124,11 +124,11 @@ Deno.test("json cast: the json parameter stays typed jsonb for the binding layer
 // ── Recognized operand forms ─────────────────────────────────────────────
 
 Deno.test("json operand: a string-keyed subscript, whatever its base", async () => {
-  assertStringIncludes(await compile("select Event { k := <str>.meta['k'] }"), "(event_1.meta -> 'k') #>> '{}'");
+  assertStringIncludes(await compile("select Event { k := <str>.meta['k'] }"), "(disc_json_index(event_1.meta, 'k')) #>> '{}'");
 });
 
 Deno.test("json operand: an integer subscript on a json operand", async () => {
-  assertStringIncludes(await compile("select <str>(<json>$j)['items'][0]"), `((${J} -> 'items') -> 0) #>> '{}'`);
+  assertStringIncludes(await compile("select <str>(<json>$j)['items'][0]"), `(disc_json_index(disc_json_index(${J}, 'items'), 0)) #>> '{}'`);
 });
 
 Deno.test("json operand: a call to a function that returns json", async () => {
@@ -141,7 +141,7 @@ Deno.test("json operand: a call to a function that returns json", async () => {
 });
 
 Deno.test("json operand: a with-bound name whose binding is json", async () => {
-  assertEquals(await compile("with row := <json>$j select <str>row['k']"), `SELECT (${J} -> 'k') #>> '{}'`);
+  assertEquals(await compile("with row := <json>$j select <str>row['k']"), `SELECT (disc_json_index(${J}, 'k')) #>> '{}'`);
   assertEquals(await compile("with row := <json>$j select <int64>row"), `SELECT CAST(${J} #>> '{}' AS bigint)`);
 });
 

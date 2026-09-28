@@ -122,8 +122,8 @@ Deno.test("bulk insert: Q4 is one INSERT … SELECT over the JSON array", async 
   assertEquals(
     sql,
     "INSERT INTO git_object (program_id, object_id, object_type, size, content) " +
-      `SELECT ${PROGRAM}, (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'object_type') #>> '{}', ` +
-      `CAST((${ITEM} -> 'size') #>> '{}' AS bigint), std_base64_decode((${ITEM} -> 'content') #>> '{}') ` +
+      `SELECT ${PROGRAM}, (disc_json_index(${ITEM}, 'object_id')) #>> '{}', (disc_json_index(${ITEM}, 'object_type')) #>> '{}', ` +
+      `CAST((disc_json_index(${ITEM}, 'size')) #>> '{}' AS bigint), std_base64_decode((disc_json_index(${ITEM}, 'content')) #>> '{}') ` +
       "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val) " +
       "ON CONFLICT (program_id, object_id) DO NOTHING RETURNING id"
   );
@@ -140,13 +140,13 @@ Deno.test("bulk insert: Q4 is a single statement and never ships content back", 
 
 Deno.test("bulk insert: Q5 rebuilds parents in order", async () => {
   const { sql } = await compile(Q5);
-  const parents = `${ITEM} -> 'parents'`;
+  const parents = `disc_json_index(${ITEM}, 'parents')`;
 
   assertEquals(
     sql,
     "INSERT INTO git_commit (program_id, object_id, tree_id, commit_time, parents) " +
-      `SELECT ${PROGRAM}, (${ITEM} -> 'object_id') #>> '{}', (${ITEM} -> 'tree_id') #>> '{}', ` +
-      `CAST((${ITEM} -> 'commit_time') #>> '{}' AS bigint), ` +
+      `SELECT ${PROGRAM}, (disc_json_index(${ITEM}, 'object_id')) #>> '{}', (disc_json_index(${ITEM}, 'tree_id')) #>> '{}', ` +
+      `CAST((disc_json_index(${ITEM}, 'commit_time')) #>> '{}' AS bigint), ` +
       `CASE WHEN (${parents} IS NULL) OR (JSONB_TYPEOF(${parents}) = 'null') THEN NULL ELSE ` +
       `CAST(ARRAY(SELECT e.v FROM jsonb_array_elements_text(${parents}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord) AS text[]) END ` +
       "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val) " +
@@ -183,7 +183,7 @@ Deno.test("bulk insert: a Program selected once in the with block is visible in 
   );
 
   assertStringIncludes(sql!, "WITH prog AS ( SELECT * FROM program AS program_1 WHERE program_1.id = CAST($2 AS uuid) ) INSERT INTO git_ref");
-  assertStringIncludes(sql!, "SELECT ( SELECT id FROM prog ), (for_iter.val -> 'name') #>> '{}'");
+  assertStringIncludes(sql!, "SELECT ( SELECT id FROM prog ), (disc_json_index(for_iter.val, 'name')) #>> '{}'");
   assertStringIncludes(sql!, "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val)");
 });
 
@@ -217,7 +217,7 @@ Deno.test("bulk insert: a select body over a function iterator reads from it lat
   const { sql } = await compile("for x in json_array_unpack(<json>$j) union (select <str>x['name'])");
 
   assertStringIncludes(sql!, "FROM JSONB_ARRAY_ELEMENTS(CAST($1 AS jsonb)) AS for_iter(val), LATERAL (");
-  assertStringIncludes(sql!, "(for_iter.val -> 'name') #>> '{}'");
+  assertStringIncludes(sql!, "(disc_json_index(for_iter.val, 'name')) #>> '{}'");
 });
 
 Deno.test("bulk insert: update and delete bodies are rejected, not emitted as invalid SQL", async () => {
@@ -277,5 +277,5 @@ Deno.test("bulk insert policy: a bypass caller is not denied", async () => {
   const { error, sql } = await compile(Q4_LOCKED, { bypass: true, userId: USER_ID });
 
   assertEquals(error, undefined);
-  assertStringIncludes(sql!, "INSERT INTO locked (name) SELECT (for_iter.val -> 'name') #>> '{}' FROM JSONB_ARRAY_ELEMENTS(");
+  assertStringIncludes(sql!, "INSERT INTO locked (name) SELECT (disc_json_index(for_iter.val, 'name')) #>> '{}' FROM JSONB_ARRAY_ELEMENTS(");
 });

@@ -194,3 +194,87 @@ Deno.test({
       assertEquals(await values(pool, schema, "select IdxItem.ts[1].y"), ["q"]);
     })
 });
+
+Deno.test({
+  name: "PG indexing-slicing: arrays of arrays, of different lengths, are values as Gel's are",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]]"), [[[1, 2], [3]]]);
+      assertEquals(await values(pool, schema, "select [[[1]], [[2, 3]]]"), [[[[1]], [[2, 3]]]]);
+      assertEquals(await values(pool, schema, "select [[1, 2], <array<int64>>[]]"), [[[1, 2], []]]);
+      assertEquals(await values(pool, schema, "select <array<array<int64>>>[]"), [[]]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][1]"), [[3]]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][-1]"), [[3]]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][0][1]"), [2]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][0][1] + 1"), [3]);
+      assertEquals(await values(pool, schema, "select [['a', 'b']][0][1] ++ 'x'"), ["bx"]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][0] ++ [9]"), [[1, 2, 9]]);
+      assertEquals(await values(pool, schema, "select [[[1]], [[2, 3]]][1][0][1]"), [3]);
+      assertEquals(await values(pool, schema, "with a := [[1, 2], [3]] select a[0][1]"), [2]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]][1:]"), [[[3]]]);
+      assertEquals(await values(pool, schema, "select len([[1, 2], [3]])"), [2]);
+      assertEquals(await values(pool, schema, "select [[1, 2]] ++ [[3]]"), [[[1, 2], [3]]]);
+      assertEquals(await values(pool, schema, "select array_unpack([[1, 2], [3]])"), [[1, 2], [3]]);
+      assertEquals(await values(pool, schema, "select array_agg([1, 2])"), [[[1, 2]]]);
+      assertEquals(await values(pool, schema, "select array_agg({[1, 2], [3]})"), [[[1, 2], [3]]]);
+      assertEquals(await values(pool, schema, "select array_get([[1], [2]], 1)"), [[2]]);
+      assertEquals(await values(pool, schema, "select array_get([[1], [2]], -1)"), [[2]]);
+      assertEquals(await values(pool, schema, "select array_get([[1], [2]], 5)"), []);
+      assertEquals(await values(pool, schema, "select array_get([[1, 2]], 0)[1] + 1"), [3]);
+      assertEquals(await values(pool, schema, "select array_get([(a := 1), (a := 2)], 1)"), [{ a: 2 }]);
+      assertEquals(await values(pool, schema, "select [[(a := 1)]][0][0].a + 1"), [2]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]] = [[1, 2], [3]]"), [true]);
+      assertEquals(await values(pool, schema, "select [[1, 2], [3]] = [[1, 2], [4]]"), [false]);
+      assertEquals(await values(pool, schema, "select <json>[[1, 2], [3]]"), [[[1, 2], [3]]]);
+      assertEquals(await values(pool, schema, "select <array<array<int64>>><json>[[1, 2], [3]]"), [[[1, 2], [3]]]);
+      // A parameter is bound as the jsonb such an array is (`prepareParameters` stringifies it).
+      assertEquals(await values(pool, schema, "select (<array<array<int64>>>$0)[1][0]", [JSON.stringify([[1, 2], [3]])]), [3]);
+      const outOfBounds = await failure(pool, schema, "select [[1, 2], [3]][0][5]");
+      assertStringIncludes(outOfBounds.message, "array index 5 is out of bounds");
+      assertStringIncludes((await failure(pool, schema, "select [[1], [2]][5]")).message, "array index 5 is out of bounds");
+    })
+});
+
+Deno.test({
+  name: "PG indexing-slicing: a json index reads an array's element, a string's character, an object's value",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      assertEquals(await values(pool, schema, "select (<json>[1, 2, 3])[0]"), [1]);
+      assertEquals(await values(pool, schema, "select (<json>[1, 2, 3])[-1]"), [3]);
+      assertEquals(await values(pool, schema, "select (<json>'xyz')[0]"), ["x"]);
+      assertEquals(await values(pool, schema, "select (<json>'xyz')[-1]"), ["z"]);
+      assertEquals(await values(pool, schema, "select (<json>(a := 1))['a']"), [1]);
+      assertEquals(await values(pool, schema, "select (<json>[[1, 2], [3]])[0][1]"), [2]);
+      assertEquals(await values(pool, schema, "select (<json>[1])[<int64>{}]"), []);
+      // `json_get` answers nothing instead.
+      assertEquals(await values(pool, schema, "select json_get(<json>[1, 2, 3], '5')"), []);
+      assertEquals(await values(pool, schema, "select json_get(<json>(a := 1), 'missing')"), []);
+    })
+});
+
+Deno.test({
+  name: "PG indexing-slicing: a json index out of bounds, a missing key or a scalar raises InvalidValueError, as Gel does",
+  ignore: !RUN_PG,
+  fn: () =>
+    withSchema(async (pool, schema) => {
+      const cases: [string, string][] = [
+        ["select (<json>[1, 2, 3])[5]", "JSON index 5 is out of bounds"],
+        ["select (<json>[1, 2, 3])[-4]", "JSON index -4 is out of bounds"],
+        ["select (<json>'xyz')[5]", "JSON index 5 is out of bounds"],
+        ["select (<json>[[1, 2], [3]])[0][5]", "JSON index 5 is out of bounds"],
+        ["select (<json>(a := 1))['missing']", "JSON index 'missing' is out of bounds"],
+        ["select (<json>1)[0]", "cannot index JSON number"],
+        ["select (<json>true)['a']", "cannot index JSON boolean"],
+        ["select (<json>'xyz')['a']", "cannot index JSON string"],
+        ["select (<json>[1, 2])['a']", "cannot index JSON array by text"],
+        ["select (<json>(a := 1))[0]", "cannot index JSON object by bigint"]
+      ];
+      for (const [edgeql, message] of cases) {
+        const error = await failure(pool, schema, edgeql);
+        assertEquals(error.message, message, edgeql);
+        assertEquals(error.code?.startsWith("22"), true, `${edgeql}: SQLSTATE ${error.code}`);
+      }
+    })
+});

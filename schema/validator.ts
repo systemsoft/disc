@@ -1160,6 +1160,11 @@ export class SchemaValidator {
         );
         return;
       }
+      // Gel's arrays of arrays are query values only (UnsupportedFeatureError).
+      if (typeRef.params[0].name.parts.join("::") === "array") {
+        this.addError("nested arrays are not supported");
+        return;
+      }
       this.validateTypeRef(typeRef.params[0]);
       return;
     }
