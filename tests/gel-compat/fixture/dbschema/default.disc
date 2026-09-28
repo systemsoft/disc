@@ -24,4 +24,11 @@ module default {
     multi books: Book;
     best: Book;
   };
+
+  type Team {
+    required name: str;
+    multi members: Book {
+      role: str;
+    };
+  };
 };

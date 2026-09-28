@@ -32,12 +32,29 @@ const ZERO_UUID = new Uint8Array(16);
 
 /**
  * A decoded output descriptor: a base scalar, an array or tuple (`type`
- * names it, e.g. `tuple<a: std::int64, b: std::str>`), or an object shape.
+ * names it, e.g. `tuple<a: std::int64, b: std::str>`), an object shape, or
+ * none (`null`: the null type id and no descriptors, as for output format
+ * NONE).
  */
 export type Described =
   | { kind: "array" | "tuple"; type: string; }
+  | { kind: "null"; }
   | { kind: "scalar"; type: string; }
-  | { fields: { name: string; type: string; }[]; kind: "object"; };
+  | { fields: DescribedField[]; kind: "object"; };
+
+/**
+ * An object's field: its name (a link property's `@name`, as the clients
+ * name it), its type name, and the flags Gel sets on it when set:
+ * `implicit` (an injected `id`, `__tid__` or `__tname__`), `link` and
+ * `linkProperty`.
+ */
+export interface DescribedField {
+  implicit?: true;
+  link?: true;
+  linkProperty?: true;
+  name: string;
+  type: string;
+}
 
 export interface Answer {
   cardinality: number;
@@ -45,8 +62,9 @@ export interface Answer {
   values: unknown[];
 }
 
-/*** The output format and expected cardinality a query is sent with (binary, MANY by default). ***/
+/*** The output format, expected cardinality and compilation flags a query is sent with (binary, MANY and none by default). ***/
 export interface QueryOptions {
+  compilationFlags?: bigint;
   expectedCardinality?: number;
   outputFormat?: OutputFormat;
 }
@@ -63,13 +81,35 @@ function uuidString(bytes: Uint8Array): string {
 type DescribedNode =
   | { kind: "array" | "scalar" | "tuple"; type: string; }
   | { element: DescribedNode; kind: "set"; }
-  | { fields: { name: string; node: DescribedNode; }[]; free: boolean; kind: "object"; };
+  | { fields: DescribedNodeField[]; free: boolean; kind: "object"; };
 
-/*** A node's type name: `std::str`, `set<std::str>`, `{title: std::str}` (a free object `free{…}`). ***/
+interface DescribedNodeField {
+  flags: number;
+  name: string;
+  node: DescribedNode;
+}
+
+/*** Gel's shape element flags (edb/server/compiler/sertypes.py `ShapePointerFlags`). ***/
+const IS_IMPLICIT = 1 << 0;
+const IS_LINKPROP = 1 << 1;
+const IS_LINK = 1 << 2;
+
+/*** A field's name as the clients name it: a link property's `@name`. ***/
+function fieldName(field: DescribedNodeField): string {
+  return field.flags & IS_LINKPROP ? `@${field.name}` : field.name;
+}
+
+/**
+ * A node's type name: `std::str`, `set<std::str>`, `{title: std::str}` (a
+ * free object `free{…}`), a flagged field named `implicit id`, `link best`
+ * or `@rank`.
+ */
 function typeName(node: DescribedNode): string {
   switch (node.kind) {
-    case "object":
-      return `${node.free ? "free" : ""}{${node.fields.map(f => `${f.name}: ${typeName(f.node)}`).join(", ")}}`;
+    case "object": {
+      const label = (f: DescribedNodeField): string => `${f.flags & IS_IMPLICIT ? "implicit " : ""}${f.flags & IS_LINK ? "link " : ""}${fieldName(f)}`;
+      return `${node.free ? "free" : ""}{${node.fields.map(f => `${label(f)}: ${typeName(f.node)}`).join(", ")}}`;
+    }
     case "set":
       return `set<${typeName(node.element)}>`;
     default:
@@ -97,12 +137,12 @@ function describeRoot(block: Uint8Array): DescribedNode {
       const free = r.readUInt8() === 1; // ephemeral_free_shape
       r.readUInt16(); // object type pos
       const count = r.readUInt16();
-      const fields: { name: string; node: DescribedNode; }[] = [];
+      const fields: DescribedNodeField[] = [];
       for (let i = 0; i < count; i++) {
-        r.readUInt32(); // flags
+        const flags = r.readUInt32();
         r.readUInt8(); // cardinality
         const name = r.readString();
-        fields.push({ name, node: nodeAt(r.readUInt16()) });
+        fields.push({ flags, name, node: nodeAt(r.readUInt16()) });
         r.readUInt16(); // source_type_pos
       }
       return { fields, free, kind: "object" };
@@ -137,10 +177,23 @@ function describeRoot(block: Uint8Array): DescribedNode {
   return nodeAt(descriptors.length - 1);
 }
 
-/*** The root descriptor as a `Described`: an object's fields named by their type names. ***/
+/*** The root descriptor as a `Described`: an object's fields named by their type names, with their flags. ***/
 function describe(root: DescribedNode): Described {
   if (root.kind === "object") {
-    return { fields: root.fields.map(f => ({ name: f.name, type: typeName(f.node) })), kind: "object" };
+    const fields = root.fields.map(f => {
+      const field: DescribedField = { name: fieldName(f), type: typeName(f.node) };
+      if (f.flags & IS_IMPLICIT) {
+        field.implicit = true;
+      }
+      if (f.flags & IS_LINK) {
+        field.link = true;
+      }
+      if (f.flags & IS_LINKPROP) {
+        field.linkProperty = true;
+      }
+      return field;
+    });
+    return { fields, kind: "object" };
   }
   assert(root.kind !== "set", "a set is never the root descriptor");
   return root;
@@ -182,7 +235,7 @@ function decodeNode(node: DescribedNode, bytes: Uint8Array): unknown {
   const out: Record<string, unknown> = {};
   for (const field of node.fields) {
     r.readUInt32(); // reserved
-    out[field.name] = element(field.node);
+    out[fieldName(field)] = element(field.node);
   }
   assertEquals(r.remaining, 0, "no trailing bytes after the object");
   return out;
@@ -284,15 +337,15 @@ export class Client {
   }
 
   /*** Parse + Execute a command; the first ErrorResponse either answers, or undefined when it ran. ***/
-  async run(commandText: string): Promise<(ServerMessage & { kind: "ErrorResponse"; }) | undefined> {
-    const parsed = await this.parse(commandText);
+  async run(commandText: string, options: QueryOptions = {}): Promise<(ServerMessage & { kind: "ErrorResponse"; }) | undefined> {
+    const parsed = await this.parse(commandText, options);
     const parseError = parsed.find(m => m.kind === "ErrorResponse");
     if (parseError?.kind === "ErrorResponse") {
       return parseError;
     }
     const cdd = parsed.find(m => m.kind === "CommandDataDescription");
     assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
-    const executed = await this.execute(commandText, cdd, []);
+    const executed = await this.execute(commandText, cdd, [], options);
     const error = executed.find(m => m.kind === "ErrorResponse");
     return error?.kind === "ErrorResponse" ? error : undefined;
   }
@@ -302,7 +355,7 @@ export class Client {
       allowedCapabilities: 0xffffffffffffffffn,
       annotations: [],
       commandText,
-      compilationFlags: 0n,
+      compilationFlags: options.compilationFlags ?? 0n,
       expectedCardinality: options.expectedCardinality ?? Cardinality.MANY,
       implicitLimit: 0n,
       inputLanguage: InputLanguage.EDGEQL,
@@ -326,7 +379,7 @@ export class Client {
       annotations: [],
       arguments: encodeStrArgs(args),
       commandText,
-      compilationFlags: 0n,
+      compilationFlags: options.compilationFlags ?? 0n,
       expectedCardinality: options.expectedCardinality ?? Cardinality.MANY,
       implicitLimit: 0n,
       inputLanguage: InputLanguage.EDGEQL,
@@ -350,6 +403,11 @@ export class Client {
     const error = executed.find(m => m.kind === "ErrorResponse");
     assert(!error, `query failed: ${error?.kind === "ErrorResponse" ? error.message : ""}`);
 
+    if (cdd.outputTypedesc.length === 0) {
+      assertEquals(cdd.outputTypedescId, ZERO_UUID, "no output descriptor is the null type id");
+      assert(!executed.some(m => m.kind === "Data"), "no data without an output descriptor");
+      return { cardinality: cdd.resultCardinality, described: { kind: "null" }, values: [] };
+    }
     const root = describeRoot(cdd.outputTypedesc);
     const values = executed
       .filter(m => m.kind === "Data")

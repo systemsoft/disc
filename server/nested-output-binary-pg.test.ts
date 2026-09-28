@@ -11,7 +11,11 @@
  * - `group` answers free objects `{key, grouping, elements}`;
  * - a bare mutation answers the set of objects it wrote, each its `{id}`;
  * - JSON output is one std::str: the result as a JSON array, or each object
- *   when at most one is expected (`querySingleJSON`).
+ *   when at most one is expected (`querySingleJSON`);
+ * - implicit ids / type ids / type names as the client's compilation flags
+ *   ask, link properties, splats, `[is T].p` and object group keys with
+ *   their types, output format NONE as the null type id, and a single
+ *   result of many elements refused (ResultCardinalityMismatchError).
  *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
@@ -19,14 +23,17 @@
 import { assert, assertEquals } from "@std/assert";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
-import { Cardinality, OutputFormat } from "../protocol/enums.ts";
+import { Cardinality, CompilationFlag, OutputFormat } from "../protocol/enums.ts";
 import { Client, type Answer, type QueryOptions } from "../tests/binary-protocol-client.ts";
 import { canRunPgTests, getTestDsn, makePool, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 
 const SDL = `module default {
   type NoBook { required title: str; multi tags: str; };
-  type NoAuthor { required name: str; multi books: NoBook; best: NoBook; };
+  type NoAuthor { required name: str; multi books: NoBook { rank: int16; }; best: NoBook; };
+  abstract type NoShape { required label: str; };
+  type NoCircle extending NoShape { required radius: float64; };
+  type NoSquare extending NoShape { required side: int64; };
 };`;
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -66,8 +73,17 @@ Deno.test({
       const text of [
         `insert NoBook { title := "b1", tags := {"x", "y"} }`,
         `insert NoBook { title := "b2" }`,
-        `insert NoAuthor { name := "ann", books := (select NoBook), best := (select NoBook filter .title = "b1" limit 1) }`,
-        `insert NoAuthor { name := "bob" }`
+        `insert NoAuthor {
+          name := "ann",
+          books := {
+            (select NoBook filter .title = "b1") { @rank := 1 },
+            (select NoBook filter .title = "b2") { @rank := 2 }
+          },
+          best := (select NoBook filter .title = "b1" limit 1)
+        }`,
+        `insert NoAuthor { name := "bob" }`,
+        `insert NoCircle { label := "c", radius := 1.5 }`,
+        `insert NoSquare { label := "s", side := 2 }`
       ]
     ) {
       await handler.executeBinaryQuery(text, {});
@@ -90,8 +106,8 @@ Deno.test({
         assertEquals(answer.described, {
           fields: [
             { name: "name", type: "std::str" },
-            { name: "books", type: "set<{title: std::str, tags: set<std::str>}>" },
-            { name: "best", type: "{title: std::str}" }
+            { link: true, name: "books", type: "set<{title: std::str, tags: set<std::str>}>" },
+            { link: true, name: "best", type: "{title: std::str}" }
           ],
           kind: "object"
         });
@@ -112,9 +128,9 @@ Deno.test({
         const answer = await query("group NoBook { title } by .title");
         assertEquals(answer.described, {
           fields: [
-            { name: "key", type: "free{title: std::str}" },
+            { link: true, name: "key", type: "free{title: std::str}" },
             { name: "grouping", type: "set<std::str>" },
-            { name: "elements", type: "set<{title: std::str}>" }
+            { link: true, name: "elements", type: "set<{title: std::str}>" }
           ],
           kind: "object"
         });
@@ -129,7 +145,7 @@ Deno.test({
 
       await t.step("a bare mutation answers the set of objects it wrote", async () => {
         const answer = await query("update NoBook set { title := .title }");
-        assertEquals(answer.described, { fields: [{ name: "id", type: "std::uuid" }], kind: "object" });
+        assertEquals(answer.described, { fields: [{ implicit: true, name: "id", type: "std::uuid" }], kind: "object" });
         assertEquals(answer.values, [{ id: "<id>" }, { id: "<id>" }]);
         assertEquals((await query("update NoBook filter .title = 'none' set { title := .title }")).values, []);
       });
@@ -151,6 +167,92 @@ Deno.test({
         ]]);
         const elements = await query("select NoAuthor { name } order by .name", { outputFormat: OutputFormat.JSON_ELEMENTS });
         assertEquals(elements.values.map(v => JSON.parse(v as string)), [{ name: "ann" }, { name: "bob" }]);
+      });
+
+      await t.step("objects carry the implicit id, type id and type name the client asks for", async () => {
+        const ids = { compilationFlags: CompilationFlag.INJECT_OUTPUT_OBJECT_IDS };
+        const answer = await query("select NoAuthor { name, books: { title }, best } order by .name", ids);
+        assertEquals(answer.described, {
+          fields: [
+            { implicit: true, name: "id", type: "std::uuid" },
+            { name: "name", type: "std::str" },
+            { link: true, name: "books", type: "set<{implicit id: std::uuid, title: std::str}>" },
+            { link: true, name: "best", type: "{implicit id: std::uuid}" }
+          ],
+          kind: "object"
+        });
+        assertEquals(answer.values, [
+          { best: { id: "<id>" }, books: [{ id: "<id>", title: "b1" }, { id: "<id>", title: "b2" }], id: "<id>", name: "ann" },
+          { best: null, books: [], id: "<id>", name: "bob" }
+        ]);
+        const all = ids.compilationFlags | CompilationFlag.INJECT_OUTPUT_TYPE_IDS | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES;
+        const typed = await query("select NoAuthor { name } filter .name = 'ann'", { compilationFlags: all });
+        assertEquals(
+          typed.values.map(v => {
+            const { __tid__, ...rest } = v as Record<string, unknown>;
+            return { ...rest, __tid__: typeof __tid__ } as Record<string, unknown>;
+          }),
+          [{ __tid__: "string", __tname__: "default::NoAuthor", id: "<id>", name: "ann" }]
+        );
+      });
+
+      await t.step("link properties, splats, type intersections and object group keys have their types", async () => {
+        const props = await query("select NoAuthor { books: { title, @rank, @next := @rank + 1 } } filter .name = 'ann'");
+        assertEquals(props.described, {
+          fields: [{ link: true, name: "books", type: "set<{title: std::str, @rank: std::int16, @next: std::int64}>" }],
+          kind: "object"
+        });
+        assertEquals(props.values, [{ books: [{ "@next": 2n, "@rank": 1, title: "b1" }, { "@next": 3n, "@rank": 2, title: "b2" }] }]);
+
+        const splat = await query("select NoBook { * } filter .title = 'b1'");
+        assertEquals(splat.described, {
+          fields: [{ name: "id", type: "std::uuid" }, { name: "title", type: "std::str" }, { name: "tags", type: "set<std::str>" }],
+          kind: "object"
+        });
+        assertEquals(splat.values, [{ id: "<id>", tags: ["x", "y"], title: "b1" }]);
+
+        const shapes = await query("select NoShape { label, [is NoCircle].radius, [is NoSquare].side } order by .label");
+        assertEquals(shapes.described, {
+          fields: [{ name: "label", type: "std::str" }, { name: "radius", type: "std::float64" }, { name: "side", type: "std::int64" }],
+          kind: "object"
+        });
+        assertEquals(shapes.values, [{ label: "c", radius: 1.5, side: null }, { label: "s", radius: null, side: 2n }]);
+
+        const byBest = await query("group NoAuthor { name } using b := .best by b");
+        assertEquals(
+          byBest.described.kind === "object" ? byBest.described.fields[0] : undefined,
+          { link: true, name: "key", type: "free{link b: {implicit id: std::uuid}}" }
+        );
+        assertEquals(byBest.values, [
+          { elements: [{ name: "ann" }], grouping: ["b"], key: { b: { id: "<id>" } } },
+          { elements: [{ name: "bob" }], grouping: ["b"], key: { b: null } }
+        ]);
+      });
+
+      await t.step("output format NONE is the null type id with no result", async () => {
+        assertEquals(await query("update NoBook set { title := .title }", { outputFormat: OutputFormat.NONE }), {
+          cardinality: Cardinality.NO_RESULT,
+          described: { kind: "null" },
+          values: []
+        });
+      });
+
+      await t.step("a single result of more than one element is a ResultCardinalityMismatchError", async () => {
+        const one = { expectedCardinality: Cardinality.AT_MOST_ONE };
+        for (const [text, cardinality] of [["select NoAuthor { name }", "MANY"], ["update NoBook set { title := .title }", "MANY"]]) {
+          const error = await client.run(text, one);
+          assertEquals(
+            [error?.errorCode, error?.message],
+            [0x03030000, `the query has cardinality ${cardinality} which does not match the expected cardinality ONE`]
+          );
+        }
+        // One element is a single result; an update on `.id` writes one object at most.
+        assertEquals((await query("select NoAuthor { name } filter .name = 'ann'", one)).values, [{ name: "ann" }]);
+        const nobody = "<uuid>'00000000-0000-0000-0000-000000000000'";
+        assertEquals((await query(`update NoAuthor filter .id = ${nobody} set { name := .name }`, one)).values, []);
+        // The update refused above wrote nothing: it was refused when parsed.
+        assertEquals((await client.run("update NoBook set { title := 'x' }", one))?.errorCode, 0x03030000);
+        assertEquals((await query("select NoBook { title } order by .title")).values, [{ title: "b1" }, { title: "b2" }]);
       });
     } finally {
       conn.close();

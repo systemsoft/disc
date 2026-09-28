@@ -257,3 +257,82 @@ def test_nested_multi_link_shapes(client):
         )
     )
     assert sorted(book["title"] for book in nested[0]["books"]) == [a, b]
+
+
+def test_objects_carry_an_implicit_id(client):
+    # The client always asks for ids (INJECT_OUTPUT_OBJECT_IDS); they're hidden.
+    inserted = client.query_single(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=f"implicit-{uuid.uuid4()}",
+        count=9,
+    )
+    fetched = client.query_single(
+        "SELECT Item { name } FILTER .id = <uuid>$id", id=inserted.id
+    )
+    assert fetched.id == inserted.id
+    assert "id" not in repr(fetched)
+    described = client._describe_query("SELECT Item { name }")
+    assert described.output_type.elements["id"].is_implicit
+    assert not described.output_type.elements["name"].is_implicit
+
+
+def test_link_properties_splats_and_object_group_keys(client):
+    title = f"member-{uuid.uuid4()}"
+    client.query("INSERT Book { title := <str>$t }", t=title)
+    team = client.query_single(
+        """
+        INSERT Team {
+          name := <str>$name,
+          members := (SELECT Book FILTER .title = <str>$t) { @role := 'lead' }
+        }
+        """,
+        name=f"team-{uuid.uuid4()}",
+        t=title,
+    )
+    fetched = client.query_single(
+        "SELECT Team { members: { title, @role } } FILTER .id = <uuid>$id",
+        id=team.id,
+    )
+    [member] = fetched.members
+    assert (member.title, member["@role"]) == (title, "lead")
+    members = client._describe_query(
+        "SELECT Team { members: { title, @role } }"
+    ).output_type.elements["members"]
+    assert members.kind == gel.enums.ElementKind.LINK
+    member_kinds = members.type.element_type.elements
+    assert member_kinds["@role"].kind == gel.enums.ElementKind.LINK_PROPERTY
+
+    splat = client.query_single("SELECT Book { * } FILTER .title = <str>$t", t=title)
+    assert (splat.title, list(splat.tags)) == (title, [])
+
+    client.query(
+        "INSERT Author { name := <str>$n, best := (SELECT Book FILTER .title = <str>$t LIMIT 1) }",
+        n=f"keyed-{uuid.uuid4()}",
+        t=title,
+    )
+    groups = client.query("GROUP Author { name } USING b := .best BY b")
+    assert any(g.key.b is not None and g.key.b.id for g in groups)
+
+
+def test_execute_runs_without_a_result(client):
+    assert client.execute("UPDATE Item FILTER .name = 'nobody' SET { count := 0 }") is None
+
+
+def test_single_results_of_many_elements_raise(client):
+    for name in ("one", "two"):
+        client.query(
+            "INSERT Item { name := <str>$name, count := <int32>$count }",
+            name=f"many-{name}-{uuid.uuid4()}",
+            count=10,
+        )
+    # The client re-raises the server's ResultCardinalityMismatchError as an
+    # InterfaceError naming the method, the server's as its cause.
+    for query in (client.query_single, client.query_single_json):
+        for text in ("SELECT Item { name }", "SELECT {1, 2}"):
+            with pytest.raises(gel.InterfaceError) as raised:
+                query(text)
+            assert isinstance(raised.value.__cause__, gel.ResultCardinalityMismatchError)
+    with pytest.raises(gel.NoDataError):
+        client.query_required_single(
+            "SELECT Item { name } FILTER .name = 'nobody' LIMIT 1"
+        )

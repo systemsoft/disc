@@ -576,7 +576,8 @@ export class DiscServer {
           executeBinaryQuery?: (
             commandText: string,
             args: Record<string, unknown>,
-            caller: { admin: boolean; }
+            caller: { admin: boolean; },
+            options: { implicitIds: boolean; }
           ) => Promise<{
             rows: Record<string, unknown>[];
             status: string;

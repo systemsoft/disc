@@ -42,6 +42,11 @@ For each language:
 10. `GROUP Item { name } BY .count` — free objects `{key, grouping, elements}`.
 11. Nested shapes over `Author.books` (multi link), `Author.best` (single
     link) and `Book.tags` (multi property), with and without sub-shapes.
+12. Implicit ids (Python asks for them: hidden `id` in every shape), link
+    properties (`Team.members@role`), `{ * }` splats, a group key of
+    objects, `execute` (output format NONE), and single results of many
+    elements (ResultCardinalityMismatchError — Python re-raises it as an
+    InterfaceError) or none (`NoDataError`).
 
 ## What's deliberately out of scope
 

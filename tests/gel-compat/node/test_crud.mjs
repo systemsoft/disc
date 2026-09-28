@@ -10,7 +10,7 @@
  * script at tests/gel-compat/run.sh handles that.
  */
 
-import { ConstraintViolationError, createClient } from "gel";
+import { ConstraintViolationError, createClient, NoDataError, ResultCardinalityMismatchError } from "gel";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
@@ -215,5 +215,58 @@ test("an exclusive violation raises ConstraintViolationError", async () => {
   await assert.rejects(
     client.query("INSERT Label { code := <str>$code }", { code }),
     ConstraintViolationError
+  );
+});
+
+test("a shape without elements is its implicit id; the others have none", async () => {
+  const inserted = await insertItem(`implicit-${Date.now()}`, 9);
+  const bare = await client.querySingle("SELECT Item FILTER .id = <uuid>$id", { id: inserted.id });
+  assert.deepEqual({ ...bare }, { id: inserted.id });
+  const named = await client.querySingle("SELECT Item { name } FILTER .id = <uuid>$id", { id: inserted.id });
+  assert.deepEqual(Object.keys(named), ["name"]);
+});
+
+test("link properties, splats and object group keys", async () => {
+  const title = `member-${Date.now()}-${Math.random()}`;
+  await client.query("INSERT Book { title := <str>$t }", { t: title });
+  const team = await client.querySingle(
+    `INSERT Team {
+       name := <str>$name,
+       members := (SELECT Book FILTER .title = <str>$t) { @role := 'lead' }
+     }`,
+    { name: `team-${Date.now()}`, t: title }
+  );
+  const fetched = await client.querySingle(
+    "SELECT Team { members: { title, @role } } FILTER .id = <uuid>$id",
+    { id: team.id }
+  );
+  assert.deepEqual(fetched.members.map(m => ({ ...m })), [{ title, "@role": "lead" }]);
+
+  const splat = await client.querySingle("SELECT Book { * } FILTER .title = <str>$t", { t: title });
+  assert.equal(splat.title, title);
+  assert.deepEqual([...splat.tags], []);
+  assert.ok(splat.id);
+
+  await client.query(
+    "INSERT Author { name := <str>$n, best := (SELECT Book FILTER .title = <str>$t LIMIT 1) }",
+    { n: `keyed-${Date.now()}`, t: title }
+  );
+  const groups = await client.query("GROUP Author { name } USING b := .best BY b");
+  assert.ok(groups.some(g => g.key.b && g.key.b.id));
+});
+
+test("execute runs without a result", async () => {
+  assert.equal(await client.execute("UPDATE Item FILTER .name = 'nobody' SET { count := 0 }"), undefined);
+});
+
+test("single results of many elements raise ResultCardinalityMismatchError", async () => {
+  await insertItem(`many-one-${Date.now()}`, 10);
+  await insertItem(`many-two-${Date.now()}`, 10);
+  await assert.rejects(client.querySingle("SELECT Item { name }"), ResultCardinalityMismatchError);
+  await assert.rejects(client.querySingleJSON("SELECT Item { name }"), ResultCardinalityMismatchError);
+  await assert.rejects(client.querySingle("SELECT {1, 2}"), ResultCardinalityMismatchError);
+  await assert.rejects(
+    client.queryRequiredSingle("SELECT Item { name } FILTER .name = 'nobody' LIMIT 1"),
+    NoDataError
   );
 });

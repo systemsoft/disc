@@ -117,6 +117,17 @@ export class DisabledCapabilityError extends DiscError {
   }
 }
 
+/**
+ * A query of many results where the client expects one (`querySingle`,
+ * `querySingleJSON`, `queryRequiredSingle`): Gel's
+ * `ResultCardinalityMismatchError` (edb/server/compiler/compiler.py).
+ */
+export class ResultCardinalityMismatchError extends DiscError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
 export class ValidationError extends DiscError {
   constructor(message: string, context?: ErrorContext) {
     super(message, context);

@@ -12,6 +12,7 @@ import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
+import { withImplicitIds } from "../edgeql/implicit-ids.ts";
 import { containsPersistentConfigure, isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { sha256Hex } from "../lib/crypto.ts";
@@ -1168,10 +1169,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   async executeBinaryQuery(
     commandText: string,
     args: Record<string, unknown>,
-    caller: { admin: boolean; } = { admin: false }
+    caller: { admin: boolean; } = { admin: false },
+    options: { implicitIds: boolean; } = { implicitIds: false }
   ): Promise<{ rows: Record<string, unknown>[]; status: string; values?: boolean; }> {
     const parser = new EdgeQL.EdgeQLParser(commandText);
-    const ast = parser.parse();
+    // A client asking for implicit ids gets every object's `id` (see edgeql/implicit-ids.ts).
+    const ast = options.implicitIds ? withImplicitIds(parser.parse()) : parser.parse();
 
     // Same read-only gate as handleRequest (gh/geldata#5524).
     if (this.options.readOnly && isWriteQuery(ast)) {

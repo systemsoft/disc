@@ -17,13 +17,14 @@
  *   - Error code mapping (Disc errors -> Gel protocol error codes)
  */
 
-import { tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
-import type { Schema } from "../compiler/context.ts";
+import { selectKeepsAtMostOne, tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
+import type { Schema, TypeDef } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import {
   Cardinality,
+  CompilationFlag,
   ErrorSeverity,
   OutputFormat,
   PROTOCOL_MAJOR_VERSION,
@@ -59,6 +60,7 @@ import {
   postgresErrorFields,
   QueryError,
   QueryTimeoutError,
+  ResultCardinalityMismatchError,
   SchemaError,
   SyntaxError,
   ValidationError
@@ -232,7 +234,19 @@ interface ShapeElementV2 {
   /** index into the descriptor list of this field's type codec */
   pos: number;
   cardinality: number;
+  /** `SHAPE_POINTER_IS_*` bits (0 for a query parameter). */
+  flags: number;
 }
+
+/**
+ * A shape element's flags, as Gel's `ShapePointerFlags`
+ * (edb/server/compiler/sertypes.py): an injected `id` / `__tid__` /
+ * `__tname__` is implicit (the clients hide it), a link property is one (the
+ * clients name it `@name`), and a pointer to objects is a link.
+ */
+const SHAPE_POINTER_IS_IMPLICIT = 1 << 0;
+const SHAPE_POINTER_IS_LINKPROP = 1 << 1;
+const SHAPE_POINTER_IS_LINK = 1 << 2;
 
 function encodeShapeV2(
   tid: Uint8Array,
@@ -246,7 +260,7 @@ function encodeShapeV2(
   w.writeUInt16(0); // object type pos
   w.writeUInt16(elements.length);
   for (const el of elements) {
-    w.writeUInt32(0); // flags
+    w.writeUInt32(el.flags);
     w.writeUInt8(el.cardinality);
     w.writeString(el.name);
     w.writeUInt16(el.pos);
@@ -290,6 +304,12 @@ interface OutputField {
   cardinality: number;
   /** For a field of objects (a link, a `group`'s key and elements), their shape. */
   shape?: OutputShape;
+  /** An `id`, `__tid__` or `__tname__` Gel injects into the shape, which the clients hide. */
+  implicit?: boolean;
+  /** A link property (`@name` in a link's sub-shape): its value is the row's `@name`. */
+  linkProperty?: boolean;
+  /** The value of the field in every object, rather than the row's: an injected `__tid__` or `__tname__`. */
+  constant?: unknown;
 }
 
 /**
@@ -325,10 +345,22 @@ interface OutputShape {
   free?: boolean;
   /**
    * The result cardinality, when the query's shape pins it down (a
-   * selected scalar expression or set literal). Otherwise the
+   * selected scalar expression or set literal, a mutation). Otherwise the
    * CommandDataDescription echoes the client's expected cardinality.
    */
   cardinality?: number;
+}
+
+/**
+ * The implicit fields a client asks Gel to inject into every object shape
+ * of a binary result, by its Parse / Execute compilation flags
+ * (INJECT_OUTPUT_OBJECT_IDS, _TYPE_IDS, _TYPE_NAMES; the Python client
+ * always asks for ids, the JS client for none).
+ */
+export interface ImplicitFields {
+  ids: boolean;
+  typeIds: boolean;
+  typeNames: boolean;
 }
 
 /**
@@ -341,6 +373,10 @@ interface WithScope {
   schema?: DescribedSchema;
   /** The object type a relative path (`.name`) starts from: a shape's, or a `group`'s. */
   subject?: string;
+  /** The implicit fields the client asked for. */
+  implicit?: ImplicitFields;
+  /** In a link's sub-shape, the link's properties, which `@name` names. */
+  linkProperties?: Map<string, DescribedProperty>;
 }
 
 /**
@@ -354,6 +390,16 @@ interface BoundAlias {
   scope: WithScope;
 }
 
+/** A property (or link property) as an output description reads it. */
+interface DescribedProperty {
+  baseType?: string;
+  computed?: boolean;
+  edgeqlType?: string;
+  multi?: boolean;
+  required?: boolean;
+  type: string;
+}
+
 /** The parts of the schema an output description reads. */
 interface DescribedSchema {
   /** Each user scalar mapped to the built-in type it extends (`Schema.scalars`). */
@@ -362,11 +408,8 @@ interface DescribedSchema {
     string,
     {
       kind?: string;
-      properties: Map<
-        string,
-        { baseType?: string; edgeqlType?: string; type: string; required?: boolean; multi?: boolean; }
-      >;
-      links?: Map<string, { required?: boolean; multi?: boolean; target?: string; }>;
+      properties: Map<string, DescribedProperty>;
+      links?: Map<string, { multi?: boolean; properties?: Map<string, DescribedProperty>; required?: boolean; target?: string; }>;
     }
   >;
 }
@@ -801,22 +844,19 @@ export function inferOutputShape(
 ): OutputShape {
   // The schema travels with the scope, so nested expressions see it.
   const scope = schema && outerScope.schema !== schema ? { ...outerScope, schema } : outerScope;
-  // `id` is always required + single → ONE.
-  const idField: OutputField = {
-    name: "id",
-    edgeqlType: "uuid",
-    cardinality: Cardinality.ONE
-  };
   if (!query || typeof query !== "object") {
-    return { typeName: "Object", fields: [idField] };
+    return { typeName: "Object", fields: withImplicitFields("Object", [], scope) };
   }
   const q = query as { kind?: string; };
 
+  // A mutation answers the objects it wrote, each its `{id}`.
   if (
     q.kind === "InsertQuery" || q.kind === "UpdateQuery" ||
     q.kind === "DeleteQuery"
   ) {
-    return { typeName: "Object", fields: [idField] };
+    const mutation = q as AST.InsertQuery | AST.UpdateQuery | AST.DeleteQuery;
+    const typeName = qualifyTypeName(extractTypeNameFromExpr(mutation.type) ?? "Object", scope);
+    return { cardinality: mutationCardinality(mutation, typeName, scope), fields: withImplicitFields(typeName, [], scope), typeName };
   }
 
   // `with …`: describe the body like the same query without `with`, each
@@ -905,86 +945,188 @@ export function inferOutputShape(
     }
 
     const typeName = objectTypeName(expr, exprScope) ?? "Object";
-    const fields = sel.shape ? shapeFields(typeName, sel.shape, scope) : [];
-
-    if (fields.length === 0) {
-      fields.push(idField);
-    }
-    return { typeName, fields };
+    return objectShape(typeName, sel.shape, scope);
   }
 
   if (q.kind === "GroupQuery") {
     return inferGroupShape(q as AST.GroupQuery, scope);
   }
 
-  return { typeName: "Object", fields: [idField] };
+  return { typeName: "Object", fields: withImplicitFields("Object", [], scope) };
+}
+
+/**
+ * How many objects a mutation writes, as Gel infers it: an insert one (`unless
+ * conflict` without `else`: at most one), an update or delete at most one
+ * when it keeps at most one (a filter on `.id` or an exclusive property, see
+ * `selectKeepsAtMostOne`), else many.
+ */
+function mutationCardinality(mutation: AST.InsertQuery | AST.UpdateQuery | AST.DeleteQuery, typeName: string, scope: WithScope): number {
+  if (mutation.kind === "InsertQuery") {
+    return mutation.unless && !mutation.unless.else ? Cardinality.AT_MOST_ONE : Cardinality.ONE;
+  }
+  // The schema an output description reads is Disc's (`Schema`), narrowed.
+  const typeDef = scope.schema?.types?.get(typeName) as TypeDef | undefined;
+  const limit = mutation.kind === "DeleteQuery" ? mutation.limit : undefined;
+  const keepsOne = typeDef !== undefined &&
+    selectKeepsAtMostOne({ expr: mutation.type, filter: mutation.filter, kind: "SelectQuery", limit }, typeDef);
+  return keepsOne ? Cardinality.AT_MOST_ONE : Cardinality.MANY;
+}
+
+/**
+ * An object shape's fields with the implicit ones Gel injects in front of
+ * them (edb/edgeql/compiler/viewgen.py `_get_shape_configuration_inner`):
+ * `id` when the shape has no pointers (link properties aside), or when the client asks for ids and
+ * the shape doesn't select it; then `__tid__` and `__tname__` (the object's
+ * type, `default::Author`) when asked for — so a shape starts `__tname__,
+ * __tid__, id`. Disc has no type ids of its own: `__tid__` is derived from
+ * the type's name.
+ */
+function withImplicitFields(typeName: string, fields: OutputField[], scope: WithScope): OutputField[] {
+  const implicit = scope.implicit;
+  const out = [...fields];
+  const pointers = fields.filter(f => !f.linkProperty);
+  if (pointers.length === 0 || (implicit?.ids && !pointers.some(f => f.name === "id"))) {
+    out.unshift({ cardinality: Cardinality.ONE, edgeqlType: "uuid", implicit: true, name: "id" });
+  }
+  if (typeName === "Object") {
+    return out;
+  }
+  const qualified = typeName.includes("::") ? typeName : `default::${typeName}`;
+  if (implicit?.typeIds) {
+    const typeId = generateDescriptorIdSync(new TextEncoder().encode(`disc:type:${qualified}`));
+    out.unshift({ cardinality: Cardinality.ONE, constant: typeId, edgeqlType: "uuid", implicit: true, name: "__tid__" });
+  }
+  if (implicit?.typeNames) {
+    out.unshift({ cardinality: Cardinality.ONE, constant: qualified, edgeqlType: "str", implicit: true, name: "__tname__" });
+  }
+  return out;
 }
 
 /**
  * The fields of a shape on objects of `typeName`: a property as its type, a
  * link as its objects in their sub-shape (`{id}` without one), a computed
- * element as what its expression gives. Each has its cardinality, so a
- * multi link or property, or a computed set, is described as a set.
+ * element as what its expression gives, a splat (`*`) as the type's stored
+ * properties, `id` first (as the compiler expands it). `[is T].p` is `T`'s
+ * pointer, empty on objects of other types. Each has its cardinality, so a
+ * multi link or property, or a computed set, is described as a set. In a
+ * link's sub-shape, its link properties (`@p`, `@q := …`) follow the
+ * shape's pointers, as Gel orders them.
  */
-function shapeFields(typeName: string, shape: AST.Shape, scope: WithScope): OutputField[] {
-  const typeDef = scope.schema?.types?.get(typeName);
+function shapeFields(
+  typeName: string,
+  shape: AST.Shape,
+  scope: WithScope,
+  linkProperties?: Map<string, DescribedProperty>
+): OutputField[] {
+  const types = scope.schema?.types;
+  const typeDef = types?.get(typeName);
+  const elementScope: WithScope = { ...scope, linkProperties, subject: typeName };
   const fields: OutputField[] = [];
+  const properties: OutputField[] = [];
+  const add = (field: OutputField): void => {
+    if (!fields.some(f => f.name === field.name)) {
+      fields.push(field);
+    }
+  };
   for (const el of shape.elements) {
+    if (el.splat) {
+      add({ cardinality: Cardinality.ONE, edgeqlType: "uuid", name: "id" });
+      for (const [name, property] of typeDef?.properties ?? []) {
+        if (!property.computed) {
+          add(propertyField(name, property, scope));
+        }
+      }
+      continue;
+    }
     const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
     if (!fieldName) {
       continue;
     }
+    if (el.linkProperty) {
+      properties.push(linkPropertyField(fieldName, el, elementScope));
+      continue;
+    }
     if (el.computable) {
-      fields.push(computedField(fieldName, el, { ...scope, subject: typeName }));
+      add(computedField(fieldName, el, elementScope));
       continue;
     }
-    // The schema's TypeDef uses `type` for the SQL type and may carry
-    // the original EdgeQL type via a property-level field. Always
-    // prefer the EdgeQL type since that's what the wire codec needs.
-    const propType = typeDef?.properties.get(fieldName);
+    // `[is T].p`: `T`'s pointer, which objects of other types don't have.
+    const sourceDef = el.typeFilter ? types?.get(qualifyTypeName(el.typeFilter, scope)) : typeDef;
+    const intersected = el.typeFilter !== undefined;
+    const propType = sourceDef?.properties.get(fieldName);
     if (propType) {
-      const eqlType = propType.baseType ?? propType.edgeqlType ?? propType.type ?? "uuid";
-      fields.push({
-        name: fieldName,
-        edgeqlType: builtinScalarType(eqlType, scope),
-        cardinality: cardinalityFor(
-          propType.required ?? false,
-          propType.multi ?? false
-        )
-      });
+      add(propertyField(fieldName, propType, scope, intersected));
       continue;
     }
-    const linkDef = typeDef?.links?.get(fieldName);
+    const linkDef = sourceDef?.links?.get(fieldName);
     if (linkDef) {
       const target = linkDef.target?.replace(/^default::/, "") ?? "Object";
-      fields.push({
+      add({
         name: fieldName,
         edgeqlType: target,
         cardinality: cardinalityFor(
-          linkDef.required ?? false,
+          !intersected && (linkDef.required ?? false),
           linkDef.multi ?? false
         ),
-        shape: objectShape(target, el.shape, scope)
+        shape: objectShape(target, el.shape, scope, linkDef.properties)
       });
       continue;
     }
     // Unknown field — fall back to an optional single uuid.
-    fields.push({
+    add({
       name: fieldName,
       edgeqlType: "uuid",
       cardinality: Cardinality.AT_MOST_ONE
     });
   }
-  return fields;
+  return [...fields, ...properties];
 }
 
-/*** Objects of `typeName` in `shape`: Gel's implicit `{id}` without one. ***/
-function objectShape(typeName: string, shape: AST.Shape | undefined, scope: WithScope): OutputShape {
-  const fields = shape ? shapeFields(typeName, shape, scope) : [];
+/**
+ * A property's field: its EdgeQL type (the schema's `type` is the SQL
+ * type), as the built-in type it's sent as. Optional when reached through a
+ * type intersection (`[is T].p`).
+ */
+function propertyField(name: string, property: DescribedProperty, scope: WithScope, optional = false): OutputField {
+  const eqlType = property.baseType ?? property.edgeqlType ?? property.type ?? "uuid";
   return {
-    fields: fields.length > 0 ? fields : [{ cardinality: Cardinality.ONE, edgeqlType: "uuid", name: "id" }],
-    typeName
+    name,
+    edgeqlType: builtinScalarType(eqlType, scope),
+    cardinality: cardinalityFor(!optional && (property.required ?? false), property.multi ?? false)
   };
+}
+
+/**
+ * A link property in a link's sub-shape (`@role`, `@r := @role ++ "!"`):
+ * the link's property as its type, or what the expression gives. One value
+ * at most, as a link property is single. Unknown, an optional uuid.
+ */
+function linkPropertyField(name: string, el: AST.ShapeElement, scope: WithScope): OutputField {
+  if (el.computable) {
+    const type = inferScalarType(el.expr, scope);
+    return type === null ?
+      { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: "uuid", linkProperty: true, name } :
+      { cardinality: expressionCardinality(el.expr, scope), edgeqlType: type, linkProperty: true, name };
+  }
+  const property = scope.linkProperties?.get(name);
+  return property ?
+    { ...propertyField(name, { ...property, multi: false }, scope), linkProperty: true } :
+    { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: "uuid", linkProperty: true, name };
+}
+
+/**
+ * Objects of `typeName` in `shape` (reached by a link with
+ * `linkProperties`), with Gel's implicit fields: `{id}` without a shape.
+ */
+function objectShape(
+  typeName: string,
+  shape: AST.Shape | undefined,
+  scope: WithScope,
+  linkProperties?: Map<string, DescribedProperty>
+): OutputShape {
+  const fields = shape ? shapeFields(typeName, shape, scope, linkProperties) : [];
+  return { fields: withImplicitFields(typeName, fields, scope), typeName };
 }
 
 /**
@@ -1014,7 +1156,7 @@ function computedField(name: string, el: AST.ShapeElement, scope: WithScope): Ou
  * free objects of `key` (a free object of each key by name), `grouping`
  * (the key names, a set of str) and `elements` (the group's objects in the
  * shape given, `{id}` without one). A `using` key has its expression's
- * type, a `.p` key its property's.
+ * type (objects their `{id}`), a `.p` key its property's.
  */
 function inferGroupShape(group: AST.GroupQuery, scope: WithScope): OutputShape {
   const subject = group.expr.kind === "ShapeExpr" ? (group.expr as AST.ShapeExpr).expr : group.expr;
@@ -1027,6 +1169,11 @@ function inferGroupShape(group: AST.GroupQuery, scope: WithScope): OutputShape {
     // A bare `p` not bound by `using` names the property `.p`.
     const expr: AST.Expression = bound.get(name) ??
       (by.kind === "Identifier" ? { kind: "Path", steps: [{ kind: "PathStep", name, type: "property" }] } as AST.Path : by);
+    // A key of objects (`using b := .best`) is each object, in its `{id}`.
+    const objectType = objectTypeName(expr, subjectScope);
+    if (objectType !== null && scope.schema?.types?.get(objectType)?.kind === "object") {
+      return { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: objectType, name, shape: objectShape(objectType, undefined, scope) };
+    }
     return { cardinality: Cardinality.AT_MOST_ONE, edgeqlType: inferScalarType(expr, subjectScope) ?? "str", name };
   });
   return {
@@ -1244,6 +1391,18 @@ interface ReachedPath {
  * one str. Null when a step isn't a link or property the schema knows.
  */
 function inferPath(path: AST.Path, scope: WithScope): ReachedPath | null {
+  // `@name` in a link's sub-shape: one value of the link property.
+  const [first] = path.steps;
+  if (!path.rooted && path.steps.length === 1 && first.type === "link_property") {
+    const property = scope.linkProperties?.get(first.name);
+    return property ?
+      {
+        cardinality: cardinalityFor(property.required ?? false, false),
+        object: false,
+        type: builtinScalarType(property.baseType ?? property.edgeqlType ?? property.type, scope)
+      } :
+      null;
+  }
   const types = scope.schema?.types;
   if (!types || (!path.rooted && !scope.subject)) {
     return null;
@@ -1495,7 +1654,8 @@ function buildInputDescriptor(
   const elements: ShapeElementV2[] = params.map(p => ({
     name: p.name,
     pos: appendTypeDescriptor(list, p.edgeqlType),
-    cardinality: 0x41 // ONE
+    cardinality: 0x41, // ONE
+    flags: 0
   }));
 
   const tid = generateDescriptorIdSync(
@@ -1513,9 +1673,45 @@ function buildInputDescriptor(
   return { id: packed.rootId, data: packed.data };
 }
 
-/*** A prepared statement's cache key: its output format describes it too (JSON as one str). ***/
-function statementKey(commandText: string, outputFormat: number): string {
-  return `${outputFormat}:${commandText}`;
+/**
+ * A prepared statement's cache key: its output format (JSON as one str) and
+ * the implicit fields asked for describe it too.
+ */
+function statementKey(commandText: string, outputFormat: number, implicit: ImplicitFields | undefined): string {
+  const fields = implicit ? `${Number(implicit.ids)}${Number(implicit.typeIds)}${Number(implicit.typeNames)}` : "";
+  return `${outputFormat}:${fields}:${commandText}`;
+}
+
+/**
+ * The implicit fields a Parse / Execute's compilation flags ask for. Only
+ * binary output has them: Gel injects none in JSON
+ * (edb/server/compiler/compiler.py `_get_compile_options`).
+ */
+function implicitFieldsFor(compilationFlags: bigint, outputFormat: number): ImplicitFields | undefined {
+  if (outputFormat !== OutputFormat.BINARY) {
+    return undefined;
+  }
+  return {
+    ids: (compilationFlags & CompilationFlag.INJECT_OUTPUT_OBJECT_IDS) !== 0n,
+    typeIds: (compilationFlags & CompilationFlag.INJECT_OUTPUT_TYPE_IDS) !== 0n,
+    typeNames: (compilationFlags & CompilationFlag.INJECT_OUTPUT_TYPE_NAMES) !== 0n
+  };
+}
+
+/*** Whether the client expects one result at most (`querySingle`, `queryRequiredSingle` and their JSON forms). ***/
+function expectsOne(expectedCardinality: number): boolean {
+  return expectedCardinality === Cardinality.ONE || expectedCardinality === Cardinality.AT_MOST_ONE;
+}
+
+/**
+ * Gel's ResultCardinalityMismatchError for a query of many results where
+ * the client expects one (edb/server/compiler/compiler.py). Gel knows it
+ * when it compiles the query; so does Disc for a query whose cardinality
+ * it describes (`resultCardinality`), and otherwise when it runs one.
+ */
+function resultCardinalityMismatch(cardinality: number): ResultCardinalityMismatchError {
+  const name = cardinality === Cardinality.AT_LEAST_ONE ? "AT_LEAST_ONE" : "MANY";
+  return new ResultCardinalityMismatchError(`the query has cardinality ${name} which does not match the expected cardinality ONE`);
 }
 
 /** Byte-for-byte equality on two 16-byte UUIDs. */
@@ -1654,7 +1850,8 @@ function encodeRowAsObject(
   w.writeUInt32(shape.fields.length);
   for (const field of shape.fields) {
     w.writeUInt32(0); // reserved
-    const bytes = encodeFieldValue(field, row?.[field.name]);
+    const value = field.constant !== undefined ? field.constant : row?.[field.linkProperty ? `@${field.name}` : field.name];
+    const bytes = encodeFieldValue(field, value);
     if (bytes === null) {
       // -1 as a signed i32 is 0xFFFFFFFF unsigned.
       w.writeUInt32(0xffffffff);
@@ -1777,10 +1974,17 @@ export function buildOutputDescriptor(
   return { id: packed.rootId, data: packed.data };
 }
 
-/*** A shape's identity: its type and each field's name, type (a nested shape's identity) and cardinality. ***/
+/*** A shape's identity: its type and each field's flags, name, type (a nested shape's identity) and cardinality. ***/
 function shapeSignature(shape: OutputShape): string {
-  const fields = shape.fields.map(f => `${f.name}:${f.shape ? `{${shapeSignature(f.shape)}}` : f.edgeqlType}:${f.cardinality}`);
+  const fields = shape.fields.map(f => `${shapePointerFlags(f)}:${f.name}:${f.shape ? `{${shapeSignature(f.shape)}}` : f.edgeqlType}:${f.cardinality}`);
   return `${shape.free ? "free:" : ""}${shape.typeName}:${fields.join(",")}`;
+}
+
+/*** A field's `SHAPE_POINTER_IS_*` flags: implicit, a link property, a link (a field of objects). ***/
+function shapePointerFlags(field: OutputField): number {
+  return (field.implicit ? SHAPE_POINTER_IS_IMPLICIT : 0) |
+    (field.linkProperty ? SHAPE_POINTER_IS_LINKPROP : 0) |
+    (field.shape ? SHAPE_POINTER_IS_LINK : 0);
 }
 
 /**
@@ -1797,7 +2001,12 @@ function appendShapeDescriptor(list: TypeDescriptorList, shape: OutputShape): nu
   }
   const elements: ShapeElementV2[] = shape.fields.map(f => {
     const pos = f.shape ? appendShapeDescriptor(list, f.shape) : appendTypeDescriptor(list, f.edgeqlType);
-    return { cardinality: f.cardinality, name: f.name, pos: isMulti(f.cardinality) ? appendSetDescriptor(list, pos) : pos };
+    return {
+      cardinality: f.cardinality,
+      flags: shapePointerFlags(f),
+      name: f.name,
+      pos: isMulti(f.cardinality) ? appendSetDescriptor(list, pos) : pos
+    };
   });
   const tid = generateDescriptorIdSync(new TextEncoder().encode(`disc:output:${signature}`));
   const position = list.descriptors.length;
@@ -1827,6 +2036,7 @@ export const GEL_ERROR_CODES = {
   InternalServerError: 0x01000000,
   UnsupportedFeatureError: 0x02000000,
   ProtocolError: 0x03000000,
+  ResultCardinalityMismatchError: 0x03030000,
   DisabledCapabilityError: 0x03040200,
   QueryError: 0x04000000,
   InvalidSyntaxError: 0x04010000,
@@ -1944,6 +2154,7 @@ function errorAttributes(error: unknown): ErrorAttribute[] {
  * - InvalidValueError -> InvalidValueError
  * - ConfigurationError -> ConfigurationError
  * - DisabledCapabilityError -> DisabledCapabilityError
+ * - ResultCardinalityMismatchError -> ResultCardinalityMismatchError
  * - CompilationError, QueryError -> QueryError
  * - ValidationError -> InvalidValueError
  * - DatabaseExecutionError -> its `cause`'s code (a compile error the
@@ -1971,6 +2182,9 @@ export function mapErrorToGelCode(error: Error): number {
   }
   if (error instanceof ConfigurationError) {
     return GEL_ERROR_CODES.ConfigurationError;
+  }
+  if (error instanceof ResultCardinalityMismatchError) {
+    return GEL_ERROR_CODES.ResultCardinalityMismatchError;
   }
   if (error instanceof DisabledCapabilityError) {
     return GEL_ERROR_CODES.DisabledCapabilityError;
@@ -2037,8 +2251,18 @@ export interface BinaryExecutionResult {
 export type BinaryQueryExecutor = (
   commandText: string,
   args: Record<string, unknown>,
-  caller: BinaryCaller
+  caller: BinaryCaller,
+  options: BinaryExecuteOptions
 ) => Promise<BinaryExecutionResult>;
+
+/** How a binary client asks for a query's results. */
+export interface BinaryExecuteOptions {
+  /**
+   * Select `id` in every object shape (`withImplicitIds`), which the output
+   * description then carries: the client sent INJECT_OUTPUT_OBJECT_IDS.
+   */
+  implicitIds: boolean;
+}
 
 /**
  * Who a binary connection is. `admin` when it authenticated with the
@@ -2594,8 +2818,11 @@ export class BinaryConnection {
       this.parseStateData(msg.stateTypedescId, msg.stateData);
 
       // Phase 4.2: Check cache first
-      const cached = this.stmtCache.get(statementKey(msg.commandText, msg.outputFormat));
+      const implicit = implicitFieldsFor(msg.compilationFlags, msg.outputFormat);
+      const key = statementKey(msg.commandText, msg.outputFormat, implicit);
+      const cached = this.stmtCache.get(key);
       if (cached) {
+        this.checkResultCardinality(cached.outputShape, msg.expectedCardinality);
         // Cache hit — send cached descriptors
         await this.sendMessage({
           kind: "CommandDataDescription",
@@ -2612,12 +2839,12 @@ export class BinaryConnection {
       }
 
       // Cache miss — compile and build type descriptors
-      const built = this.buildDescriptors(msg.commandText, msg.outputFormat);
+      const built = this.buildDescriptors(msg.commandText, msg.outputFormat, implicit);
 
       const commandStatus = this.detectCommandStatus(msg.commandText);
 
       // Store in cache
-      this.stmtCache.set(statementKey(msg.commandText, msg.outputFormat), {
+      this.stmtCache.set(key, {
         commandText: msg.commandText,
         inputDescId: built.inputDesc.id,
         outputDescId: built.outputDesc.id,
@@ -2629,6 +2856,7 @@ export class BinaryConnection {
         params: built.params,
         outputShape: built.outputShape
       });
+      this.checkResultCardinality(built.outputShape, msg.expectedCardinality);
 
       await this.sendMessage({
         kind: "CommandDataDescription",
@@ -2668,7 +2896,9 @@ export class BinaryConnection {
       let params: ParamInfo[];
       let outputShape: OutputShape;
 
-      const cached = this.stmtCache.get(statementKey(msg.commandText, msg.outputFormat));
+      const implicit = implicitFieldsFor(msg.compilationFlags, msg.outputFormat);
+      const key = statementKey(msg.commandText, msg.outputFormat, implicit);
+      const cached = this.stmtCache.get(key);
       if (cached) {
         // Cache hit — reuse descriptors
         inputDesc = { id: cached.inputDescId, data: cached.inputDesc };
@@ -2678,7 +2908,7 @@ export class BinaryConnection {
         outputShape = cached.outputShape;
       } else {
         // Cache miss — build descriptors
-        const descs = this.buildDescriptors(msg.commandText, msg.outputFormat);
+        const descs = this.buildDescriptors(msg.commandText, msg.outputFormat, implicit);
         inputDesc = descs.inputDesc;
         outputDesc = descs.outputDesc;
         commandStatus = this.detectCommandStatus(msg.commandText);
@@ -2686,7 +2916,7 @@ export class BinaryConnection {
         outputShape = descs.outputShape;
 
         // Store in cache for future use
-        this.stmtCache.set(statementKey(msg.commandText, msg.outputFormat), {
+        this.stmtCache.set(key, {
           commandText: msg.commandText,
           inputDescId: inputDesc.id,
           outputDescId: outputDesc.id,
@@ -2714,6 +2944,7 @@ export class BinaryConnection {
         msg.outputTypedescId,
         outputDesc.id
       );
+      this.checkResultCardinality(outputShape, msg.expectedCardinality);
       if (inputMismatch || outputMismatch) {
         await this.sendMessage({
           kind: "CommandDataDescription",
@@ -2736,7 +2967,9 @@ export class BinaryConnection {
       let rows: Record<string, unknown>[] = [];
       let values = false;
       if (this.executor) {
-        const result = await this.executor(msg.commandText, args, { admin: this.passwordAuthenticated });
+        const result = await this.executor(msg.commandText, args, { admin: this.passwordAuthenticated }, {
+          implicitIds: implicit?.ids ?? false
+        });
         rows = result.rows;
         values = result.values === true;
         // Prefer the executor's status (it knows whether INSERT had a
@@ -2751,13 +2984,17 @@ export class BinaryConnection {
         // frame come back; production paths always supply an executor.
         rows = [{}];
       }
+      // A single result found to be many when run (see `resultCardinalityMismatch`).
+      if (expectsOne(msg.expectedCardinality) && msg.outputFormat !== OutputFormat.NONE && rows.length > 1) {
+        throw resultCardinalityMismatch(Cardinality.MANY);
+      }
 
       const dataElements = encodeRowsAsObjects(
         rows,
         outputShape,
         msg.outputFormat,
         values,
-        msg.expectedCardinality === Cardinality.ONE || msg.expectedCardinality === Cardinality.AT_MOST_ONE
+        expectsOne(msg.expectedCardinality)
       );
 
       // Send one Data message per row — the upstream Gel Python client's
@@ -2878,9 +3115,21 @@ export class BinaryConnection {
   // Descriptor building
   // -----------------------------------------------------------------------
 
+  /**
+   * Gel's ResultCardinalityMismatchError when the client expects one result
+   * and the query's described cardinality is many (see
+   * `resultCardinalityMismatch`).
+   */
+  private checkResultCardinality(shape: OutputShape, expectedCardinality: number): void {
+    if (expectsOne(expectedCardinality) && shape.cardinality !== undefined && isMulti(shape.cardinality)) {
+      throw resultCardinalityMismatch(shape.cardinality);
+    }
+  }
+
   private buildDescriptors(
     commandText: string,
-    outputFormat: number
+    outputFormat: number,
+    implicit: ImplicitFields | undefined
   ): {
     inputDesc: { id: Uint8Array; data: Uint8Array; };
     outputDesc: { id: Uint8Array; data: Uint8Array; };
@@ -2895,7 +3144,17 @@ export class BinaryConnection {
       const parser = new EdgeQLParser(commandText);
       const query = parser.parse();
       const params = collectParameters(query);
-      const outputShape = inferOutputShape(query, this._schema);
+      const outputShape = inferOutputShape(query, this._schema, { ...EMPTY_SCOPE, implicit });
+      // Output format NONE (`execute`) is described as Gel's null type id,
+      // with no descriptors and no result (edb/server/compiler/compiler.py).
+      if (outputFormat === OutputFormat.NONE) {
+        return {
+          inputDesc: buildInputDescriptor(params),
+          outputDesc: { id: new Uint8Array(16), data: new Uint8Array(0) },
+          params,
+          outputShape: { ...outputShape, cardinality: Cardinality.NO_RESULT }
+        };
+      }
       return {
         inputDesc: buildInputDescriptor(params),
         outputDesc: outputFormat === OutputFormat.JSON || outputFormat === OutputFormat.JSON_ELEMENTS ?
