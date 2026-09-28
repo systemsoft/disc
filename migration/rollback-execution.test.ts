@@ -87,14 +87,14 @@ function createTestConfig(
 // A. Tracker method tests
 // ---------------------------------------------------------------------------
 
-Deno.test("Tracker - getLatestMigration returns most recent migration", async () => {
+Deno.test("Tracker - getLatestMigration returns the last applied migration, by applied order (applied_at can tie)", async () => {
   const responses = new Map<string, { rows: any[]; rowCount: number; }>();
 
   // Response for CREATE TABLE IF NOT EXISTS (initialization)
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Response for getLatestMigration query
-  responses.set("ORDER BY applied_at DESC", {
+  responses.set("ORDER BY applied_order DESC", {
     rows: [{
       id: "m20240601_abc",
       name: "create_user",
@@ -128,7 +128,7 @@ Deno.test("Tracker - getLatestMigration returns null when empty", async () => {
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Empty result for getLatestMigration
-  responses.set("ORDER BY applied_at DESC", { rows: [], rowCount: 0 });
+  responses.set("ORDER BY applied_order DESC", { rows: [], rowCount: 0 });
 
   const pool = createMockPool(responses);
   const tracker = new MigrationTracker(pool);
@@ -148,13 +148,13 @@ Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order"
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Response for the reference migration lookup
-  responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
-    rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
+  responses.set("SELECT applied_order FROM disc_migrations WHERE id", {
+    rows: [{ applied_order: 1 }],
     rowCount: 1
   });
 
   // Response for migrations after the reference
-  responses.set("WHERE applied_at > $1", {
+  responses.set("WHERE applied_order > $1", {
     rows: [
       {
         id: "m003",
@@ -385,13 +385,13 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
   });
 
   // getMigrationsAfter - reference lookup
-  responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
-    rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
+  responses.set("SELECT applied_order FROM disc_migrations WHERE id", {
+    rows: [{ applied_order: 1 }],
     rowCount: 1
   });
 
   // getMigrationsAfter - results (DESC order)
-  responses.set("WHERE applied_at > $1", {
+  responses.set("WHERE applied_order > $1", {
     rows: [
       {
         id: "m003",
@@ -453,13 +453,13 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
   });
 
   // getMigrationsAfter - reference lookup
-  responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
-    rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
+  responses.set("SELECT applied_order FROM disc_migrations WHERE id", {
+    rows: [{ applied_order: 1 }],
     rowCount: 1
   });
 
   // Only m002 is after m001
-  responses.set("WHERE applied_at > $1", {
+  responses.set("WHERE applied_order > $1", {
     rows: [{
       id: "m002",
       name: "migration_2",
@@ -512,7 +512,7 @@ Deno.test("Engine - getMigrationStatus returns correct counts", async () => {
   });
 
   // getLatestMigration
-  responses.set("ORDER BY applied_at DESC", {
+  responses.set("ORDER BY applied_order DESC", {
     rows: [{
       id: "m003",
       name: "latest_migration",
@@ -556,7 +556,7 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
   });
 
   // getLatestMigration (for getLatestMigrationId)
-  responses.set("ORDER BY applied_at DESC", {
+  responses.set("ORDER BY applied_order DESC", {
     rows: [{
       id: "m001",
       name: "create_user",
@@ -608,12 +608,12 @@ Deno.test("SchemaManager - rollbackToMigration delegates to engine", async () =>
   });
 
   // getMigrationsAfter
-  responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
-    rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
+  responses.set("SELECT applied_order FROM disc_migrations WHERE id", {
+    rows: [{ applied_order: 1 }],
     rowCount: 1
   });
 
-  responses.set("WHERE applied_at > $1", {
+  responses.set("WHERE applied_order > $1", {
     rows: [{
       id: "m002",
       name: "migration_2",
@@ -657,7 +657,7 @@ Deno.test("SchemaManager - getMigrationStatus returns formatted status", async (
     rowCount: 2
   });
 
-  responses.set("ORDER BY applied_at DESC", {
+  responses.set("ORDER BY applied_order DESC", {
     rows: [{
       id: "m002",
       name: "add_posts",

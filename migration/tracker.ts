@@ -547,7 +547,7 @@ export class MigrationTracker {
       const lastMigrationResult = await this.pool.query(`
         SELECT id, applied_at, schema_hash
         FROM disc_migrations
-        ORDER BY applied_at DESC
+        ORDER BY applied_order DESC
         LIMIT 1
       `);
 
@@ -708,7 +708,7 @@ export class MigrationTracker {
       const result = await this.pool.query(`
         SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
-        ORDER BY applied_at DESC
+        ORDER BY applied_order DESC
         LIMIT 1
       `);
 
@@ -727,7 +727,8 @@ export class MigrationTracker {
   }
 
   /**
-   * Get all migrations applied after the given migration ID, ordered by applied_at DESC
+   * Get all migrations applied after the given migration ID, latest first
+   * (by applied_order: two migrations' applied_at can tie)
    */
   async getMigrationsAfter(
     migrationId: string
@@ -737,9 +738,9 @@ export class MigrationTracker {
     }
 
     try {
-      // First get the applied_at timestamp for the reference migration
+      // First get the applied order of the reference migration
       const refResult = await this.pool.query(
-        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        `SELECT applied_order FROM disc_migrations WHERE id = $1`,
         [migrationId]
       );
 
@@ -749,17 +750,17 @@ export class MigrationTracker {
         );
       }
 
-      const refAppliedAt = refResult.rows[0].applied_at;
+      const refAppliedOrder = refResult.rows[0].applied_order;
 
       // Get all migrations applied after the reference migration
       const result = await this.pool.query(
         `
         SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
-        WHERE applied_at > $1
-        ORDER BY applied_at DESC
+        WHERE applied_order > $1
+        ORDER BY applied_order DESC
       `,
-        [refAppliedAt]
+        [refAppliedOrder]
       );
 
       const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
@@ -818,7 +819,7 @@ export class MigrationTracker {
       const result = await this.pool.query(`
         SELECT id, name, description, schema_hash, created_at
         FROM disc_migrations
-        ORDER BY applied_at ASC
+        ORDER BY applied_order ASC
       `);
 
       if (result.rows.length === 0) {
@@ -847,7 +848,8 @@ export class MigrationTracker {
   }
 
   /**
-   * Get all migrations in the range [fromId, toId] inclusive, ordered by applied_at ASC.
+   * Get all migrations in the range [fromId, toId] inclusive, in applied order
+   * (by applied_order: two migrations' applied_at can tie).
    * Used for squash validation to check if any data migrations exist in the range.
    */
   async getMigrationsInRange(
@@ -859,9 +861,9 @@ export class MigrationTracker {
     }
 
     try {
-      // Get the applied_at timestamps for both boundary migrations
+      // Get the applied order of both boundary migrations
       const fromResult = await this.pool.query(
-        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        `SELECT applied_order FROM disc_migrations WHERE id = $1`,
         [fromId]
       );
       if (fromResult.rows.length === 0) {
@@ -871,7 +873,7 @@ export class MigrationTracker {
       }
 
       const toResult = await this.pool.query(
-        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        `SELECT applied_order FROM disc_migrations WHERE id = $1`,
         [toId]
       );
       if (toResult.rows.length === 0) {
@@ -880,17 +882,17 @@ export class MigrationTracker {
         );
       }
 
-      const fromAppliedAt = fromResult.rows[0].applied_at;
-      const toAppliedAt = toResult.rows[0].applied_at;
+      const fromAppliedOrder = fromResult.rows[0].applied_order;
+      const toAppliedOrder = toResult.rows[0].applied_order;
 
       const result = await this.pool.query(
         `
         SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
-        WHERE applied_at >= $1 AND applied_at <= $2
-        ORDER BY applied_at ASC
+        WHERE applied_order >= $1 AND applied_order <= $2
+        ORDER BY applied_order ASC
       `,
-        [fromAppliedAt, toAppliedAt]
+        [fromAppliedOrder, toAppliedOrder]
       );
 
       const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
