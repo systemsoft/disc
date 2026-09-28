@@ -203,7 +203,8 @@ Deno.test("array and tuple values round-trip through Gel's wire formats", () => 
     ["tuple<a: int64, b: str>", { a: 1, b: "x" }, { a: 1n, b: "x" }],
     ["tuple<a: int64, b: str>", [2, "y"], { a: 2n, b: "y" }],
     ["array<tuple<int64, str>>", [[1, "a"], [2, "b"]], [[1n, "a"], [2n, "b"]]],
-    ["tuple<array<float64>, bool>", [["1.5", 2], true], [[1.5, 2], true]]
+    ["tuple<array<float64>, bool>", [["1.5", 2], true], [[1.5, 2], true]],
+    ["array<array<int64>>", [[1, 2], [], [3]], [[1n, 2n], [], [3n]]]
   ];
   for (const [type, value, decoded] of cases) {
     assertEquals(decodeWireValue(type, encodeWireValue(type, value)), decoded, type);
@@ -216,4 +217,13 @@ Deno.test("array and tuple values round-trip through Gel's wire formats", () => 
   assertEquals([...encodeWireValue("array<str>", [])], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   assertEquals([...encodeWireValue("array<str>", ["a"])], [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 97]);
   assertEquals([...encodeWireValue("tuple<str>", ["a"])], [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 97]);
+  // An array of arrays wraps each inner array in a one-element tuple,
+  // [i32 count=1][i32 reserved=0][i32 len][bytes], as Gel sends and reads it
+  // (gel-python's BaseArrayCodec).
+  const inner = [...encodeWireValue("array<str>", ["a"])];
+  assertEquals([...encodeWireValue("array<array<str>>", [["a"]])], [
+    ...[0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+    ...[0, 0, 0, 37, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 25],
+    ...inner
+  ]);
 });

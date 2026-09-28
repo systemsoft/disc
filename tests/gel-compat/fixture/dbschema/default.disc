@@ -1,4 +1,6 @@
 module default {
+  scalar type Color extending enum<Red, Green>;
+
   type Item {
     required name: str;
     required count: int32;

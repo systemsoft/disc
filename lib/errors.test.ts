@@ -76,6 +76,13 @@ Deno.test("gelErrorMessage names Gel's types before the first colon, as Gel's tr
   );
 });
 
+Deno.test("gelErrorMessage names an enum by its Gel name, quoted, as Gel does", () => {
+  const names = new Map([["disc_enum_color", "default::Color"]]);
+  const error = pgError(`invalid input value for enum disc_enum_color: "Purple"`, "22P02");
+  assertEquals(gelErrorMessage(error, names), `invalid input value for enum 'default::Color': "Purple"`);
+  assertEquals(gelErrorMessage(error), `invalid input value for enum disc_enum_color: "Purple"`);
+});
+
 Deno.test("gelErrorMessage keeps other messages: another SQLSTATE, Disc's own RAISE, no PostgreSQL error", () => {
   assertEquals(gelErrorMessage(pgError(`column "date" does not exist`, "42703")), `column "date" does not exist`);
   assertEquals(

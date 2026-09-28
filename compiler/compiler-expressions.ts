@@ -284,6 +284,21 @@ const TO_STR_FORMAT_TYPES = new Map<string, string>([
  */
 const TO_STR_EMPTY_CHECKED = new Set(["decimal", "float32", "float64", "int16", "int32", "int64", "json", "local_time"]);
 
+/**
+ * The stdlib function that reads a `str` cast to each type as Gel does
+ * (lib/stdlib-sql.ts): a date or time only in ISO 8601, a duration only in
+ * its units, a bool only `true` or `false` — with Gel's errors and hints.
+ */
+const STR_READERS = new Map<string, string>([
+  ["bool", "disc_str_to_bool"],
+  ["date_duration", "disc_date_duration_in"],
+  ["datetime", "disc_datetime_in"],
+  ["duration", "disc_duration_in"],
+  ["local_date", "disc_local_date_in"],
+  ["local_datetime", "disc_local_datetime_in"],
+  ["local_time", "disc_local_time_in"]
+]);
+
 /*** The SQL type of each number parser (`to_int64(str, fmt)`, …). ***/
 const NUMBER_PARSER_TYPES = new Map<string, string>([
   ["to_bigint", "numeric"],
@@ -3877,6 +3892,21 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     // `<str>` of a date duration writes zero `P0D`; `<json>` of a value that is
     // not json already is `jsonValue`.
     const sourceType = this.staticScalarType(cast.expr);
+
+    // A str (or each str of an array of them) cast to a date, time, duration
+    // or bool is read as Gel reads it (`STR_READERS`); one is never bytes.
+    const sourceElement = arrayElement ? /^array<(.+)>$/.exec(sourceType ?? "")?.[1] ?? null : sourceType;
+    if (!fromJson && isStdType(sourceElement, "str")) {
+      const target = (arrayElement ?? typeName).replace(/^(std::)?(cal::)?/, "");
+      if (target === "bytes" && !arrayElement) {
+        throw new CompilationError("cannot cast 'std::str' to 'std::bytes'", this.expressionLocation(cast));
+      }
+      const reader = STR_READERS.get(target);
+      if (reader) {
+        const read = arrayElement ? this.mapElements(expr, reader) : SQL.createFunctionCall(reader, [expr]);
+        return this.scalarCastCheck(SQL.createCastExpression(read, pgType), typeName);
+      }
+    }
     if (pgType === "text" && !fromJson) {
       const text = this.temporalText(expr, sourceType);
       if (text !== expr) {
@@ -3908,7 +3938,7 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const value = float ? SQL.createCastExpression(expr, pgType.endsWith("[]") ? "double precision[]" : "double precision") : expr;
     // Text is a bigint as Gel's `str_to_bigint` reads it (`disc_str_to_bigint`).
     const operand = rounded ?
-      (array ? this.roundElements(value) : SQL.createFunctionCall("round", [value])) :
+      (array ? this.mapElements(value, "round") : SQL.createFunctionCall("round", [value])) :
       toBigint && !array && !fromJson && isStdType(sourceType, "str") ?
       SQL.createFunctionCall("disc_str_to_bigint", [value]) :
       value;
@@ -4007,16 +4037,17 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
   }
 
   /**
-   * `round` of each element of the array `sql`, in order (Gel casts an array
-   * element by element); a NULL array (an empty set) stays NULL. The array is
-   * also kept as a SQL AST node, in the NULL test, so a parameter in it is
-   * still found by `buildParameterTypeMap`.
+   * The function `fn` (`round`, `disc_datetime_in`) of each element of the
+   * array `sql`, in order (Gel casts an array element by element); a NULL
+   * array (an empty set) stays NULL. The array is also kept as a SQL AST
+   * node, in the NULL test, so a parameter in it is still found by
+   * `buildParameterTypeMap`.
    */
-  private roundElements(sql: SQL.SQLExpression): SQL.SQLExpression {
-    const rounded = `ARRAY(SELECT round(e.v) FROM UNNEST(${this.renderSqlExpr(sql)}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
+  private mapElements(sql: SQL.SQLExpression, fn: string): SQL.SQLExpression {
+    const mapped = `ARRAY(SELECT ${fn}(e.v) FROM UNNEST(${this.renderSqlExpr(sql)}) WITH ORDINALITY AS e(v, ord) ORDER BY e.ord)`;
     return SQL.createCaseExpression(
       [SQL.createWhenClause(SQL.createBinaryExpression("IS", sql, SQL.createLiteral("null", null)), SQL.createLiteral("null", null))],
-      { kind: "RawSQLExpression", sql: rounded }
+      { kind: "RawSQLExpression", sql: mapped }
     );
   }
 

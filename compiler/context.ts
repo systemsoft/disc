@@ -702,6 +702,21 @@ export function enumSqlType(typeDef: TypeDef): string {
 }
 
 /**
+ * The Gel name of each enum of `schema` by its PostgreSQL type
+ * (`disc_enum_color` → `default::Color`), for an error PostgreSQL words
+ * with the one (see `gelErrorMessage`, lib/errors.ts).
+ */
+export function enumGelNames(schema: Schema): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const typeDef of schema.types.values()) {
+    if (typeDef.enumValues?.length) {
+      names.set(enumSqlType(typeDef), typeDef.name.includes("::") ? typeDef.name : `${typeDef.module ?? "default"}::${typeDef.name}`);
+    }
+  }
+  return names;
+}
+
+/**
  * Get all subtypes transitively (breadth-first).
  *
  * For example, if Circle extends Shape and Ellipse extends Circle,

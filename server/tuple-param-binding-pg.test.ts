@@ -17,6 +17,7 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
@@ -91,6 +92,39 @@ Deno.test({
       );
       assertEquals(res.errors, undefined);
       assertEquals(res.data, [["one", "two"]]);
+    } finally {
+      await handler.close();
+    }
+  }
+});
+
+// An array of arrays is a jsonb array (a query value only; Gel rejects one in
+// a schema), so its parameter binds as JSON text too. Gel 7.1 answers these
+// over HTTP as here.
+Deno.test({
+  name: "PG tuple binding: array-of-array param round-trips",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+    // Indexing reads `disc_index` (lib/stdlib-sql.ts).
+    await bootstrapStdlib(pool);
+    await pool.close();
+    const handler = new EdgeQLProtocolHandler({ databaseUrl: dsn });
+    try {
+      const cases: [string, Record<string, unknown>, unknown[]][] = [
+        ["select <array<array<int64>>>$p", { p: [[1, 2], [], [3]] }, [[[1, 2], [], [3]]]],
+        ["select <array<array<str>>>$p", { p: [["a"], []] }, [[["a"], []]]],
+        ["select <array<array<int64>>>$p", { p: [] }, [[]]],
+        ["select len(<array<array<int64>>>$p)", { p: [[1, 2], [3]] }, [2]],
+        ["select (<array<array<int64>>>$p)[1]", { p: [[1, 2], [3]] }, [[3]]]
+      ];
+      for (const [query, variables, data] of cases) {
+        const res = await handler.handleRequest({ query, variables }, makeContext());
+        assertEquals(res.errors, undefined, query);
+        assertEquals(res.data, data, query);
+      }
     } finally {
       await handler.close();
     }

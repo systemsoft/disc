@@ -10,7 +10,7 @@
  * top-level SELECT expressions.
  */
 
-import { createClient, InvalidValueError } from "gel";
+import { createClient, InvalidArgumentError, InvalidValueError, QueryError } from "gel";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
@@ -82,6 +82,46 @@ test("an invalid cast raises InvalidValueError naming Gel's type", async () => {
   await assert.rejects(
     client.querySingle("SELECT <int64>'x'"),
     error => error instanceof InvalidValueError && error.message.split("\n")[0] === "invalid input syntax for type std::int64: \"x\""
+  );
+});
+
+// Gel 7.1's message and hint for a str it can't read as each type.
+const DATETIME_HINT = "Please use ISO8601 format. Example: 2010-12-27T23:59:59-07:00. " +
+  "Alternatively \"to_datetime\" function provides custom formatting options.";
+
+test("a str that is no ISO 8601 datetime raises InvalidValueError with Gel's hint", async () => {
+  await assert.rejects(
+    client.querySingle("SELECT <datetime>'2024-01-01T00:00'"),
+    error =>
+      error instanceof InvalidValueError &&
+      error.message.split("\n")[0] === "invalid input syntax for type std::datetime: '2024-01-01T00:00'" &&
+      error.message.includes(`Hint: ${DATETIME_HINT}`)
+  );
+  await assert.rejects(
+    client.querySingle("SELECT <duration>'1 month'"),
+    error => error instanceof InvalidValueError && error.message.includes("Hint: Day, month and year units cannot be used for std::duration.")
+  );
+});
+
+test("bool, enum and bytes casts of a str fail as Gel's do", async () => {
+  await assert.rejects(
+    client.querySingle("SELECT <bool>'t'"),
+    error => error instanceof InvalidValueError && error.message.split("\n")[0] === "invalid input syntax for type std::bool: 't'"
+  );
+  await assert.rejects(
+    client.querySingle("SELECT <Color>'Purple'"),
+    error => error instanceof InvalidValueError && error.message.split("\n")[0] === "invalid input value for enum 'default::Color': \"Purple\""
+  );
+  await assert.rejects(
+    client.querySingle("SELECT <bytes>'x'"),
+    error => error instanceof QueryError && error.message.split("\n")[0] === "cannot cast 'std::str' to 'std::bytes'"
+  );
+});
+
+test("gel-js does not encode an array of arrays argument, against Gel as here", async () => {
+  await assert.rejects(
+    client.querySingle("SELECT <array<array<int64>>>$p", { p: [[1, 2], [3]] }),
+    error => error instanceof InvalidArgumentError && error.message.startsWith("only arrays of scalars or tuples are supported")
   );
 });
 

@@ -24,7 +24,8 @@
  * Values (elements NULL as length -1):
  *
  *   array: [i32 ndims=1][i32 flags=0][i32 reserved=0][i32 len][i32 lower=1]
- *          then [i32 len][bytes] per element; empty: [i32 0][i32 0][i32 0]
+ *          then [i32 len][bytes] per element; empty: [i32 0][i32 0][i32 0];
+ *          an element that is an array is sent as a one-element tuple of it
  *   set:   as an array (see `encodeSetValue` for a set of arrays)
  *   tuple: [i32 count] then [i32 reserved=0][i32 len][bytes] per element
  */
@@ -247,7 +248,12 @@ function encodeValue(type: WireType, value: unknown): Uint8Array {
       w.writeUInt32(items.length);
       w.writeUInt32(1); // lower bound
       for (const item of items) {
-        writeElement(w, type.element, item);
+        if (type.element.kind === "array" && item !== null && item !== undefined) {
+          // An inner array goes in a one-element tuple, as Gel sends it.
+          w.writeLenPrefixedBytes(encodeValue({ elements: [{ type: type.element }], kind: "tuple" }, [item]));
+        } else {
+          writeElement(w, type.element, item);
+        }
       }
     }
     return w.toBytes();
@@ -293,7 +299,12 @@ function decodeValue(type: WireType, bytes: Uint8Array): unknown {
     }
     const length = r.readUInt32();
     r.readUInt32(); // lower bound
-    return Array.from({ length }, () => element(type.element));
+    // An inner array comes in a one-element tuple (see `encodeValue`).
+    const inner: WireType = type.element.kind === "array" ? { elements: [{ type: type.element }], kind: "tuple" } : type.element;
+    return Array.from({ length }, () => {
+      const value = element(inner);
+      return inner === type.element || value === null ? value : (value as unknown[])[0];
+    });
   }
   r.readUInt32(); // count
   const values = type.elements.map(el => {

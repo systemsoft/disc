@@ -169,6 +169,13 @@ Deno.test("errors - createQueryError maps 23503 to ForeignKeyViolationError", ()
   assertEquals(err.constraint, "fk_git_ref_program");
 });
 
+Deno.test("errors - a query error carries Gel's hint", () => {
+  const hint = "Units smaller than days cannot be used for std::cal::date_duration.";
+  const err = createQueryError([{ extensions: { hint, sqlState: "22007" }, message: "invalid input syntax for type std::cal::date_duration: '1 hour'" }]);
+  assertEquals(err.hint, hint);
+  assertEquals(createQueryError([{ message: "x" }]).hint, undefined);
+});
+
 Deno.test("errors - createQueryError maps any other class-23 state to ConstraintViolationError", () => {
   for (const sqlState of ["23502", "23514", "23000"]) {
     const err = createQueryError([{ extensions: { sqlState }, message: "check" }]);

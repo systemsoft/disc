@@ -55,6 +55,11 @@ export class DiscQueryError extends DiscClientError {
    * validation errors, which never reach it.
    */
   readonly sqlState?: string;
+  /**
+   * Gel's hint for the error (`extensions.hint`), when it has one: "Please
+   * use ISO8601 format. …" for a str that is no datetime.
+   */
+  readonly hint?: string;
 
   constructor(errors: QueryError[]) {
     const message = errors.length === 1 ?
@@ -64,6 +69,7 @@ export class DiscQueryError extends DiscClientError {
     this.name = "DiscQueryError";
     this.errors = errors;
     this.sqlState = firstExtension(errors, "sqlState");
+    this.hint = firstExtension(errors, "hint");
   }
 }
 

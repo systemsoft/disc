@@ -80,3 +80,21 @@ def test_query_single_returns_none_on_empty(client):
         id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
     )
     assert out is None
+
+
+def test_datetime_str_error_carries_gel_hint(client):
+    """A str that is no ISO 8601 datetime: Gel 7.1's message and hint."""
+    with pytest.raises(gel.InvalidValueError) as err:
+        client.query_single("SELECT <datetime>'x'")
+    assert str(err.value).split("\n")[0] == "invalid input syntax for type std::datetime: 'x'"
+    assert err.value._hint == (
+        "Please use ISO8601 format. Example: 2010-12-27T23:59:59-07:00. "
+        'Alternatively "to_datetime" function provides custom formatting options.'
+    )
+
+
+def test_array_of_arrays_argument_roundtrip(client):
+    """gel-python sends an array of arrays, each inner one in a tuple; so does Gel."""
+    out = client.query_single("SELECT <array<array<int64>>>$p", p=[[1, 2], [], [3]])
+    assert out == [[1, 2], [], [3]]
+    assert client.query_single("SELECT [[1, 2], [3]]") == [[1, 2], [3]]

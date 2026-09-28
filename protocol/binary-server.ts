@@ -19,7 +19,7 @@
 
 import { selectKeepsAtMostOne, tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
 import { powerType } from "../compiler/compiler-expressions.ts";
-import type { Schema, TypeDef } from "../compiler/context.ts";
+import { enumGelNames, type Schema, type TypeDef } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
@@ -56,6 +56,7 @@ import {
   DatabaseExecutionError,
   DisabledCapabilityError,
   DiscError,
+  GEL_TYPE_NAMED_SQLSTATES,
   gelErrorMessage,
   InvalidReferenceError,
   InvalidValueError,
@@ -2135,17 +2136,28 @@ function sqlStateToGelCode(sqlState: string): number | undefined {
   return undefined;
 }
 
-/*** Gel's `details` ErrorResponse attribute (FIELD_DETAILS). ***/
+/*** Gel's `hint` and `details` ErrorResponse attributes (FIELD_HINT, FIELD_DETAILS). ***/
+const ERROR_ATTRIBUTE_HINT = 0x0001;
 const ERROR_ATTRIBUTE_DETAILS = 0x0002;
 
 /**
- * The ErrorResponse attributes of `error`: the details line PostgreSQL sent
- * with it, if any — as for a violated `constraint expression on (…)`, Gel's
- * "violated constraint 'std::expression' on object type '…'".
+ * The ErrorResponse attributes of `error`: the hint Disc's SQL raised with
+ * it (Gel's, "Please use ISO8601 format. …"), and the details line
+ * PostgreSQL sent with it — as for a violated `constraint expression on
+ * (…)`, Gel's "violated constraint 'std::expression' on object type '…'" —
+ * but not for a value it can't take (`GEL_TYPE_NAMED_SQLSTATES`), which Gel
+ * sends without one.
  */
 function errorAttributes(error: unknown): ErrorAttribute[] {
-  const detail = postgresErrorFields(error)?.detail;
-  return detail === undefined ? [] : [{ code: ERROR_ATTRIBUTE_DETAILS, value: new TextEncoder().encode(detail) }];
+  const fields = postgresErrorFields(error);
+  const attributes: ErrorAttribute[] = [];
+  if (fields?.hint !== undefined) {
+    attributes.push({ code: ERROR_ATTRIBUTE_HINT, value: new TextEncoder().encode(fields.hint) });
+  }
+  if (fields?.detail !== undefined && !GEL_TYPE_NAMED_SQLSTATES.has(fields.sqlState)) {
+    attributes.push({ code: ERROR_ATTRIBUTE_DETAILS, value: new TextEncoder().encode(fields.detail) });
+  }
+  return attributes;
 }
 
 /**
@@ -2530,7 +2542,7 @@ export class BinaryConnection {
               mapErrorToGelCode(err) :
               GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
-              err instanceof Error ? gelErrorMessage(err) : String(err),
+              err instanceof Error ? gelErrorMessage(err, enumGelNames(this._schema)) : String(err),
               errorCode,
               errorAttributes(err)
             );
@@ -2879,7 +2891,7 @@ export class BinaryConnection {
         mapErrorToGelCode(err) :
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
-        err instanceof Error ? gelErrorMessage(err) : String(err),
+        err instanceof Error ? gelErrorMessage(err, enumGelNames(this._schema)) : String(err),
         errorCode,
         errorAttributes(err)
       );
@@ -3043,7 +3055,7 @@ export class BinaryConnection {
         mapErrorToGelCode(err) :
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
-        err instanceof Error ? gelErrorMessage(err) : String(err),
+        err instanceof Error ? gelErrorMessage(err, enumGelNames(this._schema)) : String(err),
         errorCode,
         errorAttributes(err)
       );

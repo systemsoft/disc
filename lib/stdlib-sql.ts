@@ -187,6 +187,106 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
 
+  // disc_str_to_bool(val) — a `str` cast to `bool` (compiler
+  // `compileTypeCast`), as Gel's `str_to_bool` reads it: `true` or `false`
+  // in any case, blanks around it; PostgreSQL's `t`, `yes`, `1` are not.
+  // Anything else is Gel's error (InvalidValueError, SQLSTATE 22P02).
+  `CREATE OR REPLACE FUNCTION disc_str_to_bool(val text) RETURNS boolean AS $$
+     DECLARE
+       m text[] := regexp_match(val, '^\\s*(?:(true)|(false))\\s*$', 'i');
+     BEGIN
+       IF m IS NULL THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_text_representation', MESSAGE = 'invalid input syntax for type std::bool: ' || quote_literal(val);
+       END IF;
+       RETURN m[2] IS NULL;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  // disc_datetime_in(val), disc_local_datetime_in(val), disc_local_date_in(val),
+  // disc_local_time_in(val) — a `str` cast to `datetime`, `cal::local_datetime`,
+  // `cal::local_date` or `cal::local_time` (compiler `compileTypeCast`), as
+  // Gel's `datetime_in`, … (edb/pgsql/metaschema.py) read it: only ISO 8601
+  // text, a datetime with its time zone and a local one without, so
+  // PostgreSQL never guesses a zone. Other text is Gel's error and hint
+  // (InvalidValueError, SQLSTATE 22007); text of the form with a field out
+  // of range is PostgreSQL's cast error. A local time of hour 24 is out of
+  // range, as in Gel.
+  `CREATE OR REPLACE FUNCTION disc_datetime_in(val text) RETURNS timestamptz AS $$
+     BEGIN
+       IF val !~ '^\\s*((\\d{4}-\\d{2}-\\d{2}|\\d{8})[ tT](\\d{2}(:\\d{2}(:\\d{2}(\\.\\d+)?)?)?|\\d{2,6}(\\.\\d+)?)([zZ]|[-+](\\d{2,4}|\\d{2}:\\d{2})))\\s*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::datetime: ' || quote_literal(val),
+           HINT = 'Please use ISO8601 format. Example: 2010-12-27T23:59:59-07:00. Alternatively "to_datetime" function provides custom formatting options.';
+       END IF;
+       RETURN val::timestamptz;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_local_datetime_in(val text) RETURNS timestamp AS $$
+     BEGIN
+       IF val !~ '^\\s*((\\d{4}-\\d{2}-\\d{2}|\\d{8})[ tT](\\d{2}(:\\d{2}(:\\d{2}(\\.\\d+)?)?)?|\\d{2,6}(\\.\\d+)?))\\s*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::cal::local_datetime: ' || quote_literal(val),
+           HINT = 'Please use ISO8601 format. Example 2010-04-18T09:27:00 Alternatively "to_local_datetime" function provides custom formatting options.';
+       END IF;
+       RETURN val::timestamp;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_local_date_in(val text) RETURNS date AS $$
+     BEGIN
+       IF val !~ '^\\s*(\\d{4}-\\d{2}-\\d{2}|\\d{8})\\s*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::cal::local_date: ' || quote_literal(val),
+           HINT = 'Please use ISO8601 format. Example 2010-04-18 Alternatively "to_local_date" function provides custom formatting options.';
+       END IF;
+       RETURN val::date;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_local_time_in(val text) RETURNS time AS $$
+     DECLARE
+       result time;
+     BEGIN
+       IF val !~ '^\\s*(\\d{2}(:\\d{2}(:\\d{2}(\\.\\d+)?)?)?|\\d{2,6}(\\.\\d+)?)\\s*$' THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::cal::local_time: ' || quote_literal(val),
+           HINT = 'Please use ISO8601 format. Examples: 18:43:27 or 18:43 Alternatively "to_local_time" function provides custom formatting options.';
+       END IF;
+       result := val::time;
+       IF date_part('hour', result) = 24 THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'std::cal::local_time field value out of range: ' || quote_literal(val);
+       END IF;
+       RETURN result;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  // disc_duration_in(val), disc_date_duration_in(val) — a `str` cast to
+  // `duration` or `cal::date_duration` (compiler `compileTypeCast`), as Gel's
+  // `duration_in` and `date_duration_in` read it: an interval (PostgreSQL's
+  // error when it is none), of no day, month or year units for a duration
+  // and none smaller than days for a date duration; else Gel's error and
+  // hint (InvalidValueError, SQLSTATE 22007).
+  `CREATE OR REPLACE FUNCTION disc_duration_in(val text) RETURNS interval AS $$
+     DECLARE
+       result interval := val::interval;
+     BEGIN
+       IF date_part('year', result) <> 0 OR date_part('month', result) <> 0 OR date_part('day', result) <> 0 THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::duration: ' || quote_literal(val),
+           HINT = 'Day, month and year units cannot be used for std::duration.';
+       END IF;
+       RETURN result;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
+  `CREATE OR REPLACE FUNCTION disc_date_duration_in(val text) RETURNS interval AS $$
+     DECLARE
+       result interval := val::interval;
+     BEGIN
+       IF date_part('hour', result) <> 0 OR date_part('minute', result) <> 0 OR date_part('second', result) <> 0 THEN
+         RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format', MESSAGE = 'invalid input syntax for type std::cal::date_duration: ' || quote_literal(val),
+           HINT = 'Units smaller than days cannot be used for std::cal::date_duration.';
+       END IF;
+       RETURN result;
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
   // disc_date_part(func_name, unit, val, units) — `datetime_get`,
   // `duration_get`, `cal::time_get` and `cal::date_get` with a unit that isn't
   // a literal (compiler `compileDatePartGet`, which checks a literal one):

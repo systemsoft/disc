@@ -530,7 +530,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           new Error(String(error));
 
         log.error("Database execution error", { error: dbError.message });
-        throw new DatabaseExecutionError(`Database query failed: ${gelErrorMessage(dbError)}`, sql, dbError);
+        throw new DatabaseExecutionError(`Database query failed: ${gelErrorMessage(dbError, Context.enumGelNames(this.schema))}`, sql, dbError);
       }
     }
 

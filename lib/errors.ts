@@ -251,12 +251,15 @@ export class TransactionAbortedError extends DiscError {
  * The PostgreSQL error fields a client can act on, read from the driver's
  * error (deno-postgres keeps the server's ErrorResponse in `fields`) or from
  * a wrapper whose `cause` is that error. `sqlState` is the SQLSTATE
- * (`23505`, `40001`, …); the other three are present when PostgreSQL sent
- * them. Undefined when the error did not come from PostgreSQL.
+ * (`23505`, `40001`, …); the others are present when PostgreSQL sent them.
+ * `hint` is only one Disc's own SQL raises (`RAISE … HINT`), which is Gel's
+ * ("Please use ISO8601 format. …"); PostgreSQL's own hints are not Gel's.
+ * Undefined when the error did not come from PostgreSQL.
  */
 export interface PostgresErrorFields {
   constraint?: string;
   detail?: string;
+  hint?: string;
   sqlState: string;
   table?: string;
 }
@@ -269,7 +272,7 @@ export function postgresErrorFields(error: unknown): PostgresErrorFields | undef
     return undefined;
   }
 
-  const { code, constraint, detail, table } = fields as Record<string, unknown>;
+  const { code, constraint, detail, hint, routine, table } = fields as Record<string, unknown>;
   if (typeof code !== "string") {
     return undefined;
   }
@@ -283,6 +286,9 @@ export function postgresErrorFields(error: unknown): PostgresErrorFields | undef
   }
   if (typeof detail === "string") {
     out.detail = detail;
+  }
+  if (typeof hint === "string" && routine === "exec_stmt_raise") {
+    out.hint = hint;
   }
   return out;
 }
@@ -323,8 +329,15 @@ const PG_TYPE_GEL_NAMES = new Map<string, string>([
 
 const PG_TYPE_NAME = new RegExp([...PG_TYPE_GEL_NAMES.keys()].map(name => `\\b${name}\\b`).join("|"), "g");
 
-/*** The SQLSTATEs of the errors whose message Gel words with its type names (Gel's errormech `interpret_by_code`). ***/
-const GEL_TYPE_NAMED_SQLSTATES = new Set(["22003", "22007", "22008", "22P02"]);
+/**
+ * The SQLSTATEs of the errors whose message Gel words with its type names
+ * (Gel's errormech `interpret_by_code`). Gel sends such an error with its
+ * message and hint only, never PostgreSQL's detail.
+ */
+export const GEL_TYPE_NAMED_SQLSTATES = new Set(["22003", "22007", "22008", "22P02"]);
+
+/*** PostgreSQL's message for a label that is not of the enum: `invalid input value for enum disc_enum_color: "Purple"`. ***/
+const ENUM_VALUE_MESSAGE = /^invalid input value for enum "?([^":]+)"?:/;
 
 /**
  * The message of `error` as Gel words it. A value PostgreSQL can't take —
@@ -333,13 +346,20 @@ const GEL_TYPE_NAMED_SQLSTATES = new Set(["22003", "22007", "22008", "22P02"]);
  * (`std::int64`, `std::int16`) in each PostgreSQL type name before the first
  * colon (errormech `translate_pgtype`), for an invalid text representation
  * (22P02), a number out of range (22003) or a bad date or time (22007,
- * 22008). A message Disc's SQL raises itself (`RAISE`) is Gel's already, and
- * any other message is PostgreSQL's as is.
+ * 22008). An enum is named by its Gel name in `enumNames` (by PostgreSQL
+ * type, `enumGelNames`), quoted: `invalid input value for enum
+ * 'default::Color': "Purple"`. A message Disc's SQL raises itself (`RAISE`)
+ * is Gel's already, and any other message is PostgreSQL's as is.
  */
-export function gelErrorMessage(error: Error): string {
+export function gelErrorMessage(error: Error, enumNames?: ReadonlyMap<string, string>): string {
   const fields = (error as { fields?: { code?: unknown; routine?: unknown; }; }).fields;
   if (typeof fields?.code !== "string" || !GEL_TYPE_NAMED_SQLSTATES.has(fields.code) || fields.routine === "exec_stmt_raise") {
     return error.message;
+  }
+  const enumType = ENUM_VALUE_MESSAGE.exec(error.message)?.[1];
+  const enumName = enumType === undefined ? undefined : enumNames?.get(enumType);
+  if (enumName !== undefined) {
+    return error.message.replace(ENUM_VALUE_MESSAGE, `invalid input value for enum '${enumName}':`);
   }
   const [leading, ...rest] = error.message.split(":");
   return [leading.replace(PG_TYPE_NAME, name => PG_TYPE_GEL_NAMES.get(name)!), ...rest].join(":");
