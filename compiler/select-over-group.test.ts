@@ -142,3 +142,34 @@ Deno.test("group - grouping sets, cube and rollup group by several sets of keys,
   );
   assertStringIncludes(await sqlOf("group User by (.role, .active)"), "GROUP BY user_1.role, user_1.active");
 });
+
+Deno.test("select over group - the outer filter and order by aggregate the elements, as in `count(.elements) > 1`", async () => {
+  assertStringIncludes(
+    await sqlOf("select (group User by .role) { key: {role}, n := count(.elements) } filter count(.elements) > 1 order by max(.elements.score)"),
+    "GROUP BY user_1.role HAVING COUNT(*) > 1 ORDER BY MAX(user_1.score) ASC NULLS FIRST"
+  );
+});
+
+Deno.test("select over group - a filter of the elements' values keeps a group any of them passes", async () => {
+  assertStringIncludes(await sqlOf("select (group User by .role) { key: {role} } filter .elements.score > 4"), "HAVING BOOL_OR(user_1.score > 4)");
+  assertStringIncludes(
+    await sqlOf("select (group User by .role) { key: {role} } filter 'bob' in .elements.name or .key.role = 'admin'"),
+    "(BOOL_OR(user_1.name = 'bob')) OR (user_1.role = 'admin')"
+  );
+});
+
+Deno.test("select over group - `in` and `exists` of the elements' values are one value for the group", async () => {
+  assertStringIncludes(await sqlOf("select (group User by .role) { key: {role} } filter 'ann' in .elements.name"), "HAVING BOOL_OR(user_1.name = 'ann')");
+  assertStringIncludes(
+    await sqlOf("select (group User by .role) { key: {role} } filter 'ann' not in .elements.name"),
+    "HAVING NOT BOOL_OR(user_1.name = 'ann')"
+  );
+  const shaped = await sqlOf("select (group User by .role) { key: {role}, has := exists .elements.score, ann := 'ann' in .elements.name }");
+  assertStringIncludes(shaped, "'has', COUNT(user_1.score) > 0");
+  assertStringIncludes(shaped, "'ann', BOOL_OR(user_1.name = 'ann')");
+});
+
+Deno.test("select over group - an order by of the elements' values is a set, with Gel's error", async () => {
+  const { error } = await compiled("select (group User by .role) { key: {role} } order by .elements.name");
+  assertEquals(error, "possibly more than one element returned by an expression where only singletons are allowed");
+});

@@ -5,7 +5,10 @@
  * SDL Abstract Syntax Tree (AST) node definitions
  */
 
+import { EdgeQLLexer } from "../edgeql/lexer.ts";
+import { TokenType as EdgeQLTokenType } from "../edgeql/tokens.ts";
 import { Span } from "../lib/types.ts";
+import { sdlExpressionToEdgeQL } from "./expression-printer.ts";
 
 // Base AST node interface
 export interface SDLNode {
@@ -61,6 +64,8 @@ export interface AliasDeclaration extends SDLNode {
   kind: "AliasDeclaration";
   name: Identifier;
   using: Expression;
+  /*** `using`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  usingSource?: string;
 }
 
 // Function declaration
@@ -90,6 +95,8 @@ export interface GlobalDeclaration extends SDLNode {
   required?: boolean;
   multi?: boolean;
   default?: Expression;
+  /*** `default`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  defaultSource?: string;
   readonly?: boolean;
 }
 
@@ -150,6 +157,8 @@ export interface PropertyDeclaration extends SDLNode {
   /*** A computed's expression as written: the EdgeQL it compiles from (`computed` is its SDL form). ***/
   computedSource?: string;
   default?: Expression;
+  /*** `default`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  defaultSource?: string;
   constraints?: Constraint[];
   annotations?: Annotation[];
   rewrites?: RewriteDeclaration[];
@@ -177,6 +186,8 @@ export interface LinkDeclaration extends SDLNode {
   readonly?: boolean;
   computed?: Expression;
   default?: Expression;
+  /*** `default`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  defaultSource?: string;
   extending?: TypeRef[];
   properties?: PropertyDeclaration[];
   constraints?: Constraint[];
@@ -197,7 +208,11 @@ export interface Constraint extends SDLNode {
   name?: Identifier;
   delegated?: boolean;
   on?: Expression;
+  /*** `on`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  onSource?: string;
   args?: Expression[];
+  /*** Each of `args`' EdgeQL as written (absent from schemas an older Disc stored). ***/
+  argSources?: string[];
   annotations?: Annotation[];
   errmessage?: string;
 }
@@ -207,6 +222,8 @@ export interface Index extends SDLNode {
   kind: "Index";
   name?: Identifier;
   on: Expression;
+  /*** `on`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  onSource?: string;
   annotations?: Annotation[];
 }
 
@@ -223,12 +240,16 @@ export interface AccessPolicy extends SDLNode {
   name: Identifier;
   actions: AccessAction[];
   condition?: Expression;
+  /*** `condition`'s (`using`'s) EdgeQL as written (absent from schemas an older Disc stored). ***/
+  conditionSource?: string;
   /**
    * Optional `with check (...)` expression. When present, runs as an
    * INSERT/UPDATE post-condition: the candidate row must satisfy the
    * expression after the write or the operation is rejected. (P1-37)
    */
   withCheck?: Expression;
+  /*** `withCheck`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  withCheckSource?: string;
   annotations?: Annotation[];
   /**
    * Optional custom error message surfaced when this policy denies an
@@ -241,6 +262,8 @@ export interface AccessPolicy extends SDLNode {
    * it does not hold for is neither allowed nor denied by the policy.
    */
   when?: Expression;
+  /*** `when`'s EdgeQL as written (absent from schemas an older Disc stored). ***/
+  whenSource?: string;
 }
 
 export interface AccessAction extends SDLNode {
@@ -402,10 +425,22 @@ export function createLiteral(
  * written on its type, a typed value for a scalar's. Returns a new tree.
  */
 export function replaceSubject(expr: Expression, subject: Expression): Expression {
+  // EdgeQL kept as its source text: each `__subject__` in it, as EdgeQL.
+  const replaceSubjectInSource = (source: string, subject: Expression): string => {
+    const text = subject.kind === "PathExpression" ? sdlExpressionToEdgeQL(subject) : `(${sdlExpressionToEdgeQL(subject)})`;
+    return new EdgeQLLexer(source)
+      .tokenize()
+      .filter(token => token.type === EdgeQLTokenType.IDENT && token.value === "__subject__")
+      .reverse()
+      .reduce((replaced, token) => replaced.slice(0, token.offset) + text + replaced.slice(token.offset + token.value.length), source);
+  };
   const walk = (e: Expression): Expression => {
     switch (e.kind) {
       case "PathExpression":
-        if (e.path[0] !== "__subject__" || e.source !== undefined) {
+        if (e.source !== undefined) {
+          return { ...e, source: replaceSubjectInSource(e.source, subject) };
+        }
+        if (e.path[0] !== "__subject__") {
           return e;
         }
         if (e.path.length === 1) {

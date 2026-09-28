@@ -262,6 +262,14 @@ type GroupElementsSelect = Pick<EdgeQLAST.SelectQuery, "filter" | "limit" | "off
 /*** Aggregates of a set: in a select over a group, `count(.elements)` is one value for the group, `.elements.name` a set. ***/
 const SET_AGGREGATES = new Set(["all", "any", "array_agg", "avg", "count", "exists", "math_mean", "max", "min", "stddev", "stddev_pop", "stddev_samp", "sum"]);
 
+/*** A call of `std::name` with `args`. ***/
+function stdCall(name: string, args: EdgeQLAST.Expression[]): EdgeQLAST.FunctionCall {
+  return EdgeQLAST.createFunctionCall(
+    EdgeQLAST.createQualifiedName(["std", name]),
+    args.map(value => ({ kind: "FunctionArg", value }))
+  );
+}
+
 /*** `cube(…)` or `rollup(…)` in a group's `by`: its SQL grouping, else undefined. ***/
 function groupingFunction(expr: EdgeQLAST.Expression): "CUBE" | "ROLLUP" | undefined {
   const name = expr.kind === "FunctionCall" && expr.name.parts.length === 1 ? expr.name.parts[0].toLowerCase() : undefined;
@@ -2970,10 +2978,15 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           SQL.createJsonField("elements", fields.elements)
         ]);
 
-      // Compile FILTER to HAVING clause, with a select over the group's filter.
+      // Compile FILTER to HAVING clause, with a select over the group's filter:
+      // one of the elements' values (`.elements.score > 4`) keeps a group any
+      // of them passes, as Gel's filter keeps an object any of its values does.
+      const overFilter = over?.filter ? this.groupSetOperands(over.filter, computables) : undefined;
       const conditions = [
         ...(query.filter ? [inGroup(query.filter)] : []),
-        ...(over?.filter ? [read(over.filter)] : [])
+        ...(overFilter ?
+          [read(this.readsEachGroupElement(overFilter, computables) ? stdCall("any", [overFilter]) : overFilter)] :
+          [])
       ];
       const havingClause: SQL.HavingClause | undefined = conditions.length > 0 ?
         { condition: conditions.reduce((all, condition) => SQL.createBinaryExpression("AND", all, condition)), kind: "HavingClause" } :
@@ -2983,7 +2996,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         {
           items: over.orderBy.map(item => ({
             direction: item.direction ?? "ASC",
-            expression: read(item.expr),
+            expression: read(this.groupSingleton(item.expr, computables)),
             kind: "OrderByItem" as const,
             ...compileEmptyOrder(item)
           })),
@@ -3026,10 +3039,11 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
       }
       // `.elements.p` (and an expression of it): the set of the group's
       // elements' values, `[]` for none.
-      const value = read(element.expr);
+      const expr = this.groupSetOperands(element.expr, new Map());
+      const value = read(expr);
       return SQL.createJsonField(
         name,
-        this.readsEachGroupElement(element.expr) ? this.groupElements({}, value, SQL.isNotNull(value)) : value
+        this.readsEachGroupElement(expr) ? this.groupElements({}, value, SQL.isNotNull(value)) : value
       );
     }
     switch (name) {
@@ -3133,9 +3147,10 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * Whether `expr`, in a select over a group, reads each of the group's
    * elements (`.elements.name`, `.elements.name ++ '!'`) rather than the
    * group (`count(.elements)`, `sum(.elements.score) + 1`, `.key.role`):
-   * its value is then a set, one per element.
+   * its value is then a set, one per element. `.c`, a computable of
+   * `computables`, reads what `c` does.
    */
-  private readsEachGroupElement(expr: EdgeQLAST.Expression): boolean {
+  private readsEachGroupElement(expr: EdgeQLAST.Expression, computables: Map<string, EdgeQLAST.Expression> = new Map()): boolean {
     const visit = (node: unknown): boolean => {
       if (Array.isArray(node)) {
         return node.some(visit);
@@ -3154,11 +3169,51 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
       }
       if (ast.kind === "Path" && !ast.rooted) {
-        return ast.steps[0]?.name === "elements";
+        const computable = ast.steps.length === 1 ? computables.get(ast.steps[0].name) : undefined;
+        return ast.steps[0]?.name === "elements" || (computable !== undefined && this.readsEachGroupElement(computable));
       }
       return Object.values(node).some(visit);
     };
     return visit(expr);
+  }
+
+  /**
+   * `expr`, in a select over a group, with `x in S`, `x not in S` and
+   * `exists S` of a set of the group's elements' values (`'ann' in
+   * .elements.name`) one value for the group, as in Gel: `any(S = x)`,
+   * `not any(S = x)` and `count(S) > 0`.
+   */
+  private groupSetOperands(expr: EdgeQLAST.Expression, computables: Map<string, EdgeQLAST.Expression>): EdgeQLAST.Expression {
+    const map = (node: unknown): unknown => {
+      if (Array.isArray(node)) {
+        return node.map(map);
+      }
+      if (typeof node !== "object" || node === null || (node as EdgeQLAST.EdgeQLNode).kind === "Subquery") {
+        return node;
+      }
+      const ast = Object.fromEntries(Object.entries(node).map(([name, value]) => [name, map(value)])) as unknown as EdgeQLAST.Expression;
+      if (ast.kind === "BinaryOp" && (ast.op === "IN" || ast.op === "NOT IN") && this.readsEachGroupElement(ast.right, computables)) {
+        const any = stdCall("any", [EdgeQLAST.createBinaryOp("=", ast.right, ast.left)]);
+        return ast.op === "IN" ? any : EdgeQLAST.createUnaryOp("NOT", any);
+      }
+      if (ast.kind === "UnaryOp" && ast.op.toUpperCase() === "EXISTS" && this.readsEachGroupElement(ast.operand, computables)) {
+        return EdgeQLAST.createBinaryOp(">", stdCall("count", [ast.operand]), EdgeQLAST.createLiteral("integer", 0));
+      }
+      return ast;
+    };
+    return map(expr) as EdgeQLAST.Expression;
+  }
+
+  /*** `expr`, an order by of a select over a group: one value for the group, else Gel's error (`order by .elements.name`). ***/
+  private groupSingleton(expr: EdgeQLAST.Expression, computables: Map<string, EdgeQLAST.Expression>): EdgeQLAST.Expression {
+    const single = this.groupSetOperands(expr, computables);
+    if (this.readsEachGroupElement(single, computables)) {
+      throw new CompilationError(
+        "possibly more than one element returned by an expression where only singletons are allowed",
+        locationOf(expr)
+      );
+    }
+    return single;
   }
 
   /**

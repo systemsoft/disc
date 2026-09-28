@@ -6,6 +6,8 @@
  */
 
 import { isPolymorphicType } from "../compiler/context.ts";
+import type * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ValidationError } from "../lib/errors.ts";
 import { propNameToColumnName } from "../lib/identifiers.ts";
 import * as AST from "./ast.ts";
@@ -954,7 +956,7 @@ export class SchemaValidator {
 
   private checkPathProblem(type: AST.TypeDeclaration | null, path: AST.PathExpression): string | undefined {
     if (path.source !== undefined) {
-      return "it contains a query";
+      return this.checkEdgeQLProblem(type, new EdgeQLParser(path.source).parseExpressionOnly());
     }
     if (path.path[0] === "global") {
       return `constraint expressions must be immutable, and it reads the global '${path.path[1]}'`;
@@ -996,6 +998,61 @@ export class SchemaValidator {
       return `it reads the computed ${kind} '${steps[0]}'`;
     }
     return undefined;
+  }
+
+  /**
+   * `checkExpressionProblem` for EdgeQL beyond the SDL expression grammar
+   * (kept as its source text, parsed as `expr`): a query, a parameter, a
+   * function Gel's constraints reject, or a path `checkPathProblem` rejects.
+   */
+  private checkEdgeQLProblem(type: AST.TypeDeclaration | null, expr: EdgeQLAST.EdgeQLNode): string | undefined {
+    const visit = (node: unknown): string | undefined => {
+      if (Array.isArray(node)) {
+        return node.map(visit).find(problem => problem !== undefined);
+      }
+      if (!node || typeof node !== "object") {
+        return undefined;
+      }
+      const ast = node as EdgeQLAST.Expression | EdgeQLAST.Query;
+      switch (ast.kind) {
+        case "Subquery":
+        case "SelectQuery":
+        case "InsertQuery":
+        case "UpdateQuery":
+        case "DeleteQuery":
+        case "GroupQuery":
+        case "ForQuery":
+        case "WithBlock":
+          return "it contains a query";
+        case "Parameter":
+          return `it reads the query parameter '$${ast.name.replace(/^\$/, "")}'`;
+        case "GlobalRef":
+          return this.checkPathProblem(type, { kind: "PathExpression", path: ["global", ast.module ? `${ast.module}::${ast.name}` : ast.name] });
+        case "Identifier":
+          return this.checkPathProblem(type, { kind: "PathExpression", path: [ast.name] });
+        case "TypeName":
+          return this.checkPathProblem(type, { kind: "PathExpression", path: ast.name.parts });
+        case "Path":
+          return this.checkPathProblem(type, {
+            kind: "PathExpression",
+            path: [...ast.rooted ? [] : ["."], ...ast.steps.map(step => step.type === "backlink" ? `<${step.name}` : step.name)]
+          });
+        case "TypeCast":
+          return visit(ast.expr);
+        case "FunctionCall": {
+          const fn = ast.name.parts.join("::").replace(/^std::/, "");
+          if (NOT_IMMUTABLE_FUNCTIONS.has(fn)) {
+            return `constraint expressions must be immutable, and ${fn}() is not`;
+          }
+          if (SET_OF_FUNCTIONS.has(fn)) {
+            return `it calls the aggregate ${fn}(), which reads a set rather than one object's values`;
+          }
+          return visit(ast.args);
+        }
+      }
+      return visit(Object.values(node));
+    };
+    return visit(expr);
   }
 
   /*** A property or link of `type` or of a type it extends, nearest first. ***/

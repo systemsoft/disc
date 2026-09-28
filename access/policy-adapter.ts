@@ -123,9 +123,14 @@ export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPo
     /*** Gel's `when` restricts the objects the policy applies to, as its `using` does: the
          policy's condition is both. ***/
     const conditions = [sdl.when, sdl.condition].filter((expr): expr is SDLExpression => expr !== undefined);
+    // Each as written; a schema an older Disc stored has only the SDL form.
+    const sources = [
+      ...sdl.when ? [sdl.whenSource ?? sdlExpressionToEdgeQL(sdl.when)] : [],
+      ...sdl.condition ? [sdl.conditionSource ?? sdlExpressionToEdgeQL(sdl.condition)] : []
+    ];
 
     if (conditions.length > 0) {
-      policy.usingSource = conditions.map(expr => `(${sdlExpressionToEdgeQL(expr)})`).join(" and ");
+      policy.usingSource = sources.map(source => `(${source})`).join(" and ");
       const converted = convertAll(conditions);
 
       if (converted !== undefined) {
@@ -140,7 +145,7 @@ export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPo
     }
 
     if (sdl.withCheck !== undefined) {
-      policy.withCheckSource = sdlExpressionToEdgeQL(sdl.withCheck);
+      policy.withCheckSource = sdl.withCheckSource ?? sdlExpressionToEdgeQL(sdl.withCheck);
       policy.withCheck = convertAll([sdl.withCheck]);
     }
 

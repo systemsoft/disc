@@ -1407,6 +1407,101 @@ Deno.test("SDL Parser - a computed's expression the EdgeQL parser rejects is an 
   assertEquals(error.context?.location?.line, 3);
 });
 
+// Defaults, constraint expressions and arguments, index expressions, access
+// policies' conditions, globals' defaults and aliases are EdgeQL too: each
+// kept as written (`…Source`).
+Deno.test("SDL Parser - defaults, constraints, indexes, policies, globals and aliases take EdgeQL expressions, kept as written", () => {
+  const [account, tags, big, alias, union] = new SDLParser(`
+    type Account {
+      required name: str {
+        default := ['a', 'b'][0];
+        constraint max_len_value(2 ^ 3);
+        constraint one_of('a', {'b'}, 'c');
+      };
+      n: int64 {
+        constraint expression on (__subject__ // 2 >= 0);
+      };
+      constraint expression on (.name in {'a', 'b'});
+      index on (str_lower(.name) ++ {'x'});
+      access policy p when (exists [1, 2]) allow all using (.name not in {'x'});
+      access policy q {
+        allow insert;
+        using (.name union 'y' = 'y');
+        with check (len(.name) // 2 > 0);
+      };
+    };
+    global tags: array<str> {
+      default := ['a'];
+    };
+    global big: bigint {
+      default := 10n;
+    };
+    alias Named := Account { name };
+    alias Names := Account.name union 'x';
+  `)
+    .parse()
+    .declarations as [SDLAST.TypeDeclaration, SDLAST.GlobalDeclaration, SDLAST.GlobalDeclaration, SDLAST.AliasDeclaration, SDLAST.AliasDeclaration];
+
+  const [name, n, check, index, p, q] = account.members as [
+    SDLAST.PropertyDeclaration,
+    SDLAST.PropertyDeclaration,
+    SDLAST.Constraint,
+    SDLAST.Index,
+    SDLAST.AccessPolicy,
+    SDLAST.AccessPolicy
+  ];
+  assertEquals(name.defaultSource, "['a', 'b'][0]");
+  assertEquals(name.constraints?.map(constraint => constraint.argSources), [["2 ^ 3"], ["'a'", "{'b'}", "'c'"]]);
+  assertEquals(n.constraints?.[0].onSource, "__subject__ // 2 >= 0");
+  assertEquals(check.onSource, ".name in {'a', 'b'}");
+  assertEquals(index.onSource, "str_lower(.name) ++ {'x'}");
+  assertEquals([p.whenSource, p.conditionSource], ["exists [1, 2]", ".name not in {'x'}"]);
+  assertEquals([q.conditionSource, q.withCheckSource], [".name union 'y' = 'y'", "len(.name) // 2 > 0"]);
+  assertEquals([tags.defaultSource, big.defaultSource], ["['a']", "10n"]);
+  assertEquals([alias.usingSource, union.usingSource], ["Account { name }", "Account.name union 'x'"]);
+});
+
+// What the SDL expression grammar reads (all an older Disc accepted) keeps the
+// form it gave it, which databases migrated by it hold as their schema.
+Deno.test("SDL Parser - an expression the SDL grammar reads keeps its SDL form, beside its source", () => {
+  const [account] = new SDLParser(`
+    type Account {
+      required name: str {
+        default := 'anon';
+        constraint max_len_value(50);
+      };
+      constraint expression on (.name != 'x');
+      index on ((.name, .name));
+      access policy p allow all using (.name ?= global g);
+    };
+  `)
+    .parse()
+    .declarations as [SDLAST.TypeDeclaration];
+  const [name, check, index, policy] = account.members as [SDLAST.PropertyDeclaration, SDLAST.Constraint, SDLAST.Index, SDLAST.AccessPolicy];
+  assertEquals(name.default, { kind: "Literal", type: "string", value: "anon" });
+  assertEquals(name.defaultSource, "'anon'");
+  assertEquals(name.constraints?.[0].args, [{ kind: "Literal", type: "integer", value: 50 }]);
+  assertEquals(check.on?.kind, "BinaryOp");
+  assertEquals(index.on.kind, "TupleExpression");
+  assertEquals(index.onSource, "(.name, .name)");
+  assertEquals(policy.condition?.kind, "BinaryOp");
+});
+
+Deno.test("SDL Parser - a default, a constraint's or an index's expression the EdgeQL parser rejects is an error at its line", () => {
+  for (
+    const member of [
+      "n: int64 { default := 1 +; };",
+      "constraint expression on (.n union);",
+      "n: int64 { constraint min_value(1 +); };",
+      "index on (.n union);",
+      "access policy p allow all using (.n union);"
+    ]
+  ) {
+    const error = assertThrows(() => new SDLParser(`type T {\n  n2: int64;\n  ${member}\n}`).parse(), SyntaxError);
+    assertEquals(error.context?.location?.line, 3, member);
+  }
+});
+
 Deno.test("SDL Parser - a function's parameter and return type keep `optional` and `set of`", () => {
   const [a, b, c] = new SDLParser(`
     function a(s: str) -> set of str using (str_split(s, ',')[0]);

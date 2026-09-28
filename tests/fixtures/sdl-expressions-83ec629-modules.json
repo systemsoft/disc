@@ -1,0 +1,993 @@
+[
+  {
+    "name": "default",
+    "items": [
+      {
+        "kind": "ScalarTypeDeclaration",
+        "abstract": false,
+        "name": {
+          "kind": "Identifier",
+          "value": "Status",
+          "quoted": false
+        },
+        "extending": [
+          {
+            "kind": "TypeRef",
+            "name": {
+              "kind": "QualifiedName",
+              "parts": [
+                "enum"
+              ]
+            },
+            "optional": false,
+            "array": false,
+            "params": [
+              {
+                "kind": "TypeRef",
+                "name": {
+                  "kind": "QualifiedName",
+                  "parts": [
+                    "Active"
+                  ]
+                },
+                "optional": false,
+                "array": false
+              },
+              {
+                "kind": "TypeRef",
+                "name": {
+                  "kind": "QualifiedName",
+                  "parts": [
+                    "Closed"
+                  ]
+                },
+                "optional": false,
+                "array": false
+              }
+            ]
+          }
+        ],
+        "constraints": [],
+        "annotations": []
+      },
+      {
+        "kind": "ScalarTypeDeclaration",
+        "abstract": false,
+        "name": {
+          "kind": "Identifier",
+          "value": "Pct",
+          "quoted": false
+        },
+        "extending": [
+          {
+            "kind": "TypeRef",
+            "name": {
+              "kind": "QualifiedName",
+              "parts": [
+                "int64"
+              ]
+            },
+            "optional": false,
+            "array": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "min_value",
+              "quoted": false
+            },
+            "delegated": false,
+            "args": [
+              {
+                "kind": "Literal",
+                "type": "integer",
+                "value": 0
+              }
+            ],
+            "span": {
+              "start": {
+                "line": 4,
+                "column": 16,
+                "offset": 121
+              },
+              "end": {
+                "line": 4,
+                "column": 16,
+                "offset": 121
+              }
+            }
+          },
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "max_value",
+              "quoted": false
+            },
+            "delegated": false,
+            "args": [
+              {
+                "kind": "Literal",
+                "type": "integer",
+                "value": 100
+              }
+            ],
+            "span": {
+              "start": {
+                "line": 5,
+                "column": 16,
+                "offset": 150
+              },
+              "end": {
+                "line": 5,
+                "column": 16,
+                "offset": 150
+              }
+            }
+          }
+        ],
+        "annotations": []
+      },
+      {
+        "kind": "ScalarTypeDeclaration",
+        "abstract": false,
+        "name": {
+          "kind": "Identifier",
+          "value": "Code",
+          "quoted": false
+        },
+        "extending": [
+          {
+            "kind": "TypeRef",
+            "name": {
+              "kind": "QualifiedName",
+              "parts": [
+                "str"
+              ]
+            },
+            "optional": false,
+            "array": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "expression",
+              "quoted": false
+            },
+            "delegated": false,
+            "on": {
+              "kind": "BinaryOp",
+              "op": "<=",
+              "left": {
+                "kind": "FunctionCall",
+                "name": {
+                  "kind": "QualifiedName",
+                  "parts": [
+                    "len"
+                  ]
+                },
+                "args": [
+                  {
+                    "kind": "PathExpression",
+                    "path": [
+                      "__subject__"
+                    ]
+                  }
+                ]
+              },
+              "right": {
+                "kind": "Literal",
+                "type": "integer",
+                "value": 8
+              }
+            },
+            "span": {
+              "start": {
+                "line": 8,
+                "column": 16,
+                "offset": 221
+              },
+              "end": {
+                "line": 8,
+                "column": 16,
+                "offset": 221
+              }
+            }
+          },
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "one_of",
+              "quoted": false
+            },
+            "delegated": false,
+            "args": [
+              {
+                "kind": "Literal",
+                "type": "string",
+                "value": "A"
+              },
+              {
+                "kind": "Literal",
+                "type": "string",
+                "value": "B"
+              },
+              {
+                "kind": "Literal",
+                "type": "string",
+                "value": "C"
+              }
+            ],
+            "span": {
+              "start": {
+                "line": 9,
+                "column": 16,
+                "offset": 275
+              },
+              "end": {
+                "line": 9,
+                "column": 16,
+                "offset": 275
+              }
+            }
+          }
+        ],
+        "annotations": []
+      },
+      {
+        "kind": "GlobalDeclaration",
+        "name": {
+          "kind": "Identifier",
+          "value": "current_owner",
+          "quoted": false
+        },
+        "type": {
+          "kind": "TypeRef",
+          "name": {
+            "kind": "QualifiedName",
+            "parts": [
+              "uuid"
+            ]
+          },
+          "optional": false,
+          "array": false
+        },
+        "readonly": false
+      },
+      {
+        "kind": "GlobalDeclaration",
+        "name": {
+          "kind": "Identifier",
+          "value": "tenant",
+          "quoted": false
+        },
+        "type": {
+          "kind": "TypeRef",
+          "name": {
+            "kind": "QualifiedName",
+            "parts": [
+              "str"
+            ]
+          },
+          "optional": false,
+          "array": false
+        },
+        "default": {
+          "kind": "Literal",
+          "type": "string",
+          "value": "main"
+        },
+        "readonly": false
+      },
+      {
+        "kind": "GlobalDeclaration",
+        "name": {
+          "kind": "Identifier",
+          "value": "limit_of",
+          "quoted": false
+        },
+        "type": {
+          "kind": "TypeRef",
+          "name": {
+            "kind": "QualifiedName",
+            "parts": [
+              "int64"
+            ]
+          },
+          "optional": false,
+          "array": false
+        },
+        "default": {
+          "kind": "BinaryOp",
+          "op": "*",
+          "left": {
+            "kind": "Literal",
+            "type": "integer",
+            "value": 10
+          },
+          "right": {
+            "kind": "Literal",
+            "type": "integer",
+            "value": 2
+          }
+        },
+        "readonly": false
+      },
+      {
+        "kind": "TypeDeclaration",
+        "abstract": false,
+        "name": {
+          "kind": "Identifier",
+          "value": "Owner",
+          "quoted": false
+        },
+        "members": [
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "name",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "str"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "required": true
+          }
+        ]
+      },
+      {
+        "kind": "TypeDeclaration",
+        "abstract": false,
+        "name": {
+          "kind": "Identifier",
+          "value": "Account",
+          "quoted": false
+        },
+        "members": [
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "name",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "str"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "required": true,
+            "default": {
+              "kind": "Literal",
+              "type": "string",
+              "value": "anon"
+            },
+            "constraints": [
+              {
+                "kind": "Constraint",
+                "name": {
+                  "kind": "Identifier",
+                  "value": "exclusive",
+                  "quoted": false
+                },
+                "delegated": false,
+                "span": {
+                  "start": {
+                    "line": 23,
+                    "column": 18,
+                    "offset": 542
+                  },
+                  "end": {
+                    "line": 23,
+                    "column": 18,
+                    "offset": 542
+                  }
+                }
+              },
+              {
+                "kind": "Constraint",
+                "name": {
+                  "kind": "Identifier",
+                  "value": "max_len_value",
+                  "quoted": false
+                },
+                "delegated": false,
+                "args": [
+                  {
+                    "kind": "Literal",
+                    "type": "integer",
+                    "value": 50
+                  }
+                ],
+                "span": {
+                  "start": {
+                    "line": 24,
+                    "column": 18,
+                    "offset": 570
+                  },
+                  "end": {
+                    "line": 24,
+                    "column": 18,
+                    "offset": 570
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "score",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "int64"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "default": {
+              "kind": "Literal",
+              "type": "integer",
+              "value": 3
+            },
+            "constraints": [
+              {
+                "kind": "Constraint",
+                "name": {
+                  "kind": "Identifier",
+                  "value": "min_value",
+                  "quoted": false
+                },
+                "delegated": false,
+                "args": [
+                  {
+                    "kind": "UnaryOp",
+                    "op": "-",
+                    "operand": {
+                      "kind": "Literal",
+                      "type": "integer",
+                      "value": 1
+                    }
+                  }
+                ],
+                "span": {
+                  "start": {
+                    "line": 29,
+                    "column": 18,
+                    "offset": 677
+                  },
+                  "end": {
+                    "line": 29,
+                    "column": 18,
+                    "offset": 677
+                  }
+                }
+              },
+              {
+                "kind": "Constraint",
+                "name": {
+                  "kind": "Identifier",
+                  "value": "expression",
+                  "quoted": false
+                },
+                "delegated": false,
+                "on": {
+                  "kind": "BinaryOp",
+                  "op": "!=",
+                  "left": {
+                    "kind": "PathExpression",
+                    "path": [
+                      "__subject__"
+                    ]
+                  },
+                  "right": {
+                    "kind": "Literal",
+                    "type": "integer",
+                    "value": 13
+                  }
+                },
+                "span": {
+                  "start": {
+                    "line": 30,
+                    "column": 18,
+                    "offset": 709
+                  },
+                  "end": {
+                    "line": 30,
+                    "column": 18,
+                    "offset": 709
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "ratio",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "float64"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "default": {
+              "kind": "Literal",
+              "type": "float",
+              "value": 0.5
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "created",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "datetime"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "default": {
+              "kind": "FunctionCall",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "datetime_current"
+                ]
+              },
+              "args": []
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "active",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "bool"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "default": {
+              "kind": "Literal",
+              "type": "boolean",
+              "value": true
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "status",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "Status"
+                ]
+              },
+              "optional": false,
+              "array": false
+            },
+            "default": {
+              "kind": "PathExpression",
+              "path": [
+                "Status",
+                "Active"
+              ]
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "pct",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "Pct"
+                ]
+              },
+              "optional": false,
+              "array": false
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "code",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "Code"
+                ]
+              },
+              "optional": false,
+              "array": false
+            }
+          },
+          {
+            "kind": "PropertyDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "holder",
+              "quoted": false
+            },
+            "type": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "uuid"
+                ]
+              },
+              "optional": false,
+              "array": false
+            }
+          },
+          {
+            "kind": "LinkDeclaration",
+            "name": {
+              "kind": "Identifier",
+              "value": "owner",
+              "quoted": false
+            },
+            "target": {
+              "kind": "TypeRef",
+              "name": {
+                "kind": "QualifiedName",
+                "parts": [
+                  "Owner"
+                ]
+              },
+              "optional": false,
+              "array": false
+            }
+          },
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "expression",
+              "quoted": false
+            },
+            "delegated": false,
+            "on": {
+              "kind": "BinaryOp",
+              "op": "or",
+              "left": {
+                "kind": "BinaryOp",
+                "op": ">=",
+                "left": {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "score"
+                  ]
+                },
+                "right": {
+                  "kind": "Literal",
+                  "type": "integer",
+                  "value": 0
+                }
+              },
+              "right": {
+                "kind": "BinaryOp",
+                "op": "=",
+                "left": {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "name"
+                  ]
+                },
+                "right": {
+                  "kind": "Literal",
+                  "type": "string",
+                  "value": "anon"
+                }
+              }
+            },
+            "span": {
+              "start": {
+                "line": 48,
+                "column": 16,
+                "offset": 1059
+              },
+              "end": {
+                "line": 48,
+                "column": 16,
+                "offset": 1059
+              }
+            }
+          },
+          {
+            "kind": "Constraint",
+            "name": {
+              "kind": "Identifier",
+              "value": "exclusive",
+              "quoted": false
+            },
+            "delegated": false,
+            "on": {
+              "kind": "TupleExpression",
+              "elements": [
+                {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "name"
+                  ]
+                },
+                {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "score"
+                  ]
+                }
+              ]
+            },
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 16,
+                "offset": 1121
+              },
+              "end": {
+                "line": 49,
+                "column": 16,
+                "offset": 1121
+              }
+            }
+          },
+          {
+            "kind": "Index",
+            "on": {
+              "kind": "PathExpression",
+              "path": [
+                ".",
+                "name"
+              ]
+            }
+          },
+          {
+            "kind": "Index",
+            "on": {
+              "kind": "TupleExpression",
+              "elements": [
+                {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "name"
+                  ]
+                },
+                {
+                  "kind": "PathExpression",
+                  "path": [
+                    ".",
+                    "score"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "AccessPolicy",
+            "name": {
+              "kind": "Identifier",
+              "value": "own",
+              "quoted": false
+            },
+            "actions": [
+              {
+                "kind": "AccessAction",
+                "allow": true,
+                "operations": [
+                  "all"
+                ]
+              }
+            ],
+            "condition": {
+              "kind": "BinaryOp",
+              "op": "?=",
+              "left": {
+                "kind": "PathExpression",
+                "path": [
+                  ".",
+                  "holder"
+                ]
+              },
+              "right": {
+                "kind": "PathExpression",
+                "path": [
+                  "global",
+                  "current_owner"
+                ]
+              }
+            }
+          },
+          {
+            "kind": "AccessPolicy",
+            "name": {
+              "kind": "Identifier",
+              "value": "main_only",
+              "quoted": false
+            },
+            "actions": [
+              {
+                "kind": "AccessAction",
+                "allow": true,
+                "operations": [
+                  "select"
+                ]
+              }
+            ],
+            "condition": {
+              "kind": "PathExpression",
+              "path": [
+                ".",
+                "active"
+              ]
+            },
+            "when": {
+              "kind": "BinaryOp",
+              "op": "=",
+              "left": {
+                "kind": "PathExpression",
+                "path": [
+                  "global",
+                  "tenant"
+                ]
+              },
+              "right": {
+                "kind": "Literal",
+                "type": "string",
+                "value": "main"
+              }
+            }
+          },
+          {
+            "kind": "AccessPolicy",
+            "name": {
+              "kind": "Identifier",
+              "value": "no_closed",
+              "quoted": false
+            },
+            "actions": [
+              {
+                "kind": "AccessAction",
+                "allow": false,
+                "operations": [
+                  "insert",
+                  "update"
+                ]
+              }
+            ],
+            "condition": {
+              "kind": "BinaryOp",
+              "op": "=",
+              "left": {
+                "kind": "PathExpression",
+                "path": [
+                  ".",
+                  "status"
+                ]
+              },
+              "right": {
+                "kind": "PathExpression",
+                "path": [
+                  "Status",
+                  "Closed"
+                ]
+              }
+            },
+            "errmessage": "closed"
+          }
+        ]
+      },
+      {
+        "kind": "AliasDeclaration",
+        "name": {
+          "kind": "Identifier",
+          "value": "BigAccounts",
+          "quoted": false
+        },
+        "using": {
+          "kind": "PathExpression",
+          "path": [
+            "select",
+            "Account",
+            "filter",
+            ".",
+            "score",
+            ">",
+            "10"
+          ],
+          "source": "select Account filter .score > 10"
+        }
+      },
+      {
+        "kind": "AliasDeclaration",
+        "name": {
+          "kind": "Identifier",
+          "value": "AccountNames",
+          "quoted": false
+        },
+        "using": {
+          "kind": "PathExpression",
+          "path": [
+            "Account",
+            "name"
+          ]
+        }
+      }
+    ]
+  }
+]

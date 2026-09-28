@@ -91,6 +91,30 @@ function namedPaths(node: unknown, names: Set<string>): { name: string; node: Ed
   return Object.entries(node).flatMap(([key, value]) => key === "type" ? [] : namedPaths(value, names));
 }
 
+/**
+ * Whether `query`'s shape, filter or order by reads a link property of the
+ * link its objects are reached by (`select .teams.members { lr := @role }
+ * filter @role = 'x'`) — a bare `@prop`, outside any nested shape, whose
+ * `@prop` is its own link's.
+ */
+function readsLinkProperty(query: EdgeQLAST.SelectQuery): boolean {
+  const visit = (node: unknown): boolean => {
+    if (Array.isArray(node)) {
+      return node.some(visit);
+    }
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    const path = node as EdgeQLAST.Path;
+    if (path.kind === "Path" && path.steps.length === 1 && path.steps[0].type === "link_property") {
+      return true;
+    }
+    return Object.entries(node).some(([key, value]) => key !== "shape" && visit(value));
+  };
+  return (query.shape?.elements ?? []).some(element => element.linkProperty || (element.computable && visit(element.expr))) ||
+    visit(query.filter) || visit(query.orderBy);
+}
+
 /*** `aggregate` of a link's target ids, or `[]` when it has none (as Gel answers an empty link), not NULL. ***/
 function emptyArrayWhenNone(aggregate: SQL.SQLExpression): SQL.SQLExpression {
   return SQL.createFunctionCall("COALESCE", [aggregate, { kind: "RawSQLExpression", sql: "'[]'::jsonb" }]);
@@ -217,7 +241,8 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       const idsOnly = this.objectIdSelects.has(query);
       const { selectItems, fromClause, where } = this.compileSelectExpression(
         query.expr,
-        idsOnly ? undefined : query.shape
+        idsOnly ? undefined : query.shape,
+        readsLinkProperty(query)
       );
       // A select of objects compared by identity (`objectComparisonById`): their ids.
       const subject = idsOnly ? this.ctx.currentScope.aliases.values().next().value : undefined;
@@ -557,7 +582,9 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   protected compileSelectExpression(
     expr: EdgeQLAST.Expression,
-    shape?: EdgeQLAST.Shape
+    shape?: EdgeQLAST.Shape,
+    /** The select reads a link property of the last link of `expr`, a path (see `compilePathExpression`). */
+    linkRows = false
   ): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
@@ -822,7 +849,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (expr.kind === "Path") {
       // `select Rec.t.a`: the element of each tuple the path reaches.
       const elements = shape ? null : this.tupleElementsOfPath(expr);
-      return elements ? this.compileSelectExpression(elements) : this.compilePathExpression(expr, shape);
+      return elements ? this.compileSelectExpression(elements) : this.compilePathExpression(expr, shape, linkRows);
     }
 
     if (expr.kind === "SetExpr") {
@@ -1617,6 +1644,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
         }
         // Computed property: name := expression. Objects read as a link
         // does; a path set is its select's rows as an array.
+        this.checkPathLinkProperties(element, typeName);
         const objects = this.objectComputable(element);
         const pathSelect = objects ? null : this.shapePathSelect(element);
         // A tuple or array with an empty element (`t := (.a, .b)`) is empty.
@@ -1956,6 +1984,24 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       multi && !asserted,
       shape !== undefined || ownShape !== undefined
     );
+  }
+
+  /**
+   * A computed link of a path's objects (`m := .teams.members { … }`) has
+   * the link properties of the path's link when it is one link, as in Gel:
+   * through several, it has none of its own, so the shape cannot name one
+   * (`@role`) — though `lr := @role` still reads the last link's.
+   */
+  private checkPathLinkProperties(element: EdgeQLAST.ShapeElement, typeName: string): void {
+    const { expr } = element;
+    const linkProperty = expr.kind === "ShapeExpr" && expr.expr.kind === "Path" ?
+      expr.shape.elements.find(field => field.linkProperty && !field.computable) :
+      undefined;
+    if (!linkProperty || expr.kind !== "ShapeExpr" || expr.expr.kind !== "Path" || (this.resolvePath(expr.expr)?.hops.length ?? 0) < 2) {
+      return;
+    }
+    const owner = typeName.includes("::") ? typeName : `default::${typeName}`;
+    throw new InvalidReferenceError(`link '${element.name?.name}' of object type '${owner}' has no property '${linkProperty.name?.name}'`);
   }
 
   /*** Whether the objects `expr` stands for may be several, as Gel infers it (see `objectComputable`); null when `expr` is not objects. ***/
@@ -2424,11 +2470,14 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    *                       WHERE __j_posts_1.source_id IN (SELECT user_3.id FROM "user" AS user_3))
    *
    * The reached type is the select's subject, so its filter, order by and
-   * limit apply to those objects.
+   * limit apply to those objects. With `linkRows` (the select reads `@prop`),
+   * they are one per link of the path's last link, as in Gel, and `@prop`
+   * reads its junction row (see `compilePathSource`).
    */
   private compilePathExpression(
     path: EdgeQLAST.Path,
-    shape?: EdgeQLAST.Shape
+    shape?: EdgeQLAST.Shape,
+    linkRows = false
   ): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
@@ -2523,7 +2572,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       );
     }
 
-    const source = this.compilePathSource(resolved);
+    const source = this.compilePathSource(resolved, linkRows && !resolved.property);
     this.bindPathSubject(path, resolved, source.alias);
     const typeName = resolved.typeDef.name;
     let selectItems: SQL.SelectItem[];

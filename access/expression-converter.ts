@@ -129,6 +129,12 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
     case "PathExpression": {
       const path = expr as PathExpression;
 
+      // EdgeQL beyond the SDL expression grammar (`.tags in {'a'}`, `(select …)`),
+      // kept as its source text: no in-memory form, its SQL alone decides.
+      if (path.source !== undefined) {
+        throw new ValidationError("An EdgeQL expression kept as source text has no in-memory form");
+      }
+
       if (path.path[0] === "global") {
         return {
           kind: "AccessGlobal",

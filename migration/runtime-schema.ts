@@ -601,7 +601,8 @@ function extractPropertyConstraints(
       name: c.name?.value ?? "unknown"
     };
     if (c.args && c.args.length > 0) {
-      constraint.args = c.args.map(stringifyExpression);
+      // As written; a schema an older Disc stored has only the SDL form.
+      constraint.args = c.args.map((arg, index) => c.argSources?.[index] ?? stringifyExpression(arg));
     }
     return constraint;
   });
@@ -725,7 +726,8 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
       if (item.kind === "AliasDeclaration") {
         const aliasDecl = item as AliasDeclaration;
         const aliasName = aliasDecl.name.value;
-        const expression = stringifyExpression(aliasDecl.using);
+        // As written; a schema an older Disc stored has only the SDL form.
+        const expression = aliasDecl.usingSource ?? stringifyExpression(aliasDecl.using);
 
         // Attempt to detect targetType from the expression.
         // If the expression is a PathExpression starting with a type name,
@@ -789,7 +791,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         };
 
         if (globalDecl.default) {
-          globalDef.default = stringifyExpression(globalDecl.default);
+          globalDef.default = globalDecl.defaultSource ?? stringifyExpression(globalDecl.default);
         }
 
         globals.set(qualifiedName, globalDef);

@@ -16,6 +16,10 @@ import { KEYWORDS, Token, TokenType } from "./tokens.ts";
 const XOR_MESSAGE = "'xor' is not an operator in EdgeQL";
 const XOR_HINT = "For exactly one of two conditions, compare them as booleans: (exists .a) != (exists .b)";
 
+/*** Brackets an EdgeQL expression's extent is counted in (see `parseEdgeQLExpression`). ***/
+const OPENING_BRACKETS = new Set([TokenType.LBRACE, TokenType.LBRACKET, TokenType.LPAREN]);
+const CLOSING_BRACKETS = new Set([TokenType.RBRACE, TokenType.RBRACKET, TokenType.RPAREN]);
+
 export class SDLParser {
   private source: string;
   private tokens: Token[];
@@ -298,10 +302,10 @@ export class SDLParser {
   private parseAliasDeclaration(): AST.AliasDeclaration {
     const name = this.parseIdentifier();
     this.consume(TokenType.ASSIGN, "Expected ':=' in alias declaration");
-    const using = this.parseExpression();
+    const { expression: using, source: usingSource } = this.parseDelegatedExpression();
     this.consume(TokenType.SEMICOLON, "Expected ';' after alias declaration");
 
-    return { kind: "AliasDeclaration", name, using };
+    return { kind: "AliasDeclaration", name, using, usingSource };
   }
 
   private parseFunctionDeclaration(): AST.FunctionDeclaration {
@@ -399,13 +403,14 @@ export class SDLParser {
     const type = this.parseTypeRef();
 
     let defaultValue: AST.Expression | undefined;
+    let defaultSource: string | undefined;
     let readonly = false;
 
     if (this.match(TokenType.LBRACE)) {
       while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
         if (this.match(TokenType.DEFAULT)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'default'");
-          defaultValue = this.parseExpression();
+          ({ expression: defaultValue, source: defaultSource } = this.parseDelegatedExpression());
           this.consume(TokenType.SEMICOLON, "Expected ';' after default value");
         } else if (this.match(TokenType.READONLY)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'readonly'");
@@ -439,6 +444,7 @@ export class SDLParser {
       required: qualifiers.required,
       multi: qualifiers.multi,
       default: defaultValue,
+      ...(defaultSource !== undefined ? { defaultSource } : {}),
       readonly
     };
   }
@@ -648,14 +654,16 @@ export class SDLParser {
   }
 
   /**
-   * An EdgeQL expression, up to the `;` or the unmatched `)` that ends it:
-   * its source text, which the EdgeQL expression parser must accept, and its
-   * SDL form — or, for EdgeQL the SDL expression parser does not cover, its
-   * source text kept whole (a PathExpression with `source`).
+   * An EdgeQL expression, up to the `;` (in a list, the `,`) or the unmatched
+   * `)` that ends it: its source text, which the EdgeQL expression parser
+   * must accept, and its SDL form — or, for EdgeQL the SDL expression parser
+   * does not cover, its source text kept whole (a PathExpression with
+   * `source`). An expression the SDL grammar reads keeps the form it gives
+   * it: databases an older Disc migrated hold their schema in that form.
    */
-  private parseDelegatedExpression(): { expression: AST.Expression; source: string; } {
+  private parseDelegatedExpression(inList = false): { expression: AST.Expression; source: string; } {
     const start = this.current;
-    const whole = this.parseEdgeQLExpression() as AST.PathExpression;
+    const whole = this.parseEdgeQLExpression(inList) as AST.PathExpression;
     const end = this.current;
     const source = whole.source ?? "";
     this.checkEdgeQLExpression(source, this.tokens[start]);
@@ -735,7 +743,7 @@ export class SDLParser {
           annotations.push(this.parseAnnotation());
         } else if (this.match(TokenType.DEFAULT)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'default'");
-          property.default = this.parseExpression();
+          ({ expression: property.default, source: property.defaultSource } = this.parseDelegatedExpression());
           this.consume(TokenType.SEMICOLON, "Expected ';' after default value");
         } else if (this.match(TokenType.READONLY)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'readonly'");
@@ -882,7 +890,7 @@ export class SDLParser {
           annotations.push(this.parseAnnotation());
         } else if (this.match(TokenType.DEFAULT)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'default'");
-          link.default = this.parseExpression();
+          ({ expression: link.default, source: link.defaultSource } = this.parseDelegatedExpression());
           this.consume(TokenType.SEMICOLON, "Expected ';' after default value");
         } else if (this.match(TokenType.READONLY)) {
           this.consume(TokenType.ASSIGN, "Expected ':=' after 'readonly'");
@@ -994,15 +1002,26 @@ export class SDLParser {
     }
 
     let on: AST.Expression | undefined;
+    let onSource: string | undefined;
     if (this.match(TokenType.ON)) {
       this.consume(TokenType.LPAREN, "Expected '(' after 'on'");
-      on = this.parseExpression();
+      ({ expression: on, source: onSource } = this.parseDelegatedExpression());
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
     }
 
     let args: AST.Expression[] | undefined;
+    let argSources: string[] | undefined;
     if (name && this.match(TokenType.LPAREN)) {
-      args = this.parseExpressionList();
+      args = [];
+      argSources = [];
+      while (!this.check(TokenType.RPAREN) && !this.isAtEnd()) {
+        const { expression, source } = this.parseDelegatedExpression(true);
+        args.push(expression);
+        argSources.push(source);
+        if (!this.match(TokenType.COMMA)) {
+          break;
+        }
+      }
       this.consume(TokenType.RPAREN, "Expected ')' after constraint arguments");
     }
 
@@ -1011,7 +1030,9 @@ export class SDLParser {
       name,
       delegated,
       on,
-      args
+      ...(onSource !== undefined ? { onSource } : {}),
+      args,
+      ...(argSources !== undefined ? { argSources } : {})
     };
 
     // Record the constraint name's source position so the validator can
@@ -1078,10 +1099,10 @@ export class SDLParser {
 
     this.consume(TokenType.ON, "Expected 'on' in index declaration");
     this.consume(TokenType.LPAREN, "Expected '(' after 'on'");
-    const on = this.parseExpression();
+    const { expression: on, source: onSource } = this.parseDelegatedExpression();
     this.consume(TokenType.RPAREN, "Expected ')' after expression");
 
-    const index: AST.Index = { kind: "Index", name, on };
+    const index: AST.Index = { kind: "Index", name, on, onSource };
 
     // Parse index body if present
     if (this.match(TokenType.LBRACE)) {
@@ -1126,16 +1147,16 @@ export class SDLParser {
     const name = this.parseIdentifier();
 
     const actions: AST.AccessAction[] = [];
-    let condition: AST.Expression | undefined;
+    let condition: { expression: AST.Expression; source: string; } | undefined;
     let errmessage: string | undefined;
-    let when: AST.Expression | undefined;
-    let withCheck: AST.Expression | undefined;
+    let when: { expression: AST.Expression; source: string; } | undefined;
+    let withCheck: { expression: AST.Expression; source: string; } | undefined;
     const annotations: AST.Annotation[] = [];
     const isAction = (): boolean => this.check(TokenType.IDENT) && (this.peek().value === "allow" || this.peek().value === "deny");
     const isWhen = (): boolean => this.check(TokenType.IDENT) && this.peek().value === "when";
-    const parenthesized = (clause: string): AST.Expression => {
+    const parenthesized = (clause: string): { expression: AST.Expression; source: string; } => {
       this.consume(TokenType.LPAREN, `Expected '(' after '${clause}'`);
-      const expr = this.parseExpression();
+      const expr = this.parseDelegatedExpression();
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
       return expr;
     };
@@ -1182,9 +1203,7 @@ export class SDLParser {
       } else if (this.match(TokenType.WITH)) {
         // `with check (<expr>);` — INSERT/UPDATE post-condition. (P1-37)
         this.consume(TokenType.CHECK, "Expected 'check' after 'with'");
-        this.consume(TokenType.LPAREN, "Expected '(' after 'with check'");
-        withCheck = this.parseExpression();
-        this.consume(TokenType.RPAREN, "Expected ')' after expression");
+        withCheck = parenthesized("with check");
         this.consume(
           TokenType.SEMICOLON,
           "Expected ';' after with check clause"
@@ -1215,13 +1234,18 @@ export class SDLParser {
       kind: "AccessPolicy",
       name,
       actions,
-      condition
+      condition: condition?.expression
     };
+    if (condition !== undefined) {
+      policy.conditionSource = condition.source;
+    }
     if (when !== undefined) {
-      policy.when = when;
+      policy.when = when.expression;
+      policy.whenSource = when.source;
     }
     if (withCheck !== undefined) {
-      policy.withCheck = withCheck;
+      policy.withCheck = withCheck.expression;
+      policy.withCheckSource = withCheck.source;
     }
     if (errmessage !== undefined) {
       policy.errmessage = errmessage;
@@ -2254,35 +2278,34 @@ export class SDLParser {
     throw this.error(message, hint);
   }
 
-  private parseEdgeQLExpression(): AST.Expression {
+  /**
+   * An EdgeQL expression's tokens, up to the `;` (or, in a list, the `,`)
+   * outside any brackets, or the unmatched `)`, `]` or `}`, that ends it.
+   */
+  private parseEdgeQLExpression(inList = false): AST.Expression {
     // For now, parse EdgeQL expressions as simplified PathExpressions
     // This is a temporary solution until full EdgeQL support is implemented
     const tokens: string[] = [];
     const start = this.peek().offset;
-    let parenDepth = 0;
+    let depth = 0;
 
     while (!this.isAtEnd()) {
       const token = this.peek();
 
-      if (token.type === TokenType.LPAREN) {
-        parenDepth++;
-        tokens.push(token.value);
-        this.advance();
-      } else if (token.type === TokenType.RPAREN) {
-        if (parenDepth === 0) {
-          // This is the closing paren of our parent expression
+      if (OPENING_BRACKETS.has(token.type)) {
+        depth++;
+      } else if (CLOSING_BRACKETS.has(token.type)) {
+        if (depth === 0) {
+          // This is the closing bracket of our parent expression
           break;
         }
-        parenDepth--;
-        tokens.push(token.value);
-        this.advance();
-      } else if (token.type === TokenType.SEMICOLON && parenDepth === 0) {
-        // End of statement
+        depth--;
+      } else if (depth === 0 && (token.type === TokenType.SEMICOLON || (inList && token.type === TokenType.COMMA))) {
+        // End of statement, or of a list's element
         break;
-      } else {
-        tokens.push(token.value);
-        this.advance();
       }
+      tokens.push(token.value);
+      this.advance();
     }
 
     // The tokens lose their spacing and a string's quotes; keep the source

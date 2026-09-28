@@ -2455,7 +2455,8 @@ export class SchemaDiffer {
       case "FunctionCall":
         return `${expr.name.parts.join("::")}(${expr.args.map(a => this.extractExpressionString(a)).join(", ")})`;
       case "PathExpression":
-        return expr.path.join(".");
+        // EdgeQL beyond the SDL expression grammar is kept as its source text.
+        return expr.source ?? expr.path.join(".");
       case "BinaryOp":
         return `${this.extractExpressionString(expr.left)} ${expr.op} ${this.extractExpressionString(expr.right)}`;
       case "UnaryOp":
@@ -2493,7 +2494,9 @@ export class SchemaDiffer {
               return String(arg.value);
             }
 
-            return String(arg);
+            // An expression (`-1`, `2 ^ 3`) as EdgeQL, from its SDL form, as
+            // the schema an older Disc stored has it.
+            return sdlExpressionToEdgeQL(arg);
           })
           .join(",");
 

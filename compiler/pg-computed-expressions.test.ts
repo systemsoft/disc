@@ -194,3 +194,28 @@ pgTest("link properties through computed links", async (pool, schema) => {
     "link 'team_roles' of object type 'default::CeOrg' has no property 'role'"
   );
 });
+
+pgTest("link properties in the shape of a path written in a query", async (pool, schema) => {
+  const byName = (value: unknown) => [...value as Record<string, unknown>[]].sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : 1);
+  // Through several links, `lr := @role` reads the last link's: one object per link, as in Gel.
+  const [org1, org2] = await rows(pool, schema, "select CeOrg { name, m := .teams.members { name, lr := @role } } order by .name");
+  assertEquals(byName(org1.m), [{ lr: "dev", name: "m1" }, { lr: "dev", name: "m2" }, { lr: "lead", name: "m1" }]);
+  assertEquals(org2.m, []);
+  // A select of the path filters by it too.
+  assertEquals(
+    await rows(pool, schema, "select CeOrg { m := (select .teams.members { name, lr := @role } filter @role = 'lead') } filter .name = 'org1'"),
+    [{ m: [{ lr: "lead", name: "m1" }] }]
+  );
+  // Without a link property, the path's objects are distinct.
+  const [distinct] = await rows(pool, schema, "select CeOrg { m := .teams.members { name } } filter .name = 'org1'");
+  assertEquals(byName(distinct.m), [{ name: "m1" }, { name: "m2" }]);
+  // Through one link, `@role` names it too.
+  const [team] = await rows(pool, schema, "select CeTeam { m := .members { name, @role } } filter .name = 'a'");
+  assertEquals(byName(team.m), [{ "@role": "dev", name: "m1" }, { "@role": "dev", name: "m2" }]);
+  // Through several, the computed link has none of its own (Gel: InvalidReferenceError).
+  await assertRejects(
+    () => rows(pool, schema, "select CeOrg { m := .teams.members { name, @role } }"),
+    Error,
+    "link 'm' of object type 'default::CeOrg' has no property 'role'"
+  );
+});

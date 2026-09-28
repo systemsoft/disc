@@ -95,6 +95,9 @@ export function normalizeArrowsToProperties(modules: Module[]): Module[] {
         if (link.default !== undefined) {
           property.default = link.default;
         }
+        if (link.defaultSource !== undefined) {
+          property.defaultSource = link.defaultSource;
+        }
         if (link.constraints !== undefined) {
           property.constraints = link.constraints;
         }
@@ -165,6 +168,9 @@ export function normalizeObjectPropertiesToLinks(modules: Module[]): Module[] {
         }
         if (property.default !== undefined) {
           link.default = property.default;
+        }
+        if (property.defaultSource !== undefined) {
+          link.defaultSource = property.defaultSource;
         }
         if (property.constraints !== undefined) {
           link.constraints = property.constraints;

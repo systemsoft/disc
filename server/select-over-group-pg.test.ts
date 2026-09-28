@@ -160,6 +160,32 @@ Deno.test({
         assertEquals(plain.map(row => [row.key, row.grouping]), [[{ role: "dev" }, ["role"]]]);
       });
 
+      await t.step("the outer filter and order by read the elements as a set: aggregates, in, exists, any of them", async () => {
+        assertEquals(
+          await data("select (group User by .role) { key: {role}, n := count(.elements) } filter count(.elements) > 1 order by max(.elements.score)"),
+          [{ key: { role: "dev" }, n: 2 }]
+        );
+        assertEquals(await data("select (group User by .role) { key: {role} } order by min(.elements.name) desc"), [
+          { key: { role: "dev" } },
+          { key: { role: "admin" } }
+        ]);
+        assertEquals(await data("select (group User by .role) { key: {role} } filter 'ann' in .elements.name"), [{ key: { role: "admin" } }]);
+        assertEquals(await data("select (group User by .role) { key: {role} } filter 'ann' not in .elements.name"), [{ key: { role: "dev" } }]);
+        assertEquals(await data("select (group User by .role) { key: {role} } filter .elements.score > 4"), [{ key: { role: "dev" } }]);
+        assertEquals(
+          await data("select (group User by .role) { key: {role} } filter 'bob' in .elements.name or .key.role = 'admin' order by .key.role"),
+          [{ key: { role: "admin" } }, { key: { role: "dev" } }]
+        );
+        assertEquals(
+          await data(
+            "select (group User by .role) { key: {role}, has := exists .elements.score, ann := 'ann' in .elements.name } order by exists .elements.score then .key.role"
+          ),
+          [{ ann: true, has: true, key: { role: "admin" } }, { ann: false, has: true, key: { role: "dev" } }]
+        );
+        const reply = await post("select (group User by .role) { key: {role} } order by .elements.name");
+        assertStringIncludes(JSON.stringify(reply.body), "possibly more than one element returned by an expression where only singletons are allowed");
+      });
+
       await t.step("a computable of the elements' values is each group's set of them", async () => {
         const sorted = (rows: unknown, field: string) =>
           (rows as Record<string, unknown>[]).map(row => ({ ...row, [field]: [...row[field] as string[]].sort() }));

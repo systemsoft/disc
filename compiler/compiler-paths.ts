@@ -243,8 +243,16 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
    * under the reached type so the select's shape, filter and order by resolve
    * against them. A path that follows no link from a row is that row itself
    * (no FROM); one from a type or a binding with no link is its table.
+   *
+   * With `linkRows`, when the last link has a junction table, the rows are
+   * its links — joined to their targets, an object once per link reaching it,
+   * as Gel reads a path whose shape or clauses read `@prop` — and `@prop`
+   * reads the link's row:
+   *
+   *   .teams.members
+   *   → FROM "user" u, team_members j WHERE j.target_id = u.id AND j.source_id IN (<ids of .teams>)
    */
-  protected compilePathSource(resolved: ResolvedPath): PathSource {
+  protected compilePathSource(resolved: ResolvedPath, linkRows = false): PathSource {
     const { start, typeDef } = resolved;
     // A path through an abstract type reads its table (and the junctions of
     // its multi links) like any other; the reads become ones of its concrete
@@ -259,7 +267,24 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
     } else {
       const alias = Context.generateAlias(this.ctx, typeDef.tableName);
       source = { alias, from: [SQL.createTableReference(typeDef.tableName, alias)] };
-      if (resolved.hops.length > 0) {
+      const last = resolved.hops[resolved.hops.length - 1];
+      if (linkRows && last?.kind === "link" && last.link.junctionTable) {
+        const junction = Context.generateAlias(this.ctx, `__j_${last.link.name}`);
+        source.from.push(SQL.createTableReference(last.link.junctionTable, junction));
+        source.where = SQL.createBinaryExpression(
+          "AND",
+          SQL.createBinaryExpression(
+            "=",
+            SQL.createColumnReference(last.link.junctionTargetColumn ?? "target_id", junction),
+            SQL.createColumnReference("id", alias)
+          ),
+          this.idIn(
+            SQL.createColumnReference(last.link.junctionSourceColumn ?? "source_id", junction),
+            this.compilePathIds({ ...resolved, hops: resolved.hops.slice(0, -1) })
+          )
+        );
+        this.ctx.currentScope.linkSource = { alias: junction, link: last.link };
+      } else if (resolved.hops.length > 0) {
         source.where = this.idIn(SQL.createColumnReference("id", alias), this.compilePathIds(resolved));
       }
     }
