@@ -22,6 +22,7 @@ import {
   locationOf,
   POLICY_ROWS
 } from "./compiler-base.ts";
+import { bindAliases } from "./aliases.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { inlineDeclaredCalls } from "./declared-functions.ts";
@@ -153,9 +154,10 @@ const NOT_ROW_LOCAL_FUNCTIONS = new Set([
 /**
  * Why `expr` can't be the boolean of a CHECK on `tableName` — it reads
  * something other than that table's row, or a value that changes between
- * statements — or undefined when it can. See `checkConstraintSql`.
+ * statements — or undefined when it can. See `checkConstraintSql`. `what`
+ * names such expressions in the reason (an index's, see `indexExpressionSql`).
  */
-function rowLocalViolation(expr: SQL.SQLExpression, tableName: string): string | undefined {
+function rowLocalViolation(expr: SQL.SQLExpression, tableName: string, what = "constraint expressions"): string | undefined {
   const reasons: string[] = [];
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) {
@@ -187,7 +189,7 @@ function rowLocalViolation(expr: SQL.SQLExpression, tableName: string): string |
       case "FunctionCall": {
         const name = (node as SQL.FunctionCall).name.toLowerCase();
         if (NOT_ROW_LOCAL_FUNCTIONS.has(name)) {
-          reasons.push(`constraint expressions must be immutable, and it calls ${name}()`);
+          reasons.push(`${what} must be immutable, and it calls ${name}()`);
         }
         break;
       }
@@ -198,10 +200,51 @@ function rowLocalViolation(expr: SQL.SQLExpression, tableName: string): string |
         }
         const called = [...sql.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi)].map(match => match[1].toLowerCase()).find(name => NOT_ROW_LOCAL_FUNCTIONS.has(name));
         if (called) {
-          reasons.push(`constraint expressions must be immutable, and it calls ${called}()`);
+          reasons.push(`${what} must be immutable, and it calls ${called}()`);
         }
         return;
       }
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(expr);
+  return reasons[0];
+}
+
+/**
+ * Why `expr` can't be a column's DEFAULT — it reads the row's columns, a
+ * query parameter, or runs a query — or undefined when it can. See
+ * `defaultValueSql`.
+ */
+function columnDefaultViolation(expr: SQL.SQLExpression): string | undefined {
+  const reasons: string[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    switch ((node as { kind?: string; }).kind) {
+      case "SelectStatement":
+      case "SubqueryExpression":
+      case "AggregateExpression":
+      case "WindowFunctionExpression":
+      case "JsonAgg":
+        reasons.push("it runs a query");
+        return;
+      case "ParameterReference":
+        reasons.push("it reads a query parameter");
+        return;
+      case "ColumnReference":
+        reasons.push("it reads the object's own properties or links");
+        return;
+      case "RawSQLExpression":
+        if (/\bselect\b/i.test((node as SQL.RawSQLExpression).sql)) {
+          reasons.push("it runs a query");
+        }
+        return;
     }
     Object.values(node).forEach(visit);
   };
@@ -300,9 +343,14 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     query: EdgeQLAST.Query,
     options?: { parameterMap?: Map<string, number>; }
   ): Result<SQL.SQLStatement, CompilationError> {
+    const schema = this.ctx.schema;
     try {
+      // Aliases are their expressions (see aliases.ts): the query compiles
+      // with the view types of those it names.
+      const aliased = bindAliases(query, schema);
+      this.ctx.schema = aliased.schema;
       // Calls of SDL functions are their bodies (see declared-functions.ts).
-      query = inlineDeclaredCalls(query, this.ctx.schema);
+      query = inlineDeclaredCalls(aliased.query, this.ctx.schema);
       // Establish a stable name → 1-indexed-position map for $name parameters
       // so compileParameter can resolve each reference to a unique `$N`.
       // Caller can pre-supply the map (binary protocol does this so the
@@ -338,6 +386,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
           `Compilation failed: ${error instanceof Error ? error.message : String(error)}`
         )
       );
+    } finally {
+      this.ctx.schema = schema;
     }
   }
 
@@ -3347,6 +3397,23 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
    * which.
    */
   checkConstraintSql(edgeql: string, tableName: string): string {
+    return this.rowExpressionSql(edgeql, tableName, "constraint expressions");
+  }
+
+  /**
+   * `edgeql`, an element of an `index on (…)` of the object type stored in
+   * `tableName` (`str_lower(.email)`), as an expression of a PostgreSQL
+   * expression index on that table. Like a CHECK's, it may read only the
+   * row's columns and must be immutable: anything else throws a
+   * CompilationError saying which, as Gel's "index expressions must be
+   * immutable".
+   */
+  indexExpressionSql(edgeql: string, tableName: string): string {
+    return this.rowExpressionSql(edgeql, tableName, "index expressions");
+  }
+
+  /*** `edgeql` over the row of `tableName`, for `checkConstraintSql` and `indexExpressionSql` (`what` names them in errors). ***/
+  private rowExpressionSql(edgeql: string, tableName: string, what: string): string {
     const typeDef = [...this.ctx.schema.types.values()].find(candidate => candidate.tableName === tableName && candidate.kind === "object");
     if (!typeDef) {
       throw new CompilationError(`Constraint on unknown table '${tableName}'`);
@@ -3356,7 +3423,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     this.ctx.currentScope.aliases.set(tableName, { alias: tableName, table: tableName, type: typeDef.name });
     try {
       const sql = this.compileExpression(this.parseSchemaExpression(edgeql));
-      const notRowLocal = rowLocalViolation(sql, tableName);
+      const notRowLocal = rowLocalViolation(sql, tableName, what);
       if (notRowLocal) {
         throw new CompilationError(notRowLocal);
       }
@@ -3367,15 +3434,24 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
   }
 
   /**
-   * `edgeql`, a property's `default` that calls an SDL function, as the SQL of
-   * the column's DEFAULT: the call inlined (see declared-functions.ts). Names
-   * resolve in the default module.
+   * `edgeql`, a property's `default`, as the SQL of the column's DEFAULT: a
+   * literal, an array, a tuple, arithmetic, a cast, an enum value, a call
+   * (an SDL function's inlined, see declared-functions.ts). Names resolve in
+   * `module`. PostgreSQL evaluates a DEFAULT before the row exists and
+   * without a query, so one reading the object's properties (`.a + 1`), a
+   * query parameter, or running a query (`(select count(User))`) throws a
+   * CompilationError saying which.
    */
-  defaultValueSql(edgeql: string): string {
+  defaultValueSql(edgeql: string, module?: string): string {
     const outer = this.ctx;
-    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter };
+    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: module };
     try {
-      return new SQLCodeGenerator().generateExpression(this.compileExpression(this.parseSchemaExpression(edgeql)));
+      const sql = this.compileExpression(this.parseSchemaExpression(edgeql));
+      const problem = columnDefaultViolation(sql);
+      if (problem) {
+        throw new CompilationError(problem);
+      }
+      return new SQLCodeGenerator().generateExpression(sql);
     } finally {
       this.ctx = outer;
     }

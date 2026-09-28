@@ -473,6 +473,13 @@ export interface PropertyDefinition {
   required: boolean;
   multi: boolean;
   default?: any;
+  /**
+   * The SQL of the column's DEFAULT when `default` is an expression (`2 + 3`,
+   * `['a', 'b']`, `datetime_current()`): the differ compiles it (see
+   * `EdgeQLCompiler.defaultValueSql`). Absent for a literal or an enum value,
+   * which the DDL generator formats itself.
+   */
+  defaultSql?: string;
   computed?: string; // Expression string for computed properties (virtual, evaluated at query time)
   constraints: string[];
   annotations: Record<string, any>;
@@ -592,6 +599,14 @@ export interface IndexDefinition {
   table: string;
   columns: string[];
   unique: boolean;
+  /**
+   * Aligned with `columns`, when an element of the index is an expression
+   * (`index on (str_lower(.email))`): its SQL (`lower(ix_user.email)`), and
+   * null for a column. `columns` then names the expression
+   * (`str_lower_email`), for the index's name. Absent for an index of
+   * columns only.
+   */
+  expressions?: (string | null)[];
   partial?: string; // WHERE clause for partial indexes
   method?: "btree" | "hash" | "gist" | "gin" | "brin";
   /** Schema origin of an SDL-declared index, for error messages: the declaring type… */

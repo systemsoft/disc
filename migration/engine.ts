@@ -5,8 +5,6 @@
  * Migration Engine - orchestrates schema diffing, DDL generation, and migration execution
  */
 
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
-import { lookupFunction, type Schema } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { MigrationError } from "../lib/errors.ts";
@@ -16,7 +14,6 @@ import { Module, normalizeModules } from "../schema/converter.ts";
 import { DataMigrationRunner } from "./data-migration.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
-import { modulesToSchema } from "./runtime-schema.ts";
 import {
   reconcileAbstractMirrors,
   reconcileColumnTypes,
@@ -241,20 +238,6 @@ export class MigrationEngine {
     this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(schema));
     this.ddlGenerator.setScalarBaseTypes(this.differ.scalarBaseTypes(schema));
     this.ddlGenerator.setSequenceScalars(this.differ.sequenceScalarNames(schema));
-    // A default calling an SDL function (`default := greet()`) is its body:
-    // functions are inlined where they are called, never created.
-    let compiled: { compiler: EdgeQLCompiler; schema: Schema; } | undefined;
-    this.ddlGenerator.setDeclaredDefaults(edgeql => {
-      const name = /^([A-Za-z_][A-Za-z0-9_:]*)\s*\(/.exec(edgeql)?.[1];
-      if (!name || !schema.some(module => module.items.some(item => item.kind === "FunctionDeclaration"))) {
-        return undefined;
-      }
-      if (!compiled) {
-        const runtime = modulesToSchema(schema);
-        compiled = { compiler: new EdgeQLCompiler(runtime, { enableAccessControl: false }), schema: runtime };
-      }
-      return lookupFunction(compiled.schema, name.split("::"))?.declared ? compiled.compiler.defaultValueSql(edgeql) : undefined;
-    });
   }
 
   /**
@@ -1930,8 +1913,9 @@ export class MigrationEngine {
    *
    * Handled today: SQLSTATE 23505 while creating a unique index that came from
    * a `CreateIndex` operation, and 23514 while adding the CHECK of an
-   * `AddCheck` operation — existing rows violate the constraint. Anything
-   * else is returned as it was thrown.
+   * `AddCheck` operation — existing rows violate the constraint — and 42P17
+   * while creating an index whose expression calls a function PostgreSQL
+   * doesn't mark immutable. Anything else is returned as it was thrown.
    */
   private describeStatementFailure(error: unknown, statement: string, operations: Types.MigrationOperation[]): unknown {
     const fields = (error as { fields?: { code?: string; detail?: string; }; })?.fields ??
@@ -1954,23 +1938,34 @@ export class MigrationEngine {
       );
     }
 
-    if (fields?.code !== "23505")
+    if (fields?.code !== "23505" && fields?.code !== "42P17")
       return error;
 
     const operation = operations.find((op): op is Types.CreateIndexOperation =>
       op.kind === "CreateIndex" && this.ddlGenerator.generateDDL([op]).includes(statement)
     );
 
+    if (fields.code === "42P17" && operation) {
+      const { declaration, name, table, typeName } = operation.index;
+
+      return new MigrationError(
+        `Cannot create index "${name}" on type '${typeName ?? table}': '${declaration ?? name}' — index expressions must be immutable ` +
+          `(${error instanceof Error ? error.message : String(error)}).`
+      );
+    }
+
     if (!operation || !operation.index.unique)
       return error;
 
-    const { columns, declaration, name, table, typeName } = operation.index;
+    const { declaration, expressions, name, table, typeName } = operation.index;
+    const columns = operation.index.columns.map((column, i) => expressions?.[i] ?? column);
     const columnList = columns.join(", ");
+    const present = columns.map((column, i) => expressions?.[i] ? `(${column}) IS NOT NULL` : `${column} IS NOT NULL`).join(" AND ");
 
     return new MigrationError(
       `Cannot create unique index "${name}": existing rows of type '${typeName ?? table}' violate ` +
         `'${declaration ?? `unique (${columnList})`}'${fields.detail ? ` (${fields.detail})` : ""}. Find the duplicates with:\n` +
-        `  SELECT ${columnList}, count(*) FROM ${table} WHERE ${columns.map(c => `${c} IS NOT NULL`).join(" AND ")} ` +
+        `  SELECT ${columnList}, count(*) FROM ${table} WHERE ${present} ` +
         `GROUP BY ${columnList} HAVING count(*) > 1;\n` +
         `Remove or merge them, then re-run the migration. Nothing was applied.`
     );

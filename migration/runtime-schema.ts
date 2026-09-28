@@ -8,6 +8,7 @@
  */
 
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
+import { aliasViewType } from "../compiler/aliases.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import { selectKeepsAtMostOne } from "../compiler/compiler-base.ts";
 import { inlineDeclaredCalls } from "../compiler/declared-functions.ts";
@@ -1370,6 +1371,13 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
     }
   }
 
+  // An alias of a type's objects is a view type (compiler/aliases.ts): its
+  // computeds are typed below as a type's are.
+  const views = [...aliases].flatMap(([key, aliasDef]) => {
+    aliasDef.view = aliasViewType(key, aliasDef.expression, types);
+    return aliasDef.view ? [aliasDef.view] : [];
+  });
+
   // (c) A computed that yields objects (`auth := .author`, `first :=
   // (select .<post[is Comment] … limit 1)`) is a computed link to their
   // type, not a property: selected with a sub-shape, filtered through, and
@@ -1383,7 +1391,7 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
   // empty, `single` on one that may be several).
   for (let changed = true; changed;) {
     changed = false;
-    for (const typeDef of types.values()) {
+    for (const typeDef of [...types.values(), ...views]) {
       for (const [name, property] of typeDef.properties) {
         if (!property.computed || !property.computedExpr || property.edgeqlType !== "auto") {
           continue;

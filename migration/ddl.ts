@@ -122,11 +122,6 @@ export class DDLGenerator {
    */
   private sequenceScalars = new Map<string, string>();
   /**
-   * The SQL of a default that calls an SDL function (`default := greet()`),
-   * or undefined for any other default. Set via {@link setDeclaredDefaults}.
-   */
-  private declaredDefault: (edgeql: string) => string | undefined = () => undefined;
-  /**
    * During `generateRollbackDDL`: the operations migrating the schema after the
    * migration back to the schema before it, where the rollback finds the
    * definitions of what the migration dropped. Empty when the caller has none.
@@ -163,11 +158,6 @@ export class DDLGenerator {
   /*** Tell the generator the sequence of each sequence scalar (from `SchemaDiffer.sequenceScalarNames`). ***/
   setSequenceScalars(sequences: Map<string, string>): void {
     this.sequenceScalars = new Map(sequences);
-  }
-
-  /*** Tell the generator how to compile a default that calls an SDL function (the schema's functions are inlined, not created). ***/
-  setDeclaredDefaults(compile: (edgeql: string) => string | undefined): void {
-    this.declaredDefault = compile;
   }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
@@ -1429,9 +1419,9 @@ END $$;`,
           if (retyped) {
             break;
           }
-          if (change.newValue !== undefined) {
+          if (defaults.new !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.newValue, "unknown")};`
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${defaults.new};`
             );
           } else {
             statements.push(
@@ -1547,17 +1537,22 @@ END $$;`,
   }
 
   /**
-   * The default a property's column has before and after an AlterProperty:
-   * from its ChangeDefault when it has one, else from the property
-   * definitions the differ attaches on a type change (`undefined` when
-   * neither says).
+   * The SQL of the default a property's column has before and after an
+   * AlterProperty (`undefined` for none): from its ChangeDefault when it has
+   * one, else from the property definitions the differ attaches on a type
+   * change. An expression's is the SQL the differ compiled into those
+   * definitions; a literal is formatted as `type` (`unknown` when the
+   * operation doesn't say).
    */
-  private propertyDefaults(operation: Types.AlterPropertyOperation): { new: unknown; old: unknown; } {
+  private propertyDefaults(operation: Types.AlterPropertyOperation, type = "unknown"): { new: string | undefined; old: string | undefined; } {
     const change = operation.changes.find(c => c.kind === "ChangeDefault");
-
-    return change ?
+    const values = change ?
       { new: change.newValue, old: change.oldValue } :
       { new: operation.newProperty?.default, old: operation.oldProperty?.default };
+    const sql = (value: unknown, property: Types.PropertyDefinition | undefined): string | undefined =>
+      value === undefined ? undefined : property?.defaultSql ?? this.formatDefaultValue(value, property?.type ?? type);
+
+    return { new: sql(values.new, operation.newProperty), old: sql(values.old, operation.oldProperty) };
   }
 
   /**
@@ -1611,16 +1606,17 @@ END $$;`,
   /**
    * Change a single property's column from EdgeQL type `from` to `to`,
    * converting its stored values (see {@link propertyConversion}). The
-   * column's default is dropped for the change and `newDefault` set after
-   * it, as a ChangeDefault alongside the type change would.
+   * column's default is dropped for the change and `newDefault` (SQL, see
+   * `propertyDefaults`) set after it, as a ChangeDefault alongside the type
+   * change would.
    */
   private generateRetypeProperty(
     tableName: string,
     propertyName: string,
     from: string,
     to: string,
-    oldDefault: unknown,
-    newDefault: unknown
+    oldDefault: string | undefined,
+    newDefault: string | undefined
   ): string[] {
     const conversion = this.propertyConversion(tableName, propertyName, from, to);
     const columnName = propNameToColumnName(propertyName);
@@ -1635,7 +1631,7 @@ END $$;`,
         this.mapEdgeQLTypeToPostgreSQL(to),
         conversion.using,
         oldDefault !== undefined || newDefault !== undefined,
-        newDefault === undefined ? undefined : this.formatDefaultValue(newDefault, to)
+        newDefault
       ),
       ...this.addFiniteCheck(tableName, columnName, to, false)
     ];
@@ -2056,9 +2052,13 @@ END $$;`,
     const ifNotExists = operation.ifNotExists ? "IF NOT EXISTS " : "";
     const method = index.method ? ` USING ${index.method.toUpperCase()}` : "";
     const partial = index.partial ? ` WHERE ${index.partial}` : "";
-    const columns = index.columns.map(col => this.escapeIdentifier(col)).join(
-      ", "
-    );
+    const columns = index
+      .columns
+      .map((col, i) => {
+        const expression = index.expressions?.[i];
+        return expression ? `(${expression})` : this.escapeIdentifier(col);
+      })
+      .join(", ");
 
     return [
       `CREATE ${unique}INDEX ${ifNotExists}${this.escapeIdentifier(index.name)} ON ${this.escapeIdentifier(index.table)}${method} (${columns})${partial};`
@@ -2455,7 +2455,7 @@ END $$;`
       nullable: !property.required,
       primaryKey: false,
       unique: false,
-      default: property.default !== undefined ? this.formatDefaultValue(property.default, property.type) : undefined
+      default: property.default !== undefined ? property.defaultSql ?? this.formatDefaultValue(property.default, property.type) : undefined
     }));
   }
 
@@ -2471,7 +2471,7 @@ END $$;`
       return EMPTY_ARRAY;
 
     if (property.default !== undefined)
-      return this.formatDefaultValue(property.default, property.type);
+      return property.defaultSql ?? this.formatDefaultValue(property.default, property.type);
 
     const sequence = this.sequenceScalars.get(property.type);
     return sequence === undefined ? undefined : `nextval('${sequence}')`;
@@ -2612,7 +2612,7 @@ END $$;`
       // they'd be quoted as text and PG would reject them at apply time
       // ("invalid input syntax for type timestamp with time zone").
       if (/^[A-Za-z_][A-Za-z0-9_:]*\s*\(.*\)\s*$/.test(value)) {
-        return this.declaredDefault(value) ?? this.compileExpressionString(value);
+        return this.compileExpressionString(value);
       }
 
       // Enum defaults arrive as serialized PathExpressions. The runtime
@@ -3206,9 +3206,9 @@ END $$;`
           if (retyped) {
             break;
           }
-          if (change.oldValue !== undefined) {
+          if (defaults.old !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.oldValue, "unknown")};`
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${defaults.old};`
             );
           } else {
             statements.push(

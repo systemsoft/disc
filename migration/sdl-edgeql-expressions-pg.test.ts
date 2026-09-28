@@ -101,6 +101,17 @@ Deno.test({
       await t.step("an alias of a shape", async () => {
         assertEquals(await values(pool, schema, "select XqNamed { name } order by .name"), [{ name: "a" }, { name: "c" }]);
       });
+
+      await t.step("an alias's computed reads as a property of its objects", async () => {
+        assertEquals(await values(pool, schema, "select XqNamed { name, loud } order by .name"), [{ loud: "A", name: "a" }, { loud: "C", name: "c" }]);
+        assertEquals(await values(pool, schema, "select XqNamed { name } filter .loud = 'C'"), [{ name: "c" }]);
+      });
+
+      await t.step("an alias of values is its values", async () => {
+        assertEquals((await values(pool, schema, "select XqTiers")).sort(), ["gold", "none", "silver"]);
+        assertEquals(await values(pool, schema, "select count(XqTiers)"), [3n]);
+        assertEquals((await values(pool, schema, "select XqTiers filter XqTiers != 'none'")).sort(), ["gold", "silver"]);
+      });
     } finally {
       await manager.close();
       await resetTestDatabase(pool);

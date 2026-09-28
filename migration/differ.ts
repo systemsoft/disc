@@ -84,6 +84,10 @@ export class SchemaDiffer {
     Map<string, AST.TypeDeclaration>,
     DiffCache
   >();
+  /*** The modules each type declaration `extractTypes` read is in, and its own module's name: where its expressions compile. ***/
+  private typeSchemas = new WeakMap<AST.TypeDeclaration, { module: string; schema: Module[]; }>();
+  /*** The EdgeQL compiler over each such schema, built when first needed (see `compilerFor`). ***/
+  private compilers = new WeakMap<Module[], EdgeQLCompiler | Error>();
 
   private getCache(
     allTypes: Map<string, AST.TypeDeclaration>
@@ -120,7 +124,95 @@ export class SchemaDiffer {
     // `status: Status` inside `agents` names `agents::Status` (likewise any
     // scalar the module declares); qualify it on both sides so column
     // emission can't resolve it to `default::Status`.
-    return this.diffModules(qualifyScalarReferences(oldSchema), qualifyScalarReferences(newSchema));
+    const next = qualifyScalarReferences(newSchema);
+    this.checkDefaults(next);
+    return this.diffModules(qualifyScalarReferences(oldSchema), next);
+  }
+
+  /**
+   * Throws a MigrationError for the first property default of `schema` that
+   * can't be its column's DEFAULT (see `EdgeQLCompiler.defaultValueSql`),
+   * naming where it is declared. The schema migrated from is not checked: a
+   * default of it that doesn't compile keeps the DDL an older Disc gave it.
+   */
+  private checkDefaults(schema: Module[]): void {
+    for (const typeDef of this.extractTypes(schema).values()) {
+      const properties = typeDef.members.flatMap(member =>
+        member.kind === "PropertyDeclaration" ? [member] : member.kind === "LinkDeclaration" ? member.properties ?? [] : []
+      );
+
+      for (const property of properties) {
+        if (!property.default || !this.isExpressionDefault(property.default))
+          continue;
+
+        const compiler = this.compilerFor(schema);
+
+        if (compiler instanceof Error)
+          throw compiler;
+
+        const edgeql = sdlExpressionToEdgeQL(property.default);
+
+        try {
+          compiler.defaultValueSql(edgeql, this.typeSchemas.get(typeDef)?.module);
+        } catch (error) {
+          throw new MigrationError(
+            `Type '${typeDef.name.value}', property '${property.name.value}': 'default := ${edgeql}' can't be the column's default — ${
+              error instanceof Error ? error.message : String(error)
+            }. Disc stores a default as the column's DEFAULT, which PostgreSQL evaluates before the object exists: ` +
+              `a default that reads the object's properties or runs a query is not supported yet.`
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * True when `expr`, a property's default, compiles to its column's DEFAULT
+   * (`EdgeQLCompiler.defaultValueSql`): anything but a literal or an enum
+   * value (`Status.Active`), which the DDL generator formats as it always has.
+   */
+  private isExpressionDefault(expr: AST.Expression): boolean {
+    if (expr.kind === "Literal")
+      return false;
+
+    return !(expr.kind === "PathExpression" && expr.source === undefined && expr.path[0] !== ".");
+  }
+
+  /*** The EdgeQL compiler over `schema`, or the error building it threw. ***/
+  private compilerFor(schema: Module[]): EdgeQLCompiler | Error {
+    let compiler = this.compilers.get(schema);
+
+    if (!compiler) {
+      try {
+        compiler = new EdgeQLCompiler(modulesToSchema(schema), { enableAccessControl: false });
+      } catch (error) {
+        compiler = error instanceof Error ? error : new Error(String(error));
+      }
+      this.compilers.set(schema, compiler);
+    }
+
+    return compiler;
+  }
+
+  /**
+   * The SQL of `property`'s default as its column's DEFAULT, compiled where
+   * `owner`, the type declaring it, is — or undefined for a literal or an
+   * enum value (see `isExpressionDefault`) or a default that doesn't compile
+   * (`checkDefaults` reports that for the schema being migrated to).
+   */
+  private compiledDefault(property: AST.PropertyDeclaration, owner: AST.TypeDeclaration): string | undefined {
+    const where = this.typeSchemas.get(owner);
+
+    if (!property.default || !where || !this.isExpressionDefault(property.default))
+      return undefined;
+
+    const compiler = this.compilerFor(where.schema);
+
+    try {
+      return compiler instanceof Error ? undefined : compiler.defaultValueSql(sdlExpressionToEdgeQL(property.default), where.module);
+    } catch {
+      return undefined;
+    }
   }
 
   private diffModules(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
@@ -568,6 +660,7 @@ export class SchemaDiffer {
       for (const item of module.items) {
         if (item.kind === "TypeDeclaration") {
           types.set(item.name.value, item);
+          this.typeSchemas.set(item, { module: module.name, schema: modules });
         }
       }
     }
@@ -882,15 +975,16 @@ export class SchemaDiffer {
 
     for (const member of typeDef.members) {
       if (member.kind === "PropertyDeclaration") {
-        properties.push(this.propertyDefinition(member));
+        properties.push(this.propertyDefinition(member, typeDef));
       }
     }
 
     return properties;
   }
 
-  private propertyDefinition(member: AST.PropertyDeclaration): Types.PropertyDefinition {
+  private propertyDefinition(member: AST.PropertyDeclaration, owner: AST.TypeDeclaration): Types.PropertyDefinition {
     const rewrites = this.extractRewrites(member);
+    const defaultSql = this.compiledDefault(member, owner);
     const propDef: Types.PropertyDefinition = {
       name: member.name.value,
       type: this.typeToString(member.type),
@@ -907,6 +1001,9 @@ export class SchemaDiffer {
     };
     if (rewrites.length > 0) {
       propDef.rewrites = rewrites;
+    }
+    if (defaultSql !== undefined) {
+      propDef.defaultSql = defaultSql;
     }
     return propDef;
   }
@@ -933,7 +1030,7 @@ export class SchemaDiffer {
         }
 
         if (member.properties && member.properties.length > 0) {
-          linkDef.properties = member.properties.map(p => this.propertyDefinition(p));
+          linkDef.properties = member.properties.map(p => this.propertyDefinition(p, typeDef));
         }
 
         if (this.isExclusiveLink(member)) {
@@ -1103,7 +1200,8 @@ export class SchemaDiffer {
             propertyName: propName,
             changes
           };
-          if (oldProp.multi || newProp.multi || oldProp.type !== newProp.type) {
+          // The DDL reads a changed default's SQL from the definitions.
+          if (oldProp.multi || newProp.multi || oldProp.type !== newProp.type || changes.some(change => change.kind === "ChangeDefault")) {
             alter.oldProperty = oldProp;
             alter.newProperty = newProp;
           }
@@ -1314,6 +1412,7 @@ export class SchemaDiffer {
 
       const resolved = this.resolveIndexColumns(member.on!, typeDef, allTypes, strict ? declaration : null);
       const columns = resolved.map(r => r.column);
+      const expressions = resolved.some(r => r.expression !== undefined) ? resolved.map(r => r.expression ?? null) : undefined;
 
       if (resolved.length === 1) {
         /*** A single link already gets `idx_<table>_<link>_id` with its FK; the same index again
@@ -1334,6 +1433,7 @@ export class SchemaDiffer {
           member.name?.value ?? this.defaultIndexName(tableName, columns),
         table: tableName,
         columns,
+        ...(expressions ? { expressions } : {}),
         unique,
         typeName: typeDef.name.value,
         declaration
@@ -1348,9 +1448,9 @@ export class SchemaDiffer {
     const describe = (e: AST.Expression): string =>
       e.kind === "TupleExpression" ?
         `(${e.elements.map(describe).join(", ")})` :
-        e.kind === "PathExpression" ?
+        e.kind === "PathExpression" && e.source === undefined ?
         `.${e.path.join(".").replace(/^\.+/, "")}` :
-        this.extractExpressionString(e);
+        sdlExpressionToEdgeQL(e);
 
     return `(${describe(expr)})`;
   }
@@ -1972,18 +2072,22 @@ export class SchemaDiffer {
    * Multi links (junction table) and computed members (no storage) have no
    * column. With `declaration` set (used in the message) they are an
    * error; with `null` they fall back to the bare name, as they always did.
+   *
+   * Any other element (`str_lower(.email)`) is an expression, compiled over
+   * the type's row (see `indexExpression`): its `expression` is the SQL, and
+   * its `column` names it (`str_lower_email`) in the index's name.
    */
   private resolveIndexColumns(
     expr: AST.Expression,
     typeDef: AST.TypeDeclaration,
     allTypes: Map<string, AST.TypeDeclaration>,
     declaration: string | null
-  ): { column: string; kind: "exclusive-link" | "exclusive-property" | "link" | "other"; }[] {
+  ): { column: string; expression?: string; kind: "exclusive-link" | "exclusive-property" | "link" | "other"; }[] {
     if (expr.kind === "TupleExpression") {
       return expr.elements.flatMap(el => this.resolveIndexColumns(el, typeDef, allTypes, declaration));
     }
 
-    if (expr.kind === "PathExpression") {
+    if (expr.kind === "PathExpression" && expr.source === undefined) {
       // `.email` parses as path `[".", "email"]`; strip the EdgeQL leading
       // dot and convert the bare member name to its column.
       const leaf = expr.path.join(".").replace(/^\.+/, "");
@@ -2007,10 +2111,37 @@ export class SchemaDiffer {
       return [{ column: propNameToColumnName(leaf), kind: exclusive ? "exclusive-property" : "other" }];
     }
 
-    // Fallback: stringify any other expression shape so a functional/
-    // partial index still produces a stable, comparable key rather than
-    // silently collapsing to an empty column list.
-    return [{ column: propNameToColumnName(this.extractExpressionString(expr)), kind: "other" }];
+    const edgeql = sdlExpressionToEdgeQL(expr);
+    const expression = this.indexExpression(edgeql, typeDef, declaration);
+    const column = edgeql.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+
+    return [{ column, ...(expression === undefined ? {} : { expression }), kind: "other" }];
+  }
+
+  /**
+   * `edgeql`, an element of an index of `typeDef`, as the SQL of an
+   * expression index on its table (`EdgeQLCompiler.indexExpressionSql`).
+   * One that can't be — it isn't immutable, or reads more than the row — is
+   * a MigrationError naming `declaration`, or undefined when `declaration`
+   * is null (the stored baseline is read leniently).
+   */
+  private indexExpression(edgeql: string, typeDef: AST.TypeDeclaration, declaration: string | null): string | undefined {
+    const where = this.typeSchemas.get(typeDef);
+    const compiler = where ? this.compilerFor(where.schema) : new Error(`the schema of type '${typeDef.name.value}' is unknown`);
+
+    try {
+      if (compiler instanceof Error)
+        throw compiler;
+
+      return compiler.indexExpressionSql(edgeql, typeNameToTableName(typeDef.name.value));
+    } catch (error) {
+      if (declaration === null)
+        return undefined;
+
+      throw new MigrationError(
+        `Type '${typeDef.name.value}': '${declaration}' can't be an index — ${error instanceof Error ? error.message : String(error)}.`
+      );
+    }
   }
 
   /**
@@ -2026,12 +2157,14 @@ export class SchemaDiffer {
 
   /**
    * Stable comparison key for an index. Two indexes are "the same" when
-   * their name, column list (ordered — composite order matters in PG), and
-   * uniqueness all match. Any difference makes them distinct, so a changed
-   * definition diffs as a drop of the old key plus a create of the new one.
+   * their name, column list (ordered — composite order matters in PG),
+   * expressions and uniqueness all match. Any difference makes them
+   * distinct, so a changed definition diffs as a drop of the old key plus a
+   * create of the new one.
    */
   private indexKey(index: Types.IndexDefinition): string {
-    return `${index.name}::${index.unique ? "u" : "n"}::${index.columns.join(",")}`;
+    const expressions = index.expressions ? `::${index.expressions.map(expression => expression ?? "").join(",")}` : "";
+    return `${index.name}::${index.unique ? "u" : "n"}::${index.columns.join(",")}${expressions}`;
   }
 
   /**

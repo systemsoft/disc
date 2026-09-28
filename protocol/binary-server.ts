@@ -20,6 +20,7 @@
 import { selectKeepsAtMostOne, tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
 import { powerType } from "../compiler/compiler-expressions.ts";
 import { enumGelNames, type Schema, type TypeDef } from "../compiler/context.ts";
+import { bindAliases } from "../compiler/aliases.ts";
 import { withDeclaredCallsInlined } from "../compiler/declared-functions.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -3222,9 +3223,11 @@ export class BinaryConnection {
     // parse error so query execution can surface a real error.
     try {
       const parser = new EdgeQLParser(commandText);
-      const query = withDeclaredCallsInlined(parser.parse(), this._schema);
+      // Described as compiled: aliases bound (their view types in the schema), SDL functions inlined.
+      const aliased = bindAliases(parser.parse(), this._schema);
+      const query = withDeclaredCallsInlined(aliased.query, aliased.schema);
       const params = collectParameters(query);
-      const outputShape = inferOutputShape(query, this._schema, { ...EMPTY_SCOPE, implicit });
+      const outputShape = inferOutputShape(query, aliased.schema, { ...EMPTY_SCOPE, implicit });
       // Output format NONE (`execute`) is described as Gel's null type id,
       // with no descriptors and no result (edb/server/compiler/compiler.py).
       if (outputFormat === OutputFormat.NONE) {

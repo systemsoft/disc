@@ -176,6 +176,12 @@ export interface ShapeElement extends EdgeQLNode {
   operator?: ":=" | "+=" | "-=";
   shape?: Shape;
   /**
+   * A computed's value (`loud := str_upper(.name)`) as written, as the schema
+   * keeps a computed: an alias's computeds are computed properties of its
+   * view type (see compiler/aliases.ts).
+   */
+  source?: string;
+  /**
    * Sub-shape predicate for a link element: `link: { ... } filter .active`.
    * Narrows the linked set before aggregation — compiles to an extra `AND`
    * on the link subquery's `WHERE`, so only matching rows reach
@@ -603,6 +609,7 @@ export function createShapeElement(
     offset?: Expression;
     limit?: Expression;
     linkProperty?: boolean;
+    source?: string;
   }
 ): ShapeElement {
   return {

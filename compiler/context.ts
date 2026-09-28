@@ -153,6 +153,8 @@ export interface AliasDef {
   name: string;
   expression: string;
   targetType?: string;
+  /*** For an alias of a type's objects (`alias Named := User { loud := … }`): its view type (see compiler/aliases.ts). ***/
+  view?: TypeDef;
 }
 
 export interface GlobalDef {

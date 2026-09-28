@@ -47,7 +47,11 @@ export class EdgeQLParser {
   /*** Each select pathOffExpression made, and the path in it that later steps extend. ***/
   private pathsOffExpressions = new WeakMap<AST.Expression, AST.Path>();
 
+  /*** The text parsed, whose computeds' values shape elements keep (`ShapeElement.source`). ***/
+  private readonly source: string;
+
   constructor(source: string) {
+    this.source = source;
     const lexer = new EdgeQLLexer(source);
     this.tokens = lexer.tokenize();
   }
@@ -938,7 +942,9 @@ export class EdgeQLParser {
           ":=";
         name = ident;
         computable = true;
+        const start = this.peek().offset;
         const expr = this.parseSetExpression();
+        const source = this.source.slice(start, this.peek().offset).trim();
 
         // Check for nested shape
         let shape: AST.Shape | undefined;
@@ -954,6 +960,7 @@ export class EdgeQLParser {
           cardinality,
           operator,
           shape,
+          source,
           ...this.parseShapeModifiers(expr.kind === "ShapeExpr" ? expr.shape : shape)
         });
       } else if (this.match(TokenType.COLON)) {
