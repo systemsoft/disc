@@ -259,6 +259,8 @@ export interface JsonAgg extends SQLExpressionBase {
   expression: SQLExpression;
   /** Optional aggregate ordering → `jsonb_agg(expr ORDER BY ...)`. */
   orderBy?: OrderByItem[];
+  /** Optional aggregate filter → `jsonb_agg(expr) FILTER (WHERE ...)`. */
+  filter?: SQLExpression;
 }
 
 // SQL Builder functions
@@ -388,12 +390,14 @@ export function createJsonField(key: string, value: SQLExpression): JsonField {
 
 export function createJsonAgg(
   expression: SQLExpression,
-  orderBy?: OrderByItem[]
+  orderBy?: OrderByItem[],
+  filter?: SQLExpression
 ): JsonAgg {
   return {
     kind: "JsonAgg",
     expression,
-    orderBy
+    orderBy,
+    ...(filter ? { filter } : {})
   };
 }
 

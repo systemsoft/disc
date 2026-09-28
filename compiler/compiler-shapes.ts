@@ -118,7 +118,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
   protected abstract compileSelectQueryRaw(
     query: EdgeQLAST.SelectQuery
   ): SQL.SelectStatement;
-  protected abstract compileGroupQuery(query: EdgeQLAST.GroupQuery, over?: EdgeQLAST.SelectQuery): SQL.SelectStatement;
+  protected abstract compileGroupQuery(query: EdgeQLAST.GroupQuery, over?: EdgeQLAST.SelectQuery): SQL.SQLStatement;
 
   protected compileSelectQuery(
     query: EdgeQLAST.SelectQuery
@@ -1371,7 +1371,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     return { selectItems, fromClause };
   }
 
-  private compileShape(
+  protected compileShape(
     shape: EdgeQLAST.Shape,
     typeName: string,
     tableAlias: string

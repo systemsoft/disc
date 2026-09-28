@@ -473,14 +473,15 @@ export class SQLCodeGenerator {
 
   private generateJsonAgg(expr: SQL.JsonAgg): string {
     const inner = this.generateExpression(expr.expression);
+    const filter = expr.filter ? ` FILTER (WHERE ${this.generateExpression(expr.filter)})` : "";
     if (expr.orderBy && expr.orderBy.length > 0) {
       const order = expr
         .orderBy
         .map(item => this.generateOrderByItem(item))
         .join(", ");
-      return `jsonb_agg(${inner} ORDER BY ${order})`;
+      return `jsonb_agg(${inner} ORDER BY ${order})${filter}`;
     }
-    return `jsonb_agg(${inner})`;
+    return `jsonb_agg(${inner})${filter}`;
   }
 
   private generateParameterReference(expr: SQL.ParameterReference): string {

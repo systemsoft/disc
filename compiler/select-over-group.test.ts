@@ -23,8 +23,13 @@ const SDL = `
 module default {
   type User {
     required name: str;
+    active: bool;
     role: str;
     score: int64;
+  };
+  type Post {
+    required title: str;
+    author: User;
   };
 }
 `;
@@ -70,10 +75,10 @@ Deno.test("select over group - filter, order by and limit apply to the groups an
   assertStringIncludes(sql, "GROUP BY user_1.role HAVING COUNT(*) > 1 ORDER BY user_1.role ASC NULLS FIRST LIMIT 1");
 });
 
-Deno.test("select over group - elements take the select's sub-shape; key and grouping read as the group's", async () => {
+Deno.test("select over group - elements take the select's sub-shape; grouping reads as the group's, a bare key as Gel's empty object", async () => {
   const sql = await sqlOf("select (group User { name } by .role) { key, grouping, elements: { score } }");
 
-  assertStringIncludes(sql, "'key', jsonb_build_object('role', user_1.role)");
+  assertStringIncludes(sql, "'key', jsonb_build_object()");
   assertStringIncludes(sql, "'grouping', jsonb_build_array('role')");
   assertStringIncludes(sql, "'elements', jsonb_agg(jsonb_build_object('score', user_1.score))");
 });
@@ -83,4 +88,57 @@ Deno.test("select over group - a group has no other field, with Gel's error", as
     const { error } = await compiled(`select (group User by .role) ${query}`);
     assertEquals(error, `object type 'std::FreeObject' has no link or property '${field}'`);
   }
+});
+
+Deno.test("select over group - a computable of the elements' values is each group's set of them", async () => {
+  const sql = await sqlOf("select (group User by .role) { key: {role}, names := .elements.name, n := count(.elements) }");
+
+  assertStringIncludes(sql, "'names', COALESCE(jsonb_agg(user_1.name) FILTER (WHERE user_1.name IS NOT NULL), '[]'::jsonb)");
+  assertStringIncludes(sql, "'n', COUNT(*)");
+});
+
+Deno.test("select over group - the elements' sub-shape takes a filter, an order by and a limit", async () => {
+  const sql = await sqlOf("select (group User by .role) { elements: { name } filter .score > 3 order by .name desc limit 1 }");
+
+  assertStringIncludes(
+    sql,
+    "jsonb_agg(jsonb_build_object('name', user_1.name) ORDER BY user_1.name DESC NULLS LAST) FILTER (WHERE user_1.score > 3)"
+  );
+  assertStringIncludes(sql, "jsonb_path_query_array(");
+});
+
+Deno.test("select over group - `.elements { … }` and a select of the elements are the group's objects in that shape", async () => {
+  assertStringIncludes(
+    await sqlOf("select (group User by .role) { e := .elements { name } }"),
+    "'e', jsonb_agg(jsonb_build_object('name', user_1.name))"
+  );
+  assertStringIncludes(
+    await sqlOf("select (group User by .role) { e := (select .elements { name } filter .score > 3) }"),
+    "'e', COALESCE(jsonb_agg(jsonb_build_object('name', user_1.name)) FILTER (WHERE user_1.score > 3), '[]'::jsonb)"
+  );
+});
+
+Deno.test("group - the grouped objects may be a select, a with binding or a path", async () => {
+  const selected = await sqlOf("group (select User filter .active) { name } by .role");
+  assertStringIncludes(selected, "WITH ");
+  assertStringIncludes(selected, "WHERE user_1.active");
+  assertStringIncludes(selected, "'elements', jsonb_agg(jsonb_build_object('name', ");
+
+  assertStringIncludes(await sqlOf("with u := (select User filter .score > 3) group u { name } by .role"), "GROUP BY u_");
+  assertStringIncludes(await sqlOf("group Post.author { name } by .role"), "GROUP BY ");
+  assertStringIncludes(await sqlOf("select (group (select User filter .active) by .role) { key: {role}, n := count(.elements) }"), "'n', COUNT(*)");
+});
+
+Deno.test("group - grouping sets, cube and rollup group by several sets of keys, `grouping` naming each set's", async () => {
+  const cube = await sqlOf("group User by cube(.role, .active)");
+  assertStringIncludes(cube, "GROUP BY CUBE(user_1.role, user_1.active)");
+  assertStringIncludes(cube, "GROUPING(user_1.role)");
+
+  assertStringIncludes(await sqlOf("group User by rollup(.role, .active)"), "GROUP BY ROLLUP(user_1.role, user_1.active)");
+  assertStringIncludes(await sqlOf("group User by {.role, .active}"), "GROUP BY GROUPING SETS(user_1.role, user_1.active)");
+  assertStringIncludes(
+    await sqlOf("group User by .role, {.active, (.name, .score)}"),
+    "GROUP BY user_1.role, GROUPING SETS(user_1.active, (user_1.name, user_1.score))"
+  );
+  assertStringIncludes(await sqlOf("group User by (.role, .active)"), "GROUP BY user_1.role, user_1.active");
 });
