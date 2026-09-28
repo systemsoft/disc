@@ -10,9 +10,11 @@
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import { selectKeepsAtMostOne } from "../compiler/compiler-base.ts";
+import { inlineDeclaredCalls } from "../compiler/declared-functions.ts";
 import {
   AbstractAnnotationDef,
   AliasDef,
+  DeclaredFunction,
   FunctionDef,
   GlobalDef,
   IndexDef,
@@ -313,7 +315,9 @@ export function detectComputedPointerErrors(schema: Schema): string | null {
       if (!pointer.computed || !pointer.computedExpr) {
         continue;
       }
-      const expr = new EdgeQLParser(pointer.computedExpr).parseExpressionOnly();
+      const parsed = new EdgeQLParser(pointer.computedExpr).parseExpressionOnly();
+      // A call of an SDL function is typed by its declared return type, but links to objects as its body does.
+      const expr = kind === "link" ? inlineDeclaredCalls(parsed, schema) : parsed;
       const where = `the computed ${kind} '${pointer.name}' of object type '${typeDef.name}'`;
       if (kind === "link" && hasShape(expr)) {
         errors.push(`${where}: including a shape on schema-defined computed links is not yet supported`);
@@ -1320,17 +1324,42 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
 
   // SDL `function` declarations, so a call to one is a known function. A
   // function of the default module is called bare; any other by its module.
+  // Each overload is kept in `declared`, and a call is inlined (see
+  // compiler/declared-functions.ts); the entry's signature is the first
+  // overload's, which types a computed that calls it.
   const functions = getBuiltinFunctions();
   for (const module of modules) {
     for (const item of module.items) {
       if (item.kind === "FunctionDeclaration") {
         const name = module.name === "default" ? item.name.value : `${module.name}::${item.name.value}`;
+        const body = item.usingSource ?? (item.using ? sdlExpressionToEdgeQL(item.using) : undefined);
+        const declared: DeclaredFunction[] = body === undefined ? [] : [{
+          body,
+          module: module.name,
+          name: `${module.name}::${item.name.value}`,
+          parameters: item.parameters.map(parameter => ({
+            ...(parameter.default ? { default: sdlExpressionToEdgeQL(parameter.default) } : {}),
+            name: parameter.name.value,
+            ...(parameter.namedOnly ? { namedOnly: true } : {}),
+            type: typeRefToSdlString(parameter.type),
+            ...(parameter.typemod === "optional" || parameter.typemod === "setof" ? { typemod: parameter.typemod } : {})
+          })),
+          returnType: typeRefToSdlString(item.returnType),
+          ...(item.returnTypemod ? { returnTypemod: item.returnTypemod } : {}),
+          ...(item.volatility ? { volatility: item.volatility } : {})
+        }];
+        const overloads = functions.get(name);
+        if (overloads?.declared) {
+          overloads.declared.push(...declared);
+          continue;
+        }
         functions.set(name, {
           args: item.parameters.map(parameter => ({
             name: parameter.name.value,
             required: parameter.typemod !== "optional" && !parameter.default,
             type: parameter.type.name.parts.join("::")
           })),
+          declared,
           name,
           returnType: typeRefToSdlString(item.returnType),
           ...(item.returnTypemod ? { returnTypemod: item.returnTypemod } : {})
@@ -1359,7 +1388,9 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         }
         const expr = new EdgeQLParser(property.computedExpr).parseExpressionOnly();
         const resolve = (target: string) => resolveLinkTarget(target, typeDef.module);
-        const inferred = inferComputedLink(expr, typeDef, resolve);
+        // A call of an SDL function is typed by its declared return type, but
+        // links to objects as its body does (`top := top_posts(3)`).
+        const inferred = inferComputedLink(inlineDeclaredCalls(expr, { functions, types }), typeDef, resolve);
         if (!inferred) {
           const values = inferComputedPropertyValues(expr, typeDef, resolve, functions);
           // Its cardinality even when its type can't be told (it stays `auto`).

@@ -10,8 +10,8 @@
  * through computed links (a one-hop alias carries them; a multi-hop computed
  * link does not, as in Gel, but a path to one does:
  * `.teams.members@role`). (Calls of SDL-declared functions are typed by their
- * declared return type — codegen/computed-results.test.ts — but Disc does
- * not run them yet.)
+ * declared return type — codegen/computed-results.test.ts — and run inlined:
+ * compiler/pg-declared-functions.test.ts.)
  *
  * Expected values are Gel 7.1's for the same schema and data.
  *

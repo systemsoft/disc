@@ -10,7 +10,6 @@
 
 import { BUILTIN_ACCESS_GLOBALS } from "../access/evaluator.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, ConfigurationError, InvalidReferenceError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
@@ -25,6 +24,7 @@ import {
 } from "./compiler-base.ts";
 import { ShapeCompilerLayer } from "./compiler-shapes.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { inlineDeclaredCalls } from "./declared-functions.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
@@ -293,6 +293,8 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     options?: { parameterMap?: Map<string, number>; }
   ): Result<SQL.SQLStatement, CompilationError> {
     try {
+      // Calls of SDL functions are their bodies (see declared-functions.ts).
+      query = inlineDeclaredCalls(query, this.ctx.schema);
       // Establish a stable name → 1-indexed-position map for $name parameters
       // so compileParameter can resolve each reference to a unique `$N`.
       // Caller can pre-supply the map (binary protocol does this so the
@@ -3239,7 +3241,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     if (globalDef.default === undefined) {
       return value;
     }
-    const fallback = this.compileExpression(new EdgeQLParser(globalDef.default).parseExpressionOnly());
+    const fallback = this.compileExpression(this.parseSchemaExpression(globalDef.default));
     return SQL.createFunctionCall("COALESCE", [value, SQL.createCastExpression(fallback, globalDef.pgType)]);
   }
 
@@ -3269,7 +3271,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     this.compilingPolicy = true;
     try {
       // A condition keeps the objects it holds for, as a filter does.
-      return this.renderPolicySql(this.compileFilter(new EdgeQLParser(edgeql).parseExpressionOnly()));
+      return this.renderPolicySql(this.compileFilter(this.parseSchemaExpression(edgeql)));
     } finally {
       outer.aliasCounter = this.ctx.aliasCounter;
       this.ctx = outer;
@@ -3298,12 +3300,27 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
     this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter, moduleScope: typeDef.module };
     this.ctx.currentScope.aliases.set(tableName, { alias: tableName, table: tableName, type: typeDef.name });
     try {
-      const sql = this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly());
+      const sql = this.compileExpression(this.parseSchemaExpression(edgeql));
       const notRowLocal = rowLocalViolation(sql, tableName);
       if (notRowLocal) {
         throw new CompilationError(notRowLocal);
       }
       return new SQLCodeGenerator().generateExpression(sql);
+    } finally {
+      this.ctx = outer;
+    }
+  }
+
+  /**
+   * `edgeql`, a property's `default` that calls an SDL function, as the SQL of
+   * the column's DEFAULT: the call inlined (see declared-functions.ts). Names
+   * resolve in the default module.
+   */
+  defaultValueSql(edgeql: string): string {
+    const outer = this.ctx;
+    this.ctx = { ...Context.createContext(outer.schema), aliasCounter: outer.aliasCounter };
+    try {
+      return new SQLCodeGenerator().generateExpression(this.compileExpression(this.parseSchemaExpression(edgeql)));
     } finally {
       this.ctx = outer;
     }
@@ -3335,7 +3352,7 @@ export class EdgeQLCompiler extends ShapeCompilerLayer {
         }
         return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, replace(value)]));
       };
-      const compiled = this.compileExpression(new EdgeQLParser(edgeql).parseExpressionOnly());
+      const compiled = this.compileExpression(this.parseSchemaExpression(edgeql));
       const sql = replace(compiled) as SQL.SQLExpression;
       const notRowLocal = rowLocalViolation(sql, "");
       if (notRowLocal) {

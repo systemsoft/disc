@@ -20,6 +20,7 @@
 import { selectKeepsAtMostOne, tupleTypeElements, unitedTupleType } from "../compiler/compiler-base.ts";
 import { powerType } from "../compiler/compiler-expressions.ts";
 import { enumGelNames, type Schema, type TypeDef } from "../compiler/context.ts";
+import { withDeclaredCallsInlined } from "../compiler/declared-functions.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { objectTypeId } from "../lib/type-ids.ts";
@@ -3221,7 +3222,7 @@ export class BinaryConnection {
     // parse error so query execution can surface a real error.
     try {
       const parser = new EdgeQLParser(commandText);
-      const query = parser.parse();
+      const query = withDeclaredCallsInlined(parser.parse(), this._schema);
       const params = collectParameters(query);
       const outputShape = inferOutputShape(query, this._schema, { ...EMPTY_SCOPE, implicit });
       // Output format NONE (`execute`) is described as Gel's null type id,

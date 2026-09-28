@@ -288,7 +288,7 @@ Deno.test("Schema Reload - stale schema recovery with evolving types", async () 
 // ---------------------------------------------------------------------------
 // A reloaded schema comes from the SDL alone (built-ins + declared types), so
 // the extension functions merged at startup must be merged again, or every
-// call to one turns into "Unknown function" after a schema-watch reload.
+// call to one turns into "function … does not exist" after a schema-watch reload.
 Deno.test("Schema Reload - extension functions are still known after updateSchema", async () => {
   const server = new DiscServer({
     dryRun: true,
@@ -319,6 +319,6 @@ Deno.test("Schema Reload - extension functions are still known after updateSchem
   };
   const response = await server.getProtocolHandler().handleRequest({ query: "select reload_double(21)" }, context);
 
-  assertEquals(response.errors?.filter(error => /unknown function/i.test(error.message)), []);
+  assertEquals(response.errors?.filter(error => /function .* does not exist/i.test(error.message)), []);
   assertEquals((server.getProtocolHandler() as unknown as { schema: Schema; }).schema.types.has("Note"), true);
 });

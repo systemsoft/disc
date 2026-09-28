@@ -296,6 +296,34 @@ export interface FunctionDef {
   windowOnly?: boolean; // true for functions that REQUIRE an OVER clause (row_number, rank, etc.)
   windowCompatible?: boolean; // true for functions that CAN use an OVER clause (count, sum, etc.)
   introspection?: boolean; // true for schema:: functions resolved at compile time
+  /*** An SDL `function`: its overloads, each inlined where it is called (compiler/declared-functions.ts). ***/
+  declared?: DeclaredFunction[];
+}
+
+/*** One overload of a function the SDL declares, as `function name(…) -> T using (…)`. ***/
+export interface DeclaredFunction {
+  /*** The body's EdgeQL source (`using (…)`). ***/
+  body: string;
+  /*** The declaring module: the body's names resolve there. ***/
+  module: string;
+  /*** Qualified: `default::full_name`. ***/
+  name: string;
+  parameters: DeclaredParameter[];
+  /*** As written: `str`, `Post`, `array<str>`. ***/
+  returnType: string;
+  returnTypemod?: "optional" | "setof";
+  volatility?: "immutable" | "stable" | "volatile" | "modifying";
+}
+
+export interface DeclaredParameter {
+  /*** The default's EdgeQL source (`name: str = 'world'`). ***/
+  default?: string;
+  name: string;
+  /*** `named only`: passed by name (`f(x := 1)`), never by position. ***/
+  namedOnly?: boolean;
+  /*** As written: `str`, `User`, `array<str>`. ***/
+  type: string;
+  typemod?: "optional" | "setof";
 }
 
 export interface ArgDef {

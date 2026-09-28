@@ -68,15 +68,15 @@ function compileError(source: string, against = schema): string {
   return result.ok ? "" : result.error.message;
 }
 
-Deno.test("unknown function: a call to a function nobody registered is a compile error naming it", () => {
-  assertStringIncludes(compileError("select enc::base64_decode('aGk=')"), "'enc::base64_decode'");
-  assertStringIncludes(compileError("select no_such_function(1)"), "'no_such_function'");
-  assertStringIncludes(compileError("select User { n := str_uper(.name) }"), "'str_uper'");
+Deno.test("unknown function: a call to a function nobody registered is Gel's error naming it", () => {
+  assertStringIncludes(compileError("select enc::base64_decode('aGk=')"), "function 'enc::base64_decode' does not exist");
+  assertStringIncludes(compileError("select no_such_function(1)"), "function 'default::no_such_function' does not exist");
+  assertStringIncludes(compileError("select User { n := str_uper(.name) }"), "function 'default::str_uper' does not exist");
 });
 
 Deno.test("unknown function: also with an OVER clause, and nested in an argument", () => {
-  assertStringIncludes(compileError("select User { n := no_such_window() over (order by .name) }"), "'no_such_window'");
-  assertStringIncludes(compileError("select len(no_such_function('a'))"), "'no_such_function'");
+  assertStringIncludes(compileError("select User { n := no_such_window() over (order by .name) }"), "function 'default::no_such_window' does not exist");
+  assertStringIncludes(compileError("select len(no_such_function('a'))"), "function 'default::no_such_function' does not exist");
 });
 
 Deno.test("unknown function: built-ins resolve even when the schema object carries no function map entries", () => {
@@ -84,7 +84,7 @@ Deno.test("unknown function: built-ins resolve even when the schema object carri
 
   assertEquals(compileError("select len('abc')", bare), "");
   assertEquals(compileError("select std::base64_decode('aGk=')", bare), "");
-  assertStringIncludes(compileError("select no_such_function(1)", bare), "'no_such_function'");
+  assertStringIncludes(compileError("select no_such_function(1)", bare), "function 'default::no_such_function' does not exist");
 });
 
 Deno.test("unknown function: a function the schema adds (extension, custom) compiles", () => {
@@ -122,10 +122,11 @@ Deno.test("unknown function: an SDL-declared function compiles, bare and module-
   const declared = manager.modulesToSchema(parsed.value);
 
   assertEquals(declared.functions.get("shout")?.returnType, "str");
-  assertEquals(compileEdgeQLWith(declared, "select Note { loud := shout(.body) }").includes("shout(note_1.body)"), true);
-  assertEquals(compileEdgeQLWith(declared, "select default::shout('a')"), "SELECT shout('a')");
-  assertEquals(compileEdgeQLWith(declared, "select util::twice(2)"), "SELECT util_twice(2)");
-  assertStringIncludes(compileError("select twice(2)", declared), "'twice'");
+  // A call is its body, inlined (see declared-functions.ts).
+  assertEquals(compileEdgeQLWith(declared, "select Note { loud := shout(.body) }").includes("UPPER(note_1.body)"), true);
+  assertEquals(compileEdgeQLWith(declared, "select default::shout('a')"), "SELECT UPPER('a')");
+  assertStringIncludes(compileEdgeQLWith(declared, "select util::twice(2)"), "2 * 2");
+  assertStringIncludes(compileError("select twice(2)", declared), "function 'default::twice' does not exist");
   // Built-ins are still there next to the declared ones.
   assertEquals(compileEdgeQLWith(declared, "select len('abc')"), "SELECT LENGTH('abc')");
 });

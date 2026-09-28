@@ -72,9 +72,15 @@ export interface FunctionDeclaration extends SDLNode {
   /*** `-> optional T` (may be empty) or `-> set of T` (may be several). ***/
   returnTypemod?: "optional" | "setof";
   using?: Expression;
-  volatility?: "stable" | "volatile" | "immutable";
+  /*** The body's EdgeQL source, as written between `using (` and `)`. ***/
+  usingSource?: string;
+  volatility?: FunctionVolatility;
+  annotations?: Annotation[];
   overloaded?: boolean;
 }
+
+/*** A function's `volatility := '…'`, lowercased. ***/
+export type FunctionVolatility = "immutable" | "stable" | "volatile" | "modifying";
 
 // Global declaration
 export interface GlobalDeclaration extends SDLNode {
@@ -256,6 +262,8 @@ export interface FunctionParameter extends SDLNode {
   type: TypeRef;
   typemod?: "optional" | "setof" | "singleton";
   default?: Expression;
+  /*** Declared `named only`: passed by name (`f(x := 1)`), never by position. ***/
+  namedOnly?: boolean;
 }
 
 // Type references

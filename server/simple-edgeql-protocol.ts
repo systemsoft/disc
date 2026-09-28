@@ -20,6 +20,7 @@
 
 import { describeResult, type ResultInfo } from "../compiler/compiler-base.ts";
 import * as Context from "../compiler/context.ts";
+import { withDeclaredCallsInlined } from "../compiler/declared-functions.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
@@ -273,7 +274,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       // Use the real EdgeQL parser (it takes source string, not tokens)
       const parser = new EdgeQL.EdgeQLParser(query);
-      const ast = parser.parse();
+      const ast = withDeclaredCallsInlined(parser.parse(), this.schema);
 
       log.debug("Successfully parsed query", { kind: ast.kind });
       return {

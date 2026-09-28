@@ -122,6 +122,11 @@ export class DDLGenerator {
    */
   private sequenceScalars = new Map<string, string>();
   /**
+   * The SQL of a default that calls an SDL function (`default := greet()`),
+   * or undefined for any other default. Set via {@link setDeclaredDefaults}.
+   */
+  private declaredDefault: (edgeql: string) => string | undefined = () => undefined;
+  /**
    * During `generateRollbackDDL`: the operations migrating the schema after the
    * migration back to the schema before it, where the rollback finds the
    * definitions of what the migration dropped. Empty when the caller has none.
@@ -158,6 +163,11 @@ export class DDLGenerator {
   /*** Tell the generator the sequence of each sequence scalar (from `SchemaDiffer.sequenceScalarNames`). ***/
   setSequenceScalars(sequences: Map<string, string>): void {
     this.sequenceScalars = new Map(sequences);
+  }
+
+  /*** Tell the generator how to compile a default that calls an SDL function (the schema's functions are inlined, not created). ***/
+  setDeclaredDefaults(compile: (edgeql: string) => string | undefined): void {
+    this.declaredDefault = compile;
   }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
@@ -2602,7 +2612,7 @@ END $$;`
       // they'd be quoted as text and PG would reject them at apply time
       // ("invalid input syntax for type timestamp with time zone").
       if (/^[A-Za-z_][A-Za-z0-9_:]*\s*\(.*\)\s*$/.test(value)) {
-        return this.compileExpressionString(value);
+        return this.declaredDefault(value) ?? this.compileExpressionString(value);
       }
 
       // Enum defaults arrive as serialized PathExpressions. The runtime

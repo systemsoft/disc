@@ -1422,6 +1422,38 @@ Deno.test("SDL Parser - a function's parameter and return type keep `optional` a
   assertEquals(c.returnType.name.parts, ["array"]);
 });
 
+Deno.test("SDL Parser - a function keeps its body's source and its parameters' `named only`", () => {
+  const [f] = new SDLParser(`
+    function joined(a: str, named only sep: str = ',') -> str using (a ++ sep);
+  `)
+    .parse()
+    .declarations as SDLAST.FunctionDeclaration[];
+  assertEquals(f.usingSource, "a ++ sep");
+  assertEquals(f.parameters[0].namedOnly, undefined);
+  assertEquals(f.parameters[1].namedOnly, true);
+  assertEquals(f.parameters[1].name.value, "sep");
+});
+
+Deno.test("SDL Parser - a function's block body takes volatility, annotations and `using`", () => {
+  const [f] = new SDLParser(`
+    function vol(x: int64) -> int64 {
+      volatility := 'Immutable';
+      annotation title := 'plus one';
+      using (x + 1);
+    };
+  `)
+    .parse()
+    .declarations as SDLAST.FunctionDeclaration[];
+  assertEquals(f.volatility, "immutable");
+  assertEquals(f.usingSource, "x + 1");
+  assertEquals(f.annotations?.map(annotation => annotation.name.parts.join("::")), ["title"]);
+});
+
+Deno.test("SDL Parser - a function's volatility must be one Gel knows", () => {
+  const error = assertThrows(() => new SDLParser(`function f() -> int64 { volatility := 'Bogus'; using (1); };`).parse(), SyntaxError);
+  assertEquals(error.message.includes("'Bogus'"), true);
+});
+
 Deno.test("SDL Parser - property keyword accepts arrow form", () => {
   const source = `
     type Login {

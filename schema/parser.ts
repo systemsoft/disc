@@ -316,10 +316,33 @@ export class SDLParser {
     const returnType = this.parseTypeRef();
 
     let using: AST.Expression | undefined;
-    if (this.match(TokenType.USING)) {
+    let usingSource: string | undefined;
+    let volatility: AST.FunctionVolatility | undefined;
+    const annotations: AST.Annotation[] = [];
+    const parseUsing = (): void => {
       this.consume(TokenType.LPAREN, "Expected '(' after 'using'");
-      using = this.parseDelegatedExpression().expression;
+      ({ expression: using, source: usingSource } = this.parseDelegatedExpression());
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
+    };
+
+    if (this.match(TokenType.USING)) {
+      parseUsing();
+    } else if (this.match(TokenType.LBRACE)) {
+      // Gel's block form: `{ volatility := 'Stable'; annotation title := '…'; using (…); }`.
+      while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
+        if (this.match(TokenType.USING)) {
+          parseUsing();
+          this.consume(TokenType.SEMICOLON, "Expected ';' after 'using (…)'");
+        } else if (this.match(TokenType.ANNOTATION)) {
+          annotations.push(this.parseAnnotation());
+        } else if (this.peek().value.toLowerCase() === "volatility") {
+          this.advance();
+          volatility = this.parseVolatility();
+        } else {
+          throw this.error(`Unexpected token '${this.peek().value}' in function body — expected 'using (…)', 'volatility := …' or an annotation`);
+        }
+      }
+      this.consume(TokenType.RBRACE, "Expected '}' after function body");
     }
 
     this.consume(
@@ -327,7 +350,29 @@ export class SDLParser {
       "Expected ';' after function declaration"
     );
 
-    return { kind: "FunctionDeclaration", name, parameters, returnType, ...(returnTypemod ? { returnTypemod } : {}), using };
+    return {
+      kind: "FunctionDeclaration",
+      name,
+      parameters,
+      returnType,
+      ...(returnTypemod ? { returnTypemod } : {}),
+      using,
+      ...(usingSource !== undefined ? { usingSource } : {}),
+      ...(volatility ? { volatility } : {}),
+      ...(annotations.length > 0 ? { annotations } : {})
+    };
+  }
+
+  /*** `:= '<volatility>';` after a function body's `volatility`: one of Gel's four, in any case. ***/
+  private parseVolatility(): AST.FunctionVolatility {
+    this.consume(TokenType.ASSIGN, "Expected ':=' after 'volatility'");
+    const token = this.consume(TokenType.STRING, "Expected a string after 'volatility :='");
+    const value = token.value.toLowerCase();
+    if (value !== "immutable" && value !== "stable" && value !== "volatile" && value !== "modifying") {
+      throw this.error(`Invalid volatility '${token.value}': expected 'Immutable', 'Stable', 'Volatile' or 'Modifying'`);
+    }
+    this.consume(TokenType.SEMICOLON, "Expected ';' after volatility");
+    return value;
   }
 
   /*** A parameter's or a return type's `optional` or `set of`, consumed; else undefined. ***/
@@ -1382,6 +1427,12 @@ export class SDLParser {
 
     if (!this.check(TokenType.RPAREN)) {
       do {
+        // `named only x: T` is passed by name only (`f(1, x := 2)`), as in Gel.
+        const namedOnly = this.peek().value.toLowerCase() === "named" && this.tokens[this.current + 1]?.value.toLowerCase() === "only";
+        if (namedOnly) {
+          this.advance();
+          this.advance();
+        }
         const name = this.parseIdentifier();
         this.consume(TokenType.COLON, "Expected ':' after parameter name");
         const typemod: AST.FunctionParameter["typemod"] = this.parseTypemod();
@@ -1398,7 +1449,8 @@ export class SDLParser {
           name,
           type,
           typemod,
-          default: defaultValue
+          default: defaultValue,
+          ...(namedOnly ? { namedOnly } : {})
         });
       } while (this.match(TokenType.COMMA));
     }

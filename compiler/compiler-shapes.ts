@@ -128,6 +128,12 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       this.outputObjects = this.selectAnswersObjects(query);
     }
 
+    // `select posts_by(.author) { title }`: a select of the SDL function's body (see inlineDeclaredCallHere).
+    const subject = this.inlineDeclaredCallHere(query.expr);
+    if (subject !== query.expr) {
+      return this.compileSelectQuery({ ...query, expr: subject });
+    }
+
     // `select (group …) [{ shape }] [filter …] …`: the groups, each shaped (see compileGroupQuery).
     if (query.expr.kind === "Subquery" && query.expr.query.kind === "GroupQuery") {
       return this.compileGroupQuery(query.expr.query, query);
@@ -1452,8 +1458,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
    */
   private compilePropertyReference(property: Context.PropertyDef, tableAlias: string, typeName: string, written = true): SQL.SQLExpression {
     if (property.computed && property.computedExpr) {
-      const parser = new EdgeQLParser(property.computedExpr);
-      const expr = parser.parseExpressionOnly();
+      const expr = this.parseSchemaExpression(property.computedExpr);
       // A set (`bodies := .<post[is Comment].body`, `{.a, .b}`) is its values
       // as an array, as the same computed written in the shape is.
       const pathSelect = this.shapePathSelect({ computable: true, expr, kind: "ShapeElement" });
@@ -1478,7 +1483,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
 
   private bytesTypeOfProperty(property: Context.PropertyDef, typeName: string): "bytea" | "bytea[]" | null {
     if (property.computed && property.computedExpr) {
-      return this.bytesTypeOf(new EdgeQLParser(property.computedExpr).parseExpressionOnly(), typeName);
+      return this.bytesTypeOf(this.parseSchemaExpression(property.computedExpr), typeName);
     }
     return property.type === "bytea" || property.type === "bytea[]" ? property.type : null;
   }
@@ -1532,7 +1537,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       if (!property?.computed || !property.computedExpr) {
         continue;
       }
-      const expr = new EdgeQLParser(property.computedExpr).parseExpressionOnly();
+      const expr = this.parseSchemaExpression(property.computedExpr);
       if (expr.kind !== "NamedTuple") {
         return null;
       }
@@ -1605,6 +1610,11 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
       // Named element (alias or computed property)
       key = element.name.name;
       if (element.computable) {
+        // A call of an SDL function is its body (see inlineDeclaredCallHere).
+        const inlined = this.inlineDeclaredCallHere(element.expr);
+        if (inlined !== element.expr) {
+          return this.compileShapeElement({ ...element, expr: inlined }, typeName, tableAlias);
+        }
         // Computed property: name := expression. Objects read as a link
         // does; a path set is its select's rows as an array.
         const objects = this.objectComputable(element);
@@ -1814,7 +1824,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     if (!Context.isExpressionLink(link)) {
       return link;
     }
-    const expr = new EdgeQLParser(link.computedExpr).parseExpressionOnly();
+    const expr = this.parseSchemaExpression(link.computedExpr);
     const step = expr.kind === "Path" && !expr.rooted && expr.steps.length === 1 ? expr.steps[0] : undefined;
     const stored = step?.type === "property" ? Context.getLink(this.ctx, typeName, step.name) : undefined;
     if (stored && !Context.isExpressionLink(stored) && stored.multi === link.multi) {
@@ -1841,7 +1851,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
     shape?: EdgeQLAST.Shape,
     clauses: ShapeClauses = {}
   ): SQL.SQLExpression {
-    const expr = new EdgeQLParser(link.computedExpr).parseExpressionOnly();
+    const expr = this.parseSchemaExpression(link.computedExpr);
     const asserted = expr.kind === "FunctionCall" && expr.args.length === 1 &&
       expr.name.parts.join("::").replace(/^std::/, "") === "assert_single";
     const query = expressionLinkSelect(asserted ? expr.args[0].value : expr, shape);
@@ -2605,7 +2615,7 @@ export abstract class ShapeCompilerLayer extends PathCompilerLayer {
           // A computed property (`title2 := .title ++ '!'`) is its
           // expression; it has no column.
           if (prop?.computed && prop.computedExpr) {
-            return this.compileExpression(new EdgeQLParser(prop.computedExpr).parseExpressionOnly());
+            return this.compileExpression(this.parseSchemaExpression(prop.computedExpr));
           }
           if (prop?.columnName) {
             return SQL.createColumnReference(prop.columnName, ta.alias);

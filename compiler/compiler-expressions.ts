@@ -9,6 +9,7 @@
 
 import type { AccessExpressionNode } from "../access/ast.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, InvalidReferenceError, InvalidValueError, type ErrorContext } from "../lib/errors.ts";
 import { sequenceName } from "../lib/identifiers.ts";
 import { sqlStringLiteral } from "../lib/sql-escape.ts";
@@ -26,6 +27,7 @@ import {
   unitedTupleType
 } from "./compiler-base.ts";
 import * as Context from "./context.ts";
+import { inlineDeclaredCall, inlineDeclaredCalls, syntacticType } from "./declared-functions.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
@@ -2858,6 +2860,19 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const functionName = parts.join("_");
     const qualifiedName = funcCall.name.parts.join("::");
 
+    // A call of an SDL function the pre-pass left (its body reads an argument
+    // that depends on where it is written inside a scope of its own): inlined
+    // here, each such argument compiled once, where the call is.
+    const inlined = this.inlineDeclaredCallHere(funcCall);
+    if (inlined !== funcCall) {
+      return this.compileExpression(inlined);
+    }
+    // So is one passed to this call: `count(posts_by(.author))` counts a select.
+    const inlinedArgs = funcCall.args.map(arg => ({ ...arg, value: this.inlineDeclaredCallHere(arg.value) }));
+    if (inlinedArgs.some((arg, index) => arg.value !== funcCall.args[index].value)) {
+      return this.compileFunctionCall({ ...funcCall, args: inlinedArgs });
+    }
+
     // `array_agg` of tuples: an array of tuples is a jsonb array (see
     // `compileArrayExpr`); the aggregate, however it is compiled, is made one.
     if (functionName === "array_agg" && this.staticTupleArrayType(funcCall) && !this.tupleArrayAggregates.has(funcCall)) {
@@ -3576,6 +3591,56 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     return sequenceName(qualified.slice(0, qualified.lastIndexOf("::")), name);
   }
 
+  /*** An expression the schema holds as source (a computed, a policy, a global's default), with its SDL function calls inlined. ***/
+  protected parseSchemaExpression(source: string): EdgeQLAST.Expression {
+    return inlineDeclaredCalls(new EdgeQLParser(source).parseExpressionOnly(), this.ctx.schema);
+  }
+
+  /**
+   * `expr` inlined when it is a call of an SDL function (see
+   * declared-functions.ts), else `expr`. The compile-time half of the
+   * inlining: the arguments' types are known here, and an argument the body
+   * reads inside a scope of its own is compiled once, here
+   * (`bindCallArgument`).
+   */
+  protected inlineDeclaredCallHere(expr: EdgeQLAST.Expression): EdgeQLAST.Expression {
+    // `posts_by(.author) { title }`: the call's objects, shaped.
+    if (expr.kind === "ShapeExpr") {
+      const subject = this.inlineDeclaredCallHere(expr.expr);
+      return subject === expr.expr ? expr : { ...expr, expr: subject };
+    }
+    // `(select posts_by(.author) …)`: a select of them.
+    if (expr.kind === "Subquery" && expr.query.kind === "SelectQuery") {
+      const subject = this.inlineDeclaredCallHere(expr.query.expr);
+      return subject === expr.query.expr ? expr : { ...expr, query: { ...expr.query, expr: subject } };
+    }
+    if (expr.kind !== "FunctionCall" || !Context.lookupFunction(this.ctx.schema, expr.name.parts)?.declared) {
+      return expr;
+    }
+    return inlineDeclaredCall(expr, this.ctx.schema, {
+      bind: value => this.bindCallArgument(value),
+      typeOf: arg => syntacticType(arg, this.ctx.schema) ?? this.staticScalarType(arg)
+    }) ?? expr;
+  }
+
+  /**
+   * A name for `value` compiled here, for an inlined SDL function's body to
+   * read inside a scope of its own (`select Post filter .author = u` of
+   * `posts_by(.author)`), where `value` itself would read that scope's `.`.
+   */
+  private bindCallArgument(value: EdgeQLAST.Expression): EdgeQLAST.Identifier {
+    const name = Context.generateAlias(this.ctx, "__fnarg");
+    const staticType = this.staticScalarType(value);
+    this.ctx.currentScope.variables.set(name, {
+      expression: value,
+      name,
+      sqlOverride: this.compileExpression(value),
+      ...(staticType !== null ? { staticType } : {}),
+      type: this.isJsonExpression(value) ? "json" : "any"
+    });
+    return EdgeQLAST.createIdentifier(name);
+  }
+
   /**
    * A call to a function that is neither built in nor added by the schema (SDL
    * declaration, extension, custom function). Without this it would reach
@@ -3583,10 +3648,9 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
    * some unrelated SQL function of that name.
    */
   private unknownFunction(parts: string[]): CompilationError {
-    return new CompilationError(
-      `Unknown function '${parts.join("::")}'. It is not a built-in function, and the schema does not declare it ` +
-        "(SDL function, extension or custom function)."
-    );
+    // Gel's message, naming a bare name in the module it was looked up in.
+    const name = parts.length > 1 ? parts.join("::") : `${this.ctx.moduleScope ?? "default"}::${parts[0]}`;
+    return new InvalidReferenceError(`function '${name}' does not exist`);
   }
 
   private compileWindowFunctionCall(

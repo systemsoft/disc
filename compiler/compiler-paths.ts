@@ -20,7 +20,6 @@
  */
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError, InvalidReferenceError } from "../lib/errors.ts";
 import { backlinkIntersectionName, locationOf } from "./compiler-base.ts";
 import { ExpressionCompilerLayer } from "./compiler-expressions.ts";
@@ -145,7 +144,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
       const link: Context.LinkDef | undefined = step.type === "property" ? typeDef?.links.get(step.name) : undefined;
       const property = step.type === "property" && !link ? typeDef?.properties.get(step.name) : undefined;
       const computedExpr = link && Context.isExpressionLink(link) ? link.computedExpr : property?.computed ? property.computedExpr : undefined;
-      const expr = computedExpr ? new EdgeQLParser(computedExpr).parseExpressionOnly() : undefined;
+      const expr = computedExpr ? this.parseSchemaExpression(computedExpr) : undefined;
       if (typeDef && expr?.kind === "Path" && !expr.rooted) {
         out.push(...this.spliceSteps(typeDef, expr.steps));
       } else {
@@ -416,7 +415,7 @@ export abstract class PathCompilerLayer extends ExpressionCompilerLayer {
         table: source.tableName,
         type: source.name
       });
-      rows = this.compileQuery(expressionLinkSelect(new EdgeQLParser(link.computedExpr).parseExpressionOnly()));
+      rows = this.compileQuery(expressionLinkSelect(this.parseSchemaExpression(link.computedExpr)));
     } finally {
       Context.popScope(this.ctx);
     }

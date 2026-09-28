@@ -10,6 +10,7 @@ import { encodeHex } from "@std/encoding/hex";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
+import { withDeclaredCallsInlined } from "../compiler/declared-functions.ts";
 import * as SQL from "../compiler/sql.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { withImplicitIds } from "../edgeql/implicit-ids.ts";
@@ -606,7 +607,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     try {
       // Use the EdgeQL parser (which internally lexes the source)
       const parser = new EdgeQL.EdgeQLParser(query);
-      const ast = parser.parse();
+      const ast = withDeclaredCallsInlined(parser.parse(), this.schema);
 
       return { success: true, ast };
     } catch (error) {
@@ -1175,7 +1176,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   ): Promise<{ rows: Record<string, unknown>[]; status: string; values?: boolean; }> {
     const parser = new EdgeQL.EdgeQLParser(commandText);
     // A client asking for implicit ids gets every object's `id` (see edgeql/implicit-ids.ts).
-    const ast = options.implicitIds ? withImplicitIds(parser.parse()) : parser.parse();
+    const parsed = withDeclaredCallsInlined(parser.parse(), this.schema);
+    const ast = options.implicitIds ? withImplicitIds(parsed) : parsed;
 
     // Same read-only gate as handleRequest (gh/geldata#5524).
     if (this.options.readOnly && isWriteQuery(ast)) {

@@ -1091,7 +1091,7 @@ export class DiscServer {
   updateSchema(schema: Schema): void {
     // A reloaded schema is built from the SDL alone. Extension functions and
     // types are merged in again, as at startup, or a call to one becomes an
-    // "Unknown function" after a schema-watch reload.
+    // "function … does not exist" after a schema-watch reload.
     this.protocolHandler.updateSchema?.(
       mergeSchemaAdditions(schema, this.extensionRegistry.getAllFunctions(), this.extensionRegistry.getAllTypes())
     );

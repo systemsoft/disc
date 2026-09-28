@@ -11,6 +11,7 @@
  */
 
 import { Schema } from "../compiler/context.ts";
+import { detectFunctionErrors } from "../compiler/declared-functions.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
@@ -134,6 +135,10 @@ export class SchemaManager {
         const computed = detectComputedPointerErrors(schema);
         if (computed) {
           return Err(new MigrationError(`Invalid computed pointers:\n${computed}`));
+        }
+        const functions = detectFunctionErrors(schema);
+        if (functions) {
+          return Err(new MigrationError(`Invalid functions:\n${functions}`));
         }
       }
       return Ok(modules);

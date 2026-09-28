@@ -5,6 +5,8 @@
  * Migration Engine - orchestrates schema diffing, DDL generation, and migration execution
  */
 
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
+import { lookupFunction, type Schema } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { MigrationError } from "../lib/errors.ts";
@@ -14,6 +16,7 @@ import { Module, normalizeModules } from "../schema/converter.ts";
 import { DataMigrationRunner } from "./data-migration.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
+import { modulesToSchema } from "./runtime-schema.ts";
 import {
   reconcileAbstractMirrors,
   reconcileColumnTypes,
@@ -238,6 +241,20 @@ export class MigrationEngine {
     this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(schema));
     this.ddlGenerator.setScalarBaseTypes(this.differ.scalarBaseTypes(schema));
     this.ddlGenerator.setSequenceScalars(this.differ.sequenceScalarNames(schema));
+    // A default calling an SDL function (`default := greet()`) is its body:
+    // functions are inlined where they are called, never created.
+    let compiled: { compiler: EdgeQLCompiler; schema: Schema; } | undefined;
+    this.ddlGenerator.setDeclaredDefaults(edgeql => {
+      const name = /^([A-Za-z_][A-Za-z0-9_:]*)\s*\(/.exec(edgeql)?.[1];
+      if (!name || !schema.some(module => module.items.some(item => item.kind === "FunctionDeclaration"))) {
+        return undefined;
+      }
+      if (!compiled) {
+        const runtime = modulesToSchema(schema);
+        compiled = { compiler: new EdgeQLCompiler(runtime, { enableAccessControl: false }), schema: runtime };
+      }
+      return lookupFunction(compiled.schema, name.split("::"))?.declared ? compiled.compiler.defaultValueSql(edgeql) : undefined;
+    });
   }
 
   /**
