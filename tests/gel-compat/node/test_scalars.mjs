@@ -10,7 +10,7 @@
  * top-level SELECT expressions.
  */
 
-import { createClient } from "gel";
+import { createClient, InvalidValueError } from "gel";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
@@ -76,6 +76,13 @@ test("datetime roundtrip", async () => {
   const when = new Date("2026-05-04T12:34:56.000Z");
   const out = await client.querySingle("SELECT <datetime>$x", { x: when });
   assert.equal(new Date(out).toISOString(), when.toISOString());
+});
+
+test("an invalid cast raises InvalidValueError naming Gel's type", async () => {
+  await assert.rejects(
+    client.querySingle("SELECT <int64>'x'"),
+    error => error instanceof InvalidValueError && error.message.split("\n")[0] === "invalid input syntax for type std::int64: \"x\""
+  );
 });
 
 test("Cardinality.AT_MOST_ONE: querySingle on empty filter returns null", async () => {

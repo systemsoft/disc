@@ -55,6 +55,7 @@ import {
   DatabaseExecutionError,
   DisabledCapabilityError,
   DiscError,
+  gelErrorMessage,
   InvalidReferenceError,
   InvalidValueError,
   postgresErrorFields,
@@ -2525,7 +2526,7 @@ export class BinaryConnection {
               mapErrorToGelCode(err) :
               GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
-              err instanceof Error ? err.message : String(err),
+              err instanceof Error ? gelErrorMessage(err) : String(err),
               errorCode,
               errorAttributes(err)
             );
@@ -2874,7 +2875,7 @@ export class BinaryConnection {
         mapErrorToGelCode(err) :
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
-        err instanceof Error ? err.message : String(err),
+        err instanceof Error ? gelErrorMessage(err) : String(err),
         errorCode,
         errorAttributes(err)
       );
@@ -3038,7 +3039,7 @@ export class BinaryConnection {
         mapErrorToGelCode(err) :
         GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
-        err instanceof Error ? err.message : String(err),
+        err instanceof Error ? gelErrorMessage(err) : String(err),
         errorCode,
         errorAttributes(err)
       );

@@ -139,6 +139,7 @@ const GEL_VALUES: [string, unknown][] = [
   [`select cal::to_local_datetime('2024-01-02 03:04:05', 'YYYY-MM-DD HH24:MI:SS')`, "2024-01-02T03:04:05"],
   [`select cal::to_local_datetime('2024-01-02 03:04:05 +02', 'YYYY-MM-DD HH24:MI:SS "x"')`, "2024-01-02T03:04:05"],
   [`select cal::to_local_date('02/01/2024', 'DD/MM/YYYY')`, "2024-01-02"],
+  [`select cal::to_local_date('0001-01-01', 'YYYY-MM-DD')`, "0001-01-01"],
   [`select cal::to_local_date('02/01/2024 13:00', 'DD/MM/YYYY HH24:MI')`, "2024-01-02"],
   [`select cal::to_local_time('2024 13:02', 'YYYY HH24:MI')`, "13:02:00"],
   [`select to_int64('1,234', '9,999')`, 1234],
@@ -196,7 +197,44 @@ const GEL_ERRORS: [string, string][] = [
   [`select to_bigint('1', '')`, `to_bigint(): "fmt" argument must be a non-empty string`],
   [`select to_decimal('1', '')`, `to_decimal(): "fmt" argument must be a non-empty string`],
   [`select to_str('abc', 'x')`, `function "to_str(arg0: std::str, arg1: std::str)" does not exist`],
-  [`select to_str(true, 'x')`, `function "to_str(arg0: std::bool, arg1: std::str)" does not exist`]
+  [`select to_str(true, 'x')`, `function "to_str(arg0: std::bool, arg1: std::str)" does not exist`],
+  // An empty value the query names, given an empty format: Gel's `to_str`
+  // of an int, a float, a decimal, a local time or json, and its number,
+  // local date and local time parsers, reject the format anyway. (Gel
+  // answers so the first time it runs such a query; PostgreSQL folds the
+  // check of the constant format then. Run again, from Gel's query cache,
+  // the same query answers `[]`.)
+  [`select to_str(<int64>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<int32>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<int16>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<float64>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<float32>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<decimal>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<cal::local_time>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<json>{}, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_str(<int64>{}, str_trim(' '))`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`with f := '' select to_str(<int64>{}, f)`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`with x := <int64>{} select to_str(x, '')`, `to_str(): "fmt" argument must be a non-empty string`],
+  [`select to_int64(<str>{}, '')`, `to_int64(): "fmt" argument must be a non-empty string`],
+  [`select to_int32(<str>{}, '')`, `to_int32(): "fmt" argument must be a non-empty string`],
+  [`select to_int16(<str>{}, '')`, `to_int16(): "fmt" argument must be a non-empty string`],
+  [`select to_float64(<str>{}, '')`, `to_float64(): "fmt" argument must be a non-empty string`],
+  [`select to_float32(<str>{}, '')`, `to_float32(): "fmt" argument must be a non-empty string`],
+  [`select to_bigint(<str>{}, '')`, `to_bigint(): "fmt" argument must be a non-empty string`],
+  [`select to_decimal(<str>{}, '')`, `to_decimal(): "fmt" argument must be a non-empty string`],
+  [`select cal::to_local_time(<str>{}, '')`, `to_local_time(): "fmt" argument must be a non-empty string`],
+  [`select cal::to_local_date(<str>{}, '')`, `to_local_date(): "fmt" argument must be a non-empty string`],
+  // A parsed date and time outside years 1 to 9999 (UTC), as one whose
+  // format has no year (year 1 BC).
+  [`select cal::to_local_time('10:30', 'HH24:MI')`, "'std::datetime' value out of range"],
+  [`select cal::to_local_date('10 5', 'MM DD')`, "'std::datetime' value out of range"],
+  [`select cal::to_local_datetime('10 5 10', 'MM DD HH24')`, "'std::datetime' value out of range"],
+  [`select to_datetime('10 5 10 +00', 'MM DD HH24 TZH')`, "'std::datetime' value out of range"],
+  [`select to_datetime('10000-01-01 +00', 'YYYY-MM-DD TZH')`, "'std::datetime' value out of range"],
+  [`select to_datetime('0001-01-01 +01', 'YYYY-MM-DD TZH')`, "'std::datetime' value out of range"],
+  [`select cal::to_local_datetime('10000-01-01', 'YYYY-MM-DD')`, "'std::datetime' value out of range"],
+  // PostgreSQL's to_number, which names its type as Gel's
+  [`select to_int64('x', '999')`, `invalid input syntax for type std::decimal: " "`]
 ];
 
 Deno.test({
@@ -232,6 +270,30 @@ Deno.test({
       await t.step("an empty value is empty; a format from a parameter or a property path", async () => {
         assertEquals((await run(`select to_str(<datetime>{}, 'YYYY')`)).data, []);
         assertEquals((await run(`select to_datetime(<str>{}, 'YYYY TZH')`)).data, []);
+        // Gel's other overloads skip an empty value, whatever the format; so
+        // do all for a value of each row (below).
+        for (
+          const query of [
+            `select to_str(<bigint>{}, '')`,
+            `select to_str(<datetime>{}, '')`,
+            `select to_str(<cal::local_datetime>{}, '')`,
+            `select to_str(<cal::local_date>{}, '')`,
+            `select to_str(<duration>{}, '')`,
+            `select to_str(<cal::relative_duration>{}, '')`,
+            `select to_str(<cal::date_duration>{}, '')`,
+            `select to_datetime(<str>{}, '')`,
+            `select cal::to_local_datetime(<str>{}, '')`,
+            `select to_str(<int64>{}, <str>{})`,
+            `select to_int64(<str>{}, 'x')`
+          ]
+        ) {
+          assertEquals(await run(query), { data: [] }, query);
+        }
+        // An empty parameter is a value the query is given (Gel's binary
+        // protocol answers so; its HTTP endpoint answers `[]`).
+        assertEquals(await run(`select to_str(<optional int64>$v, <str>$f)`, { f: "", v: null }), {
+          error: `to_str(): "fmt" argument must be a non-empty string`
+        });
         assertEquals((await run(`select to_str(<datetime>'2024-01-02T03:04:05Z', <str>$f)`, { f: "YYYY" })).data, ["2024"]);
         assertEquals((await run(`select to_int64(<str>$s, <str>$f)`, { f: "9,999", s: "1,234" })).data, [1234]);
         await run(`insert Fmt { label := 'a', at := <datetime>'2024-01-02T03:04:05Z', d := <duration>'1 hour', n := 7 }`);
@@ -241,6 +303,8 @@ Deno.test({
           { a: null, label: "b", m: null, s: null }
         ]);
         assertEquals((await run(`select to_str(Fmt.d, 'HH24')`)).data, ["01"]);
+        assertEquals((await run(`select Fmt { m := to_str(.n, '') } filter .label = 'b'`)).data, [{ m: null }]);
+        assertEquals((await run(`with b := (select Fmt filter .label = 'b') select to_str(b.n, '')`)).data, []);
         assertEquals((await run(`select Fmt { s := to_str(.at, .label) } filter .label = 'a'`)).data, [{ s: "a" }]);
       });
     } finally {

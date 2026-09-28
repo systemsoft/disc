@@ -173,6 +173,20 @@ const STDLIB_SQL = [
      END;
    $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
 
+  // disc_str_to_bigint(val) — a `str` cast to `bigint` (`<bigint>'12'`,
+  // `to_bigint('12')`; compiler `compileTypeCast`), as numeric. Text that is
+  // no number is Gel's `str_to_bigint` error, which names `std::bigint`
+  // (InvalidValueError, SQLSTATE 22P02); PostgreSQL's numeric cast would
+  // name `numeric`, Gel's `std::decimal`. `disc_finite_numeric` checks the
+  // number.
+  `CREATE OR REPLACE FUNCTION disc_str_to_bigint(val text) RETURNS numeric AS $$
+     BEGIN
+       RETURN val::numeric;
+     EXCEPTION WHEN invalid_text_representation THEN
+       RAISE EXCEPTION USING ERRCODE = 'invalid_text_representation', MESSAGE = 'invalid input syntax for type std::bigint: ' || quote_literal(val);
+     END;
+   $$ LANGUAGE plpgsql IMMUTABLE STRICT;`,
+
   // disc_date_part(func_name, unit, val, units) — `datetime_get`,
   // `duration_get`, `cal::time_get` and `cal::date_get` with a unit that isn't
   // a literal (compiler `compileDatePartGet`, which checks a literal one):
@@ -289,7 +303,10 @@ const STDLIB_SQL = [
   // outside a quoted part), a local one must have none; and so must the
   // input: parsed again in another time zone, a value that names its zone is
   // the same instant. (Gel's `_to_timestamptz_check`; InvalidValueError,
-  // SQLSTATE 22007.) The time zone setting is the function's own.
+  // SQLSTATE 22007.) The result must be in years 1 to 9999 (UTC), as Gel's
+  // `timestamptz_t` is, which one parsed without a year (1 BC) is not
+  // (InvalidValueError, SQLSTATE 22008). The time zone setting is the
+  // function's own.
   `CREATE OR REPLACE FUNCTION disc_to_timestamp(func_name text, val text, fmt text, zoned boolean) RETURNS timestamptz AS $$
      DECLARE
        result timestamptz;
@@ -310,6 +327,9 @@ const STDLIB_SQL = [
        IF (result = shifted) <> zoned THEN
          RAISE EXCEPTION USING ERRCODE = 'invalid_datetime_format',
            MESSAGE = CASE WHEN zoned THEN 'missing required' ELSE 'unexpected' END || ' time zone in input ' || quote_literal(val);
+       END IF;
+       IF extract(year FROM result) NOT BETWEEN 1 AND 9999 THEN
+         RAISE EXCEPTION USING ERRCODE = 'datetime_field_overflow', MESSAGE = '''std::datetime'' value out of range';
        END IF;
        RETURN result;
      END;

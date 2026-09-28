@@ -286,3 +286,61 @@ export function postgresErrorFields(error: unknown): PostgresErrorFields | undef
   }
   return out;
 }
+
+/**
+ * PostgreSQL's names of the types Gel's are stored as, and the Gel type each
+ * is, in the order of Gel's `base_type_name_map_r` (edb/pgsql/types.py): a
+ * name comes before a shorter one it starts with.
+ */
+const PG_TYPE_GEL_NAMES = new Map<string, string>([
+  ["character varying", "std::str"],
+  ["character", "std::str"],
+  ["text", "std::str"],
+  ["numeric", "std::decimal"],
+  ["int4", "std::int32"],
+  ["integer", "std::int32"],
+  ["bigint", "std::int64"],
+  ["int8", "std::int64"],
+  ["int2", "std::int16"],
+  ["smallint", "std::int16"],
+  ["boolean", "std::bool"],
+  ["bool", "std::bool"],
+  ["double precision", "std::float64"],
+  ["float8", "std::float64"],
+  ["real", "std::float32"],
+  ["float4", "std::float32"],
+  ["uuid", "std::uuid"],
+  ["timestamp with time zone", "std::datetime"],
+  ["timestamptz", "std::datetime"],
+  ["interval", "std::duration"],
+  ["bytea", "std::bytes"],
+  ["jsonb", "std::json"],
+  ["timestamp", "std::cal::local_datetime"],
+  ["date", "std::cal::local_date"],
+  ["time", "std::cal::local_time"],
+  ["json", "std::pg::json"]
+]);
+
+const PG_TYPE_NAME = new RegExp([...PG_TYPE_GEL_NAMES.keys()].map(name => `\\b${name}\\b`).join("|"), "g");
+
+/*** The SQLSTATEs of the errors whose message Gel words with its type names (Gel's errormech `interpret_by_code`). ***/
+const GEL_TYPE_NAMED_SQLSTATES = new Set(["22003", "22007", "22008", "22P02"]);
+
+/**
+ * The message of `error` as Gel words it. A value PostgreSQL can't take —
+ * `invalid input syntax for type bigint: "x"`, `value "99999" is out of
+ * range for type smallint` — names PostgreSQL's types; Gel names its own
+ * (`std::int64`, `std::int16`) in each PostgreSQL type name before the first
+ * colon (errormech `translate_pgtype`), for an invalid text representation
+ * (22P02), a number out of range (22003) or a bad date or time (22007,
+ * 22008). A message Disc's SQL raises itself (`RAISE`) is Gel's already, and
+ * any other message is PostgreSQL's as is.
+ */
+export function gelErrorMessage(error: Error): string {
+  const fields = (error as { fields?: { code?: unknown; routine?: unknown; }; }).fields;
+  if (typeof fields?.code !== "string" || !GEL_TYPE_NAMED_SQLSTATES.has(fields.code) || fields.routine === "exec_stmt_raise") {
+    return error.message;
+  }
+  const [leading, ...rest] = error.message.split(":");
+  return [leading.replace(PG_TYPE_NAME, name => PG_TYPE_GEL_NAMES.get(name)!), ...rest].join(":");
+}

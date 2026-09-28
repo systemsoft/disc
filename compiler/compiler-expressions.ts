@@ -269,6 +269,12 @@ const TO_STR_FORMAT_TYPES = new Map<string, string>([
   ["relative_duration", "interval"]
 ]);
 
+/**
+ * The types whose `to_str(value, fmt)` rejects an empty format even for an
+ * empty value (see `formatArgument`); Gel's other overloads skip one.
+ */
+const TO_STR_EMPTY_CHECKED = new Set(["decimal", "float32", "float64", "int16", "int32", "int64", "json", "local_time"]);
+
 /*** The SQL type of each number parser (`to_int64(str, fmt)`, …). ***/
 const NUMBER_PARSER_TYPES = new Map<string, string>([
   ["to_bigint", "numeric"],
@@ -290,6 +296,31 @@ const LOCAL_PARSER_TYPES = new Map<string, string>([
 /*** Whether the static type `type` is the built-in `name` (`datetime`, `date_duration`), however spelled (`std::datetime`, `cal::date_duration`). ***/
 function isStdType(type: string | null, name: string): boolean {
   return type !== null && type.replace(/^(std|cal)::/, "") === name;
+}
+
+/**
+ * Whether `sql` is one value for the whole query — literals and parameters,
+ * and casts, operators and function calls of them — not one of each row (a
+ * column, a subquery).
+ */
+function isQueryConstant(sql: SQL.SQLExpression): boolean {
+  switch (sql.kind) {
+    case "LiteralExpression":
+    case "ParameterReference":
+      return true;
+    case "RawSQLExpression":
+      return sql.sql === "NULL";
+    case "CastExpression":
+      return isQueryConstant(sql.expression);
+    case "UnaryExpression":
+      return isQueryConstant(sql.operand);
+    case "BinaryExpression":
+      return isQueryConstant(sql.left) && isQueryConstant(sql.right);
+    case "FunctionCall":
+      return sql.args.every(isQueryConstant);
+    default:
+      return false;
+  }
 }
 
 /**
@@ -1667,7 +1698,8 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
       throw new CompilationError(`function "to_str(arg0: ${qualified}, arg1: std::str)" does not exist`, locationOf(funcCall));
     }
     const value = pgType ? SQL.createCastExpression(args[0], pgType) : args[0];
-    return this.compileFormatted(funcCall, SQL.createFunctionCall("disc_to_str", [value, args[1]]), () => this.toStrValue(expr, args[0]));
+    const fmt = this.formatArgument("to_str", args, base !== null && TO_STR_EMPTY_CHECKED.has(base));
+    return this.compileFormatted(funcCall, SQL.createFunctionCall("disc_to_str", [value, fmt]), () => this.toStrValue(expr, args[0]));
   }
 
   /**
@@ -1692,11 +1724,26 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const parsed = SQL.createFunctionCall("disc_to_timestamp", [
       SQL.createLiteral("string", name),
       args[0],
-      args[1],
+      this.formatArgument(name, args, name === "to_local_date" || name === "to_local_time"),
       SQL.createLiteral("boolean", zoned)
     ]);
     const value = zoned ? parsed : SQL.createCastExpression(SQL.createFunctionCall("timezone", [SQL.createLiteral("string", "UTC"), parsed]), pgType);
     return this.compileFormatted(funcCall, value, () => SQL.createCastExpression(args[0], pgType));
+  }
+
+  /**
+   * The format `args[1]` of `name(args[0], args[1])`, checked by
+   * `disc_format_arg` when `checked` and both are one value for the whole
+   * query (`<int64>{}`, a parameter). Gel's `to_str` of an int, a float, a
+   * decimal, a local time or json, and its number, local date and local time
+   * parsers, are called with such a value even when it is empty, so an empty
+   * format is an error then too; a value of each row (a property) or of a set
+   * they are called with only when there is one.
+   */
+  private formatArgument(name: string, args: SQL.SQLExpression[], checked: boolean): SQL.SQLExpression {
+    return checked && isQueryConstant(args[0]) && isQueryConstant(args[1]) ?
+      SQL.createFunctionCall("disc_format_arg", [SQL.createLiteral("string", name), args[1]]) :
+      args[1];
   }
 
   /**
@@ -2906,11 +2953,19 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
           pgType === "numeric" ?
             this.finiteNumeric(SQL.createCastExpression(text, "numeric"), "numeric", functionName.slice("to_".length)) :
             SQL.createCastExpression(text, pgType);
+        // Text is a bigint as Gel's `str_to_bigint` reads it (`disc_str_to_bigint`).
+        const text = functionName === "to_bigint" && isStdType(this.staticScalarType(funcCall.args[0].value), "str") ?
+          SQL.createFunctionCall("disc_str_to_bigint", [args[0]]) :
+          args[0];
         if (args.length === 1) {
-          return parse(args[0]);
+          return parse(text);
         }
-        const parsed = SQL.createFunctionCall("disc_to_number", [SQL.createLiteral("string", functionName), args[0], args[1]]);
-        return this.compileFormatted(funcCall, parse(parsed), () => parse(args[0]));
+        const parsed = SQL.createFunctionCall("disc_to_number", [
+          SQL.createLiteral("string", functionName),
+          args[0],
+          this.formatArgument(functionName, args, true)
+        ]);
+        return this.compileFormatted(funcCall, parse(parsed), () => parse(text));
       }
 
       case "to_bool":
@@ -3779,7 +3834,12 @@ export abstract class ExpressionCompilerLayer extends CompilerBase {
     const isFloatCast = expr.kind === "CastExpression" && /^(double precision|real)(\[\])?$/.test(expr.targetType);
     const float = toInteger && !isFloatCast && source !== null && FLOAT_TYPES.has(this.numericBaseType(source) ?? "");
     const value = float ? SQL.createCastExpression(expr, pgType.endsWith("[]") ? "double precision[]" : "double precision") : expr;
-    const operand = !rounded ? value : array ? this.roundElements(value) : SQL.createFunctionCall("round", [value]);
+    // Text is a bigint as Gel's `str_to_bigint` reads it (`disc_str_to_bigint`).
+    const operand = rounded ?
+      (array ? this.roundElements(value) : SQL.createFunctionCall("round", [value])) :
+      toBigint && !array && !fromJson && isStdType(sourceType, "str") ?
+      SQL.createFunctionCall("disc_str_to_bigint", [value]) :
+      value;
     const compiled = fromJson ? this.compileCastFromJson(operand, pgType, typeName) : SQL.createCastExpression(operand, pgType);
     const checked = this.isFiniteNumber(cast.expr, toBigint && !rounded) ? compiled : this.finiteNumeric(compiled, pgType, typeName);
     return this.scalarCastCheck(checked, typeName);

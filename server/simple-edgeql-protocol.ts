@@ -23,7 +23,7 @@ import * as Context from "../compiler/context.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { DatabaseExecutionError, postgresErrorFields } from "../lib/errors.ts";
+import { DatabaseExecutionError, gelErrorMessage, postgresErrorFields } from "../lib/errors.ts";
 import { getLogger } from "../lib/logger.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
 import { normalizeRows } from "./row-normalizer.ts";
@@ -530,7 +530,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           new Error(String(error));
 
         log.error("Database execution error", { error: dbError.message });
-        throw new DatabaseExecutionError(`Database query failed: ${dbError.message}`, sql, dbError);
+        throw new DatabaseExecutionError(`Database query failed: ${gelErrorMessage(dbError)}`, sql, dbError);
       }
     }
 

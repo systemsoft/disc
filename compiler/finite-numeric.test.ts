@@ -66,7 +66,7 @@ function compile(edgeql: string): string {
 
 Deno.test("finite numeric - a cast to decimal or bigint is checked", () => {
   assertStringIncludes(compile("select <decimal>$d"), "disc_finite_numeric(CAST($1 AS numeric), 'std::decimal')");
-  assertStringIncludes(compile("select <bigint>'12'"), "disc_finite_numeric(CAST('12' AS numeric), 'std::bigint')");
+  assertStringIncludes(compile("select <bigint>'12'"), "disc_finite_numeric(CAST(disc_str_to_bigint('12') AS numeric), 'std::bigint')");
   assertStringIncludes(compile("select <decimal><float64>'NaN'"), "disc_finite_numeric(CAST(CAST('NaN' AS double precision) AS numeric), 'std::decimal')");
   assertStringIncludes(compile("select <array<bigint>>$b"), "disc_finite_numeric(CAST($1 AS numeric[]), 'std::bigint')");
   assertStringIncludes(compile("select <decimal><json>$j"), "disc_finite_numeric(CAST(");
@@ -74,7 +74,7 @@ Deno.test("finite numeric - a cast to decimal or bigint is checked", () => {
 
 Deno.test("finite numeric - to_decimal and to_bigint are checked", () => {
   assertStringIncludes(compile("select to_decimal('1.5')"), "disc_finite_numeric(CAST('1.5' AS numeric), 'std::decimal')");
-  assertStringIncludes(compile("select to_bigint('7')"), "disc_finite_numeric(CAST('7' AS numeric), 'std::bigint')");
+  assertStringIncludes(compile("select to_bigint('7')"), "disc_finite_numeric(CAST(disc_str_to_bigint('7') AS numeric), 'std::bigint')");
 });
 
 Deno.test("finite numeric - a numeric literal or an integer is not checked", () => {

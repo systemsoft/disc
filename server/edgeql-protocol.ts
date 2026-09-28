@@ -20,6 +20,7 @@ import {
   ConfigurationError,
   DatabaseExecutionError,
   DisabledCapabilityError,
+  gelErrorMessage,
   postgresErrorFields,
   QueryError,
   QueryTimeoutError,
@@ -852,7 +853,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           new Error(String(error));
         log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
-          `Database query failed: ${dbError.message}`,
+          `Database query failed: ${gelErrorMessage(dbError)}`,
           sql,
           dbError
         );
