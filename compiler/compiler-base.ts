@@ -53,8 +53,10 @@ export function backlinkIntersectionName(
 
 /**
  * True when a select of `typeDef`'s objects keeps at most one, as Gel
- * infers it: `limit 1`, or a filter requiring `.id` or an exclusive
- * property to equal one value.
+ * infers it (edb/edgeql/compiler/inference/cardinality.py
+ * `extract_exclusive_filters`): `limit 1`, or a filter requiring `.id`, an
+ * exclusive property, or every pointer of a type-level `constraint exclusive
+ * on (…)` to equal one value. `.l.id` pins the link `l`.
  */
 export function selectKeepsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Context.TypeDef): boolean {
   if (query.limit?.kind === "Literal" && Number(query.limit.value) <= 1) {
@@ -62,19 +64,31 @@ export function selectKeepsAtMostOne(query: EdgeQLAST.SelectQuery, typeDef: Cont
   }
   const conjuncts = (expr: EdgeQLAST.Expression): EdgeQLAST.Expression[] =>
     expr.kind === "BinaryOp" && expr.op === "AND" ? [...conjuncts(expr.left), ...conjuncts(expr.right)] : [expr];
-  const isUnique = (expr: EdgeQLAST.Expression): boolean => {
-    if (expr.kind !== "Path" || expr.rooted || expr.steps.length !== 1 || expr.steps[0].type !== "property") {
-      return false;
+  // The pointer `.p` (or `.l.id`) names, else undefined.
+  const pointer = (expr: EdgeQLAST.Expression): string | undefined => {
+    if (expr.kind !== "Path" || expr.rooted || expr.steps.some(step => step.type !== "property" && step.type !== "link")) {
+      return undefined;
     }
-    const name = expr.steps[0].name;
-    return name === "id" || (typeDef.properties.get(name)?.constraints?.some(constraint => constraint.name === "exclusive") ?? false);
+    if (expr.steps.length === 1) {
+      return expr.steps[0].name;
+    }
+    return expr.steps.length === 2 && expr.steps[1].name === "id" ? expr.steps[0].name : undefined;
   };
   const isOneValue = (expr: EdgeQLAST.Expression): boolean =>
     ["GlobalRef", "Identifier", "Literal", "Parameter"].includes(expr.kind) || (expr.kind === "TypeCast" && isOneValue(expr.expr));
-  return query.filter !== undefined && conjuncts(query.filter).some(condition =>
-    condition.kind === "BinaryOp" && condition.op === "=" &&
-    ((isUnique(condition.left) && isOneValue(condition.right)) || (isUnique(condition.right) && isOneValue(condition.left)))
-  );
+  const pinned = new Set<string>();
+  for (const condition of query.filter ? conjuncts(query.filter) : []) {
+    if (condition.kind !== "BinaryOp" || condition.op !== "=") {
+      continue;
+    }
+    const name = isOneValue(condition.right) ? pointer(condition.left) : isOneValue(condition.left) ? pointer(condition.right) : undefined;
+    if (name !== undefined) {
+      pinned.add(name);
+    }
+  }
+  const isExclusive = (name: string): boolean =>
+    name === "id" || (typeDef.properties.get(name)?.constraints?.some(constraint => constraint.name === "exclusive") ?? false);
+  return [...pinned].some(isExclusive) || (typeDef.exclusiveOn ?? []).some(names => names.every(name => pinned.has(name)));
 }
 
 /**

@@ -33,4 +33,10 @@ module default {
       role: str;
     };
   };
+
+  type Slot {
+    required shelf: str;
+    required slot: int32;
+    constraint exclusive on ((.shelf, .slot));
+  };
 };

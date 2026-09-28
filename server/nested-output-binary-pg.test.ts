@@ -15,12 +15,17 @@
  * - implicit ids / type ids / type names as the client's compilation flags
  *   ask, link properties, splats, `[is T].p` and object group keys with
  *   their types, output format NONE as the null type id, and a single
- *   result of many elements refused (ResultCardinalityMismatchError).
+ *   result of many elements refused (ResultCardinalityMismatchError) —
+ *   when parsed for a select Gel infers to be many;
+ * - `__tid__` is the type's stable id, a shape of link properties has no
+ *   implicit id, `by (.a, .b)` keys are named `a` and `b`, and a query
+ *   without parameters has the null input type id.
  *
  * Requires PostgreSQL — set DISC_PG_AUTO=1 or DISC_PG_TEST_URL.
  */
 
 import { assert, assertEquals } from "@std/assert";
+import { objectTypeId } from "../lib/type-ids.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
 import { Cardinality, CompilationFlag, OutputFormat } from "../protocol/enums.ts";
@@ -34,6 +39,12 @@ const SDL = `module default {
   abstract type NoShape { required label: str; };
   type NoCircle extending NoShape { required radius: float64; };
   type NoSquare extending NoShape { required side: int64; };
+  type NoLabel {
+    required code: str { constraint exclusive; };
+    required shelf: str;
+    required slot: int64;
+    constraint exclusive on ((.shelf, .slot));
+  };
 };`;
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -83,7 +94,9 @@ Deno.test({
         }`,
         `insert NoAuthor { name := "bob" }`,
         `insert NoCircle { label := "c", radius := 1.5 }`,
-        `insert NoSquare { label := "s", side := 2 }`
+        `insert NoSquare { label := "s", side := 2 }`,
+        `insert NoLabel { code := "x", shelf := "a", slot := 1 }`,
+        `insert NoLabel { code := "y", shelf := "a", slot := 2 }`
       ]
     ) {
       await handler.executeBinaryQuery(text, {});
@@ -158,8 +171,8 @@ Deno.test({
           { books: [], name: "bob" }
         ]]);
         assertEquals(await json("select NoAuthor.name order by NoAuthor.name"), [["ann", "bob"]]);
-        assertEquals(await json("select NoAuthor { name } filter .name = 'ann'", { expectedCardinality: Cardinality.AT_MOST_ONE }), [{ name: "ann" }]);
-        assertEquals(await json("select NoAuthor { name } filter .name = 'nobody'", { expectedCardinality: Cardinality.AT_MOST_ONE }), []);
+        assertEquals(await json("select NoAuthor { name } filter .name = 'ann' limit 1", { expectedCardinality: Cardinality.AT_MOST_ONE }), [{ name: "ann" }]);
+        assertEquals(await json("select NoAuthor { name } filter .name = 'nobody' limit 1", { expectedCardinality: Cardinality.AT_MOST_ONE }), []);
         assertEquals(await json("select NoAuthor { name } filter .name = 'nobody'"), [[]]);
         assertEquals(await json("group NoBook { title } by .title"), [[
           { elements: [{ title: "b1" }], grouping: ["title"], key: { title: "b1" } },
@@ -186,13 +199,11 @@ Deno.test({
           { best: null, books: [], id: "<id>", name: "bob" }
         ]);
         const all = ids.compilationFlags | CompilationFlag.INJECT_OUTPUT_TYPE_IDS | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES;
-        const typed = await query("select NoAuthor { name } filter .name = 'ann'", { compilationFlags: all });
+        // `__tid__` is the type's stable id (masked like every uuid, so read unmasked).
+        const typed = await client.query("select NoAuthor { name } filter .name = 'ann'", [], { compilationFlags: all });
         assertEquals(
-          typed.values.map(v => {
-            const { __tid__, ...rest } = v as Record<string, unknown>;
-            return { ...rest, __tid__: typeof __tid__ } as Record<string, unknown>;
-          }),
-          [{ __tid__: "string", __tname__: "default::NoAuthor", id: "<id>", name: "ann" }]
+          typed.values.map(v => ({ ...(v as Record<string, unknown>), id: "<id>" }) as Record<string, unknown>),
+          [{ __tid__: objectTypeId("default::NoAuthor"), __tname__: "default::NoAuthor", id: "<id>", name: "ann" }]
         );
       });
 
@@ -203,6 +214,22 @@ Deno.test({
           kind: "object"
         });
         assertEquals(props.values, [{ books: [{ "@next": 2n, "@rank": 1, title: "b1" }, { "@next": 3n, "@rank": 2, title: "b2" }] }]);
+
+        // A shape of only link properties has no implicit id (they are its pointers).
+        const ranks = await query("select NoAuthor { books: { @rank } } filter .name = 'ann'");
+        assertEquals(ranks.described, { fields: [{ link: true, name: "books", type: "set<{@rank: std::int16}>" }], kind: "object" });
+        assertEquals(ranks.values, [{ books: [{ "@rank": 1 }, { "@rank": 2 }] }]);
+
+        // `by (.a, .b)`: a key per property, named by it.
+        const byBoth = await query("group NoLabel { code } by (.shelf, .slot)");
+        assertEquals(
+          byBoth.described.kind === "object" ? byBoth.described.fields[0] : undefined,
+          { link: true, name: "key", type: "free{shelf: std::str, slot: std::int64}" }
+        );
+        assertEquals(byBoth.values, [
+          { elements: [{ code: "x" }], grouping: ["shelf", "slot"], key: { shelf: "a", slot: 1n } },
+          { elements: [{ code: "y" }], grouping: ["shelf", "slot"], key: { shelf: "a", slot: 2n } }
+        ]);
 
         const splat = await query("select NoBook { * } filter .title = 'b1'");
         assertEquals(splat.described, {
@@ -229,6 +256,11 @@ Deno.test({
         ]);
       });
 
+      await t.step("a query without parameters has the null input type id", async () => {
+        assertEquals(await client.describeInput("select NoBook { title }"), { id: "00000000-0000-0000-0000-000000000000", typedesc: new Uint8Array(0) });
+        assertEquals((await query("select NoBook { title } order by .title")).values, [{ title: "b1" }, { title: "b2" }]);
+      });
+
       await t.step("output format NONE is the null type id with no result", async () => {
         assertEquals(await query("update NoBook set { title := .title }", { outputFormat: OutputFormat.NONE }), {
           cardinality: Cardinality.NO_RESULT,
@@ -246,8 +278,17 @@ Deno.test({
             [0x03030000, `the query has cardinality ${cardinality} which does not match the expected cardinality ONE`]
           );
         }
-        // One element is a single result; an update on `.id` writes one object at most.
-        assertEquals((await query("select NoAuthor { name } filter .name = 'ann'", one)).values, [{ name: "ann" }]);
+        // A select Gel infers to be many is refused when parsed, whatever it finds.
+        const many = await client.run("select NoAuthor { name } filter .name = 'ann'", one);
+        assertEquals([many?.errorCode, many?.message], [0x03030000, "the query has cardinality MANY which does not match the expected cardinality ONE"]);
+        assertEquals((await client.run("select NoLabel { code } filter .shelf = 'a'", one))?.errorCode, 0x03030000);
+        // One at most: `limit 1`, an exclusive property, the pointers of an exclusive constraint.
+        for (const text of ["select NoAuthor { name } filter .name = 'ann' limit 1", "select NoLabel { code } filter .code = 'x'"]) {
+          assertEquals((await query(text, one)).cardinality, Cardinality.AT_MOST_ONE, text);
+        }
+        const pinned = await query("select NoLabel { code } filter .shelf = 'a' and .slot = 2", one);
+        assertEquals([pinned.cardinality, pinned.values], [Cardinality.AT_MOST_ONE, [{ code: "y" }]]);
+        // An update on `.id` writes one object at most.
         const nobody = "<uuid>'00000000-0000-0000-0000-000000000000'";
         assertEquals((await query(`update NoAuthor filter .id = ${nobody} set { name := .name }`, one)).values, []);
         // The update refused above wrote nothing: it was refused when parsed.

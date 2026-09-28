@@ -350,6 +350,14 @@ export class Client {
     return error?.kind === "ErrorResponse" ? error : undefined;
   }
 
+  /*** Parse a command: its input type id and input descriptor bytes. ***/
+  async describeInput(commandText: string, options: QueryOptions = {}): Promise<{ id: string; typedesc: Uint8Array; }> {
+    const parsed = await this.parse(commandText, options);
+    const cdd = parsed.find(m => m.kind === "CommandDataDescription");
+    assert(cdd && cdd.kind === "CommandDataDescription", `no description: ${parsed.map(m => m.kind).join(", ")}`);
+    return { id: uuidString(cdd.inputTypedescId), typedesc: cdd.inputTypedesc };
+  }
+
   private async parse(commandText: string, options: QueryOptions = {}): Promise<ServerMessage[]> {
     await this.send({
       allowedCapabilities: 0xffffffffffffffffn,

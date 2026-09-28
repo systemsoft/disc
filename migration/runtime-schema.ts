@@ -499,6 +499,22 @@ function typeRefToSdlString(
 }
 
 /**
+ * The pointers an exclusive constraint's `on` names: `.a` is `["a"]`,
+ * `(.a, .b)` `["a", "b"]`; null when it is an expression of them (`str_lower(.a)`).
+ */
+function exclusivePointers(on: Expression): string[] | null {
+  if (on.kind === "TupleExpression") {
+    const names = on.elements.map(exclusivePointers);
+    return names.every(name => name !== null) ? names.flat() : null;
+  }
+  if (on.kind !== "PathExpression" || on.source !== undefined) {
+    return null;
+  }
+  const name = on.path.join("").replace(/^\.+/, "");
+  return /^\w+$/.test(name) ? [name] : null;
+}
+
+/**
  * Stringify an SDL Expression node into a human-readable string.
  * Used for rendering constraint arguments, trigger bodies, and
  * computed property expressions.
@@ -1076,6 +1092,15 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         })) :
         undefined;
 
+      // `constraint exclusive on (…)` of pointers: the pointers it makes
+      // exclusive together (one on an expression of them pins none). A
+      // delegated one holds on each subtype alone: none here.
+      const exclusiveOn = typeDecl.members.flatMap(member =>
+        member.kind === "Constraint" && member.name?.value === "exclusive" && member.on && !member.delegated ?
+          [exclusivePointers(member.on)].filter((names): names is string[] => names !== null) :
+          []
+      );
+
       // Extract triggers from the type declaration
       const triggerDecls = typeDecl.members.filter(
         (m): m is TriggerDeclaration => m.kind === "TriggerDeclaration"
@@ -1113,7 +1138,8 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
         accessPolicies,
         triggers,
         annotations: typeAnnotations,
-        indexes
+        indexes,
+        ...(exclusiveOn.length > 0 ? { exclusiveOn } : {})
       };
 
       if (isAbstract) {
@@ -1172,6 +1198,13 @@ export function modulesToSchema(sdlModules: Module[]): Schema {
       for (const [linkName, linkDef] of parentDef.links) {
         if (!typeDef.links.has(linkName)) {
           typeDef.links.set(linkName, { ...linkDef });
+        }
+      }
+
+      // An exclusive constraint holds on the subtypes too.
+      for (const names of parentDef.exclusiveOn ?? []) {
+        if (!typeDef.exclusiveOn?.some(own => own.join() === names.join())) {
+          typeDef.exclusiveOn = [...(typeDef.exclusiveOn ?? []), names];
         }
       }
     }

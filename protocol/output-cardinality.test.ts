@@ -220,12 +220,16 @@ Deno.test("with block is described like its body, with aliases resolved", () => 
     ["select (select Thing { nickname })", "Thing", [["nickname", "str"]]]
   ];
   for (const [query, typeName, fields] of cases) {
-    // Object results keep echoing the client's expected cardinality.
+    // A select of objects without an exclusive filter is many.
     assertEquals(
       inferObject(query),
-      { cardinality: undefined, fields, isScalar: undefined, typeName },
+      { cardinality: Cardinality.MANY, fields, isScalar: undefined, typeName },
       query
     );
+  }
+  // The alias's filter keeps one at most, re-selected or not.
+  for (const query of ["with t := (select Thing filter .id = <uuid>$id) select t { title }", "select (select Thing filter .id = <uuid>$id) { title }"]) {
+    assertEquals(inferObject(query).cardinality, Cardinality.AT_MOST_ONE, query);
   }
 });
 
@@ -369,7 +373,7 @@ Deno.test("path selects and for queries are described by what they reach", () =>
     ["for t in Thing union (select t.posts { title })", "Post", [["title", "str"]]]
   ];
   for (const [query, typeName, fields] of objects) {
-    assertEquals(inferObject(query), { cardinality: undefined, fields, isScalar: undefined, typeName }, query);
+    assertEquals(inferObject(query), { cardinality: Cardinality.MANY, fields, isScalar: undefined, typeName }, query);
   }
 });
 

@@ -194,6 +194,12 @@ export interface TypeDef {
   module?: string;
   /** Indexes declared on this type (e.g., `index on (.name)`) */
   indexes?: IndexDef[];
+  /**
+   * The pointers each type-level `constraint exclusive on (…)` makes
+   * exclusive together, its own and its ancestors': `on ((.shelf, .slot))`
+   * is `["shelf", "slot"]`.
+   */
+  exclusiveOn?: string[][];
 }
 
 export interface IndexDef {

@@ -29,13 +29,15 @@
  * the descriptors and values.
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertNotEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
-import { Client, type Answer, type Described, type QueryOptions } from "../tests/binary-protocol-client.ts";
+import { objectTypeId } from "../lib/type-ids.ts";
+import { Client, type Answer, type Described, type DescribedField, type QueryOptions } from "../tests/binary-protocol-client.ts";
 import { BinaryProtocolServer } from "./binary-server.ts";
 import { Cardinality, CompilationFlag, OutputFormat } from "./enums.ts";
 
 const property = (edgeqlType: string, required = false, multi = false) => ({ edgeqlType, multi, required, type: edgeqlType });
+const exclusive = (edgeqlType: string) => ({ ...property(edgeqlType, true), constraints: [{ name: "exclusive" }] });
 
 const schema = {
   scalars: new Map(),
@@ -59,6 +61,17 @@ const schema = {
       ]),
       subtypes: ["Novel"]
     }],
+    ["Label", {
+      exclusiveOn: [["shelf", "slot"]],
+      kind: "object",
+      links: new Map(),
+      properties: new Map<string, object>([
+        ["id", property("uuid", true)],
+        ["code", exclusive("str")],
+        ["shelf", property("str", true)],
+        ["slot", property("int64", true)]
+      ])
+    }],
     ["Novel", {
       kind: "object",
       links: new Map(),
@@ -76,6 +89,7 @@ const schema = {
 const ANN = "01a0e505-981b-7ae7-9e8e-34682b149a1d";
 const B1 = "01a0e505-9816-7063-8257-cf611f47951b";
 const B2 = "01a0e505-9818-75dd-8cd6-f0ed52e8a827";
+const NOBODY = "00000000-0000-0000-0000-000000000000";
 
 /*** The rows Disc's executor answers for each query (single links with a sub-shape as one-element arrays). ***/
 const ROWS: Record<string, Record<string, unknown>[]> = {
@@ -85,6 +99,9 @@ const ROWS: Record<string, Record<string, unknown>[]> = {
   "group Book { title } by .title": [
     { elements: [{ title: "b1" }], grouping: ["title"], key: { title: "b1" } },
     { elements: [{ title: "b2" }], grouping: ["title"], key: { title: "b2" } }
+  ],
+  "group Novel { title } by (.title, .pages)": [
+    { elements: [{ title: "n1" }], grouping: ["title", "pages"], key: { pages: 300, title: "n1" } }
   ],
   "group Book { title } using n := len(.title) by n": [
     { elements: [{ title: "b1" }, { title: "b2" }], grouping: ["n"], key: { n: 2 } }
@@ -104,6 +121,8 @@ const ROWS: Record<string, Record<string, unknown>[]> = {
   "select Author { name } filter .id = <uuid>'01a0e505-981b-7ae7-9e8e-34682b149a1d'": [{ name: "ann" }],
   "select Author { name } order by .name": [{ name: "ann" }, { name: "bob" }],
   "select Author { name } filter false": [],
+  "select Author { name } filter .name = 'ann'": [{ name: "ann" }],
+  "select Author { books: { @rank } }": [{ books: [{ "@rank": 1 }] }],
   "select Book { title, fans := .<best[is Author] { name } }": [{ fans: [{ name: "ann" }], title: "b1" }],
   "select Book { title, tags }": [
     { tags: ["x", "y"], title: "b1" },
@@ -219,6 +238,18 @@ Deno.test("group answers free objects of key, grouping and elements", async () =
       kind: "object"
     });
     assertEquals(using.values, [{ elements: [{ title: "b1" }, { title: "b2" }], grouping: ["n"], key: { n: 2n } }]);
+
+    // `by (.a, .b)` groups by both keys, each named by its property, as Gel
+    // names grouping atoms (edb/edgeql/desugar_group.py); a key in several
+    // grouping sets is one key.
+    const both = await query("group Novel { title } by (.title, .pages)");
+    const key: DescribedField = { link: true, name: "key", type: "free{title: std::str, pages: std::int32}" };
+    assertEquals(both.described.kind === "object" ? both.described.fields[0] : undefined, key);
+    assertEquals(both.values, [{ elements: [{ title: "n1" }], grouping: ["title", "pages"], key: { pages: 300, title: "n1" } }]);
+    for (const text of ["group Novel { title } by {.title, (.title, .pages)}", "group Novel { title } by cube(.title, .pages)"]) {
+      const described = (await query(text)).described;
+      assertEquals(described.kind === "object" ? described.fields[0] : undefined, key, text);
+    }
   });
 });
 
@@ -237,7 +268,7 @@ Deno.test("JSON output is one std::str: the result as an array, or each object w
 
     // An empty result: `[]` for a set, nothing (the client's `null`) for one expected object.
     assertEquals((await query("select Author { name } filter false", json)).values, ["[]"]);
-    assertEquals((await query("select Author { name } filter false", { ...json, expectedCardinality: Cardinality.AT_MOST_ONE })).values, []);
+    assertEquals((await query(`select Author { name } filter .id = <uuid>'${NOBODY}'`, { ...json, expectedCardinality: Cardinality.AT_MOST_ONE })).values, []);
 
     const elements = await query("select Author { name } order by .name", { outputFormat: OutputFormat.JSON_ELEMENTS });
     assertEquals(elements.described, str);
@@ -292,7 +323,8 @@ Deno.test("objects carry an implicit id, type id and type name as the client ask
     });
     const [row] = typed.values as Record<string, unknown>[];
     assertEquals([row.__tname__, row.id, row.name], ["default::Author", ANN, "ann"]);
-    assertEquals(typeof row.__tid__, "string");
+    // The type id is the type's stable id (`objectTypeId`), not the shape's.
+    assertEquals(row.__tid__, objectTypeId("default::Author"));
 
     // A free object has none; its objects do.
     assertEquals((await query("group Book { title } by .title", ids)).described, {
@@ -317,6 +349,19 @@ Deno.test("link properties, splats, type intersections and object group keys are
       kind: "object"
     });
     assertEquals(props.values, [{ books: [{ "@next": 2n, "@rank": 1, title: "b1" }] }]);
+
+    // Link properties are pointers of the shape: one of only them has no
+    // implicit id (edb/edgeql/compiler/viewgen.py), unless ids are asked for.
+    const ranks = await query("select Author { books: { @rank } }");
+    assertEquals(ranks.described, { fields: [{ link: true, name: "books", type: "set<{@rank: std::int16}>" }], kind: "object" });
+    assertEquals(ranks.values, [{ books: [{ "@rank": 1 }] }]);
+    assertEquals((await query("select Author { books: { @rank } }", { compilationFlags: CompilationFlag.INJECT_OUTPUT_OBJECT_IDS })).described, {
+      fields: [
+        { implicit: true, name: "id", type: "std::uuid" },
+        { link: true, name: "books", type: "set<{implicit id: std::uuid, @rank: std::int16}>" }
+      ],
+      kind: "object"
+    });
 
     // A splat is its type's stored properties, `id` first.
     const splat = await query("select Book { * }");
@@ -379,6 +424,50 @@ Deno.test("a single result of more than one element is a ResultCardinalityMismat
     // One element, or none, is a single result; the session goes on.
     const one = { expectedCardinality: Cardinality.AT_MOST_ONE };
     assertEquals(await client.run(`select Author { name } filter .id = <uuid>'${ANN}'`, one), undefined);
-    assertEquals((await query("select Author { name } filter false", one)).values, []);
+    assertEquals((await query(`select Author { name } filter .id = <uuid>'${NOBODY}'`, one)).values, []);
+  });
+});
+
+Deno.test("an object select has Gel's result cardinality, and a single result of many is refused when parsed", async () => {
+  await withClient(async (query, client) => {
+    // edb/edgeql/compiler/inference/cardinality.py: a filter on `.id`, an
+    // exclusive property or every property of an exclusive constraint (each
+    // equal to one value), `limit 1` and `assert_single` keep at most one.
+    const cardinalities: [string, number][] = [
+      ["select Author { name }", Cardinality.MANY],
+      ["select Author { name } filter .name = 'ann'", Cardinality.MANY],
+      [`select Author { name } filter .id = <uuid>'${ANN}'`, Cardinality.AT_MOST_ONE],
+      [`select Author { name } filter .name = 'ann' and <uuid>'${ANN}' = .id`, Cardinality.AT_MOST_ONE],
+      ["select Author { name } order by .name limit 1", Cardinality.AT_MOST_ONE],
+      ["select Label { code } filter .code = 'x'", Cardinality.AT_MOST_ONE],
+      ["select Label { code } filter .shelf = 'a' and .slot = 1", Cardinality.AT_MOST_ONE],
+      ["select Label { code } filter .shelf = 'a'", Cardinality.MANY],
+      ["select assert_single((select Author { name }))", Cardinality.AT_MOST_ONE],
+      [`with a := (select Author filter .id = <uuid>'${ANN}') select a { name }`, Cardinality.AT_MOST_ONE],
+      [`for x in {1, 2} union (select Author { name } filter .id = <uuid>'${ANN}')`, Cardinality.MANY]
+    ];
+    for (const [text, cardinality] of cardinalities) {
+      assertEquals((await query(text)).cardinality, cardinality, text);
+    }
+    const described = (await query("select assert_single((select Author { name }))")).described;
+    assertEquals(described, { fields: [{ name: "name", type: "std::str" }], kind: "object" });
+
+    // Refused when parsed: the executor, which answers one row, never runs it.
+    const one = { expectedCardinality: Cardinality.AT_MOST_ONE };
+    const error = await client.run("select Author { name } filter .name = 'ann'", one);
+    assertEquals(
+      [error?.errorCode, error?.message],
+      [0x03030000, "the query has cardinality MANY which does not match the expected cardinality ONE"]
+    );
+    assertEquals((await query("select Label { code } filter .shelf = 'a' and .slot = 1", one)).cardinality, Cardinality.AT_MOST_ONE);
+  });
+});
+
+Deno.test("a query without parameters has Gel's null input type id and no input descriptor", async () => {
+  await withClient(async (query, client) => {
+    // edb/server/compiler/sertypes.py `describe_params`: NULL_TYPE_ID, b''.
+    assertEquals(await client.describeInput("select Author { name }"), { id: NOBODY, typedesc: new Uint8Array(0) });
+    assertNotEquals((await client.describeInput("select <str>$x")).id, NOBODY);
+    assertEquals((await query("select Author { name } order by .name")).values, [{ name: "ann" }, { name: "bob" }]);
   });
 });

@@ -230,7 +230,7 @@ def test_nested_multi_link_shapes(client):
     author = client.query_single(
         """
         SELECT Author { name, books: { title, tags }, best: { title } }
-        FILTER .name = <str>$name
+        FILTER .name = <str>$name LIMIT 1
         """,
         name=name,
     )
@@ -243,9 +243,11 @@ def test_nested_multi_link_shapes(client):
 
     # A link without a sub-shape is its objects' ids.
     bare = client.query_single(
-        "SELECT Author { books, best } FILTER .name = <str>$name", name=name
+        "SELECT Author { books, best } FILTER .name = <str>$name LIMIT 1", name=name
     )
-    best_id = client.query_single("SELECT Book { id } FILTER .title = <str>$a", a=a).id
+    best_id = client.query_single(
+        "SELECT Book { id } FILTER .title = <str>$a LIMIT 1", a=a
+    ).id
     assert bare.best.id == best_id
     assert best_id in [book.id for book in bare.books]
     assert len(bare.books) == 2
@@ -295,6 +297,11 @@ def test_link_properties_splats_and_object_group_keys(client):
     )
     [member] = fetched.members
     assert (member.title, member["@role"]) == (title, "lead")
+    # Link properties are the shape's pointers: its id only as the client asks.
+    roles = client._describe_query("SELECT Team { members: { @role } }")
+    role_elements = roles.output_type.elements["members"].type.element_type.elements
+    assert list(role_elements) == ["id", "@role"]
+    assert role_elements["id"].is_implicit
     members = client._describe_query(
         "SELECT Team { members: { title, @role } }"
     ).output_type.elements["members"]
@@ -302,7 +309,9 @@ def test_link_properties_splats_and_object_group_keys(client):
     member_kinds = members.type.element_type.elements
     assert member_kinds["@role"].kind == gel.enums.ElementKind.LINK_PROPERTY
 
-    splat = client.query_single("SELECT Book { * } FILTER .title = <str>$t", t=title)
+    splat = client.query_single(
+        "SELECT Book { * } FILTER .title = <str>$t LIMIT 1", t=title
+    )
     assert (splat.title, list(splat.tags)) == (title, [])
 
     client.query(
@@ -312,6 +321,23 @@ def test_link_properties_splats_and_object_group_keys(client):
     )
     groups = client.query("GROUP Author { name } USING b := .best BY b")
     assert any(g.key.b is not None and g.key.b.id for g in groups)
+
+
+def test_group_by_a_tuple_has_a_key_per_property(client):
+    name = f"pair-{uuid.uuid4()}"
+    client.query(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=11,
+    )
+    groups = client.query("GROUP Item { name } BY (.name, .count)")
+    [group] = [g for g in groups if g.key.name == name]
+    assert (group.key.count, list(group.grouping)) == (11, ["name", "count"])
+
+
+def test_a_query_without_parameters_takes_no_arguments(client):
+    with pytest.raises(gel.QueryArgumentError, match="expected no named arguments"):
+        client.query("SELECT 1", x=1)
 
 
 def test_execute_runs_without_a_result(client):
@@ -336,3 +362,26 @@ def test_single_results_of_many_elements_raise(client):
         client.query_required_single(
             "SELECT Item { name } FILTER .name = 'nobody' LIMIT 1"
         )
+
+
+def test_single_result_of_a_select_inferred_many_is_refused(client):
+    name = f"alone-{uuid.uuid4()}"
+    client.query(
+        "INSERT Item { name := <str>$name, count := <int32>$count }",
+        name=name,
+        count=12,
+    )
+    with pytest.raises(gel.InterfaceError) as raised:
+        client.query_single("SELECT Item { name } FILTER .name = <str>$name", name=name)
+    assert isinstance(raised.value.__cause__, gel.ResultCardinalityMismatchError)
+    # At most one: an exclusive property, the pointers of an exclusive
+    # constraint.
+    code = f"alone-{uuid.uuid4()}"
+    client.query("INSERT Label { code := <str>$code }", code=code)
+    label = client.query_single("SELECT Label { code } FILTER .code = <str>$code", code=code)
+    assert label.code == code
+    client.query("INSERT Slot { shelf := <str>$shelf, slot := 1 }", shelf=code)
+    slot = client.query_single(
+        "SELECT Slot { slot } FILTER .shelf = <str>$shelf AND .slot = 1", shelf=code
+    )
+    assert slot.slot == 1

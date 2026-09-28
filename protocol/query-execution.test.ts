@@ -670,9 +670,8 @@ Deno.test("query-execution - Execute CONFIGURE query returns CONFIGURE status", 
     )
   );
 
-  // Read CommandDataDescription
-  const rawDesc = await readMessage(conn);
-  assertEquals(decode(rawDesc!).kind, "CommandDataDescription");
+  // No CommandDataDescription: without parameters or output, the statement's
+  // input and output are the null type ids the client sent.
 
   // Should get CommandComplete (no Data for NONE format + configure)
   const rawComplete = await readMessage(conn);

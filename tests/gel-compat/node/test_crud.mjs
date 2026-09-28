@@ -10,7 +10,7 @@
  * script at tests/gel-compat/run.sh handles that.
  */
 
-import { ConstraintViolationError, createClient, NoDataError, ResultCardinalityMismatchError } from "gel";
+import { ConstraintViolationError, createClient, NoDataError, QueryArgumentError, ResultCardinalityMismatchError } from "gel";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
@@ -186,7 +186,7 @@ test("nested shapes follow multi and single links", async () => {
     { name, a, b }
   );
   const author = await client.querySingle(
-    "SELECT Author { name, books: { title, tags }, best: { title } } FILTER .name = <str>$name",
+    "SELECT Author { name, books: { title, tags }, best: { title } } FILTER .name = <str>$name LIMIT 1",
     { name }
   );
   const books = [...author.books].sort((x, y) => x.title.localeCompare(y.title));
@@ -194,8 +194,8 @@ test("nested shapes follow multi and single links", async () => {
   assert.equal(author.best.title, a);
 
   // A link without a sub-shape is its objects' ids.
-  const bare = await client.querySingle("SELECT Author { books, best } FILTER .name = <str>$name", { name });
-  const best = await client.querySingle("SELECT Book { id } FILTER .title = <str>$a", { a });
+  const bare = await client.querySingle("SELECT Author { books, best } FILTER .name = <str>$name LIMIT 1", { name });
+  const best = await client.querySingle("SELECT Book { id } FILTER .title = <str>$a LIMIT 1", { a });
   assert.equal(bare.best.id, best.id);
   assert.equal(bare.books.length, 2);
   assert.ok(bare.books.some(book => book.id === best.id));
@@ -241,8 +241,11 @@ test("link properties, splats and object group keys", async () => {
     { id: team.id }
   );
   assert.deepEqual(fetched.members.map(m => ({ ...m })), [{ title, "@role": "lead" }]);
+  // Link properties are the shape's pointers: no implicit id.
+  const roles = await client.querySingle("SELECT Team { members: { @role } } FILTER .id = <uuid>$id", { id: team.id });
+  assert.deepEqual(roles.members.map(m => ({ ...m })), [{ "@role": "lead" }]);
 
-  const splat = await client.querySingle("SELECT Book { * } FILTER .title = <str>$t", { t: title });
+  const splat = await client.querySingle("SELECT Book { * } FILTER .title = <str>$t LIMIT 1", { t: title });
   assert.equal(splat.title, title);
   assert.deepEqual([...splat.tags], []);
   assert.ok(splat.id);
@@ -253,6 +256,21 @@ test("link properties, splats and object group keys", async () => {
   );
   const groups = await client.query("GROUP Author { name } USING b := .best BY b");
   assert.ok(groups.some(g => g.key.b && g.key.b.id));
+});
+
+test("group by (.a, .b) has a key per property", async () => {
+  const name = `pair-${Date.now()}-${Math.random()}`;
+  await insertItem(name, 11);
+  const groups = await client.query("GROUP Item { name } BY (.name, .count)");
+  const [group] = groups.filter(g => g.key.name === name);
+  assert.deepEqual([group.key.count, [...group.grouping]], [11, ["name", "count"]]);
+});
+
+test("a query without parameters takes no arguments", async () => {
+  await assert.rejects(
+    client.query("SELECT 1", { x: 1 }),
+    error => error instanceof QueryArgumentError && /does not contain any query parameters/.test(error.message)
+  );
 });
 
 test("execute runs without a result", async () => {
@@ -269,4 +287,17 @@ test("single results of many elements raise ResultCardinalityMismatchError", asy
     client.queryRequiredSingle("SELECT Item { name } FILTER .name = 'nobody' LIMIT 1"),
     NoDataError
   );
+});
+
+test("a single result of a select Gel infers to be many is refused, whatever it finds", async () => {
+  const name = `alone-${Date.now()}-${Math.random()}`;
+  await insertItem(name, 12);
+  await assert.rejects(client.querySingle("SELECT Item { name } FILTER .name = <str>$name", { name }), ResultCardinalityMismatchError);
+  // At most one: an exclusive property, the pointers of an exclusive constraint.
+  const code = `alone-${Date.now()}-${Math.random()}`;
+  await client.query("INSERT Label { code := <str>$code }", { code });
+  assert.equal((await client.querySingle("SELECT Label { code } FILTER .code = <str>$code", { code })).code, code);
+  await client.query("INSERT Slot { shelf := <str>$shelf, slot := 1 }", { shelf: code });
+  const slot = await client.querySingle("SELECT Slot { slot } FILTER .shelf = <str>$shelf AND .slot = 1", { shelf: code });
+  assert.equal(slot.slot, 1);
 });

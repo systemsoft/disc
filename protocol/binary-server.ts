@@ -22,6 +22,7 @@ import { powerType } from "../compiler/compiler-expressions.ts";
 import { enumGelNames, type Schema, type TypeDef } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { objectTypeId } from "../lib/type-ids.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import {
   Cardinality,
@@ -919,7 +920,15 @@ export function inferOutputShape(
         );
       }
       if (inner.kind === "SelectQuery") {
-        return inferOutputShape({ ...sel, expr: inner.expr }, schema, exprScope);
+        // The subquery's objects, re-selected: as many as both keep.
+        const reselected = inferOutputShape({ ...sel, expr: inner.expr }, schema, exprScope);
+        const kept = inferOutputShape(inner, schema, exprScope).cardinality;
+        if (reselected.cardinality === undefined || kept === undefined) {
+          return reselected;
+        }
+        const [lower, upper] = cardinalityBounds(reselected.cardinality);
+        const [keptLower, keptUpper] = cardinalityBounds(kept);
+        return { ...reselected, cardinality: boundsCardinality(Math.min(lower, keptLower), Math.min(upper, keptUpper)) };
       }
     }
 
@@ -950,8 +959,20 @@ export function inferOutputShape(
       }
     }
 
-    const typeName = objectTypeName(expr, exprScope) ?? "Object";
-    return objectShape(typeName, sel.shape, scope);
+    // `assert_single(objects)`: the objects, one at most.
+    if (!sel.shape && expr.kind === "FunctionCall" && functionName(expr as AST.FunctionCall) === "assert_single") {
+      const [arg] = (expr as AST.FunctionCall).args;
+      const objects = arg ? inferOutputShape({ ...sel, expr: arg.value }, schema, exprScope) : undefined;
+      if (objects && !objects.isScalar && objects.cardinality !== undefined) {
+        return { ...objects, cardinality: boundsCardinality(cardinalityBounds(objects.cardinality)[0], 1) };
+      }
+    }
+
+    const typeName = objectTypeName(expr, exprScope);
+    if (typeName === null) {
+      return objectShape("Object", sel.shape, scope);
+    }
+    return { ...objectShape(typeName, sel.shape, scope), cardinality: objectSelectCardinality(sel, expr, typeName, exprScope) };
   }
 
   if (q.kind === "GroupQuery") {
@@ -959,6 +980,22 @@ export function inferOutputShape(
   }
 
   return { typeName: "Object", fields: withImplicitFields("Object", [], scope) };
+}
+
+/**
+ * How many objects a select of `typeName`'s objects keeps, as Gel infers it
+ * (edb/edgeql/compiler/inference/cardinality.py): as many as its expression
+ * gives (a type: many), at most one when it keeps at most one (`limit 1`,
+ * a filter on `.id` or exclusive pointers, see `selectKeepsAtMostOne`), and
+ * possibly none when a filter, offset or limit can drop every one.
+ */
+function objectSelectCardinality(sel: AST.SelectQuery, expr: AST.Expression, typeName: string, scope: WithScope): number {
+  const [lower, upper] = cardinalityBounds(expressionCardinality(expr, scope));
+  // The schema an output description reads is Disc's (`Schema`), narrowed.
+  const typeDef = scope.schema?.types?.get(typeName) as TypeDef | undefined;
+  const keepsOne = typeDef !== undefined && selectKeepsAtMostOne({ ...sel, expr }, typeDef);
+  const narrowed = Boolean(sel.filter || sel.offset || sel.limit);
+  return boundsCardinality(narrowed ? 0 : lower, keepsOne ? 1 : upper);
 }
 
 /**
@@ -982,17 +1019,16 @@ function mutationCardinality(mutation: AST.InsertQuery | AST.UpdateQuery | AST.D
 /**
  * An object shape's fields with the implicit ones Gel injects in front of
  * them (edb/edgeql/compiler/viewgen.py `_get_shape_configuration_inner`):
- * `id` when the shape has no pointers (link properties aside), or when the client asks for ids and
- * the shape doesn't select it; then `__tid__` and `__tname__` (the object's
- * type, `default::Author`) when asked for — so a shape starts `__tname__,
- * __tid__, id`. Disc has no type ids of its own: `__tid__` is derived from
- * the type's name.
+ * `id` when the shape has no pointers (a link property is one), or when the
+ * client asks for ids and the shape doesn't select it; then `__tid__` and
+ * `__tname__` (the object's type, `default::Author`) when asked for — so a
+ * shape starts `__tname__, __tid__, id`. `__tid__` is the type's stable id
+ * (`objectTypeId`).
  */
 function withImplicitFields(typeName: string, fields: OutputField[], scope: WithScope): OutputField[] {
   const implicit = scope.implicit;
   const out = [...fields];
-  const pointers = fields.filter(f => !f.linkProperty);
-  if (pointers.length === 0 || (implicit?.ids && !pointers.some(f => f.name === "id"))) {
+  if (fields.length === 0 || (implicit?.ids && !fields.some(f => !f.linkProperty && f.name === "id"))) {
     out.unshift({ cardinality: Cardinality.ONE, edgeqlType: "uuid", implicit: true, name: "id" });
   }
   if (typeName === "Object") {
@@ -1000,8 +1036,7 @@ function withImplicitFields(typeName: string, fields: OutputField[], scope: With
   }
   const qualified = typeName.includes("::") ? typeName : `default::${typeName}`;
   if (implicit?.typeIds) {
-    const typeId = generateDescriptorIdSync(new TextEncoder().encode(`disc:type:${qualified}`));
-    out.unshift({ cardinality: Cardinality.ONE, constant: typeId, edgeqlType: "uuid", implicit: true, name: "__tid__" });
+    out.unshift({ cardinality: Cardinality.ONE, constant: objectTypeId(qualified), edgeqlType: "uuid", implicit: true, name: "__tid__" });
   }
   if (implicit?.typeNames) {
     out.unshift({ cardinality: Cardinality.ONE, constant: qualified, edgeqlType: "str", implicit: true, name: "__tname__" });
@@ -1170,7 +1205,7 @@ function inferGroupShape(group: AST.GroupQuery, scope: WithScope): OutputShape {
   const typeName = objectTypeName(subject, scope) ?? "Object";
   const subjectScope: WithScope = { ...scope, subject: typeName };
   const bound = new Map(group.using.map(binding => [binding.name.name, binding.value]));
-  const keys: OutputField[] = group.by.elements.map(by => {
+  const keys: OutputField[] = groupingAtoms(group.by.elements).map(by => {
     const name = by.kind === "Identifier" ? (by as AST.Identifier).name : extractFieldNameFromExpr(by) ?? "expr";
     // A bare `p` not bound by `using` names the property `.p`.
     const expr: AST.Expression = bound.get(name) ??
@@ -1191,6 +1226,29 @@ function inferGroupShape(group: AST.GroupQuery, scope: WithScope): OutputShape {
     free: true,
     typeName: "FreeObject"
   };
+}
+
+/**
+ * A `group`'s keys: the atoms of its grouping elements, each once, in order
+ * (edb/edgeql/desugar_group.py `collect_grouping_atoms`): `(a, b)` is `a`
+ * and `b`, as are `{a, (a, b)}` and `cube(a, b)`.
+ */
+function groupingAtoms(elements: AST.Expression[]): AST.Expression[] {
+  const atoms = new Map<string, AST.Expression>();
+  const collect = (el: AST.Expression): void => {
+    if (el.kind === "TupleExpr" || el.kind === "SetExpr") {
+      (el as AST.TupleExpr | AST.SetExpr).elements.forEach(collect);
+    } else if (el.kind === "FunctionCall" && ["cube", "rollup"].includes(functionName(el as AST.FunctionCall))) {
+      (el as AST.FunctionCall).args.forEach(arg => collect(arg.value));
+    } else {
+      const name = el.kind === "Identifier" ? (el as AST.Identifier).name : extractFieldNameFromExpr(el) ?? "expr";
+      if (!atoms.has(name)) {
+        atoms.set(name, el);
+      }
+    }
+  };
+  elements.forEach(collect);
+  return [...atoms.values()];
 }
 
 /**
@@ -1654,6 +1712,11 @@ function extractFieldNameFromExpr(expr: unknown): string | undefined {
 function buildInputDescriptor(
   params: ParamInfo[]
 ): { id: Uint8Array; data: Uint8Array; } {
+  // No parameters: Gel's null type id and no descriptor
+  // (edb/server/compiler/sertypes.py `describe_params`).
+  if (params.length === 0) {
+    return { id: new Uint8Array(16), data: new Uint8Array(0) };
+  }
   const list: TypeDescriptorList = { descriptors: [], positions: new Map() };
   const descriptors = list.descriptors;
 
@@ -1671,8 +1734,7 @@ function buildInputDescriptor(
   );
   // Use CTYPE_SHAPE (not CTYPE_INPUT_SHAPE) for query parameters: the
   // Python client raises NotImplementedError on encode_args when the
-  // codec is sparse, and CTYPE_INPUT_SHAPE → SparseObjectCodec. Also
-  // used when there are no params, so the client gets a non-empty codec.
+  // codec is sparse, and CTYPE_INPUT_SHAPE → SparseObjectCodec.
   descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
 
   const packed = packTypedescBlock(descriptors);
