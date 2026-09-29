@@ -37,11 +37,15 @@ import * as Types from "./types.ts";
  *   - `subtypes`: reverse parent→child map, built once per `allTypes` Map.
  *   - `props` / `links`: memoized inheritance-resolved member lists, so each
  *     parent's contribution is computed once and reused by every descendant.
+ *   - `expressionConstraints` / `propertyDeclarations`: the same, for the
+ *     members `declaredChecks` reads.
  */
 interface DiffCache {
   subtypes: Map<string, string[]>;
   props: Map<AST.TypeDeclaration, Types.PropertyDefinition[]>;
   links: Map<AST.TypeDeclaration, Types.LinkDefinition[]>;
+  expressionConstraints: Map<AST.TypeDeclaration, AST.Constraint[]>;
+  propertyDeclarations: Map<AST.TypeDeclaration, AST.PropertyDeclaration[]>;
 }
 
 /*** The concrete object type whose table (or junction tables) a CHECK is on. ***/
@@ -114,7 +118,9 @@ export class SchemaDiffer {
     cache = {
       subtypes,
       props: new Map(),
-      links: new Map()
+      links: new Map(),
+      expressionConstraints: new Map(),
+      propertyDeclarations: new Map()
     };
     this.caches.set(allTypes, cache);
     return cache;
@@ -1517,8 +1523,8 @@ export class SchemaDiffer {
         const owner = { shortName, table: typeNameToTableName(typeDef.name.value), typeName: `${moduleOf.get(typeDef) ?? "default"}::${shortName}` };
 
         return [
-          ...this.expressionConstraints(typeDef, types, new Set()).map(constraint => this.typeCheck(owner, constraint)),
-          ...this.propertyDeclarations(typeDef, types, new Map()).flatMap(property => this.propertyChecks(owner, property)),
+          ...this.expressionConstraints(typeDef, types).map(constraint => this.typeCheck(owner, constraint)),
+          ...this.propertyDeclarations(typeDef, types).flatMap(property => this.propertyChecks(owner, property)),
           ...this.scalarColumns(typeDef, types, owner.table).flatMap(column => this.scalarChecks(owner, column, scalars))
         ];
       });
@@ -1776,9 +1782,19 @@ export class SchemaDiffer {
   /*** The stored single properties of a type and of the types it extends (a type's own declaration of a name wins). ***/
   private propertyDeclarations(
     typeDef: AST.TypeDeclaration,
-    types: Map<string, AST.TypeDeclaration>,
-    found: Map<string, AST.PropertyDeclaration>
+    types: Map<string, AST.TypeDeclaration>
   ): AST.PropertyDeclaration[] {
+    const cache = this.getCache(types).propertyDeclarations;
+    const cached = cache.get(typeDef);
+
+    if (cached)
+      return cached;
+
+    // Memoized (see `DiffCache`); an `extending` cycle ends here.
+    cache.set(typeDef, []);
+
+    const found = new Map<string, AST.PropertyDeclaration>();
+
     for (const member of typeDef.members) {
       if (member.kind === "PropertyDeclaration" && !member.computed && !member.multi && !found.has(member.name.value))
         found.set(member.name.value, member);
@@ -1787,33 +1803,48 @@ export class SchemaDiffer {
     for (const ext of typeDef.extending ?? []) {
       const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
 
-      if (parent && parent !== typeDef)
-        this.propertyDeclarations(parent, types, found);
+      for (const property of parent ? this.propertyDeclarations(parent, types) : []) {
+        if (!found.has(property.name.value))
+          found.set(property.name.value, property);
+      }
     }
 
-    return [...found.values()];
+    const declarations = [...found.values()];
+    cache.set(typeDef, declarations);
+    return declarations;
   }
 
   /*** The `constraint expression on (…)` members of a type and of the types it extends, at any depth. ***/
   private expressionConstraints(
     typeDef: AST.TypeDeclaration,
-    types: Map<string, AST.TypeDeclaration>,
-    seen: Set<AST.TypeDeclaration>
+    types: Map<string, AST.TypeDeclaration>
   ): AST.Constraint[] {
-    if (seen.has(typeDef))
-      return [];
+    const cache = this.getCache(types).expressionConstraints;
+    const cached = cache.get(typeDef);
 
-    seen.add(typeDef);
+    if (cached)
+      return cached;
 
-    const own = typeDef.members.filter((member): member is AST.Constraint =>
-      member.kind === "Constraint" && member.name?.value === "expression" && member.on !== undefined
+    // Memoized (see `DiffCache`); an `extending` cycle ends here.
+    cache.set(typeDef, []);
+
+    // A Set: an ancestor reached through two parents contributes its constraints once.
+    const constraints = new Set(
+      typeDef.members.filter((member): member is AST.Constraint =>
+        member.kind === "Constraint" && member.name?.value === "expression" && member.on !== undefined
+      )
     );
-    const inherited = (typeDef.extending ?? []).flatMap(ext => {
-      const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
-      return parent ? this.expressionConstraints(parent, types, seen) : [];
-    });
 
-    return [...own, ...inherited];
+    for (const ext of typeDef.extending ?? []) {
+      const parent = this.resolveExtendsTarget(ext.name.parts.join("::"), types);
+
+      for (const constraint of parent ? this.expressionConstraints(parent, types) : [])
+        constraints.add(constraint);
+    }
+
+    const declared = [...constraints];
+    cache.set(typeDef, declared);
+    return declared;
   }
 
   /**
