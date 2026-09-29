@@ -109,6 +109,13 @@
                is hostile UX. ***/
           const r = parseRange(raw);
           const isDateOnly = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+          /*** `<datetime>` takes only a full ISO 8601 timestamp with a zone, as in Gel: a bare date
+               becomes midnight UTC and a time without a zone is read as UTC. ***/
+          const datetime = (v: string) => {
+            const t = v.trim();
+            const full = isDateOnly(t) ? `${t}T00:00:00Z` : /(?:[zZ]|[-+]\d{2}(?::?\d{2})?)$/.test(t) ? t : `${t}Z`;
+            return `<datetime>"${escSql(full)}"`;
+          };
 
           if (r.op === "=" && isDateOnly(r.a)) {
             const day = r.a.trim();
@@ -118,12 +125,12 @@
             next.setUTCDate(next.getUTCDate() + 1);
 
             const tomorrow = next.toISOString().slice(0, 10);
-            parts.push(`(.${col} >= <datetime>"${day}" and .${col} < <datetime>"${tomorrow}")`);
+            parts.push(`(.${col} >= ${datetime(day)} and .${col} < ${datetime(tomorrow)})`);
 
             break;
           }
 
-          const clause = rangeClause(col, raw, (v) => `<datetime>"${escSql(v)}"`, (v) => v.length > 0);
+          const clause = rangeClause(col, raw, datetime, (v) => v.length > 0);
 
           if (clause)
             parts.push(clause);
