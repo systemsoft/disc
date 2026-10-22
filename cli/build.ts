@@ -22,6 +22,7 @@ import { join, relative } from "@std/path";
 /*** UTILITY ------------------------------------------ ***/
 
 import { sha256Hex } from "../lib/crypto.ts";
+import { runtimeExecutable } from "../lib/runtime.ts";
 import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 
 /**
@@ -455,9 +456,10 @@ export class BuildCommand {
     if (options.lite)
       console.log(`  Mode: lite (UI assets skipped)`);
 
-    console.log(`  Command: deno ${compileArgs.join(" ")}`);
+    const runtime = runtimeExecutable();
+    console.log(`  Command: ${runtime} ${compileArgs.join(" ")}`);
 
-    const command = new Deno.Command("deno", {
+    const command = new Deno.Command(runtime, {
       args: compileArgs,
       stderr: "inherit",
       stdout: "inherit"

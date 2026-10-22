@@ -11,6 +11,7 @@ import * as Context from "../compiler/context.ts";
 import * as Types from "./types.ts";
 
 import { getLogger } from "../lib/logger.ts";
+import { runtimeExecutable } from "../lib/runtime.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { emitGo } from "./emit-go.ts";
 import { emitRust } from "./emit-rust.ts";
@@ -274,7 +275,7 @@ export async function writeGeneratedFiles(result: Types.CodegenResult, basePath:
   if (runFmt && writtenPaths.length > 0) {
     try {
       const fmt = (extraArgs: string[]): Promise<Deno.CommandOutput> =>
-        new Deno.Command("deno", {
+        new Deno.Command(runtimeExecutable(), {
           args: ["fmt", "--quiet", ...extraArgs, ...writtenPaths],
           stderr: "piped",
           stdout: "null"
