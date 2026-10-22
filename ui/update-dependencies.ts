@@ -22,22 +22,13 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-/*** UTILITY ------------------------------------------ ***/
+import { packagesToUpdate } from "./dependency-pins.ts";
 
-/** Drop `typescript` from here once svelte-check accepts TS 7 (see check-typescript-pin.ts). */
-const HELD = ["typescript"];
+/*** UTILITY ------------------------------------------ ***/
 
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
-}
-
-/*** EXPORT ------------------------------------------- ***/
-
-export function packagesToUpdate(pkg: PackageJson): string[] {
-  const specs = { ...pkg.dependencies, ...pkg.devDependencies };
-
-  return Object.keys(specs).filter(name => !HELD.includes(name) && !specs[name].startsWith("npm:"));
 }
 
 /*** PROGRAM ------------------------------------------ ***/

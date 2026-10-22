@@ -6,7 +6,6 @@ import {
   assertEquals
 } from "@std/assert";
 import { encodeBase64 } from "@std/encoding/base64";
-import { Buffer } from "node:buffer";
 import {
   encodeBytes,
   jsonReplacer,
@@ -139,8 +138,16 @@ Deno.test("jsonReplacer - nested Uint8Array and arrays of them", () => {
   assertEquals(JSON.parse(body), { chunks: ["AQI=", "Aw=="], rows: [{ content: "AQ==" }, { content: "" }] });
 });
 
+/** Stand-in for Node's `Buffer`: a Uint8Array whose `toJSON` turns it into `{ type, data }`
+    before the replacer sees it. Ende has no `node:buffer`, so the shape is reproduced here. */
+class NodeBufferLike extends Uint8Array {
+  toJSON(): { data: number[]; type: "Buffer"; } {
+    return { data: Array.from(this), type: "Buffer" };
+  }
+}
+
 Deno.test("jsonReplacer - a Node Buffer (whose toJSON runs first) is encoded like any Uint8Array", () => {
-  const body = JSON.stringify({ content: Buffer.from([0x1f, 0x8b, 0x00, 0xff]), list: [Buffer.from([1])] }, jsonReplacer);
+  const body = JSON.stringify({ content: NodeBufferLike.from([0x1f, 0x8b, 0x00, 0xff]), list: [NodeBufferLike.from([1])] }, jsonReplacer);
   assertEquals(JSON.parse(body), { content: "H4sA/w==", list: ["AQ=="] });
 });
 

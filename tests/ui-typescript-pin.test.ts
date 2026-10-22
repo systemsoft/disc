@@ -5,13 +5,13 @@
  * Tests for the admin UI's `typescript` pin: `ui/update-dependencies.ts`
  * (keeps `bun run test:dependencies` from bumping it to 7) and
  * `ui/check-typescript-pin.ts` (fails `bun run check` with an explanation if
- * it gets bumped anyway).
+ * it gets bumped anyway). Both are Bun scripts on `node:` built-ins, so the
+ * logic under test lives in the import-free `ui/dependency-pins.ts`.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
-import { typescriptPinProblem } from "../ui/check-typescript-pin.ts";
-import { packagesToUpdate } from "../ui/update-dependencies.ts";
+import { packagesToUpdate, typescriptPinProblem } from "../ui/dependency-pins.ts";
 
 const UI_PACKAGE_JSON = new URL("../ui/package.json", import.meta.url);
 const SVELTE_CHECK_PACKAGE_JSON = new URL("../ui/node_modules/svelte-check/package.json", import.meta.url);
