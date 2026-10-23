@@ -1,56 +1,49 @@
 # Homebrew Formula for Disc
 #
-# Standard tap location after publication:
-#   github.com/systemsoft/homebrew-disc/Formula/disc.rb
+# Published tap: github.com/systemsoft/homebrew-disc/Formula/disc.rb
+# (copy this file there on each release).
 #
-# Until the tap repo exists, this formula can be installed directly from the
-# main repo for early adopters:
-#   brew install --HEAD https://raw.githubusercontent.com/systemsoft/disc/primary/homebrew/disc.rb
-#
-# Build path notes:
-#   - Builds Disc from source via `deno compile` (no GitHub release artifacts
-#     yet — bottle support waits on a published release pipeline).
-#   - The brew-built binary does NOT bundle PostgreSQL: the build machine
-#     has no `<DISC_HOME>/postgres/<version>/` cache, so the embedded-PG
-#     manifest is empty and the runtime falls back to the network downloader
-#     on first `disc init` / `disc serve`. This matches `DISC_BUILD_NO_BUNDLE_PG=1`
-#     behavior and keeps the formula’s brew install footprint small.
-#   - The UI IS bundled (the formula’s build steps run `bun run build` first
-#     so `server/ui-assets.test.ts` and the runtime SPA path both work).
+# Install notes:
+#   - Installs the prebuilt `disc` binary that `.github/workflows/release.yml`
+#     publishes for each tag, verified against its SHA-256. No JavaScript
+#     runtime or Bun is needed: the binary embeds the Ende runtime, the UI and
+#     PostgreSQL.
+#   - macOS is Apple Silicon only, matching the release matrix (there is no
+#     darwin-x64 release artifact; Intel Macs can run the arm64 binary under
+#     Rosetta via `install.sh`, or build from source with `ende task build`).
+#   - To bump: set `version`, then replace each `sha256` with the matching
+#     line of the release's CHECKSUMS.txt.
 
 class Disc < Formula
   desc "TypeScript-native, schema-first database (Gel/EdgeDB compatible)"
   homepage "https://disc.sh"
+  version "2026.09.28"
   license "Apache-2.0"
 
-  # Stable: tagged release. Update on each new tag.
-  url "https://github.com/systemsoft/disc/archive/refs/tags/v2026.06.13.1.tar.gz"
-  sha256 "b86e642a2741b798edc01c5d90d9e9fb0035270f66118019676776bff29f4076"
-  version "2026.06.13.1"
+  on_macos do
+    depends_on arch: :arm64
 
-  # Cutting-edge: install from `primary` branch via `brew install --HEAD disc`.
-  # Useful while bundles ship faster than tags.
-  head "https://github.com/systemsoft/disc.git", branch: "primary"
+    on_arm do
+      url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-darwin-arm64"
+      sha256 "0cd284795b23d40bb39cc893268bca0e5c17a90111033a299a53e60d1be67144"
+    end
+  end
 
-  depends_on "deno"
-  depends_on "oven-sh/bun/bun"
-
-  def install
-    # Build the SvelteKit UI so the embedded asset manifest is non-empty.
-    cd "ui" do
-      system "bun", "install", "--frozen-lockfile"
-      system "bun", "run", "build"
+  on_linux do
+    on_arm do
+      url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-linux-arm64"
+      sha256 "88203a3cf500d50f321441a3cba15efba2cc3851d4cd6cb62c36330a10026913"
     end
 
-    # Compile the Disc binary. `DISC_BUILD_NO_BUNDLE_PG=1` skips the PG
-    # cache walk explicitly — the brew machine wouldn’t have one anyway,
-    # but setting the var avoids a misleading "no embedded PG (no cache
-    # at <path>)" log line during the build.
-    ENV["DISC_BUILD_NO_BUNDLE_PG"] = "1"
-    system "deno", "task", "build"
+    on_intel do
+      url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-linux-x64"
+      sha256 "dd892ce611a7008d72a8759bada7c99dd72a68941a65e3aaacf42b2f07be42ba"
+    end
+  end
 
-    # Install the produced binary to the Homebrew-managed bin path.
-    bin.install "disc"
+  def install
+    # The download is the bare executable, named after its platform.
+    bin.install Dir["disc-*"].first => "disc"
   end
 
   test do
