@@ -70,15 +70,9 @@ jobs:
     name: Build ${{ matrix.platform }}
     needs: build-ui
     strategy:
-      # `darwin-x64` removed from the release matrix because the
-      # macos-13 runner job hangs indefinitely on the GitHub-hosted
-      # runner and never publishes its artifact. Platform support
-      # itself stays — `cli/build.ts` and `postgres/downloader.ts` can
-      # still produce a darwin-x64 binary when invoked directly
-      # (`ende task build:darwin-x64`); we just don't ship one as a
-      # pre-built release artifact. Apple Silicon Macs run the arm64
-      # binary natively; older Intel Macs can build from source or use
-      # Rosetta on the arm64 binary.
+      # No darwin-x64 entry: Intel macOS is not supported. Ende, the
+      # runtime Disc is built on, has no x86_64-apple-darwin build, so
+      # `cli/build.ts` rejects the platform.
       matrix:
         include:
           - platform: linux-x64

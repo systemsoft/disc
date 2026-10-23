@@ -109,7 +109,7 @@ const HELP_TEXT = dedent`
     --lines ${gray("<n>")} ${gray(".".repeat(14))} Number of log lines to show (default: ${bgBrightYellow("50")})
     --level ${gray("<level>")} ${gray(".".repeat(10))} Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
     --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version for upgrade
-    --platform ${gray("<platform>")} ${gray(".".repeat(4))} Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64)
+    --platform ${gray("<platform>")} ${gray(".".repeat(4))} Target platform for build (linux-x64, linux-arm64, darwin-arm64, windows-x64)
     --lite ${gray(".".repeat(19))} Skip UI assets in build (future use)
     --format ${gray("<format>")} ${gray(".".repeat(8))} Deploy format: docker, compose, systemd, env
     --status ${gray(".".repeat(17))} Show migration status (applied count, latest migration)
@@ -333,7 +333,7 @@ const COMMAND_HELP: Record<string, string> = {
       --lite ${gray(".".repeat(19))} Skip bundling UI assets (smaller binary)
       --release ${gray(".".repeat(16))} Rebuild the UI bundle via Vite (else reuse the committed ui/build/)
       -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output binary path
-      --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64 | windows-x64
+      --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-arm64 | windows-x64
   `,
 
   codegen: dedent`

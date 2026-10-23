@@ -22,7 +22,7 @@ import { clientToolsManifest, pgToolPath, PostgresClientTools, readDataDirVersio
 
 /*** HELPER ------------------------------------------- ***/
 
-const PLATFORMS = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"];
+const PLATFORMS = ["darwin-arm64", "linux-arm64", "linux-x64", "windows-x64"];
 
 /** Build a tar.gz shaped like a theseus release: `<top>/bin/pg_dump`, `psql`, … */
 async function buildFakeArchive(topDir: string): Promise<Uint8Array> {
@@ -101,7 +101,6 @@ Deno.test("clientToolsManifest - builds the theseus-rs release URL from the targ
 Deno.test("clientToolsManifest - maps each platform to its glibc/msvc target triple", () => {
   const triples: Record<string, string> = {
     "darwin-arm64": "aarch64-apple-darwin",
-    "darwin-x64": "x86_64-apple-darwin",
     "linux-arm64": "aarch64-unknown-linux-gnu",
     "linux-x64": "x86_64-unknown-linux-gnu",
     "windows-x64": "x86_64-pc-windows-msvc"
@@ -304,4 +303,8 @@ Deno.test("PostgresClientTools - default cache lives under $DISC_HOME/postgres-c
     assertEquals((tools as unknown as { baseDir: string; }).baseDir, join("/opt/disc-home", "postgres-client"));
     return Promise.resolve();
   });
+});
+
+Deno.test("clientToolsManifest - has no darwin-x64 build (Intel macOS is unsupported)", () => {
+  assertEquals(clientToolsManifest("18.4", "darwin-x64"), null);
 });

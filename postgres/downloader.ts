@@ -40,10 +40,6 @@ const POSTGRES_VERSIONS = {
       sha256: "ad810a174664012341f1c9c1ff9667f61930d054f34bd650ceb2bc0c8796ccf9",
       url: zonkyJar("darwin-arm64v8", "16.4.0")
     },
-    "darwin-x64": {
-      sha256: "e9a4d0de025426978d39087e2dfad265cb22a70ad19aa388857e4dcf6cf55f25",
-      url: zonkyJar("darwin-amd64", "16.4.0")
-    },
     "linux-arm64": {
       sha256: "5a281952dd35191be97809ce657d6cb1a7b42a8d8ca6195125dd368d47eb8c42",
       url: zonkyJar("linux-arm64v8", "16.4.0")
@@ -61,10 +57,6 @@ const POSTGRES_VERSIONS = {
     "darwin-arm64": {
       sha256: "258cc7212623632e5073c58d466242c7f0be445f7eaeb29ec323d27b4bacb223",
       url: zonkyJar("darwin-arm64v8", "17.0.0")
-    },
-    "darwin-x64": {
-      sha256: "02f07b924268145e15c66640d5b411d3c6dffb13a27cf3fe3d7f916df0eee71a",
-      url: zonkyJar("darwin-amd64", "17.0.0")
     },
     "linux-arm64": {
       sha256: "5ef32d7fe417af5b52115c8f7a1b2d7148ae6b6f21b6144135c54ee80891752a",
@@ -84,10 +76,6 @@ const POSTGRES_VERSIONS = {
       sha256: "ab698c4486a795d2aa8a158b3a41e1201a77e7ff72a6255094cd5900080853c2",
       url: zonkyJar("darwin-arm64v8", "18.4.0")
     },
-    "darwin-x64": {
-      sha256: "68381ed1488edd337345c6c4bc6ae0c823832a4dd7af8b04656ee5c218c291b5",
-      url: zonkyJar("darwin-amd64", "18.4.0")
-    },
     "linux-arm64": {
       sha256: "a9ec284923b9a7d2db41509bfb88c3d0eeb9f4aa5e2b29ea0aac5e8dbaf4c335",
       url: zonkyJar("linux-arm64v8", "18.4.0")
@@ -104,16 +92,15 @@ const POSTGRES_VERSIONS = {
 };
 
 /**
- * Disc's platform slug for the running host (`darwin-arm64`, `darwin-x64`,
- * `linux-arm64`, `linux-x64`, `windows-x64`). Shared by the server-binary
- * downloader and the on-demand client-tools download (`client-tools.ts`).
+ * Disc's platform slug for the running host (`darwin-arm64`, `linux-arm64`,
+ * `linux-x64`, `windows-x64`). Shared by the server-binary downloader and the
+ * on-demand client-tools download (`client-tools.ts`). Intel macOS is not
+ * supported (Ende has no x86_64-apple-darwin build), so it is rejected here
+ * like any other unknown host.
  */
-export function detectPgPlatform(): string {
-  const os = Deno.build.os;
-  const arch = Deno.build.arch;
-
-  if (os === "darwin") {
-    return arch === "aarch64" ? "darwin-arm64" : "darwin-x64";
+export function detectPgPlatform(os: string = Deno.build.os, arch: string = Deno.build.arch): string {
+  if (os === "darwin" && arch === "aarch64") {
+    return "darwin-arm64";
   } else if (os === "linux") {
     return arch === "aarch64" ? "linux-arm64" : "linux-x64";
   } else if (os === "windows") {
@@ -152,7 +139,7 @@ export class PostgresBinaryDownloader {
    * Pass an explicit directory (e.g. a per-platform staging dir under
    * `dist/`) when cross-compiling. `platform` defaults to the running
    * platform's detected slug; pass an explicit slug
-   * (`darwin-arm64`/`darwin-x64`/`linux-arm64`/`linux-x64`/`windows-x64`)
+   * (`darwin-arm64`/`linux-arm64`/`linux-x64`/`windows-x64`)
    * when staging PG for a target other than the current host (Bundle I
    * follow-up: cross-platform reproducible builds).
    */

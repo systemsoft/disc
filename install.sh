@@ -35,9 +35,9 @@ else
     case $(uname -sm) in
     "Darwin arm64") asset="disc-darwin-arm64" ;;
     "Darwin x86_64")
-        echo "Error: no prebuilt Disc binary for Intel macOS (darwin-x64)." 1>&2
-        echo "The Apple Silicon binary runs under Rosetta 2, or build from source:" 1>&2
-        echo "  https://github.com/${repo}" 1>&2
+        echo "Error: Intel macOS (darwin-x64) is not supported." 1>&2
+        echo "Disc runs on Apple Silicon Macs, Linux and Windows; on an Intel Mac," 1>&2
+        echo "run it in Docker or a Linux VM: https://github.com/${repo}" 1>&2
         exit 1
         ;;
     "Linux aarch64") asset="disc-linux-arm64" ;;

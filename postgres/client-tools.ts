@@ -44,7 +44,6 @@ const THESEUS_BASE = "https://github.com/theseus-rs/postgresql-binaries/releases
  */
 const TARGET_TRIPLES: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
-  "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
   "linux-x64": "x86_64-unknown-linux-gnu",
   "windows-x64": "x86_64-pc-windows-msvc"
@@ -63,7 +62,6 @@ const CLIENT_TOOLS_RELEASES: Record<string, { release: string; sha256: Record<st
     release: "16.4.1",
     sha256: {
       "darwin-arm64": "fee852f5749794be9266052d231adbe2469bca6fbde9c8fa352bb6186ab5042e",
-      "darwin-x64": "6de992b9be6fd4a4f7aa68f99fe03eb74615576158b3fed4248e6777a2c989bb",
       "linux-arm64": "ab85b8ced033df593e6c41ae658993380c38584225ef46c2ef2fea49593f65a4",
       "linux-x64": "1c9a41e89e5d920f259baf973b37a564791a6c8f6495fa6c5c7ef0a5fc0e122c",
       "windows-x64": "404b429f7189a8a7acec71e478faf9ffc9b49ec428865d258ccbc196b4356950"
@@ -73,7 +71,6 @@ const CLIENT_TOOLS_RELEASES: Record<string, { release: string; sha256: Record<st
     release: "17.0.1",
     sha256: {
       "darwin-arm64": "fc09627627c7b1321601f450ef7102bf79c5c7b73d8124bf0568924ea33a9ea7",
-      "darwin-x64": "ba631d1dff05643c5f1884b3e9c5bdff88d9db52cf7996a2b2d47cc9a952048f",
       "linux-arm64": "eb4bb4b434ba5d74e310eb33025f107c9ac48f7434d3c3672ffb430c8017b528",
       "linux-x64": "62ddba74736ab2d77c2670ce2400cda315adc1d2a87f0407bbea992c3c1a0c87",
       "windows-x64": "1ac066282d2d17ebc809215ff87f742f7a262c6dd4d398fb1c799b3706872ed7"
@@ -83,7 +80,6 @@ const CLIENT_TOOLS_RELEASES: Record<string, { release: string; sha256: Record<st
     release: "18.4.0",
     sha256: {
       "darwin-arm64": "1b68828f524b638a24918e258b173d0f16773547a0d3b83d9ba74473b61649f2",
-      "darwin-x64": "cbc38067a795d10bbddc730e61c835df0b351c36a7bd2544d388790fcf50aa4d",
       "linux-arm64": "569984d426365c6ca3c197d2b3a999b73161ff1f3abc963824a8c3624620e5dd",
       "linux-x64": "65c06cf318b9a57525d842d658d6d18cd461d12b3a89b57d6d8ed7cccbe2db53",
       "windows-x64": "4099dcf71c74bed82736e17928d07591df0efee8f802449533b9557d99ae7988"

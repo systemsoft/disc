@@ -11,7 +11,7 @@ brew install disc
 
 This installs the prebuilt `disc` binary for your platform from the tagged GitHub release, checked against its SHA-256. Nothing else is installed: the binary already embeds the Ende runtime, the admin UI and PostgreSQL.
 
-Supported platforms match the release matrix: macOS on Apple Silicon, and Linux on x64 and arm64. On an Intel Mac, use the `install.sh` script from the main README, or build from source with `ende task build`.
+Supported platforms match the release matrix: macOS on Apple Silicon, and Linux on x64 and arm64. Intel Macs are not supported, because Ende (the runtime Disc is built on) has no darwin-x64 build; run Disc in Docker or a Linux VM instead.
 
 ### After install
 

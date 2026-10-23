@@ -201,10 +201,11 @@ All binaries come from [Zonky](https://github.com/zonkyio/embedded-postgres-bina
 | Platform      | Zonky artifact   |
 | ------------- | ---------------- |
 | macOS (arm64) | `darwin-arm64v8` |
-| macOS (x64)   | `darwin-amd64`   |
 | Linux (x64)   | `linux-amd64`    |
 | Linux (arm64) | `linux-arm64v8`  |
 | Windows (x64) | `windows-amd64`  |
+
+Intel macOS is not supported: Ende, the runtime Disc is built on, has no x86_64-apple-darwin build.
 
 Supported versions: `16.4`, `17.0`, `18.4` (default).
 

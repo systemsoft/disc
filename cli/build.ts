@@ -29,12 +29,13 @@ import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
  * Mapping from user-friendly platform names to Deno compile --target values.
  */
 const PLATFORM_MAP: Record<string, string> = {
+  /*** Apple Silicon only: Ende publishes no x86_64-apple-darwin runtime, so Intel macOS is not
+       supported. ***/
   "darwin-arm64": "aarch64-apple-darwin",
-  "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
   "linux-x64": "x86_64-unknown-linux-gnu",
-  /*** Only x64 Windows: `deno compile` has no aarch64-pc-windows target and Zonky ships no
-       windows-arm64 PG. Windows-on-ARM runs the x64 binary under emulation. ***/
+  /*** Only x64 Windows: Zonky ships no windows-arm64 PG. Windows-on-ARM runs the x64 binary
+       under emulation. ***/
   "windows-x64": "x86_64-pc-windows-msvc"
 };
 

@@ -8,9 +8,8 @@
 #     publishes for each tag, verified against its SHA-256. No JavaScript
 #     runtime or Bun is needed: the binary embeds the Ende runtime, the UI and
 #     PostgreSQL.
-#   - macOS is Apple Silicon only, matching the release matrix (there is no
-#     darwin-x64 release artifact; Intel Macs can run the arm64 binary under
-#     Rosetta via `install.sh`, or build from source with `ende task build`).
+#   - macOS is Apple Silicon only, matching the release matrix. Intel Macs are
+#     not supported: Ende, the runtime Disc is built on, has no darwin-x64 build.
 #   - To bump: set `version`, then replace each `sha256` with the matching
 #     line of the release's CHECKSUMS.txt.
 

@@ -1,11 +1,11 @@
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 
-import { assertEquals, assertExists, assertRejects } from "@std/assert";
+import { assertEquals, assertExists, assertRejects, assertThrows } from "@std/assert";
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { sha256Hex } from "../lib/crypto.ts";
-import { PostgresBinaryDownloader, SUPPORTED_POSTGRES_VERSIONS } from "./downloader.ts";
+import { detectPgPlatform, PostgresBinaryDownloader, SUPPORTED_POSTGRES_VERSIONS } from "./downloader.ts";
 
 const TEST_BASE_DIR = join(
   Deno.makeTempDirSync(),
@@ -22,7 +22,6 @@ Deno.test("PostgresBinaryDownloader - platform detection", () => {
   // Should be one of the supported platforms
   const supportedPlatforms = [
     "darwin-arm64",
-    "darwin-x64",
     "linux-arm64",
     "linux-x64",
     "windows-x64"
@@ -128,7 +127,6 @@ Deno.test("PostgresBinaryDownloader - 18.4 is published for every supported plat
   for (
     const platform of [
       "darwin-arm64",
-      "darwin-x64",
       "linux-arm64",
       "linux-x64",
       "windows-x64"
@@ -300,7 +298,7 @@ function fetchReturning(body: Uint8Array): { calls: string[]; fetch: typeof fetc
 
 Deno.test("PostgresBinaryDownloader - pins a SHA-256 for every supported version × platform", () => {
   for (const version of SUPPORTED_POSTGRES_VERSIONS) {
-    for (const platform of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"]) {
+    for (const platform of ["darwin-arm64", "linux-arm64", "linux-x64", "windows-x64"]) {
       const downloader = new PostgresBinaryDownloader({ baseDir: "/nonexistent", platform });
       const manifest = (downloader as any).getManifest(version);
       assertExists(manifest, `${version} ${platform}`);
@@ -380,5 +378,23 @@ Deno.test("PostgresBinaryDownloader - default cache honours DISC_HOME like the r
       else
         Deno.env.set(name, value);
     }
+  }
+});
+
+Deno.test("detectPgPlatform rejects Intel macOS, which Disc doesn't support", () => {
+  assertThrows(() => detectPgPlatform("darwin", "x86_64"), Error, "Unsupported platform: darwin-x86_64");
+});
+
+Deno.test("detectPgPlatform maps each supported host to its slug", () => {
+  assertEquals(detectPgPlatform("darwin", "aarch64"), "darwin-arm64");
+  assertEquals(detectPgPlatform("linux", "aarch64"), "linux-arm64");
+  assertEquals(detectPgPlatform("linux", "x86_64"), "linux-x64");
+  assertEquals(detectPgPlatform("windows", "x86_64"), "windows-x64");
+});
+
+Deno.test("PostgresBinaryDownloader - has no darwin-x64 download for any version", () => {
+  for (const version of SUPPORTED_POSTGRES_VERSIONS) {
+    const downloader = new PostgresBinaryDownloader({ baseDir: "/nonexistent", platform: "darwin-x64" });
+    assertEquals((downloader as any).getManifest(version), null, version);
   }
 });

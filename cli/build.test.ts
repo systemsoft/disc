@@ -60,9 +60,13 @@ Deno.test("BuildCommand - maps windows-x64 to x86_64-pc-windows-msvc", () => {
 
 Deno.test("BuildCommand - rejects invalid platform with helpful message", () => {
   const command = new BuildCommand();
-  /*** windows-arm64 is intentionally unsupported: `deno compile` has no
-       aarch64-pc-windows target and Zonky ships no windows-arm64 PG. ***/
+  /*** windows-arm64 is intentionally unsupported: Zonky ships no windows-arm64 PG. ***/
   assertThrows(() => command.validatePlatform("windows-arm64"), Error, "Invalid platform");
+});
+
+Deno.test("BuildCommand - rejects darwin-x64, since Ende has no x86_64-apple-darwin runtime", () => {
+  const command = new BuildCommand();
+  assertThrows(() => command.validatePlatform("darwin-x64"), Error, "Invalid platform");
 });
 
 Deno.test("BuildCommand - default output path is ./disc", () => {
@@ -85,10 +89,9 @@ Deno.test("BuildCommand - windows output path gets a .exe suffix", () => {
   assertEquals(path, "./disc-windows-x64.exe");
 });
 
-Deno.test("BuildCommand - available platforms list contains all 5 platforms", () => {
-  assertEquals(AVAILABLE_PLATFORMS.length, 5);
+Deno.test("BuildCommand - available platforms list contains all 4 platforms", () => {
+  assertEquals(AVAILABLE_PLATFORMS.length, 4);
   assertEquals(AVAILABLE_PLATFORMS.includes("darwin-arm64"), true);
-  assertEquals(AVAILABLE_PLATFORMS.includes("darwin-x64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("linux-arm64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("linux-x64"), true);
   assertEquals(AVAILABLE_PLATFORMS.includes("windows-x64"), true);
