@@ -8,7 +8,7 @@
  * producing 5000-line per-build diffs and per-platform merge conflicts.
  * A real `disc build` overwrites the stub with the full manifest.
  *
- * Idempotent — leaves existing manifests alone. Run via `deno task prep`
+ * Idempotent — leaves existing manifests alone. Run via `ende task prep`
  * (chained before `test`, `check`, `dev`, `serve`, `cli`, and `build`).
  */
 

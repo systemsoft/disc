@@ -6,7 +6,7 @@
  * before each `disc build` run; do not edit by hand. To refresh without
  * paying for a full compile:
  *
- *   bash ui/build.sh && deno task ui:manifest
+ *   bash ui/build.sh && ende task ui:manifest
  *
  * The manifest is checked in so callers don’t need to run the build to
  * use the asset handler in tests / development.

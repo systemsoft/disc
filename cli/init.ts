@@ -294,7 +294,8 @@ export class InitCommand {
       - \`deno task dev\` — Watch for schema changes
       - \`deno task shell\` — Open EdgeQL REPL
 
-      These tasks require the \`disc\` binary on your \`$PATH\`.
+      With [Ende](https://ende.sh), run the same tasks as \`ende task <name>\`; it reads this
+      project's \`deno.json\` too. These tasks require the \`disc\` binary on your \`$PATH\`.
 
       ## Schema
 

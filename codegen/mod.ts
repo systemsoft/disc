@@ -11,7 +11,7 @@ import * as Context from "../compiler/context.ts";
 import * as Types from "./types.ts";
 
 import { getLogger } from "../lib/logger.ts";
-import { runtimeExecutable } from "../lib/runtime.ts";
+import { runtimeExecutables } from "../lib/runtime.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { emitGo } from "./emit-go.ts";
 import { emitRust } from "./emit-rust.ts";
@@ -221,7 +221,7 @@ export async function loadMultiFileSchemaModules(files: string[]): Promise<Modul
  * Write generated files to disk
  */
 export async function writeGeneratedFiles(result: Types.CodegenResult, basePath: string = ".", options: { runFmt?: boolean; } = {}): Promise<void> {
-  /*** Default: run `deno fmt` over the written files so downstream code matches project
+  /*** Default: run `fmt` over the written files so downstream code matches project
        conventions. Tests that round-trip content verbatim can pass { runFmt: false }. ***/
   const runFmt = options.runFmt ?? true;
   /*** Collect unique directories from file paths ***/
@@ -261,38 +261,57 @@ export async function writeGeneratedFiles(result: Types.CodegenResult, basePath:
     log.info("Generated file", { path: fullPath });
   }
 
-  /*** Run `deno fmt` over the files we just wrote so generated code matches the project’s
-       formatting conventions instead of just stripping blank lines. Best-effort — if deno isn’t on
-       PATH or fmt fails, log and continue; the content is still written.
+  /*** Run `fmt` over the files we just wrote so generated code matches the project’s formatting
+       conventions instead of just stripping blank lines. Best-effort — if no runtime is on PATH or
+       fmt fails, log and continue; the content is still written.
 
        Scoped to `writtenPaths` on purpose. This runs inside the *user's* project, so a bare
-       `deno task format` would (a) name a task that only exists in the Disc repo and (b) reformat
+       `ende task format` would (a) name a task that only exists in the Disc repo and (b) reformat
        their entire codebase as a side effect of `disc codegen`.
+
+       The first installed runtime from `runtimeExecutables()` does the formatting, so a project on
+       plain Deno is still formatted when the compiled binary finds no `ende`.
 
        The project's fmt config is tried first so its options apply. When that fails — typically
        because the config excludes the output dir, so fmt finds "No target files" — retry with
-       `--no-config` so the generated code is still formatted, with Deno's defaults. ***/
+       `--no-config` so the generated code is still formatted, with the runtime's defaults. ***/
   if (runFmt && writtenPaths.length > 0) {
     try {
-      const fmt = (extraArgs: string[]): Promise<Deno.CommandOutput> =>
-        new Deno.Command(runtimeExecutable(), {
+      const fmt = (runtime: string, extraArgs: string[]): Promise<Deno.CommandOutput> =>
+        new Deno.Command(runtime, {
           args: ["fmt", "--quiet", ...extraArgs, ...writtenPaths],
           stderr: "piped",
           stdout: "null"
         })
           .output();
 
-      let output = await fmt([]);
+      const runtimes = runtimeExecutables();
+      let runtime: string | undefined;
+      let output: Deno.CommandOutput | undefined;
+
+      for (const candidate of runtimes) {
+        try {
+          output = await fmt(candidate, []);
+          runtime = candidate;
+          break;
+        } catch (error) {
+          if (!(error instanceof Deno.errors.NotFound))
+            throw error;
+        }
+      }
+
+      if (!runtime || !output)
+        throw new Error(`none of ${runtimes.join(", ")} is on PATH`);
 
       if (!output.success)
-        output = await fmt(["--no-config"]);
+        output = await fmt(runtime, ["--no-config"]);
 
       if (!output.success) {
         const stderr = new TextDecoder().decode(output.stderr).trim();
-        log.warn("deno fmt reported issues (generated files still written)", { stderr });
+        log.warn(`${runtime} fmt reported issues (generated files still written)`, { stderr });
       }
     } catch (error) {
-      log.warn("deno fmt not available — generated files unformatted", {
+      log.warn("fmt not available — generated files unformatted", {
         error: error instanceof Error ? error.message : String(error)
       });
     }

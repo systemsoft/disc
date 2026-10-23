@@ -11,40 +11,55 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage 1: deps — cache Deno dependencies
+# Stage 1: deps — install Ende and cache dependencies
 # ---------------------------------------------------------------------------
-FROM denoland/deno:latest AS deps
+FROM debian:bookworm-slim AS deps
+
+# Ende publishes no container image, so install a pinned release with its
+# install script, which verifies the download's checksum. The default
+# matches ENDE_VERSION in .github/workflows/ci.yml; release.yml passes it.
+ARG ENDE_VERSION=v2026.10.20
+ENV ENDE_INSTALL_ROOT=/opt/ende
+ENV PATH="/opt/ende/bin:$PATH"
+# hadolint ignore=DL3008
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+  && curl -fsSL https://ende.sh/install.sh | sh -s "$ENDE_VERSION" \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Pin the deno cache to a stable, explicit path. The denoland/deno
-# image's default ($DENO_DIR=/deno-dir) has churned across versions and
-# the COPY between stages has to know where to find it. Setting it
-# here makes the multi-stage cache transfer robust across base-image
-# updates. Both stages use the same path.
-ENV DENO_DIR=/app/.deno-cache
+# Pin the Ende cache to a stable, explicit path under /app so the COPY
+# between stages knows where to find it and the non-root disc user can
+# read it after the chown below. Both stages use the same path.
+ENV ENDE_DIR=/app/.ende-cache
 
-COPY deno.json deno.lock* ./
+COPY ende.json ./
 
-RUN deno install
+RUN ende install
 
 # ---------------------------------------------------------------------------
-# Stage 2: bundled (Deno + PostgreSQL 16)
+# Stage 2: bundled (Ende + PostgreSQL 16)
 # ---------------------------------------------------------------------------
-FROM denoland/deno:latest
+FROM debian:bookworm-slim
+
+# The Ende binary comes from the deps stage; the PostgreSQL step below
+# installs the CA certificates it needs for outbound TLS.
+COPY --from=deps /opt/ende /opt/ende
+ENV PATH="/opt/ende/bin:$PATH"
 
 WORKDIR /app
 
-# Match the deps stage so the COPY destination is the path deno
-# actually consults at runtime. Without this, deno would look in the
-# upstream image's default DENO_DIR and miss the copied cache.
-ENV DENO_DIR=/app/.deno-cache
+# Match the deps stage so the COPY destination is the path ende
+# actually consults at runtime. Without this, ende would look in its
+# default cache dir and miss the copied cache.
+ENV ENDE_DIR=/app/.ende-cache
 
 # Install PostgreSQL 16 from the official PostgreSQL apt repository.
 #
 # Uses the modern signed-by= keyring approach. The legacy apt-key
 # subcommand was deprecated in Debian 11 and removed in Debian 12
-# (the current denoland/deno:latest base); using it would fail with
+# (the debian:bookworm-slim base); using it would fail with
 # exit code 127 ("apt-key: command not found").
 # hadolint ignore=DL3008
 RUN apt-get update \
@@ -73,10 +88,10 @@ ENV PGDATA=/var/lib/postgresql/16/disc
 RUN mkdir -p "$PGDATA" /run/postgresql /var/log/postgresql \
   && chown -R disc:disc "$PGDATA" /run/postgresql /var/log/postgresql
 
-# Pull cached Deno dependencies. The cache lives under /app so the
+# Pull cached Ende dependencies. The cache lives under /app so the
 # later `chown -R disc:disc /app` makes it readable by the non-root
-# disc user; /root/.cache/deno would not be reachable post-USER switch.
-COPY --from=deps /app/.deno-cache /app/.deno-cache
+# disc user; a cache under /root would not be reachable post-USER switch.
+COPY --from=deps /app/.ende-cache /app/.ende-cache
 
 # Copy the full source tree.
 COPY . .
@@ -95,7 +110,7 @@ RUN rm -rf \
   **/*.test.ts
 
 # Pre-cache modules.
-RUN deno cache cli/main.ts
+RUN ende install --entrypoint cli/main.ts
 
 # Write the entrypoint script.
 # It initializes PG (if needed), starts it, waits for readiness, then execs Disc.
@@ -153,7 +168,7 @@ export DATABASE_URL="postgresql://disc@127.0.0.1:5432/disc"
 export DISC_HOST="0.0.0.0"
 export DISC_PORT="${DISC_PORT:-5656}"
 
-exec deno run --allow-all --no-check cli/main.ts "$@"
+exec ende run --allow-all --no-check cli/main.ts "$@"
 ENTRY
 
 RUN chmod +x /app/docker-entrypoint.sh
@@ -169,7 +184,7 @@ EXPOSE 5656 5432
 
 # Health check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD deno eval "const r = await fetch('http://localhost:5656/health/ready'); if (!r.ok) Deno.exit(1);"
+  CMD ende eval "const r = await fetch('http://localhost:5656/health/ready'); if (!r.ok) Deno.exit(1);"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["serve"]

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-env --allow-run
+#!/usr/bin/env -S ende run --allow-net --allow-read --allow-write --allow-env --allow-run
 /*** SPDX-License-Identifier: Apache-2.0
      Copyright 2026 Ideas Never Cease ***/
 

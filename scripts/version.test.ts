@@ -2,7 +2,7 @@
      Copyright 2026 Ideas Never Cease ***/
 
 /**
- * Tests for the ChronVer bump logic behind `deno task version:bump`.
+ * Tests for the ChronVer bump logic behind `ende task version:bump`.
  *
  * ChronVer is `YYYY.MM.DD[.CHANGESET][-FEATURE|-break]` (chronver.org). The
  * script used to write the bare date unconditionally, so a second release on

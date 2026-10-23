@@ -17,14 +17,14 @@ REPO_ROOT="$(cd .. && pwd)"
 regenerate_manifest() {
   local repo_root="$1"
 
-  if ! command -v deno &> /dev/null; then
-    echo "⚠️  deno not found — UI asset manifest NOT refreshed."
-    echo "   Run \`deno task ui:manifest\` before committing, or CI will fail."
+  if ! command -v ende &> /dev/null; then
+    echo "⚠️  ende not found — UI asset manifest NOT refreshed."
+    echo "   Run \`ende task ui:manifest\` before committing, or CI will fail."
     return 0
   fi
 
   echo "🧾 Refreshing UI asset manifest…"
-  (cd "$repo_root" && deno task ui:manifest) || return 1
+  (cd "$repo_root" && ende task ui:manifest) || return 1
 }
 
 echo "🎨 Building Disc Admin UI…"

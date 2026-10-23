@@ -27,6 +27,11 @@ permissions:
   contents: write
   packages: write # ghcr.io push (gh/geldata#5699 + #4901)
 
+env:
+  # Same pin as ci.yml (see the rationale there), so releases build on the
+  # version CI tested.
+  ENDE_VERSION: v2026.10.20
+
 jobs:
   # The UI bundle is platform-independent static output — build it once
   # and share it with every platform job instead of rebuilding 3x.
@@ -70,7 +75,7 @@ jobs:
       # runner and never publishes its artifact. Platform support
       # itself stays — `cli/build.ts` and `postgres/downloader.ts` can
       # still produce a darwin-x64 binary when invoked directly
-      # (`deno task build:darwin-x64`); we just don't ship one as a
+      # (`ende task build:darwin-x64`); we just don't ship one as a
       # pre-built release artifact. Apple Silicon Macs run the arm64
       # binary natively; older Intel Macs can build from source or use
       # Rosetta on the arm64 binary.
@@ -85,11 +90,11 @@ jobs:
           - platform: darwin-arm64
             runner: macos-14
             artifact: disc-darwin-arm64
-          # Cross-compiled on ubuntu-latest (not windows-latest): `deno
+          # Cross-compiled on ubuntu-latest (not windows-latest): `ende
           # compile --target x86_64-pc-windows-msvc` produces the .exe,
           # and the PG-staging JAR→txz extract chain needs unzip + tar
           # with xz support, which the Linux runner has but a Windows
-          # runner does not. deno writes `disc-windows-x64.exe`, so the
+          # runner does not. ende writes `disc-windows-x64.exe`, so the
           # artifact name carries the extension through checksum + upload.
           - platform: windows-x64
             runner: ubuntu-latest
@@ -98,12 +103,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          # Pinned, not floating `v2.x` — see ci.yml for rationale. Keep in
-          # sync with ci.yml so releases build on the version CI tested.
-          deno-version: 2.9.7
+      - name: Set up Ende
+        run: |
+          curl -fsSL https://ende.sh/install.sh | sh -s "$ENDE_VERSION"
+          echo "$HOME/.ende/bin" >> "$GITHUB_PATH"
 
       - name: Download UI bundle (needed for bundled binary)
         uses: actions/download-artifact@v8.0.1
@@ -112,11 +115,11 @@ jobs:
           path: ui/build
 
       - name: Prep (write manifest stub)
-        run: deno task prep
+        run: ende task prep
 
       - name: Build binary
         run: |
-          deno run --allow-all --no-check cli/main.ts build \
+          ende run --allow-all --no-check cli/main.ts build \
             --platform ${{ matrix.platform }} \
             --output ${{ matrix.artifact }}
 
@@ -140,24 +143,21 @@ jobs:
         with:
           # Man pages are rendered from the pinned disc.md documentation
           # submodule below. Without this the checkout leaves
-          # vendor/disc.md empty and `deno task man` fails the job — which is
+          # vendor/disc.md empty and `ende task man` fails the job — which is
           # the intended behaviour, but only because gen-man.ts checks: a
           # silent empty `disc-man.tar.gz` would break `install.sh` for every
           # user instead.
           submodules: true
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          # Pinned, not floating `v2.x` — see ci.yml for rationale. Keep in
-          # sync with the build jobs so the man pages generate on the version
-          # CI tested.
-          deno-version: 2.9.7
+      - name: Set up Ende
+        run: |
+          curl -fsSL https://ende.sh/install.sh | sh -s "$ENDE_VERSION"
+          echo "$HOME/.ende/bin" >> "$GITHUB_PATH"
 
       - name: Install pandoc (man-page generation)
         run: sudo apt-get update && sudo apt-get install -y pandoc
 
-      # Man pages aren't a build artifact — `deno task man` renders them from
+      # Man pages aren't a build artifact — `ende task man` renders them from
       # the disc.md submodule via pandoc here, then packages them as
       # `disc-man.tar.gz` so the
       # publish step ships them alongside the binaries. `install.sh` fetches
@@ -165,7 +165,7 @@ jobs:
       # the "man-page archive unavailable" skip path.
       - name: Generate and package man pages
         run: |
-          deno task man
+          ende task man
           mkdir -p release
           tar -czf release/disc-man.tar.gz -C build/man .
 
@@ -232,15 +232,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          # Pinned, not floating `v2.x` — see ci.yml for rationale. Keep in
-          # sync with ci.yml so releases build on the version CI tested.
-          deno-version: 2.9.7
+      - name: Set up Ende
+        run: |
+          curl -fsSL https://ende.sh/install.sh | sh -s "$ENDE_VERSION"
+          echo "$HOME/.ende/bin" >> "$GITHUB_PATH"
 
       - name: Prep (write manifest stub)
-        run: deno task prep
+        run: ende task prep
 
       # Build once, tag twice. `:latest` and the version tag come from
       # the same image build so they're always in sync — closing the
@@ -250,6 +248,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.bundled
+          build-args: |
+            ENDE_VERSION=${{ env.ENDE_VERSION }}
           push: true
           tags: |
             ghcr.io/systemsoft/disc:${{ steps.version.outputs.version }}

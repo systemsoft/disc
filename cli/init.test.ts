@@ -256,6 +256,7 @@ Deno.test("CLI Init - creates proper README content", async () => {
     assertStringIncludes(readmeContent, "Disc");
     assertStringIncludes(readmeContent, "disc migrate");
     assertStringIncludes(readmeContent, "deno task");
+    assertStringIncludes(readmeContent, "ende task");
   } finally {
     Deno.chdir(originalCwd);
     await cleanupTempDir(tempDir);

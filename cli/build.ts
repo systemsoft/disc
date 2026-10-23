@@ -22,7 +22,7 @@ import { join, relative } from "@std/path";
 /*** UTILITY ------------------------------------------ ***/
 
 import { sha256Hex } from "../lib/crypto.ts";
-import { runtimeExecutable } from "../lib/runtime.ts";
+import { runtimeExecutables } from "../lib/runtime.ts";
 import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 
 /**
@@ -245,7 +245,7 @@ export class BuildCommand {
 
     const args: string[] = [
       "compile",
-      /*** Skip type-check during compile — `deno task check` is the gate for that, and the
+      /*** Skip type-check during compile — `ende task check` is the gate for that, and the
            `deno compile` typechecker disagrees with the task runner on a few
            `Uint8Array<ArrayBufferLike>` corners. ***/
       "--no-check",
@@ -456,7 +456,8 @@ export class BuildCommand {
     if (options.lite)
       console.log(`  Mode: lite (UI assets skipped)`);
 
-    const runtime = runtimeExecutable();
+    /*** Only the first candidate: Disc's own source reads ende.json, which Deno doesn't. ***/
+    const [runtime] = runtimeExecutables();
     console.log(`  Command: ${runtime} ${compileArgs.join(" ")}`);
 
     const command = new Deno.Command(runtime, {
@@ -751,7 +752,7 @@ export async function generateUiManifest(buildDir: string): Promise<string> {
  * before each \`disc build\` run; do not edit by hand. To refresh without
  * paying for a full compile:
  *
- *   bash ui/build.sh && deno task ui:manifest
+ *   bash ui/build.sh && ende task ui:manifest
  *
  * The manifest is checked in so callers don’t need to run the build to
  * use the asset handler in tests / development.

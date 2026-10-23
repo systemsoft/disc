@@ -71,21 +71,21 @@ function normalizeProse(text: string): string {
 // rewire those entry points, which is a deliberate trade-off rather than
 // a silent migration.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async () => {
-  const denoJsonText = await Deno.readTextFile(
-    new URL("../deno.json", import.meta.url)
+Deno.test("Gel #4408: Ende-task surface is the lint/fmt/test entry point", async () => {
+  const endeJsonText = await Deno.readTextFile(
+    new URL("../ende.json", import.meta.url)
   );
-  const denoJson = JSON.parse(denoJsonText) as {
+  const endeJson = JSON.parse(endeJsonText) as {
     tasks?: Record<string, string>;
   };
-  const tasks = denoJson.tasks ?? {};
+  const tasks = endeJson.tasks ?? {};
 
   // The commit skill and CI run these specific tasks. Renaming or removing
   // any of them is the change that requires deliberate review.
   for (const requiredTask of ["lint", "format", "test", "check"]) {
     assert(
       typeof tasks[requiredTask] === "string",
-      `deno.json:tasks.${requiredTask} is missing — Disc's lint/format/test surface relies on it (Gel #4408 pin).`
+      `ende.json:tasks.${requiredTask} is missing — Disc's lint/format/test surface relies on it (Gel #4408 pin).`
     );
   }
 
@@ -94,10 +94,10 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   // contract honest.
   const checkTask = tasks.check ?? "";
   assert(
-    checkTask.includes("deno task lint") &&
-      checkTask.includes("deno task format") &&
-      checkTask.includes("deno task test"),
-    `deno.json:tasks.check should compose lint + format + test; got: ${checkTask}`
+    checkTask.includes("ende task lint") &&
+      checkTask.includes("ende task format") &&
+      checkTask.includes("ende task test"),
+    `ende.json:tasks.check should compose lint + format + test; got: ${checkTask}`
   );
 });
 
@@ -1568,7 +1568,7 @@ Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", asy
     new URL("../Dockerfile.bundled", import.meta.url)
   );
   // `apt-key` was deprecated in Debian 11 + removed in Debian 12,
-  // which the current denoland/deno:latest base is built on. Using
+  // which the current debian:bookworm-slim base is. Using
   // it produces `exit code: 127` ("command not found").
   assert(
     !/apt-key\s+add/.test(src),
@@ -1595,37 +1595,36 @@ Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", asy
 // explicitly in the deps stage so the cache lives at a stable,
 // explicit location regardless of upstream image churn.
 //
-// This pin asserts the Dockerfile sets DENO_DIR explicitly and the
-// COPY path matches whatever DENO_DIR is set to.
+// On the move to Ende the variable became ENDE_DIR, and the deps stage
+// also copies the Ende binary itself, so the cache COPY is no longer the
+// only `COPY --from=deps` line.
+//
+// This pin asserts the Dockerfile sets ENDE_DIR explicitly and a
+// COPY --from=deps line moves exactly that directory between stages.
 // ---------------------------------------------------------------------------
-Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit DENO_DIR", async () => {
+Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit ENDE_DIR", async () => {
   const src = await Deno.readTextFile(
     new URL("../Dockerfile.bundled", import.meta.url)
   );
-  // The deps stage must set DENO_DIR explicitly so the cache lives
-  // at a known location independent of upstream image defaults.
-  const denoDirMatch = src.match(/ENV DENO_DIR=(\S+)/);
+  // The deps stage must set ENDE_DIR explicitly so the cache lives
+  // at a known location independent of the runtime's defaults.
+  const endeDirMatch = src.match(/ENV ENDE_DIR=(\S+)/);
   assert(
-    denoDirMatch !== null,
-    "Dockerfile.bundled must set ENV DENO_DIR explicitly (Bundle ZZ-2 pin)."
+    endeDirMatch !== null,
+    "Dockerfile.bundled must set ENV ENDE_DIR explicitly (Bundle ZZ-2 pin)."
   );
-  const denoDir = denoDirMatch![1];
+  const endeDir = endeDirMatch![1];
 
-  // The COPY --from=deps line must match the explicit DENO_DIR.
-  const copyMatch = src.match(/COPY --from=deps (\S+) (\S+)/);
+  // One COPY --from=deps line must carry the cache from ENDE_DIR to ENDE_DIR.
+  const copies = [...src.matchAll(/COPY --from=deps (\S+) (\S+)/g)];
   assert(
-    copyMatch !== null,
+    copies.length > 0,
     "Dockerfile.bundled must carry a COPY --from=deps line (Bundle ZZ-2 pin)."
   );
-  assertEquals(
-    copyMatch![1],
-    denoDir,
-    `COPY --from=deps source must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`
-  );
-  assertEquals(
-    copyMatch![2],
-    denoDir,
-    `COPY --from=deps target must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`
+  assert(
+    copies.some(([, from, to]) => from === endeDir && to === endeDir),
+    `A COPY --from=deps line must copy ENDE_DIR (${endeDir}) to the same path (Bundle ZZ-2 pin); ` +
+      `got: ${copies.map(([line]) => line).join("; ")}`
   );
 });
 

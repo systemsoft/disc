@@ -41,12 +41,12 @@ function extractShellFunction(source: string, name: string): string {
 }
 
 /**
- * Run `regenerate_manifest` with a stubbed `deno` on PATH. The stub records
- * its arguments and exits with `denoExitCode`; omit `denoExitCode` entirely
- * (pass null) to leave `deno` off PATH altogether.
+ * Run `regenerate_manifest` with a stubbed `ende` on PATH. The stub records
+ * its arguments and exits with `endeExitCode`; omit `endeExitCode` entirely
+ * (pass null) to leave `ende` off PATH altogether.
  */
 async function runRegenerate(
-  options: { denoExitCode: number | null; }
+  options: { endeExitCode: number | null; }
 ): Promise<{ code: number; recordedArgs: string; stdout: string; }> {
   const source = await Deno.readTextFile(BUILD_SH);
   const fn = extractShellFunction(source, "regenerate_manifest");
@@ -56,15 +56,15 @@ async function runRegenerate(
   try {
     const binDir = join(tmp, "bin");
     const repoRoot = join(tmp, "repo");
-    const recordPath = join(tmp, "deno-args.txt");
+    const recordPath = join(tmp, "ende-args.txt");
     await Deno.mkdir(binDir);
     await Deno.mkdir(repoRoot);
 
-    if (options.denoExitCode !== null) {
-      const stub = `#!/bin/bash\nprintf '%s ' "$@" > ${recordPath}\nexit ${options.denoExitCode}\n`;
-      const denoStub = join(binDir, "deno");
-      await Deno.writeTextFile(denoStub, stub);
-      await Deno.chmod(denoStub, 0o755);
+    if (options.endeExitCode !== null) {
+      const stub = `#!/bin/bash\nprintf '%s ' "$@" > ${recordPath}\nexit ${options.endeExitCode}\n`;
+      const endeStub = join(binDir, "ende");
+      await Deno.writeTextFile(endeStub, stub);
+      await Deno.chmod(endeStub, 0o755);
     }
 
     // A minimal PATH: the stub dir plus the basics `command -v` needs.
@@ -123,28 +123,28 @@ Deno.test("ui/build.sh calls it after a successful build", async () => {
 });
 
 Deno.test("regenerate_manifest runs the ui:manifest task", async () => {
-  const { code, recordedArgs } = await runRegenerate({ denoExitCode: 0 });
+  const { code, recordedArgs } = await runRegenerate({ endeExitCode: 0 });
 
   assertEquals(code, 0);
   assertStringIncludes(recordedArgs, "task");
   assertStringIncludes(recordedArgs, "ui:manifest");
 });
 
-Deno.test("regenerate_manifest warns but succeeds when deno is missing", async () => {
+Deno.test("regenerate_manifest warns but succeeds when ende is missing", async () => {
   // The UI build itself already succeeded; failing here would punish someone
-  // who built the assets on a machine without deno. Warn loudly instead.
+  // who built the assets on a machine without ende. Warn loudly instead.
   const { code, recordedArgs, stdout } = await runRegenerate({
-    denoExitCode: null
+    endeExitCode: null
   });
 
   assertEquals(code, 0);
   assertEquals(recordedArgs, "");
-  assertStringIncludes(stdout, "deno task ui:manifest");
+  assertStringIncludes(stdout, "ende task ui:manifest");
 });
 
 Deno.test("regenerate_manifest fails when the task fails", async () => {
-  // deno is present and the regen genuinely broke — that is a real failure
+  // ende is present and the regen genuinely broke — that is a real failure
   // and must not be swallowed.
-  const { code } = await runRegenerate({ denoExitCode: 1 });
+  const { code } = await runRegenerate({ endeExitCode: 1 });
   assert(code !== 0, "a failing ui:manifest task must fail the build script");
 });

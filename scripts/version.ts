@@ -73,15 +73,15 @@ if (import.meta.main) {
 
   await Deno.writeTextFile("version.txt", version);
 
-  /*** deno.json ***/
-  const denoJsonPath = "deno.json";
-  const denoJson = await Deno.readTextFile(denoJsonPath);
+  /*** ende.json ***/
+  const endeJsonPath = "ende.json";
+  const endeJson = await Deno.readTextFile(endeJsonPath);
 
   // Anchor to the top-level key (2-space indent) so task names containing
   // "version" are never rewritten.
   await Deno.writeTextFile(
-    denoJsonPath,
-    denoJson.replace(/^( {2}"version"\s*:\s*)"[^"]*"/m, `$1"${version}"`)
+    endeJsonPath,
+    endeJson.replace(/^( {2}"version"\s*:\s*)"[^"]*"/m, `$1"${version}"`)
   );
 
   /*** lib/version.ts ***/

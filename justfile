@@ -9,23 +9,23 @@ build-linux:
   mkdir -p build/linux-64
 
   @echo "[INFO] Linux ARM executable"
-  deno task build:linux-arm64
+  ende task build:linux-arm64
   mv disc-linux-arm64 build/linux/disc
 
   @echo "[INFO] Linux x64 executable"
-  deno task build:linux-x64
+  ende task build:linux-x64
   mv disc-linux-x64 build/linux-64/disc
 
 build-mac:
   @echo "[INFO] Building macOS executable…"
   mkdir -p build/mac
-  deno task build:darwin-arm64
+  ende task build:darwin-arm64
   mv disc-darwin-arm64 build/mac/disc
 
 build-windows:
   @echo "[INFO] Building Windows executable…"
   mkdir -p build/windows-64
-  deno task build:windows-x64
+  ende task build:windows-x64
   mv disc-windows-x64.exe build/windows-64/disc.exe
 
 clean:
@@ -33,10 +33,10 @@ clean:
 
 # run project for local development
 dev:
-  deno task dev
+  ende task dev
 
 format:
-  deno task format
+  ende task format
 
 # initialize/update the documentation submodule (github.com/systemsoft/disc.md).
 # `docs-sync` fast-forwards the pin to the site's latest primary; committing the
@@ -52,7 +52,7 @@ docs-sync:
 # (requires pandoc on PATH; run `just docs-sync` if the submodule is empty)
 man:
   @echo "[INFO] Generating man pages from vendor/disc.md/documents…"
-  @deno task man
+  @ende task man
   @echo "[INFO] Packaging man pages → build/disc-man.tar.gz"
   tar -czf build/disc-man.tar.gz -C build/man .
 
@@ -66,10 +66,10 @@ ui-build:
   @echo "[INFO] Building admin UI…"
   @bash ui/build.sh
   @echo "[INFO] Regenerating UI asset manifest"
-  @deno task ui:manifest
+  @ende task ui:manifest
 
 # generate version.txt and update everywhere
 version:
   @echo "[INFO] Updating version.txt with ChronVer"
-  @deno task version:bump
+  @ende task version:bump
   @echo "[INFO] Version updated: $(cat version.txt)"

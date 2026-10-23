@@ -7,6 +7,7 @@ import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 
 /*** UTILITY ------------------------------------------ ***/
 
+import { ENDE_VERSION } from "../lib/runtime.ts";
 import { DeployCommand, VALID_FORMATS } from "./deploy.ts";
 
 /*** RUNTIME ------------------------------------------ ***/
@@ -36,7 +37,9 @@ Deno.test("DeployCommand - docker format generates valid Dockerfile", () => {
   const command = new DeployCommand();
   const content = command.generateDockerfile("my-app");
 
-  assertStringIncludes(content, "FROM denoland/deno");
+  assertStringIncludes(content, "FROM debian:bookworm-slim");
+  assertStringIncludes(content, `ARG ENDE_VERSION=${ENDE_VERSION}`);
+  assertStringIncludes(content, "COPY ende.json");
   assertStringIncludes(content, "EXPOSE 5656");
   assertStringIncludes(content, "DATABASE_URL");
   assertStringIncludes(content, "cli/main.ts");

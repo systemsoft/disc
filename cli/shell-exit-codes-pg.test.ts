@@ -17,7 +17,7 @@ import { fromFileUrl, join } from "@std/path";
 import { canRunPgTests, getTestDsn, tableExists } from "../tests/pg-test-harness.ts";
 import { cleanupTempDir, createTempDir } from "../tests/test-utils.ts";
 
-const CONFIG = fromFileUrl(new URL("../deno.json", import.meta.url));
+const CONFIG = fromFileUrl(new URL("../ende.json", import.meta.url));
 const MAIN = fromFileUrl(new URL("./main.ts", import.meta.url));
 
 interface ShellRun {

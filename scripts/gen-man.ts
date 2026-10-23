@@ -21,7 +21,7 @@
  * `tests/gel-divergence-pins.test.ts` and `migration/gel-issues.test.ts`)
  * which is deliberately not published.
  *
- * Requires `pandoc` on PATH. Invoked by `deno task man` / `just man`, which
+ * Requires `pandoc` on PATH. Invoked by `ende task man` / `just man`, which
  * `just release` runs after the binary build.
  */
 

@@ -19,7 +19,7 @@ import { canRunPgTests, getTestDsn, makePool, resetTestDatabase } from "../tests
 import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { CLICommands } from "./commands.ts";
 
-const CONFIG = fromFileUrl(new URL("../deno.json", import.meta.url));
+const CONFIG = fromFileUrl(new URL("../ende.json", import.meta.url));
 const MAIN = fromFileUrl(new URL("./main.ts", import.meta.url));
 
 /*** Run `disc <args>` from `cwd` (an empty temp dir, so no disc.toml is found above it). ***/

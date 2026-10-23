@@ -18,7 +18,7 @@
  * Run `bash ui/build.sh` first — this reads whatever is on disk, and will
  * refuse to write an empty manifest.
  *
- * Invoked by `deno task ui:manifest` / `just ui-build`.
+ * Invoked by `ende task ui:manifest` / `just ui-build`.
  */
 
 import { generateUiManifest } from "../cli/build.ts";

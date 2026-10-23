@@ -37,7 +37,7 @@ cleanup() {
     rm -f "$PIDFILE"
   fi
   # Stop bundled PG instance left running by `disc serve`
-  (cd "$FIXTURE_DIR" && deno run --allow-all "$ROOT/cli/main.ts" stop 2>/dev/null || true)
+  (cd "$FIXTURE_DIR" && ende run --allow-all "$ROOT/cli/main.ts" stop 2>/dev/null || true)
 }
 trap cleanup EXIT
 
@@ -57,7 +57,7 @@ fi
 echo "==> Applying migrations (idempotent)"
 (
   cd "$FIXTURE_DIR"
-  deno run --allow-all "$ROOT/cli/main.ts" migrate >> "$LOG" 2>&1 || true
+  ende run --allow-all "$ROOT/cli/main.ts" migrate >> "$LOG" 2>&1 || true
 )
 
 echo "==> Starting disc serve (HTTP=$DISC_HTTP_PORT, binary=$DISC_BINARY_PORT, TLS on)"
@@ -65,7 +65,7 @@ echo "==> Starting disc serve (HTTP=$DISC_HTTP_PORT, binary=$DISC_BINARY_PORT, T
   cd "$FIXTURE_DIR"
   DISC_BINARY_TLS_CERT="$CERT_FILE" \
   DISC_BINARY_TLS_KEY="$KEY_FILE" \
-  nohup deno run --allow-all "$ROOT/cli/main.ts" serve \
+  nohup ende run --allow-all "$ROOT/cli/main.ts" serve \
     --port "$DISC_HTTP_PORT" \
     --binary-port "$DISC_BINARY_PORT" \
     > "$LOG" 2>&1 &
