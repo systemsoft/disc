@@ -203,8 +203,8 @@ For tests, `AccessContext.permissionChecker` accepts a mock so test suites donâ€
 
 ```bash
 # Run access module tests (46 tests)
-deno test access/ --allow-all --no-check
+ende test access/ --allow-all --no-check
 
 # Run PG-backed E2E access tests
-DISC_PG_AUTO=1 deno test server/access-pg.test.ts --allow-all --no-check
+DISC_PG_AUTO=1 ende test server/access-pg.test.ts --allow-all --no-check
 ```

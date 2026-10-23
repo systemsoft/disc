@@ -4,12 +4,12 @@
 
 ```bash
 # Non-PG tests (fast; runs in CI on every push/PR)
-deno test --allow-all --no-check \
+ende test --allow-all --no-check \
   schema/ compiler/ migration/ cli/ lib/ postgres/ \
   server/ protocol/ auth/ access/ extensions/ sdk/ codegen/ edgeql/
 
 # Full suite including PG integration tests
-DISC_PG_AUTO=1 deno task test:pg
+DISC_PG_AUTO=1 ende task test:pg
 ```
 
 ## Test categories
