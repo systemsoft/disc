@@ -16,7 +16,7 @@ A schema-first, TypeScript-native database built on [Ende](https://docs.ende.sh)
 curl -fsSL https://disc.sh/install | sh
 ```
 
-This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](https://disc.md/getting-started.md#install-disc:~:text=deno%20%2D%2Dversion-,Install%20Disc,-Pick%20whichever%20path).
+This downloads the prebuilt `disc` binary into `~/.disc/bin` and adds it to your PATH. Pin a version with `... | sh -s -- v2026.06.13`. Prebuilt binaries cover macOS (arm64), Linux (x64/arm64), and Windows (x64); Disc is also available via [Homebrew](homebrew/README.md) or [from source](https://disc.md/getting-started.md#install-disc:~:text=ende%20%2D%2Dversion-,Install%20Disc,-Pick%20whichever%20path).
 
 Disc is also [available on Homebrew](https://github.com/systemsoft/homebrew-disc)!
 
