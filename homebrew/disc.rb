@@ -16,7 +16,7 @@
 class Disc < Formula
   desc "TypeScript-native, schema-first database (Gel/EdgeDB compatible)"
   homepage "https://disc.sh"
-  version "2026.09.28"
+  version "2026.10.23"
   license "Apache-2.0"
 
   on_macos do
@@ -24,19 +24,19 @@ class Disc < Formula
 
     on_arm do
       url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-darwin-arm64"
-      sha256 "0cd284795b23d40bb39cc893268bca0e5c17a90111033a299a53e60d1be67144"
+      sha256 "0b9e9b04a01a8df9514a5111228b954ad5bc994f8d88d144c98045e7dc958f6e"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-linux-arm64"
-      sha256 "88203a3cf500d50f321441a3cba15efba2cc3851d4cd6cb62c36330a10026913"
+      sha256 "0534db37db32816a11c1dcb441a68b52e32f2eaf080b672a71aa8d87f95a0972"
     end
 
     on_intel do
       url "https://github.com/systemsoft/disc/releases/download/v#{version}/disc-linux-x64"
-      sha256 "dd892ce611a7008d72a8759bada7c99dd72a68941a65e3aaacf42b2f07be42ba"
+      sha256 "7ef200287d4261af691ff9f23d401773a7fb591d7cb9f67f6240ae7896b86652"
     end
   end
 
