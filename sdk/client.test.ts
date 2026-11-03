@@ -219,6 +219,24 @@ Deno.test("client - resolves baseUrl from DISC_SERVER_URL env", () => {
   }
 });
 
+Deno.test("client - reads env through the Ende global before Deno", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "Ende");
+  Object.defineProperty(globalThis, "Ende", {
+    configurable: true,
+    value: { env: { get: (name: string) => name === "DISC_SERVER_URL" ? "http://ende-host:9999" : undefined } }
+  });
+  try {
+    const client = new DiscClient();
+    assertEquals(client.getBaseUrl(), "http://ende-host:9999");
+  } finally {
+    if (original) {
+      Object.defineProperty(globalThis, "Ende", original);
+    } else {
+      delete (globalThis as Record<string, unknown>).Ende;
+    }
+  }
+});
+
 Deno.test("client - DISC_SERVER_URL takes precedence over disc.toml", () => {
   const tmp = Deno.makeTempDirSync();
   const cwd = Deno.cwd();

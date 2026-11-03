@@ -40,16 +40,17 @@ const SERVER_URL_ENV = "DISC_SERVER_URL";
 type ClientLogger = DiscClientConfig["logger"];
 
 /**
- * Read an environment variable across runtimes (Deno, Node, Bun). Returns
+ * Read an environment variable across runtimes (Ende, Deno, Node, Bun). Returns
  * undefined when the runtime exposes no env access or the read is denied
- * (e.g. Deno without `--allow-env`).
+ * (e.g. Ende/Deno without `--allow-env`).
  */
 function readEnvVar(name: string): string | undefined {
   try {
     // deno-lint-ignore no-explicit-any
     const g = globalThis as any;
-    if (g.Deno?.env?.get) {
-      const value = g.Deno.env.get(name);
+    const runtime = g.Ende ?? g.Deno;
+    if (runtime?.env?.get) {
+      const value = runtime.env.get(name);
       return value ? value : undefined;
     }
     if (g.process?.env) {
@@ -67,11 +68,11 @@ function readEnvVar(name: string): string | undefined {
  *
  *   1. `DISC_SERVER_URL` — works on any runtime; the robust path for deployed
  *      servers where the cwd and filesystem permissions are unpredictable.
- *   2. A `disc.toml` walked up from the cwd (Deno only — needs sync fs access),
+ *   2. A `disc.toml` walked up from the cwd (Ende/Deno only — needs sync fs access),
  *      deriving the URL from its `[server]` host/port like the CLI does.
  *
  * Returns undefined — and the caller falls back to {@link DEFAULT_BASE_URL} —
- * outside Deno (e.g. a browser bundle), when nothing is found, or when the file
+ * outside Ende/Deno (e.g. a browser bundle), when nothing is found, or when the file
  * pins neither host nor port. A *failed* read (permission denied, etc.) is
  * surfaced through `logger.warn` rather than swallowed silently, because the
  * silent fallback to localhost is exactly what makes this hard to diagnose.
@@ -83,19 +84,19 @@ function resolveBaseUrl(logger?: ClientLogger): string | undefined {
   }
 
   // deno-lint-ignore no-explicit-any
-  const deno = (globalThis as any).Deno;
-  if (!deno?.readTextFileSync || !deno?.cwd) {
+  const runtime = (globalThis as any).Ende ?? (globalThis as any).Deno;
+  if (!runtime?.readTextFileSync || !runtime?.cwd) {
     return undefined;
   }
   try {
-    let dir: string = deno.cwd();
+    let dir: string = runtime.cwd();
     while (dir) {
       let source: string | undefined;
       try {
-        // Deno accepts forward slashes as path separators on every platform.
-        source = deno.readTextFileSync(`${dir}/disc.toml`);
+        // Ende/Deno accept forward slashes as path separators on every platform.
+        source = runtime.readTextFileSync(`${dir}/disc.toml`);
       } catch (err) {
-        if (deno.errors && err instanceof deno.errors.NotFound) {
+        if (runtime.errors && err instanceof runtime.errors.NotFound) {
           source = undefined; // Expected while walking up — keep looking.
         } else {
           logger?.warn?.(
