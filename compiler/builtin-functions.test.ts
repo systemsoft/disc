@@ -72,11 +72,11 @@ Deno.test("len maps to SQL LENGTH with return type int64", () => {
   assertEquals(len.returnType, "int64");
 });
 
-Deno.test("datetime_current maps to SQL NOW with return type datetime", () => {
+Deno.test("datetime_current maps to SQL CLOCK_TIMESTAMP with return type datetime", () => {
   const fns = getBuiltinFunctions();
   const fn = fns.get("datetime_current");
   assertExists(fn);
-  assertEquals(fn.sqlName, "NOW");
+  assertEquals(fn.sqlName, "CLOCK_TIMESTAMP");
   assertEquals(fn.returnType, "datetime");
   assertEquals(fn.args.length, 0);
 });

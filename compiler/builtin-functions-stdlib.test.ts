@@ -159,14 +159,21 @@ Deno.test("Stage 27 — datetime_of_transaction compiles to TRANSACTION_TIMESTAM
   assertStringIncludes(sql, "TRANSACTION_TIMESTAMP");
 });
 
+// Gel's datetime_current() is the wall-clock time, not the transaction start.
+Deno.test("datetime_current compiles to CLOCK_TIMESTAMP, not NOW", () => {
+  const sql = compileEdgeQL(`SELECT datetime_current()`);
+  assertStringIncludes(sql, "CLOCK_TIMESTAMP()");
+  assertEquals(sql.includes("NOW()"), false);
+});
+
 Deno.test("Stage 27 — datetime_get compiles to date_part with the unit as a quoted literal", () => {
   const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), 'year')`);
-  assertStringIncludes(sql, "date_part('year', NOW())");
+  assertStringIncludes(sql, "date_part('year', CLOCK_TIMESTAMP())");
 });
 
 Deno.test("datetime_get: epochseconds is PostgreSQL's epoch", () => {
   const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), 'epochseconds')`);
-  assertStringIncludes(sql, "date_part('epoch', NOW())");
+  assertStringIncludes(sql, "date_part('epoch', CLOCK_TIMESTAMP())");
 });
 
 // The unit used to be spliced into `EXTRACT(<unit> FROM …)` unquoted, so any
@@ -183,7 +190,7 @@ Deno.test("datetime_get: a unit that is not one of Gel's is InvalidValueError an
 
 Deno.test("datetime_get: a unit that is not a literal is checked when the query runs", () => {
   const sql = compileEdgeQL(`SELECT datetime_get(datetime_current(), <str>$unit)`);
-  assertStringIncludes(sql, "disc_date_part('std::datetime_get', CAST($1 AS text), NOW(), ARRAY[");
+  assertStringIncludes(sql, "disc_date_part('std::datetime_get', CAST($1 AS text), CLOCK_TIMESTAMP(), ARRAY[");
   assertStringIncludes(sql, "'epochseconds'");
 });
 

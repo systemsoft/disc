@@ -360,7 +360,7 @@ Deno.test("Schema Differ - computed property produces no DDL column in end-to-en
   assertEquals(createTableSql.includes("total"), false);
 });
 
-Deno.test("Schema Differ - datetime_current() default produces DEFAULT NOW()", () => {
+Deno.test("Schema Differ - datetime_current() default produces DEFAULT CLOCK_TIMESTAMP()", () => {
   const differ = new SchemaDiffer();
   const generator = new DDLGenerator();
 
@@ -397,7 +397,7 @@ Deno.test("Schema Differ - datetime_current() default produces DEFAULT NOW()", (
   const ddl = generator.generateDDL(operations);
   const createTableSql = ddl[0];
 
-  assertStringIncludes(createTableSql, "DEFAULT NOW()");
+  assertStringIncludes(createTableSql, "DEFAULT CLOCK_TIMESTAMP()");
   assertEquals(
     createTableSql.includes("'FunctionCall'"),
     false,

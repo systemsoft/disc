@@ -477,7 +477,9 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       name: "datetime_current",
       args: [],
       returnType: "datetime",
-      sqlName: "NOW"
+      // Gel's datetime_current() is the wall-clock time at evaluation, not the
+      // transaction start (that's datetime_of_transaction / NOW()).
+      sqlName: "CLOCK_TIMESTAMP"
     }],
     ["datetime_of_statement", {
       name: "datetime_of_statement",

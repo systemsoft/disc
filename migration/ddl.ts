@@ -2670,7 +2670,7 @@ END $$;`
   private compileExpressionString(expr: string): string {
     return expr
       .replace(/datetime_of_statement\(\)/g, "statement_timestamp()")
-      .replace(/datetime_current\(\)/g, "now()")
+      .replace(/datetime_current\(\)/g, "clock_timestamp()")
       .replace(/datetime_of_transaction\(\)/g, "transaction_timestamp()");
   }
 
@@ -2918,7 +2918,7 @@ END $$;`
   private compileRewriteExpression(body: string): string {
     return body
       .replace(/datetime_of_statement\(\)/g, "statement_timestamp()")
-      .replace(/datetime_current\(\)/g, "now()")
+      .replace(/datetime_current\(\)/g, "clock_timestamp()")
       .replace(/datetime_of_transaction\(\)/g, "transaction_timestamp()")
       .replace(/__subject__/g, "NEW")
       .replace(/__old__/g, "OLD");
