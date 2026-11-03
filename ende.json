@@ -80,5 +80,5 @@
     "exclude": ["reference-gel/**", "ui/**"],
     "include": ["**/*.test.ts", "tests/**/*.ts"]
   },
-  "version": "2026.10.23"
+  "version": "2026.11.02"
 }
